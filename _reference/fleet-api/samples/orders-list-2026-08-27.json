@@ -1,0 +1,210 @@
+[
+ {
+  "id": "04664a21e948c9d8ab0e49d8c8b1dbcb",
+  "short_id": 26254091,
+  "status": "complete",
+  "created_at": "2026-08-27T10:16:38.04+00:00",
+  "booked_at": "2026-08-27T10:21:46.57+00:00",
+  "provider": "platform",
+  "category": "comfort",
+  "amenities": [
+   "creditcard"
+  ],
+  "address_from": {
+   "address": "Мирабадский район, улица Авлиё-Ата, 128",
+   "lat": 41.28857655932876,
+   "lon": 69.28167671800277
+  },
+  "route_points": [
+   {
+    "address": "улица Чаштепа",
+    "lat": 41.25295782696857,
+    "lon": 69.2157476797311
+   }
+  ],
+  "events": [
+   {
+    "event_at": "2026-08-27T10:16:43.649+00:00",
+    "order_status": "driving"
+   },
+   {
+    "event_at": "2026-08-27T10:23:24.832+00:00",
+    "order_status": "waiting"
+   },
+   {
+    "event_at": "2026-08-27T10:23:28.52+00:00",
+    "order_status": "transporting"
+   },
+   {
+    "event_at": "2026-08-27T10:35:49.192+00:00",
+    "order_status": "complete"
+   }
+  ],
+  "ended_at": "2026-08-27T10:35:49.192+00:00",
+  "payment_method": "cashless",
+  "driver_profile": {
+   "id": "2f88cc3f714842e287ec184c1bdc02bd",
+   "name": "Seinyan Vesmir Adamovich"
+  },
+  "car": {
+   "id": "df9d25cfd73946e796423d439e17b8ac",
+   "brand_model": "BYD E2",
+   "license": {
+    "number": "01***VС"
+   },
+   "callsign": "19924"
+  },
+  "type": {
+   "id": "4964b852670045b196e526d59915b777",
+   "name": "Яндекс.Безналичный"
+  },
+  "price": "31500.0000",
+  "mileage": "7790.0000",
+  "order_time_interval": {
+   "from": "2026-08-27T10:16:43.649+00:00",
+   "to": "2026-08-27T10:35:49.192+00:00"
+  },
+  "driving_at": "2026-08-27T10:16:43.649+00:00",
+  "flags": [
+   "show_address"
+  ]
+ },
+ {
+  "id": "c52fd2024c80cb91bf045d87a1de1811",
+  "short_id": 26254009,
+  "status": "complete",
+  "created_at": "2026-08-27T09:56:54.531+00:00",
+  "booked_at": "2026-08-27T10:00:08.159+00:00",
+  "provider": "platform",
+  "category": "start",
+  "amenities": [],
+  "address_from": {
+   "address": "Xovos 2-tor koʻchasi, 1/4",
+   "lat": 41.28842391376254,
+   "lon": 69.32882289609151
+  },
+  "route_points": [
+   {
+    "address": "Safia, Toshkent, Rixsiliy koʻchasi, 25",
+    "lat": 41.37518377,
+    "lon": 69.27071102
+   }
+  ],
+  "events": [
+   {
+    "event_at": "2026-08-27T09:56:59.754+00:00",
+    "order_status": "driving"
+   },
+   {
+    "event_at": "2026-08-27T10:00:35.299+00:00",
+    "order_status": "waiting"
+   },
+   {
+    "event_at": "2026-08-27T10:00:43.053+00:00",
+    "order_status": "transporting"
+   },
+   {
+    "event_at": "2026-08-27T10:35:46.121+00:00",
+    "order_status": "complete"
+   }
+  ],
+  "ended_at": "2026-08-27T10:35:46.121+00:00",
+  "payment_method": "cash",
+  "driver_profile": {
+   "id": "822bafe40c264cc082f569d0e1a04bad",
+   "name": "Abduraxmanov Bobur"
+  },
+  "car": {
+   "id": "3729d36c174c4d12a84adb9f365832ba",
+   "brand_model": "Chevrolet MATIZ",
+   "license": {
+    "number": "01***QС"
+   },
+   "callsign": "1520"
+  },
+  "type": {
+   "id": "af0efd4b0fa9e111a6fc00304879209b",
+   "name": "Яндекс"
+  },
+  "price": "40500.0000",
+  "mileage": "14934.0000",
+  "order_time_interval": {
+   "from": "2026-08-27T09:56:59.754+00:00",
+   "to": "2026-08-27T10:35:46.121+00:00"
+  },
+  "driving_at": "2026-08-27T09:56:59.754+00:00",
+  "flags": [
+   "show_address"
+  ]
+ },
+ {
+  "id": "23dd6c28567bdb06bff13795acd09648",
+  "short_id": 26254058,
+  "status": "complete",
+  "created_at": "2026-08-27T10:07:55.41+00:00",
+  "booked_at": "2026-08-27T10:10:50.021+00:00",
+  "provider": "platform",
+  "category": "standart",
+  "amenities": [
+   "creditcard"
+  ],
+  "address_from": {
+   "address": "Амударьинская улица, 15",
+   "lat": 41.32483527702338,
+   "lon": 69.35080196747967
+  },
+  "route_points": [
+   {
+    "address": "Дворец национального киноискусства Узбекистана, ул. Алишера Навои, 15, Ташкент",
+    "lat": 41.3190650272963,
+    "lon": 69.26071962453413
+   }
+  ],
+  "events": [
+   {
+    "event_at": "2026-08-27T10:08:01.502+00:00",
+    "order_status": "driving"
+   },
+   {
+    "event_at": "2026-08-27T10:10:49.394+00:00",
+    "order_status": "waiting"
+   },
+   {
+    "event_at": "2026-08-27T10:11:39.983+00:00",
+    "order_status": "transporting"
+   },
+   {
+    "event_at": "2026-08-27T10:34:49.973+00:00",
+    "order_status": "complete"
+   }
+  ],
+  "ended_at": "2026-08-27T10:34:49.973+00:00",
+  "payment_method": "cashless",
+  "driver_profile": {
+   "id": "a849bf495aca9260277820242e646347",
+   "name": "Zakirov Timur"
+  },
+  "car": {
+   "id": "b149a2d9dafc459098e50584f9815dcb",
+   "brand_model": "GAC Aion S Plus",
+   "license": {
+    "number": "01***ЕD"
+   },
+   "callsign": "4685"
+  },
+  "type": {
+   "id": "4964b852670045b196e526d59915b777",
+   "name": "Яндекс.Безналичный"
+  },
+  "price": "44500.0000",
+  "mileage": "8960.0000",
+  "order_time_interval": {
+   "from": "2026-08-27T10:08:01.502+00:00",
+   "to": "2026-08-27T10:34:49.973+00:00"
+  },
+  "driving_at": "2026-08-27T10:08:01.502+00:00",
+  "flags": [
+   "show_address"
+  ]
+ }
+]

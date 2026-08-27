@@ -1,0 +1,65 @@
+[
+ {
+  "updated_at": "2026-08-10T10:25:34.868449+00:00",
+  "accounts": [
+   {
+    "balance": "14971.2000",
+    "balance_limit": "1.0000",
+    "currency": "UZS",
+    "id": "2d89403f52d14081b7534628fd40cb84",
+    "type": "current",
+    "last_transaction_date": "2020-06-21T15:00:00+00:00"
+   }
+  ],
+  "car": {
+   "amenities": [
+    "conditioner"
+   ],
+   "brand": "Chevrolet",
+   "callsign": "149",
+   "category": [
+    "business",
+    "comfort",
+    "courier",
+    "econom",
+    "express",
+    "start"
+   ],
+   "color": "Белый",
+   "id": "f82335c212e34a9ea1014ccb225af842",
+   "model": "Cobalt",
+   "normalized_number": "01***TA",
+   "number": "01***TA",
+   "rental": false,
+   "status": "working",
+   "year": 2014
+  },
+  "driver_profile": {
+   "created_date": "2018-08-08T06:57:59.224+00:00",
+   "first_name": "Utkur",
+   "hire_date": "2018-08-08T00:00:00+00:00",
+   "id": "2d89403f52d14081b7534628fd40cb84",
+   "is_selfemployed": false,
+   "employment_type": "park_employee",
+   "has_contract_issue": false,
+   "last_name": "Yuldashev",
+   "driver_license": {
+    "country": "uzb",
+    "expiration_date": "2030-01-01T00:00:00+00:00",
+    "issue_date": "2011-05-28T00:00:00+00:00",
+    "normalized_number": "AB***57",
+    "number": "AB***57"
+   },
+   "modified_date": "2022-03-14T13:43:50.996+00:00",
+   "park_id": "5b6a6800243a4d55bbd875d9c9b3dd8c",
+   "phones": [
+    "+9989***09"
+   ],
+   "work_rule_id": "ea2fe2699c7d4e9ab8c61ff7f0af5014",
+   "work_status": "working"
+  },
+  "current_status": {
+   "status": "offline"
+  }
+ }
+]
