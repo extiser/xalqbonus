@@ -8,6 +8,9 @@
   - запросы строго последовательные, никакого параллелизма;
   - пауза между запросами не меньше MIN_PAUSE;
   - на отказ по лимиту пауза удваивается, попыток на страницу не больше MAX_ATTEMPTS;
+  - отказ по лимиту поднимает паузу на весь остаток прогона, а не только для
+    текущей страницы: квота Fleet API пополняется медленно, и после отказа
+    разгоняться заново означает войти в ту же стену на следующей же странице;
   - когда попытки исчерпаны — остановка с ошибкой, а не тихий пропуск страницы.
 
 Модуль импортируется скриптами рядом, самостоятельно не запускается.
@@ -22,10 +25,11 @@ import urllib.error
 import urllib.request
 from datetime import timezone
 
-MIN_PAUSE = 1.5             # пауза между запросами, секунд
+MIN_PAUSE = 1.5             # пауза между запросами в начале прогона, секунд
+MAX_PAUSE = 45.0            # выше этого пауза между запросами не растёт
 MAX_ATTEMPTS = 5            # попыток на одну страницу при отказе по лимиту
 FIRST_BACKOFF = 5.0         # пауза перед первым повтором, дальше удваивается
-MAX_BACKOFF = 120.0         # выше этого пауза не растёт
+MAX_BACKOFF = 120.0         # выше этого пауза повтора не растёт
 
 DUMPS_DIR = os.path.join("_reference", "fleet-api", "dumps")
 REPORTS_DIR = os.path.join("_reference", "fleet-api")
@@ -79,7 +83,7 @@ def iso_utc(moment):
 class FleetClient:
     """Последовательный клиент Fleet API с отступлением по лимиту."""
 
-    def __init__(self):
+    def __init__(self, start_pause=MIN_PAUSE):
         env = load_env()
         self.base_url = env["YANDEX_BASE_URL"].rstrip("/")
         self.client_id = env["YANDEX_CLIENT_ID"]
@@ -90,6 +94,8 @@ class FleetClient:
         self.waited_seconds = 0.0
         self.started_at = time.time()
         self.last_request_at = 0.0
+        self.pause = max(start_pause, MIN_PAUSE)   # растёт на отказах и уже не опускается
+        self.start_pause = self.pause
 
     # ---------------------------------------------------------- транспорт
 
@@ -124,12 +130,20 @@ class FleetClient:
             return 0, {"error": str(error)}, round(time.time() - started, 2)
 
     def _respect_pause(self):
-        """Выдержать MIN_PAUSE с момента предыдущего запроса."""
+        """Выдержать текущую паузу с момента предыдущего запроса."""
         if not self.last_request_at:
             return
-        remaining = MIN_PAUSE - (time.time() - self.last_request_at)
+        remaining = self.pause - (time.time() - self.last_request_at)
         if remaining > 0:
             time.sleep(remaining)
+
+    def _slow_down(self):
+        """
+        Отказ по лимиту означает, что выбранный темп для этого ключа слишком
+        быстрый. Сбавляем на весь остаток прогона: назад пауза не отыгрывается,
+        иначе следующая страница снова упрётся в ту же границу.
+        """
+        self.pause = min(max(self.pause * 2, FIRST_BACKOFF), MAX_PAUSE)
 
     def post(self, path, body, description):
         """
@@ -148,10 +162,11 @@ class FleetClient:
 
             if code == 429:
                 self.limit_refusals += 1
+                self._slow_down()
                 if attempt == MAX_ATTEMPTS:
                     break
                 print(f"      отказ по лимиту ({attempt}/{MAX_ATTEMPTS}) на «{description}» — "
-                      f"жду {backoff:.0f} c и повторяю")
+                      f"жду {backoff:.0f} c, дальше пауза {self.pause:.0f} c")
                 time.sleep(backoff)
                 self.waited_seconds += backoff
                 backoff = min(backoff * 2, MAX_BACKOFF)
@@ -184,6 +199,8 @@ class FleetClient:
             "limit_refusals": self.limit_refusals,
             "waited_seconds": round(self.waited_seconds, 1),
             "elapsed_seconds": round(time.time() - self.started_at, 1),
+            "pause_start_seconds": self.start_pause,
+            "pause_final_seconds": round(self.pause, 1),
         }
 
     def print_stats(self, title):
@@ -191,6 +208,8 @@ class FleetClient:
         print(f"\n{title}: запросов {stats['requests']}, "
               f"отказов по лимиту {stats['limit_refusals']}, "
               f"ждали из-за лимита {stats['waited_seconds']:.0f} c, "
+              f"пауза выросла с {stats['pause_start_seconds']} до "
+              f"{stats['pause_final_seconds']} c, "
               f"всего {stats['elapsed_seconds']:.0f} c")
 
 

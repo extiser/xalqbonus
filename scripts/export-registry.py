@@ -11,7 +11,7 @@
 каталог dumps/ закрыт в .gitignore.
 
 Запуск из корня репозитория:
-    python3 scripts/export-registry.py
+    python3 scripts/export-registry.py [стартовая пауза в секундах]
 """
 
 import json
@@ -21,7 +21,7 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from fleet_client import UTC, DUMPS_DIR, DumpWriter, FleetClient, MIN_PAUSE
+from fleet_client import UTC, DUMPS_DIR, DumpWriter, FleetClient, MAX_PAUSE, MIN_PAUSE
 
 PAGE_SIZE = 1000            # максимум, разрешённый документацией для этого метода
 PATH = "/v1/parks/driver-profiles/list"
@@ -40,15 +40,31 @@ def build_body(park_id, offset):
     }
 
 
+
+def parse_start_pause(argv):
+    """
+    Стартовая пауза задаётся аргументом, потому что подходящий темп для этого
+    ключа заранее не известен и меняется от того, кто ещё его сейчас занимает.
+    Меньше MIN_PAUSE не опускается.
+    """
+    if len(argv) > 1:
+        try:
+            return float(argv[1])
+        except ValueError:
+            sys.exit(f"первым аргументом ожидается стартовая пауза в секундах, получено «{argv[1]}»")
+    return MIN_PAUSE
+
 def main():
-    client = FleetClient()
+    client = FleetClient(parse_start_pause(sys.argv))
     stamp = datetime.now(UTC).strftime("%Y-%m-%d")
     dump_path = os.path.join(DUMPS_DIR, f"driver-profiles-{stamp}.jsonl")
     meta_path = os.path.join(DUMPS_DIR, f"driver-profiles-{stamp}.meta.json")
     writer = DumpWriter(dump_path)
 
     print(f"\nВыгрузка реестра парка — {datetime.now(UTC):%d.%m.%Y %H:%M} UTC")
-    print(f"Парк: {client.park_id[:8]}…  Страница: {PAGE_SIZE}  Пауза: {MIN_PAUSE} c\n")
+    print(f"Парк: {client.park_id[:8]}…  Страница: {PAGE_SIZE}")
+    print(f"Пауза: с {client.start_pause:g} c, растёт до {MAX_PAUSE:.0f} c "
+          "на отказах по лимиту\n")
 
     seen_ids = set()
     duplicates = 0
@@ -92,7 +108,6 @@ def main():
         "dump": os.path.basename(dump_path),
         "finished_at": datetime.now(UTC).isoformat(),
         "page_size": PAGE_SIZE,
-        "pause_seconds": MIN_PAUSE,
         "total_reported_by_api": total_reported,
         "profiles_written": written,
         "distinct_profile_ids": len(seen_ids),

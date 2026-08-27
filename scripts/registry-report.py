@@ -417,7 +417,8 @@ def render_registry(data):
     add("\n### Техника обхода реестра\n")
     add(table(["Показатель", "Значение"], [
         ["размер страницы", meta.get("page_size", "—")],
-        ["пауза между запросами", f"{meta.get('pause_seconds', '—')} c"],
+        ["пауза между запросами", f"с {meta.get('pause_start_seconds', '—')} c "
+                                  f"до {meta.get('pause_final_seconds', '—')} c"],
         ["запросов", meta.get("requests", "—")],
         ["отказов по лимиту", meta.get("limit_refusals", "—")],
         ["ждали из-за лимита", f"{meta.get('waited_seconds', '—')} c"],
@@ -593,7 +594,8 @@ def render_orders(data):
         ["различных `id`", meta.get("distinct_order_ids", "—")],
         ["повторов `id` между страницами", meta.get("duplicate_ids_between_pages", "—")],
         ["размер страницы", meta.get("page_size", "—")],
-        ["пауза между запросами", f"{meta.get('pause_seconds', '—')} c"],
+        ["пауза между запросами", f"с {meta.get('pause_start_seconds', '—')} c "
+                                  f"до {meta.get('pause_final_seconds', '—')} c"],
         ["запросов", meta.get("requests", "—")],
         ["отказов по лимиту", meta.get("limit_refusals", "—")],
         ["ждали из-за лимита", f"{meta.get('waited_seconds', '—')} c"],
