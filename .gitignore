@@ -1,0 +1,16 @@
+node_modules/
+.nuxt/
+.output/
+dist/
+.env
+.env.*
+!.env.example
+*.log
+logs/
+.DS_Store
+/data/
+*.sql
+
+# дампы продовой базы
+_backup/
+*.dump
