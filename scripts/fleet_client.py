@@ -24,6 +24,7 @@ import ssl
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 
@@ -124,13 +125,16 @@ class FleetClient:
         self.start_pause = max(start_pause, MIN_PAUSE)
         self.pause = self.start_pause          # растёт на отказах и не опускается
 
-    def _single_request(self, path, body):
+    def _single_request(self, path, body, method, query):
         """Один сетевой вызов. Возвращает (код, тело, секунды)."""
         self.requests_made += 1
+        url = self.base_url + path
+        if query:
+            url += "?" + urllib.parse.urlencode(query)
         request = urllib.request.Request(
-            self.base_url + path,
-            data=json.dumps(body).encode(),
-            method="POST",
+            url,
+            data=json.dumps(body).encode() if body is not None else None,
+            method=method,
             headers={
                 "X-Client-ID": self.client_id,
                 "X-API-Key": self.api_key,
@@ -171,6 +175,14 @@ class FleetClient:
         self.pause = min(max(self.pause * 2, FIRST_BACKOFF), MAX_PAUSE)
 
     def post(self, path, body, description):
+        """Список: тело запроса уходит в JSON, как во всех методах выборки."""
+        return self._with_retries(path, body, description, "POST", None)
+
+    def get(self, path, query, description):
+        """Справочник: параметры уходят в строку запроса, тела нет."""
+        return self._with_retries(path, None, description, "GET", query)
+
+    def _with_retries(self, path, body, description, method, query):
         """
         Запрос страницы. При отказе по лимиту повторяет с удвоением паузы.
         Когда попытки кончились — останавливает скрипт: пропустить страницу
@@ -179,7 +191,7 @@ class FleetClient:
         backoff = FIRST_BACKOFF
         for attempt in range(1, MAX_ATTEMPTS + 1):
             self._respect_pause()
-            code, payload, seconds = self._single_request(path, body)
+            code, payload, seconds = self._single_request(path, body, method, query)
             self.last_request_at = time.time()
 
             if code == 200:
@@ -256,9 +268,15 @@ class ResumableDump:
     записи, про которые мы не знаем, на какой они позиции обхода.
     """
 
-    def __init__(self, base_name, extract_id, restart=False):
+    def __init__(self, base_name, extract_id, restart=False, layout=None,
+                 skip_duplicates=False):
         self.base_name = base_name
         self.extract_id = extract_id
+        # Раскладка позиции обхода. Чекпоинт с чужой раскладкой продолжать нельзя:
+        # прежний обход описывал позицию иначе, и его числа для нового обхода
+        # означают не то же самое.
+        self.layout = layout
+        self.skip_duplicates = skip_duplicates
         self.part_path = os.path.join(DUMPS_DIR, f"{base_name}.part.jsonl")
         self.checkpoint_path = os.path.join(DUMPS_DIR, f"{base_name}.checkpoint.json")
         os.makedirs(DUMPS_DIR, exist_ok=True)
@@ -296,6 +314,11 @@ class ResumableDump:
         if not os.path.exists(self.part_path):
             print("   чекпоинт есть, а выгрузки рядом нет — начинаю обход заново")
             return None
+        if checkpoint.get("layout") != self.layout:
+            print(f"   чекпоинт от прежней раскладки обхода "
+                  f"({checkpoint.get('layout') or 'без имени'}) несовместим "
+                  f"с нынешней ({self.layout or 'без имени'}) — начинаю обход заново")
+            return None
         return checkpoint
 
     def _reset(self):
@@ -329,6 +352,10 @@ class ResumableDump:
             else:
                 self.seen_ids.add(record_id)
 
+        # Повторы, снятые при записи, в файле не лежат — их число живёт только
+        # в чекпоинте, иначе после продолжения счётчик начинался бы с нуля.
+        self.duplicates = max(self.duplicates, checkpoint.get("duplicates", 0))
+
         promised_records = checkpoint.get("records")
         if promised_records is not None and promised_records != self.records:
             print(f"   ВНИМАНИЕ: чекпоинт обещал {promised_records} записей, "
@@ -338,6 +365,7 @@ class ResumableDump:
     def _save_checkpoint(self, position, stats):
         checkpoint = {
             "stamp": self.stamp,
+            "layout": self.layout,
             "position": position,
             "context": self.context,
             "records": self.records,
@@ -362,6 +390,11 @@ class ResumableDump:
             record_id = self.extract_id(record)
             if record_id in self.seen_ids:
                 self.duplicates += 1
+                # Половины куска перекрываются в середине по построению обхода.
+                # Повтор считаем, но в выгрузку не пишем: отчёт считает профили
+                # по строкам файла, и задвоенная строка сломала бы все агрегаты.
+                if self.skip_duplicates:
+                    continue
             else:
                 self.seen_ids.add(record_id)
             line = json.dumps(record, ensure_ascii=False) + "\n"

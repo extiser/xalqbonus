@@ -384,10 +384,20 @@ def render_registry(data):
 
     # --- условия работы и машина
     add("\n### Условия работы и автомобиль\n")
-    add(f"Различных `work_rule_id`: **{len(data['work_rules'])}**\n")
-    add(table(["`work_rule_id`", "Профилей"],
-              [[rule if rule == "(пусто)" else f"`{rule}`", counted(count, profiles)]
-               for rule, count in data["work_rules"].most_common(30)]))
+    rule_names = meta.get("work_rules") or {}
+    add(f"Различных `work_rule_id` в выгрузке: **{len(data['work_rules'])}**, "
+        f"условий работы в справочнике парка: "
+        f"**{len(rule_names) if rule_names else '—'}**\n")
+    rule_rows = [[rule if rule == "(пусто)" else f"`{rule}`",
+                  rule_names.get(rule, "—"), counted(count, profiles)]
+                 for rule, count in data["work_rules"].most_common()]
+    # Условия работы без единого профиля тоже строки таблицы: пустое условие
+    # и условие, которым никто не пользуется, — разные вещи, и видно это только
+    # рядом с остальными.
+    rule_rows += [[f"`{rule}`", name, counted(0, profiles)]
+                  for rule, name in sorted(rule_names.items(), key=lambda pair: pair[1])
+                  if rule not in data["work_rules"]]
+    add(table(["`work_rule_id`", "Название", "Профилей"], rule_rows))
 
     repeated_callsigns = {callsign: owners for callsign, owners in data["callsigns"].items()
                           if len(owners) > 1}
@@ -415,8 +425,19 @@ def render_registry(data):
 
     # --- техника обхода
     add("\n### Техника обхода реестра\n")
+    add("Реестр берётся кусками по `work_status` и `work_rule_id`, а не сквозным "
+        "`offset`: лимитер Fleet API считает стоимость запроса, и глубокая "
+        "offset-страница отбивается независимо от паузы.\n")
     add(table(["Показатель", "Значение"], [
+        ["кусков", f"{meta.get('chunks_non_empty', '—')} непустых "
+                   f"из {meta.get('chunks_total', '—')}"],
+        ["кусков добиралось окнами по `updated_at`",
+         len(meta.get("chunks_windowed") or [])],
         ["размер страницы", meta.get("page_size", "—")],
+        ["кусок берётся с двух концов от", meta.get("two_end_threshold", "—")],
+        ["максимальная глубина `offset`",
+         f"{meta.get('max_offset_depth', '—')} при потолке "
+         f"{meta.get('max_offset_depth_allowed', '—')}"],
         ["пауза между запросами", f"с {meta.get('pause_start_seconds', '—')} c "
                                   f"до {meta.get('pause_final_seconds', '—')} c"],
         ["запусков выгрузки", meta.get("runs", "—")],
@@ -425,6 +446,17 @@ def render_registry(data):
         ["ждали из-за лимита", f"{meta.get('waited_seconds', '—')} c"],
         ["общее время", f"{meta.get('elapsed_seconds', '—')} c"],
     ]))
+
+    refusals_by_chunk = meta.get("limit_refusals_by_chunk") or {}
+    if refusals_by_chunk:
+        add("\nОтказы по лимиту в разбивке по кускам. Куски, прошедшие без "
+            "единого отказа, в таблицу не попадают.\n")
+        add(table(["Кусок", "Отказов", "Размер куска"],
+                  [[f"`{key}`", count, (meta.get("chunk_totals") or {}).get(key, "—")]
+                   for key, count in sorted(refusals_by_chunk.items(),
+                                            key=lambda pair: -pair[1])]))
+    else:
+        add("\nНи один кусок не получил отказа по лимиту.\n")
 
     return "\n".join(parts)
 
