@@ -305,7 +305,7 @@ def render_registry(data):
     if meta.get("total_reported_by_api") is not None:
         add(f"API сообщил `total`: {meta['total_reported_by_api']}. "
             f"Повторов `id` между страницами: {meta.get('duplicate_ids_between_pages', 0)}, "
-            f"различных профилей: {meta.get('distinct_profile_ids', '—')}.")
+            f"различных профилей: {meta.get('distinct_ids', '—')}.")
 
     # --- ВУ
     add("\n### Водительское удостоверение\n")
@@ -419,6 +419,7 @@ def render_registry(data):
         ["размер страницы", meta.get("page_size", "—")],
         ["пауза между запросами", f"с {meta.get('pause_start_seconds', '—')} c "
                                   f"до {meta.get('pause_final_seconds', '—')} c"],
+        ["запусков выгрузки", meta.get("runs", "—")],
         ["запросов", meta.get("requests", "—")],
         ["отказов по лимиту", meta.get("limit_refusals", "—")],
         ["ждали из-за лимита", f"{meta.get('waited_seconds', '—')} c"],
@@ -591,11 +592,12 @@ def render_orders(data):
 
     add("\n### Пагинация\n")
     add(table(["Показатель", "Значение"], [
-        ["различных `id`", meta.get("distinct_order_ids", "—")],
+        ["различных `id`", meta.get("distinct_ids", "—")],
         ["повторов `id` между страницами", meta.get("duplicate_ids_between_pages", "—")],
         ["размер страницы", meta.get("page_size", "—")],
         ["пауза между запросами", f"с {meta.get('pause_start_seconds', '—')} c "
                                   f"до {meta.get('pause_final_seconds', '—')} c"],
+        ["запусков выгрузки", meta.get("runs", "—")],
         ["запросов", meta.get("requests", "—")],
         ["отказов по лимиту", meta.get("limit_refusals", "—")],
         ["ждали из-за лимита", f"{meta.get('waited_seconds', '—')} c"],

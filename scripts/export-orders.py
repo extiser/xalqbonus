@@ -10,25 +10,31 @@
 Окно строится в UTC: API отдаёт и фильтрует время в UTC, подстановка
 местного времени сдвинула бы выборку на пять часов.
 
+Выгрузка возобновляемая: страницы копятся в .part.jsonl, курсор пагинации —
+в .checkpoint.json рядом. При продолжении окно берётся из чекпоинта, а не
+пересчитывается от текущего момента: иначе курсор указывал бы в одну выборку,
+а фильтр описывал другую.
+
 Выгрузка содержит адреса и маршруты и в репозиторий не коммитится:
 каталог dumps/ закрыт в .gitignore.
 
 Запуск из корня репозитория:
-    python3 scripts/export-orders.py [стартовая пауза в секундах]
+    python3 scripts/export-orders.py [стартовая пауза в секундах] [--restart]
 """
 
-import json
 import os
 import sys
 from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from fleet_client import UTC, DUMPS_DIR, DumpWriter, FleetClient, MAX_PAUSE, MIN_PAUSE, iso_utc
+from fleet_client import (MAX_PAUSE, UTC, FleetClient, LimitExhausted, ResumableDump,
+                          iso_utc, parse_export_args)
 
 PAGE_SIZE = 500             # максимум, разрешённый документацией для этого метода
 WINDOW_DAYS = 7
 PATH = "/v1/parks/orders/list"
+BASE_NAME = "orders"
 MAX_PAGES = 2000            # предохранитель от бесконечной пагинации
 
 
@@ -44,39 +50,45 @@ def build_body(park_id, ended_from, ended_to, cursor):
     return body
 
 
+def order_id(record):
+    return record.get("id")
 
-def parse_start_pause(argv):
-    """
-    Стартовая пауза задаётся аргументом, потому что подходящий темп для этого
-    ключа заранее не известен и меняется от того, кто ещё его сейчас занимает.
-    Меньше MIN_PAUSE не опускается.
-    """
-    if len(argv) > 1:
-        try:
-            return float(argv[1])
-        except ValueError:
-            sys.exit(f"первым аргументом ожидается стартовая пауза в секундах, получено «{argv[1]}»")
-    return MIN_PAUSE
 
 def main():
-    client = FleetClient(parse_start_pause(sys.argv))
-    now = datetime.now(UTC)
-    ended_from, ended_to = iso_utc(now - timedelta(days=WINDOW_DAYS)), iso_utc(now)
-    stamp = now.strftime("%Y-%m-%d")
-    dump_path = os.path.join(DUMPS_DIR, f"orders-{stamp}.jsonl")
-    meta_path = os.path.join(DUMPS_DIR, f"orders-{stamp}.meta.json")
-    writer = DumpWriter(dump_path)
+    arguments = parse_export_args("Выгрузка заказов парка за 7 суток")
+    client = FleetClient(arguments.pause)
+    dump = ResumableDump(BASE_NAME, order_id, restart=arguments.restart)
 
-    print(f"\nВыгрузка заказов — {now:%d.%m.%Y %H:%M} UTC")
+    if dump.resumed and dump.context.get("ended_at_from"):
+        ended_from = dump.context["ended_at_from"]
+        ended_to = dump.context["ended_at_to"]
+    else:
+        now = datetime.now(UTC)
+        ended_from, ended_to = iso_utc(now - timedelta(days=WINDOW_DAYS)), iso_utc(now)
+    dump.context = {
+        "page_size": PAGE_SIZE,
+        "window_days": WINDOW_DAYS,
+        "ended_at_from": ended_from,
+        "ended_at_to": ended_to,
+    }
+
+    print(f"\nВыгрузка заказов — {dump.stamp}")
     print(f"Парк: {client.park_id[:8]}…  Окно по ended_at: {ended_from} … {ended_to}")
     print(f"Страница: {PAGE_SIZE}")
     print(f"Пауза: с {client.start_pause:g} c, растёт до {MAX_PAUSE:.0f} c "
-          "на отказах по лимиту\n")
+          "на отказах по лимиту")
 
-    seen_ids = set()
-    duplicates = 0
-    cursor = None
-    pages = 0
+    position = dump.position or {}
+    cursor = position.get("cursor")
+    pages = position.get("pages", 0)
+    if dump.resumed:
+        print(f"Продолжаю прошлый обход: в выгрузке уже {dump.records} заказов, "
+              f"страниц пройдено {pages}\n")
+    else:
+        print("Обход с нуля\n")
+
+    interrupted = None
+    exhausted = False
 
     try:
         while pages < MAX_PAGES:
@@ -85,50 +97,45 @@ def main():
                 f"заказы, страница {pages + 1}")
 
             orders = payload.get("orders", [])
-            for order in orders:
-                order_id = order.get("id")
-                if order_id in seen_ids:
-                    duplicates += 1
-                else:
-                    seen_ids.add(order_id)
-                writer.write(order)
-
-            pages += 1
-            print(f"   страница {pages:>4} → получено {len(orders):>4} за {seconds:>4.2f} c, "
-                  f"всего {writer.written}")
-
             cursor = payload.get("cursor")
+            pages += 1
             # Курсор без заказов означает конец выборки: следующая страница пуста.
-            if not cursor or not orders:
+            exhausted = not cursor or not orders
+
+            dump.write_page(orders, {"cursor": cursor, "pages": pages}, client.stats())
+            print(f"   страница {pages:>4} → получено {len(orders):>4} за {seconds:>4.2f} c, "
+                  f"в выгрузке {dump.records}")
+
+            if exhausted:
                 break
         else:
             print(f"\nВНИМАНИЕ: сработал предохранитель на {MAX_PAGES} страницах — "
                   "выгрузка может быть неполной")
+    except LimitExhausted as error:
+        interrupted = error
     except BaseException:
-        writer.discard()
+        dump.keep(client.stats())
         raise
 
-    written = writer.commit()
+    if interrupted:
+        dump.keep(client.stats())
+        print(f"\nОстановка: «{interrupted.description}» не прошла за все попытки — "
+              "лимит ключа не отпустил.")
+        print(f"В выгрузке {dump.records} заказов, пройдено страниц {pages}. "
+              "Прогресс сохранён.")
+        print("Повторный запуск продолжит с этого места. Начать заново — с --restart.")
+        sys.exit(1)
 
-    meta = {
-        "dump": os.path.basename(dump_path),
-        "finished_at": datetime.now(UTC).isoformat(),
-        "window_days": WINDOW_DAYS,
-        "ended_at_from": ended_from,
-        "ended_at_to": ended_to,
-        "page_size": PAGE_SIZE,
-        "pages": pages,
-        "orders_written": written,
-        "distinct_order_ids": len(seen_ids),
-        "duplicate_ids_between_pages": duplicates,
-        **client.stats(),
-    }
-    json.dump(meta, open(meta_path, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    meta = dump.commit(client.stats(), {"pages": pages})
 
-    print(f"\nЗаписано строк: {written}   страниц: {pages}")
-    print(f"Различных id: {len(seen_ids)}   повторов id между страницами: {duplicates}")
-    print(f"Файл: {dump_path}")
-    client.print_stats("Техника обхода")
+    print(f"\nЗаписано заказов: {meta['records']}   страниц: {pages}")
+    print(f"Различных id: {meta['distinct_ids']}   "
+          f"повторов id между страницами: {meta['duplicate_ids_between_pages']}")
+    print(f"Файл: {dump.dump_path}")
+    print(f"\nТехника обхода: запусков {meta['runs']}, запросов {meta['requests']}, "
+          f"отказов по лимиту {meta['limit_refusals']}, "
+          f"ждали из-за лимита {meta['waited_seconds']:.0f} c, "
+          f"всего {meta['elapsed_seconds']:.0f} c")
 
 
 if __name__ == "__main__":

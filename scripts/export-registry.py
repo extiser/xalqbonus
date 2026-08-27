@@ -4,27 +4,31 @@
 
 Только чтение. В базу не пишет, ничего в парке не меняет.
 Результат — файл _reference/fleet-api/dumps/driver-profiles-YYYY-MM-DD.jsonl,
-по одному профилю в строке, ровно как его отдал API, плюс сводка о самом
-обходе рядом в .meta.json — отчёту нужны число запросов и время.
+по одному профилю в строке, ровно как его отдал API, плюс сводка об обходе
+рядом в .meta.json — отчёту нужны число запросов и время.
+
+Выгрузка возобновляемая: страницы копятся в .part.jsonl, позиция обхода —
+в .checkpoint.json рядом. Оборванный прогон продолжается с той же страницы,
+итоговый файл появляется только когда обход дошёл до конца.
 
 Выгрузка содержит персональные данные и в репозиторий не коммитится:
 каталог dumps/ закрыт в .gitignore.
 
 Запуск из корня репозитория:
-    python3 scripts/export-registry.py [стартовая пауза в секундах]
+    python3 scripts/export-registry.py [стартовая пауза в секундах] [--restart]
 """
 
-import json
 import os
 import sys
-from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from fleet_client import UTC, DUMPS_DIR, DumpWriter, FleetClient, MAX_PAUSE, MIN_PAUSE
+from fleet_client import (MAX_PAUSE, FleetClient, LimitExhausted, ResumableDump,
+                          parse_export_args)
 
 PAGE_SIZE = 1000            # максимум, разрешённый документацией для этого метода
 PATH = "/v1/parks/driver-profiles/list"
+BASE_NAME = "driver-profiles"
 
 
 def build_body(park_id, offset):
@@ -40,36 +44,30 @@ def build_body(park_id, offset):
     }
 
 
+def profile_id(record):
+    return (record.get("driver_profile") or {}).get("id")
 
-def parse_start_pause(argv):
-    """
-    Стартовая пауза задаётся аргументом, потому что подходящий темп для этого
-    ключа заранее не известен и меняется от того, кто ещё его сейчас занимает.
-    Меньше MIN_PAUSE не опускается.
-    """
-    if len(argv) > 1:
-        try:
-            return float(argv[1])
-        except ValueError:
-            sys.exit(f"первым аргументом ожидается стартовая пауза в секундах, получено «{argv[1]}»")
-    return MIN_PAUSE
 
 def main():
-    client = FleetClient(parse_start_pause(sys.argv))
-    stamp = datetime.now(UTC).strftime("%Y-%m-%d")
-    dump_path = os.path.join(DUMPS_DIR, f"driver-profiles-{stamp}.jsonl")
-    meta_path = os.path.join(DUMPS_DIR, f"driver-profiles-{stamp}.meta.json")
-    writer = DumpWriter(dump_path)
+    arguments = parse_export_args("Выгрузка реестра водителей парка")
+    client = FleetClient(arguments.pause)
+    dump = ResumableDump(BASE_NAME, profile_id, restart=arguments.restart)
+    dump.context = {"page_size": PAGE_SIZE}
 
-    print(f"\nВыгрузка реестра парка — {datetime.now(UTC):%d.%m.%Y %H:%M} UTC")
+    print(f"\nВыгрузка реестра парка — {dump.stamp}")
     print(f"Парк: {client.park_id[:8]}…  Страница: {PAGE_SIZE}")
     print(f"Пауза: с {client.start_pause:g} c, растёт до {MAX_PAUSE:.0f} c "
-          "на отказах по лимиту\n")
+          "на отказах по лимиту")
 
-    seen_ids = set()
-    duplicates = 0
+    offset = (dump.position or {}).get("offset", 0)
+    if dump.resumed:
+        print(f"Продолжаю прошлый обход: в выгрузке уже {dump.records} профилей, "
+              f"следующий offset {offset}\n")
+    else:
+        print("Обход с нуля\n")
+
     total_reported = None
-    offset = 0
+    interrupted = None
 
     try:
         while True:
@@ -78,51 +76,48 @@ def main():
 
             if total_reported is None:
                 total_reported = payload.get("total")
+                dump.context["total_reported_by_api"] = total_reported
                 print(f"API сообщает всего профилей: {total_reported}")
 
             profiles = payload.get("driver_profiles", [])
             if not profiles:
                 break
 
-            for profile in profiles:
-                profile_id = (profile.get("driver_profile") or {}).get("id")
-                if profile_id in seen_ids:
-                    duplicates += 1
-                else:
-                    seen_ids.add(profile_id)
-                writer.write(profile)
-
-            print(f"   offset {offset:>6} → получено {len(profiles):>4} "
-                  f"за {seconds:>4.2f} c, всего {offset + len(profiles)}")
             offset += len(profiles)
+            dump.write_page(profiles, {"offset": offset}, client.stats())
+            print(f"   получено {len(profiles):>4} за {seconds:>4.2f} c, "
+                  f"в выгрузке {dump.records} из {total_reported}")
 
             if total_reported is not None and offset >= total_reported:
                 break
+    except LimitExhausted as error:
+        interrupted = error
     except BaseException:
-        writer.discard()
+        dump.keep(client.stats())
         raise
 
-    written = writer.commit()
+    if interrupted:
+        dump.keep(client.stats())
+        print(f"\nОстановка: «{interrupted.description}» не прошла за все попытки — "
+              "лимит ключа не отпустил.")
+        print(f"В выгрузке {dump.records} профилей, следующий offset {offset}. "
+              "Прогресс сохранён.")
+        print("Повторный запуск продолжит с этого места. Начать заново — с --restart.")
+        sys.exit(1)
 
-    meta = {
-        "dump": os.path.basename(dump_path),
-        "finished_at": datetime.now(UTC).isoformat(),
-        "page_size": PAGE_SIZE,
-        "total_reported_by_api": total_reported,
-        "profiles_written": written,
-        "distinct_profile_ids": len(seen_ids),
-        "duplicate_ids_between_pages": duplicates,
-        **client.stats(),
-    }
-    json.dump(meta, open(meta_path, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    meta = dump.commit(client.stats())
 
-    print(f"\nЗаписано строк: {written}")
-    print(f"Различных профилей: {len(seen_ids)}   повторов id между страницами: {duplicates}")
-    if total_reported is not None and written != total_reported:
-        print(f"ВНИМАНИЕ: API обещал {total_reported}, выгружено {written} — расхождение "
-              f"{written - total_reported:+d}")
-    print(f"Файл: {dump_path}")
-    client.print_stats("Техника обхода")
+    print(f"\nЗаписано профилей: {meta['records']}")
+    print(f"Различных профилей: {meta['distinct_ids']}   "
+          f"повторов id между страницами: {meta['duplicate_ids_between_pages']}")
+    if total_reported is not None and meta["records"] != total_reported:
+        print(f"ВНИМАНИЕ: API обещал {total_reported}, выгружено {meta['records']} — "
+              f"расхождение {meta['records'] - total_reported:+d}")
+    print(f"Файл: {dump.dump_path}")
+    print(f"\nТехника обхода: запусков {meta['runs']}, запросов {meta['requests']}, "
+          f"отказов по лимиту {meta['limit_refusals']}, "
+          f"ждали из-за лимита {meta['waited_seconds']:.0f} c, "
+          f"всего {meta['elapsed_seconds']:.0f} c")
 
 
 if __name__ == "__main__":
