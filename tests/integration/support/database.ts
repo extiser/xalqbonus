@@ -163,6 +163,21 @@ export const cleanupTestData = async (): Promise<void> => {
     await transaction.$executeRaw`
       DELETE FROM xb.accounts WHERE "person_id" = ANY(${personIds}::uuid[])
     `;
+    // События и точки маршрута ссылаются на поездку — уходят первыми.
+    await transaction.$executeRaw`
+      DELETE FROM xb.trip_events
+       WHERE "trip_id" IN (
+             SELECT "id" FROM xb.trips
+              WHERE "profile_id" IN (SELECT "profile_id" FROM xb.park_profiles WHERE "person_id" = ANY(${personIds}::uuid[]))
+       )
+    `;
+    await transaction.$executeRaw`
+      DELETE FROM xb.trip_route_points
+       WHERE "trip_id" IN (
+             SELECT "id" FROM xb.trips
+              WHERE "profile_id" IN (SELECT "profile_id" FROM xb.park_profiles WHERE "person_id" = ANY(${personIds}::uuid[]))
+       )
+    `;
     await transaction.$executeRaw`
       DELETE FROM xb.trips
        WHERE "profile_id" IN (SELECT "profile_id" FROM xb.park_profiles WHERE "person_id" = ANY(${personIds}::uuid[]))
@@ -186,6 +201,102 @@ export const cleanupTestData = async (): Promise<void> => {
        WHERE account."type" <> 'driver'
     `;
   });
+};
+
+/**
+ * Убирает следы прогонов синхронизации заказов: отметки и строки прогонов.
+ *
+ * Отдельно от уборки по людям: отметка и прогон не принадлежат никакому человеку, а тест
+ * синхронизации обязан начинаться с чистой отметки — иначе окно первого прогона зависело бы
+ * от того, что оставил после себя предыдущий файл тестов.
+ */
+export const resetOrdersSyncState = async (): Promise<void> => {
+  // Отметка ссылается на прогон, поездка — тоже. Порядок удаления идёт по ссылкам.
+  await db.$executeRaw`DELETE FROM xb.sync_state WHERE "kind" IN ('orders', 'orders_catchup')`;
+  await db.$executeRaw`
+    UPDATE xb.trips SET "sync_run_id" = NULL
+     WHERE "sync_run_id" IN (SELECT "id" FROM xb.sync_runs WHERE "kind" IN ('orders', 'orders_catchup'))
+  `;
+  await db.$executeRaw`DELETE FROM xb.sync_runs WHERE "kind" IN ('orders', 'orders_catchup')`;
+};
+
+/**
+ * Заводит строку прогона в состоянии `running` с заданным временем старта.
+ *
+ * Так выглядит строка, брошенная процессом, которого убили: закрыть её было некому.
+ */
+export const insertRunningSyncRun = async (kind: string, startedAt: Date): Promise<string> => {
+  const rows = await db.$queryRaw<{ id: string }[]>`
+    INSERT INTO xb.sync_runs ("kind", "status", "started_at")
+    VALUES (${kind}::xb.sync_kind, 'running'::xb.sync_status, ${startedAt.toISOString()}::timestamptz)
+    RETURNING "id"
+  `;
+
+  return rows[0]?.id as string;
+};
+
+export type SyncRunRow = {
+  id: string;
+  kind: string;
+  status: string;
+  windowFrom: Date | null;
+  windowTo: Date | null;
+  itemsSeen: number;
+  itemsWritten: number;
+  rateLimited: number;
+  error: string | null;
+};
+
+export const readSyncRuns = async (kind: string): Promise<SyncRunRow[]> => {
+  const rows = await db.$queryRaw<
+    (Omit<SyncRunRow, 'itemsSeen' | 'itemsWritten' | 'rateLimited'> & {
+      itemsSeen: number;
+      itemsWritten: number;
+      rateLimited: number;
+    })[]
+  >`
+    SELECT "id",
+           "kind"::text        AS "kind",
+           "status"::text      AS "status",
+           "window_from"       AS "windowFrom",
+           "window_to"         AS "windowTo",
+           "items_seen"        AS "itemsSeen",
+           "items_written"     AS "itemsWritten",
+           "rate_limited"      AS "rateLimited",
+           "error"
+      FROM xb.sync_runs
+     WHERE "kind" = ${kind}::xb.sync_kind
+     ORDER BY "started_at"
+  `;
+
+  return rows;
+};
+
+export const readSyncWatermark = async (kind: string): Promise<Date | null> => {
+  const rows = await db.$queryRaw<{ watermark: Date | null }[]>`
+    SELECT "watermark" FROM xb.sync_state WHERE "kind" = ${kind}::xb.sync_kind
+  `;
+
+  return rows[0]?.watermark ?? null;
+};
+
+export const readTripStatus = async (orderId: string): Promise<string | null> => {
+  const rows = await db.$queryRaw<{ status: string }[]>`
+    SELECT "status" FROM xb.trips WHERE "order_id" = ${orderId}
+  `;
+
+  return rows[0]?.status ?? null;
+};
+
+export const countTripEvents = async (orderId: string): Promise<number> => {
+  const rows = await db.$queryRaw<{ total: bigint }[]>`
+    SELECT COUNT(*) AS total
+      FROM xb.trip_events AS event
+      JOIN xb.trips AS trip ON trip."id" = event."trip_id"
+     WHERE trip."order_id" = ${orderId}
+  `;
+
+  return Number(rows[0]?.total ?? 0n);
 };
 
 /**

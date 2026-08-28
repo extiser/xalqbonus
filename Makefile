@@ -8,6 +8,7 @@ COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
 
 .PHONY: help up up-d down restart logs ps shell psql migrate migrate-create typecheck test test-db \
         db-restore db-schema invariants license-collisions legacy-vs-api import-legacy \
+        sync-orders sync-state \
         prod-up prod-down prod-restart prod-logs prod-ps prod-shell prod-psql prod-migrate \
         proxy-up proxy-down proxy-ps proxy-logs proxy-validate proxy-reload
 
@@ -88,6 +89,17 @@ legacy-vs-api: ## Сверка старой базы с Fleet API: потеря 
 # Скрипт идемпотентен — повторный прогон не меняет ни одной цифры отчёта.
 import-legacy: ## Перенести реестр парка и балансы из public в xb (идемпотентно)
 	$(COMPOSE) exec -T app npx tsx scripts/import-legacy.ts
+
+# Разовый прогон синхронизации заказов мимо очереди — тем же кодом, каким ходит воркер.
+# Гоняется внутри app-контейнера: сеть стека и строка подключения с именем `postgres`
+# живут там же. Выключатель SYNC_LIVE_ENABLED на разовый прогон не влияет — он снимает
+# расписание, а не запрещает синхронизацию.
+sync-orders: ## Разовый прогон синхронизации заказов. Использование: make sync-orders [kind=orders_catchup]
+	$(COMPOSE) exec -T app npx tsx scripts/sync-orders.ts $(or $(kind),orders)
+
+# Что синхронизация думает о себе: отметки и последние прогоны со счётчиками.
+sync-state: ## Показать отметки синхронизации и последние прогоны
+	$(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -q' < scripts/sync-state.sql
 
 typecheck: ## Проверить типы (nuxt typecheck)
 	npm run typecheck

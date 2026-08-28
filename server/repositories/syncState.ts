@@ -15,13 +15,24 @@ export type SyncStateRow = { kind: SyncKind; watermark: Date | null };
  * Отметка `orders`, выставленная заодно, означала бы, что всё до неё уже опрошено, —
  * тот же класс ошибки, что убил старого бота.
  */
-export const setSyncWatermark = async (kind: SyncKind, watermark: Date): Promise<void> => {
+export const setSyncWatermark = async (
+  kind: SyncKind,
+  watermark: Date,
+  /** Прогон, поставивший отметку. Пусто у переноса: он не прогон синхронизации. */
+  lastRunId: string | null = null,
+): Promise<void> => {
   await db.$executeRaw`
-    INSERT INTO xb.sync_state ("kind", "watermark", "updated_at")
-    VALUES (${kind}::xb.sync_kind, ${watermark.toISOString()}::timestamptz, now())
+    INSERT INTO xb.sync_state ("kind", "watermark", "last_run_id", "updated_at")
+    VALUES (
+      ${kind}::xb.sync_kind,
+      ${watermark.toISOString()}::timestamptz,
+      ${lastRunId}::uuid,
+      now()
+    )
     ON CONFLICT ("kind") DO UPDATE SET
-      "watermark"  = EXCLUDED."watermark",
-      "updated_at" = now()
+      "watermark"   = EXCLUDED."watermark",
+      "last_run_id" = EXCLUDED."last_run_id",
+      "updated_at"  = now()
   `;
 };
 
