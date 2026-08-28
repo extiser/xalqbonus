@@ -1,0 +1,120 @@
+# Единственная входная дверь в стек: docker compose и npx руками не набираются — у любой
+# операции есть цель (docs/infra.md → «Единственная входная дверь — Makefile»).
+COMPOSE = docker compose -f docker/compose.local.yml --env-file .env
+COMPOSE_PROD = docker compose -f docker/compose.prod.yml --env-file .env
+COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
+
+.DEFAULT_GOAL := help
+
+.PHONY: help up up-d down restart logs ps shell psql migrate migrate-create typecheck test \
+        db-restore db-schema \
+        prod-up prod-down prod-restart prod-logs prod-ps prod-shell prod-psql prod-migrate \
+        proxy-up proxy-down proxy-ps proxy-logs proxy-validate proxy-reload
+
+help: ## Показать список доступных команд
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
+
+up: ## Поднять local-стек (foreground)
+	$(COMPOSE) up
+
+up-d: ## Поднять local-стек в фоне (detached) — не занимает терминал
+	$(COMPOSE) up -d
+
+down: ## Остановить local-стек
+	$(COMPOSE) down
+
+restart: ## Перезапустить local-стек
+	$(COMPOSE) restart
+
+logs: ## Следить за логами local-стека
+	$(COMPOSE) logs -f
+
+ps: ## Статус контейнеров local-стека
+	$(COMPOSE) ps
+
+shell: ## Shell внутри app-контейнера (local)
+	$(COMPOSE) exec app sh
+
+psql: ## Войти в psql локальной БД
+	$(COMPOSE) exec postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
+
+migrate: ## Применить миграции к локальной БД
+	$(COMPOSE) exec app npx prisma migrate deploy
+
+migrate-create: ## Создать миграцию из изменённой схемы, не применяя. Использование: make migrate-create name=point_entries
+	$(COMPOSE) exec app npx prisma migrate dev --create-only --name $(name)
+
+# Схема наших таблиц. `public` не трогается ничем и никогда: она принадлежит старому боту
+# и только читается (CLAUDE.md → «Важные ограничения»).
+db-schema: ## Завести схему xb в локальной БД, если её ещё нет
+	$(COMPOSE) exec postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -c "CREATE SCHEMA IF NOT EXISTS xb;"'
+
+# Восстановление идёт в схему public как есть, поверх пустой базы. Дамп в формате custom,
+# поэтому pg_restore, а не psql. Перезалив поверх наполненной базы стоит полутора часов,
+# поэтому цель сначала считает водителей и отказывается работать, если они уже есть.
+db-restore: ## Восстановить продовый дамп в локальную БД. Использование: make db-restore dump=_backup/xalqbonus-2026-08-27-1247.dump
+	@test -n "$(dump)" || { echo "укажите файл: make db-restore dump=_backup/<файл>.dump"; exit 1; }
+	@test -f "$(dump)" || { echo "файла нет: $(dump)"; exit 1; }
+	@tables=$$($(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -tAc "select count(*) from information_schema.tables where table_schema = '"'"'public'"'"'"' 2>/dev/null | tr -d "\r"); \
+	if [ "$$tables" != "0" ]; then \
+		echo "в схеме public уже $$tables таблиц — восстановление отменено."; \
+		echo "перезалив поверх рабочей копии удаляет основание отчётов в _reference/legacy/."; \
+		exit 1; \
+	fi
+	cat "$(dump)" | $(COMPOSE) exec -T postgres sh -c 'pg_restore --no-owner --no-privileges -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' 
+	$(MAKE) db-schema
+
+typecheck: ## Проверить типы (nuxt typecheck)
+	npm run typecheck
+
+test: ## Прогнать тесты (vitest)
+	npm run test
+
+# Боевой набор. Сборка образа входит в подъём: отдельной цели build нет, как и цели
+# с созданием миграций — на проде миграции только применяются.
+prod-up: ## Поднять prod-стек в фоне (detached)
+	$(COMPOSE_PROD) up -d --build
+
+prod-down: ## Остановить prod-стек
+	$(COMPOSE_PROD) down
+
+prod-restart: ## Перезапустить prod-стек
+	$(COMPOSE_PROD) restart
+
+prod-logs: ## Следить за логами prod-стека
+	$(COMPOSE_PROD) logs -f
+
+prod-ps: ## Статус контейнеров prod-стека
+	$(COMPOSE_PROD) ps
+
+prod-shell: ## Shell внутри app-контейнера (prod)
+	$(COMPOSE_PROD) exec app sh
+
+prod-psql: ## Войти в psql prod-БД
+	$(COMPOSE_PROD) exec postgres sh -c 'PGPASSWORD="$$POSTGRES_PASSWORD" psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
+
+prod-migrate: ## Применить миграции к prod-БД
+	$(COMPOSE_PROD) exec app ./node_modules/.bin/prisma migrate deploy
+
+# Входная дверь машины: одна на сервер, окружению не принадлежит. Цели гасят и поднимают
+# только её. Цели с удалением томов здесь нет ни под каким именем — в томе двери живут
+# выпущенные сертификаты.
+proxy-up: ## Поднять входную дверь машины в фоне (detached)
+	$(COMPOSE_PROXY) up -d
+
+proxy-down: ## Остановить входную дверь машины (тома не трогает)
+	$(COMPOSE_PROXY) down
+
+proxy-ps: ## Статус контейнера входной двери
+	$(COMPOSE_PROXY) ps
+
+proxy-logs: ## Следить за логами входной двери
+	$(COMPOSE_PROXY) logs -f
+
+# Разовый контейнер, а не exec в работающий: проверка нужна и до первого подъёма двери,
+# на развёртывании машины конфиг проверяется, пока порты ещё держит прежний прокси.
+proxy-validate: ## Проверить конфиг двери, ничего не применяя — обязательный шаг перед proxy-reload
+	$(COMPOSE_PROXY) run --rm -T caddy caddy validate --config /etc/caddy/Caddyfile
+
+proxy-reload: ## Перечитать Caddyfile двери (graceful) — только после proxy-validate
+	$(COMPOSE_PROXY) exec -T caddy caddy reload --config /etc/caddy/Caddyfile

@@ -1,0 +1,23 @@
+# Конфиг входной двери машины. Читает его только контейнер стека xalqbonus-proxy.
+{
+	email {$CADDY_ACME_EMAIL}
+
+	# Адрес центра сертификации. На обкатке в .env двери указывается тестовый сервер
+	# Let's Encrypt: выпуск для проверки тратит общий с боевым доменом недельный лимит.
+	acme_ca {$CADDY_ACME_CA:https://acme-v02.api.letsencrypt.org/directory}
+}
+
+{$APP_DOMAIN} {
+	# Предел тела запроса — единственная настоящая защита от истощения памяти. Действует
+	# и на запросы без Content-Length: чтение рвётся по факту достижения порога.
+	request_body {
+		max_size 8MB
+	}
+
+	# Имя контейнера боевого стека в общей сети xalqbonus-edge.
+	reverse_proxy xalqbonus-prod-app-1:3000
+
+	log {
+		output stdout
+	}
+}

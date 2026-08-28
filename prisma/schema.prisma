@@ -1,0 +1,18 @@
+// previewFeatures = ["multiSchema"] не указан намеренно, вопреки чеклисту issue #1:
+// в Prisma 7 флаг помечен deprecated и на каждой команде печатает предупреждение.
+// Многосхемность работает и без него — граница задана `schemas` в datasource ниже.
+generator client {
+  provider = "prisma-client"
+  output   = "../server/generated/prisma"
+}
+
+// Строка подключения живёт в prisma.config.ts: Prisma 7 в схеме её больше не принимает.
+datasource db {
+  provider = "postgresql"
+  // Prisma владеет только `xb`. `public` сюда не попадает никогда: Prisma управляет всеми
+  // перечисленными схемами, и таблица, которой нет в моделях, уходит в diff как удаляемая —
+  // первая же миграция ядра сгенерировала бы DROP на все таблицы старого бота.
+  schemas  = ["xb"]
+}
+
+// Моделей нет намеренно: структура ядра проектируется отдельной задачей (docs/roadmap.md, этап 2).

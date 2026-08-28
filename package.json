@@ -1,0 +1,45 @@
+{
+  "name": "xalqbonus",
+  "type": "module",
+  "private": true,
+  "imports": {
+    "#server/*": "./server/*.ts"
+  },
+  "scripts": {
+    "dev": "nuxt dev",
+    "dev:worker": "tsx watch server/queues/worker.ts",
+    "build": "nuxt build",
+    "build:worker": "esbuild server/queues/worker.ts --bundle --platform=node --format=esm --packages=external --alias:#server=./server --outfile=.output/server/worker.mjs",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare && prisma generate",
+    "typecheck": "nuxt typecheck",
+    "test": "vitest run",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.10.0",
+    "@prisma/client": "^7.10.0",
+    "bullmq": "^5.81.4",
+    "consola": "^3.4.2",
+    "ioredis": "^5.11.1",
+    "nuxt": "^4.5.2",
+    "pg": "^8.23.0",
+    "telegraf": "^4.16.3",
+    "vue": "^3.5.42",
+    "vue-router": "^5.3.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/pg": "^8.23.1",
+    "dotenv": "^17.4.2",
+    "esbuild": "^0.28.2",
+    "prisma": "^7.10.0",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7",
+    "vue-tsc": "^3.3.11"
+  }
+}
