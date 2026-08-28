@@ -101,6 +101,12 @@ export type TripInput = {
   amenities: string[];
 };
 
+export type UpsertedTrip = {
+  tripId: string;
+  /** `false` — заказ уже лежал в базе и был обновлён. Перекрытие окон приносит такие каждый прогон. */
+  inserted: boolean;
+};
+
 /**
  * Кладёт заказы: новый вставляется, известный обновляется по `order_id`.
  *
@@ -109,21 +115,26 @@ export type TripInput = {
  * навсегда останется незавершённой, как 243 613 записей в базе старого бота
  * (docs/analysis.md).
  *
- * Возвращает соответствие «идентификатор заказа → идентификатор строки»: по нему пишутся
- * события и точки маршрута. `RETURNING` отдаёт и вставленные строки, и обновлённые.
+ * Возвращает соответствие «идентификатор заказа → строка»: по нему пишутся события
+ * и точки маршрута. `RETURNING` отдаёт и вставленные строки, и обновлённые, а различает
+ * их выражение `xmax = 0`: у строки, вставленной этой же командой, поле пусто, у обновлённой
+ * там номер нашей транзакции. Приём известный, но в документации его нет, поэтому оговорка:
+ * он врал бы на строке, заблокированной в той же транзакции (`SELECT … FOR UPDATE`), — здесь
+ * запись идёт одной самостоятельной командой, и такого случая нет. Считается им **только**
+ * счётчик сводки: ни одно решение о начислении на нём не построено.
  */
 export const upsertTrips = async (
   trips: readonly TripInput[],
   syncRunId: string | null,
   syncedAt: Date,
-): Promise<Map<string, string>> => {
+): Promise<Map<string, UpsertedTrip>> => {
   // Повтор `order_id` внутри одной вставки Postgres отбивает целиком: «ON CONFLICT DO
   // UPDATE не может тронуть строку дважды». Побеждает последнее вхождение — оно свежее.
   const unique = new Map<string, TripInput>(trips.map((trip) => [trip.orderId, trip]));
-  const tripIds = new Map<string, string>();
+  const tripIds = new Map<string, UpsertedTrip>();
 
   for (const chunk of chunked([...unique.values()])) {
-    const rows = await db.$queryRaw<{ id: string; orderId: string }[]>`
+    const rows = await db.$queryRaw<{ id: string; orderId: string; inserted: boolean }[]>`
       INSERT INTO xb.trips (
         "order_id", "short_id", "profile_id",
         "status", "category", "payment_method", "provider",
@@ -228,11 +239,11 @@ export const upsertTrips = async (
         "amenities"                = EXCLUDED."amenities",
         "sync_run_id"              = EXCLUDED."sync_run_id",
         "synced_at"                = EXCLUDED."synced_at"
-      RETURNING "id", "order_id" AS "orderId"
+      RETURNING "id", "order_id" AS "orderId", (xmax = 0) AS "inserted"
     `;
 
     for (const row of rows) {
-      tripIds.set(row.orderId, row.id);
+      tripIds.set(row.orderId, { tripId: row.id, inserted: row.inserted });
     }
   }
 

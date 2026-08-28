@@ -137,6 +137,8 @@ describe('прогон синхронизации заказов', () => {
 
     expect(summary.status).toBe('succeeded');
     expect(summary.ordersWritten).toBe(1);
+    expect(summary.ordersInserted).toBe(1);
+    expect(summary.ordersUpdated).toBe(0);
     expect(summary.accrual.awarded).toBe(1);
     expect(await readAccountBalance(driver.personId)).toBe(1n);
     expect(await readTripStatus(orderId)).toBe('complete');
@@ -173,6 +175,10 @@ describe('прогон синхронизации заказов', () => {
 
     expect(second.accrual.awarded).toBe(0);
     expect(second.accrual.alreadyAwarded).toBe(1);
+    // Заказ тронут, но не появился: «записано 1» без этого разделения читалось бы как
+    // «прибавилась поездка», хотя не изменилось ничего.
+    expect(second.ordersInserted).toBe(0);
+    expect(second.ordersUpdated).toBe(1);
     expect(await readAccountBalance(driver.personId)).toBe(balanceAfterFirst);
     expect(await countTripEvents(orderId)).toBe(eventsAfterFirst);
   });

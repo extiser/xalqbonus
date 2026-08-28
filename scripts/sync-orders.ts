@@ -49,6 +49,8 @@ const main = async (): Promise<void> => {
     rateLimited: summary.rateLimited,
     ordersSeen: summary.ordersSeen,
     ordersWritten: summary.ordersWritten,
+    ordersInserted: summary.ordersInserted,
+    ordersUpdated: summary.ordersUpdated,
     malformed: summary.malformed,
     malformedIds: summary.malformedIds,
     skippedUnknownProfile: summary.skippedUnknownProfile,

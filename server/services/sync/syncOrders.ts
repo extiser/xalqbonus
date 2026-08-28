@@ -74,8 +74,12 @@ export type OrdersSyncSummary = {
   rateLimited: number;
   /** Сколько заказов вернул API — до разбора. */
   ordersSeen: number;
-  /** Сколько заказов легло в `xb.trips`. */
+  /** Сколько строк `xb.trips` тронуто: вставленные плюс обновлённые. Уходит в `items_written`. */
   ordersWritten: number;
+  /** Из них появились в базе впервые. */
+  ordersInserted: number;
+  /** Из них уже были: перекрытие окон приносит одни и те же заказы каждый прогон. */
+  ordersUpdated: number;
   /** Заказы, которым не хватило обязательного поля. Не записаны, потеряны из виду. */
   malformed: number;
   /**
@@ -185,7 +189,8 @@ const warnIfWatermarkStale = (
 };
 
 type PageWriteResult = {
-  written: number;
+  inserted: number;
+  updated: number;
   skippedUnknownProfile: number;
   unknownProfileIds: string[];
   completedOrderIds: string[];
@@ -205,7 +210,8 @@ const writePage = async (
   syncedAt: Date,
 ): Promise<PageWriteResult> => {
   const result: PageWriteResult = {
-    written: 0,
+    inserted: 0,
+    updated: 0,
     skippedUnknownProfile: 0,
     unknownProfileIds: [],
     completedOrderIds: [],
@@ -236,13 +242,20 @@ const writePage = async (
   }
 
   const tripIds = await upsertTrips(writable.map(toTripInput), runId, syncedAt);
-  result.written = tripIds.size;
+
+  for (const written of tripIds.values()) {
+    if (written.inserted) {
+      result.inserted += 1;
+    } else {
+      result.updated += 1;
+    }
+  }
 
   const events: TripEventInput[] = [];
   const routePoints: TripRoutePointInput[] = [];
 
   for (const order of writable) {
-    const tripId = tripIds.get(order.orderId);
+    const tripId = tripIds.get(order.orderId)?.tripId;
 
     if (!tripId) {
       continue;
@@ -298,6 +311,8 @@ export const runOrdersSync = async (
       rateLimited: 0,
       ordersSeen: 0,
       ordersWritten: 0,
+      ordersInserted: 0,
+      ordersUpdated: 0,
       malformed: 0,
       malformedIds: [],
       skippedUnknownProfile: 0,
@@ -334,7 +349,8 @@ export const runOrdersSync = async (
   const malformedIds: MalformedOrder[] = [];
   let pages = 0;
   let ordersSeen = 0;
-  let ordersWritten = 0;
+  let ordersInserted = 0;
+  let ordersUpdated = 0;
   let malformed = 0;
   let skippedUnknownProfile = 0;
   let accrual = emptyAccrual();
@@ -355,7 +371,8 @@ export const runOrdersSync = async (
       }
 
       const written = await writePage(page.orders, runId, now);
-      ordersWritten += written.written;
+      ordersInserted += written.inserted;
+      ordersUpdated += written.updated;
       skippedUnknownProfile += written.skippedUnknownProfile;
 
       for (const profileId of written.unknownProfileIds) {
@@ -378,7 +395,7 @@ export const runOrdersSync = async (
         requests: stats.requests,
         rateLimited: stats.rateLimited,
         itemsSeen: ordersSeen,
-        itemsWritten: ordersWritten,
+        itemsWritten: ordersInserted + ordersUpdated,
       },
       message,
     );
@@ -389,7 +406,7 @@ export const runOrdersSync = async (
       runId,
       pages,
       ordersSeen,
-      ordersWritten,
+      ordersWritten: ordersInserted + ordersUpdated,
       requests: stats.requests,
       rateLimited: stats.rateLimited,
       error: message,
@@ -407,7 +424,7 @@ export const runOrdersSync = async (
       requests: stats.requests,
       rateLimited: stats.rateLimited,
       itemsSeen: ordersSeen,
-      itemsWritten: ordersWritten,
+      itemsWritten: ordersInserted + ordersUpdated,
     },
     null,
   );
@@ -424,7 +441,9 @@ export const runOrdersSync = async (
     requests: stats.requests,
     rateLimited: stats.rateLimited,
     ordersSeen,
-    ordersWritten,
+    ordersWritten: ordersInserted + ordersUpdated,
+    ordersInserted,
+    ordersUpdated,
     malformed,
     malformedIds,
     skippedUnknownProfile,
@@ -445,7 +464,8 @@ export const runOrdersSync = async (
     requests: stats.requests,
     rateLimited: stats.rateLimited,
     ordersSeen,
-    ordersWritten,
+    ordersInserted,
+    ordersUpdated,
     awarded: accrual.awarded,
     alreadyAwarded: accrual.alreadyAwarded,
     outsideProgram: accrual.outsideProgram,
