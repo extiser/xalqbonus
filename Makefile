@@ -7,7 +7,7 @@ COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
 .DEFAULT_GOAL := help
 
 .PHONY: help up up-d down restart logs ps shell psql migrate migrate-create typecheck test \
-        db-restore db-schema \
+        db-restore db-schema invariants license-collisions \
         prod-up prod-down prod-restart prod-logs prod-ps prod-shell prod-psql prod-migrate \
         proxy-up proxy-down proxy-ps proxy-logs proxy-validate proxy-reload
 
@@ -63,6 +63,16 @@ db-restore: ## Восстановить продовый дамп в локал�
 	fi
 	cat "$(dump)" | $(COMPOSE) exec -T postgres sh -c 'pg_restore --no-owner --no-privileges -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' 
 	$(MAKE) db-schema
+
+# Инварианты журнала баллов. Запросы возвращают пустой результат, когда всё сходится;
+# схема в них указана явно — search_path у сырого соединения дефолтный, и запрос без
+# префикса ушёл бы в `public` и вернул правдоподобный ответ не по тем таблицам.
+invariants: ## Прогнать запросы инвариантов журнала баллов по локальной БД
+	$(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -q' < scripts/invariants.sql
+
+# Считает по выгрузке реестра из _reference/fleet-api/dumps/ — в репозитории её нет.
+license-collisions: ## Счётчик коллизий номеров ВУ до и после нормализации
+	npx tsx scripts/license-collisions.ts
 
 typecheck: ## Проверить типы (nuxt typecheck)
 	npm run typecheck

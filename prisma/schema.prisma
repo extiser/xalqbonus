@@ -15,4 +15,533 @@ datasource db {
   schemas  = ["xb"]
 }
 
-// Моделей нет намеренно: структура ядра проектируется отдельной задачей (docs/roadmap.md, этап 2).
+// Перечисления заводятся только на наши словари — те, что меняются нашей же миграцией.
+// Значения, приходящие из Fleet API (статус работы, статус заказа, категория, способ
+// оплаты), хранятся как text: чужой словарь нам не принадлежит, и новое значение
+// на той стороне не должно ронять синхронизацию (docs/decisions.md).
+
+enum AccountType {
+  driver
+  emission
+  redemption
+  raffle_bank
+
+  @@map("account_type")
+  @@schema("xb")
+}
+
+/// Ровно десять причин из таблицы ключей идемпотентности в docs/points.md.
+/// Новая причина заводится сначала там, потом здесь.
+enum PointReason {
+  opening
+  trip
+  welcome
+  order_spend
+  order_refund
+  manual
+  recon
+  expire
+  merge
+  raffle
+
+  @@map("point_reason")
+  @@schema("xb")
+}
+
+enum LinkCloseReason {
+  rebind
+  merge
+  operator
+  invalid_chat
+
+  @@map("link_close_reason")
+  @@schema("xb")
+}
+
+enum LinkConfirmedBy {
+  phone_auto
+  operator
+  driver_reply
+
+  @@map("link_confirmed_by")
+  @@schema("xb")
+}
+
+enum Language {
+  ru
+  uz
+
+  @@map("language")
+  @@schema("xb")
+}
+
+enum SyncKind {
+  registry
+  orders
+  orders_catchup
+
+  @@map("sync_kind")
+  @@schema("xb")
+}
+
+enum SyncStatus {
+  running
+  succeeded
+  failed
+
+  @@map("sync_status")
+  @@schema("xb")
+}
+
+/// Чем запись старой базы сопоставлена с профилем парка.
+enum MatchMethod {
+  profile_id
+  license
+  none
+
+  @@map("match_method")
+  @@schema("xb")
+}
+
+/// Что стало при переносе с `chat_id` записи старой базы.
+enum LegacyTelegramStatus {
+  linked
+  invalid_chat
+  pending_confirmation
+  skipped
+
+  @@map("legacy_telegram_status")
+  @@schema("xb")
+}
+
+// ---------------------------------------------------------------------------
+// Люди и учётки
+// ---------------------------------------------------------------------------
+
+/// Человек. Собственных данных у него нет намеренно: имя живёт в профиле парка,
+/// номер удостоверения — в журнале удостоверений одной активной строкой.
+/// Дубля номера в записи человека нет: два места, обязанные совпадать, однажды
+/// не совпадут (docs/decisions.md → «Номер удостоверения хранится в одном месте»).
+model Person {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  licenses      PersonLicense[]
+  parkProfiles  ParkProfile[]
+  telegramLinks TelegramLink[]
+  settings      PersonSettings?
+  // Список, а не одиночная связь: «один водительский счёт на человека» держится
+  // частичным уникальным индексом, а частичный индекс Prisma выразить не умеет.
+  accounts      Account[]
+  legacyRecords LegacyDriverMap[]
+
+  @@map("persons")
+  @@schema("xb")
+}
+
+/// Журнал водительских удостоверений. Активная строка — та, у которой `closed_at` пуст.
+model PersonLicense {
+  id       String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  personId String @map("person_id") @db.Uuid
+  /// Ровно как пришло из API, без единой правки.
+  numberRaw String @map("number_raw")
+  /// Наша нормализация: server/utils/licenseNumber.ts. `normalized_number` из API
+  /// не используется — он побайтово равен `number` у всех 25 390 профилей.
+  numberCanonical String    @map("number_canonical")
+  country         String?
+  issueDate       DateTime? @map("issue_date") @db.Date
+  expirationDate  DateTime? @map("expiration_date") @db.Date
+  observedAt      DateTime  @default(now()) @map("observed_at") @db.Timestamptz(6)
+  closedAt        DateTime? @map("closed_at") @db.Timestamptz(6)
+  /// `fleet_api`, `legacy_import`, `operator`.
+  source String
+
+  person Person @relation(fields: [personId], references: [id])
+
+  // Частичные уникальные индексы — активное ВУ на человека и активный номер на одного
+  // человека — заведены сырым SQL в миграции: Prisma условие WHERE в индексе не выражает.
+  @@index([personId])
+  /// Поиск по истории, включая закрытые строки.
+  @@index([numberCanonical])
+  @@map("person_licenses")
+  @@schema("xb")
+}
+
+/// Учётка в парке. Ключ — идентификатор из Fleet API как есть.
+model ParkProfile {
+  profileId String @id @map("profile_id")
+  personId  String @map("person_id") @db.Uuid
+  parkId    String @map("park_id")
+
+  firstName  String  @map("first_name")
+  lastName   String  @map("last_name")
+  middleName String? @map("middle_name")
+
+  workStatus     String  @map("work_status")
+  employmentType String  @map("employment_type")
+  isSelfemployed Boolean @map("is_selfemployed")
+  workRuleId     String  @map("work_rule_id")
+  /// Имя условия работы приходит только в заказах, в реестре его нет.
+  workRuleName String? @map("work_rule_name")
+
+  hireDate DateTime? @map("hire_date") @db.Date
+  fireDate DateTime? @map("fire_date") @db.Date
+
+  currentStatus          String    @map("current_status")
+  currentStatusUpdatedAt DateTime? @map("current_status_updated_at") @db.Timestamptz(6)
+
+  // Снимок машины. Отдельной таблицы машин нет: машина нужна, чтобы найти водителя
+  // в офисе, а история позывных приходит из поездок.
+  callsign      String?
+  carId         String? @map("car_id")
+  carNumber     String? @map("car_number")
+  carBrandModel String? @map("car_brand_model")
+
+  apiCreatedAt DateTime @map("api_created_at") @db.Timestamptz(6)
+  apiModifiedAt DateTime @map("api_modified_at") @db.Timestamptz(6)
+  /// Верхнеуровневый `updated_at` ответа: по нему строится инкрементальная синхронизация.
+  apiUpdatedAt DateTime @map("api_updated_at") @db.Timestamptz(6)
+  firstSeenAt  DateTime @default(now()) @map("first_seen_at") @db.Timestamptz(6)
+  lastSyncedAt DateTime @map("last_synced_at") @db.Timestamptz(6)
+
+  person       Person               @relation(fields: [personId], references: [id])
+  phones       ProfilePhone[]
+  statusEvents ProfileStatusEvent[]
+  trips        Trip[]
+  legacyRecords LegacyDriverMap[]
+
+  @@index([personId])
+  @@index([apiUpdatedAt])
+  @@index([workStatus])
+  // Уникальности на позывном нет: 86 позывных встречаются более чем на одном профиле.
+  @@index([callsign])
+  @@index([carNumber])
+  @@map("park_profiles")
+  @@schema("xb")
+}
+
+/// Журнал телефонов профиля. В API телефоны приходят массивом.
+model ProfilePhone {
+  id        String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  profileId String @map("profile_id")
+  phoneRaw  String @map("phone_raw")
+  /// Заполняется только для номеров вида `+998XXXXXXXXX`: 446 номеров реестра формату
+  /// не отвечают, у 9.9% профилей телефона нет вовсе. По этому полю идёт автопривязка.
+  phoneE164  String?   @map("phone_e164")
+  observedAt DateTime  @default(now()) @map("observed_at") @db.Timestamptz(6)
+  closedAt   DateTime? @map("closed_at") @db.Timestamptz(6)
+
+  profile ParkProfile @relation(fields: [profileId], references: [profileId])
+
+  @@index([profileId])
+  @@map("profile_phones")
+  @@schema("xb")
+}
+
+/// Журнал трудоустройства. Даты смены статуса внешний API в списке не отдаёт,
+/// поэтому `observed_at` — дата, когда факт стал известен нам (docs/drivers.md).
+model ProfileStatusEvent {
+  id        String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  profileId String @map("profile_id")
+  /// Пусто у первой записи профиля.
+  statusFrom String?  @map("status_from")
+  statusTo   String   @map("status_to")
+  observedAt DateTime @default(now()) @map("observed_at") @db.Timestamptz(6)
+  syncRunId  String?  @map("sync_run_id") @db.Uuid
+
+  profile ParkProfile @relation(fields: [profileId], references: [profileId])
+  syncRun SyncRun?    @relation(fields: [syncRunId], references: [id])
+
+  @@index([profileId, observedAt])
+  @@map("profile_status_events")
+  @@schema("xb")
+}
+
+/// Журнал привязок Telegram. Строки не удаляются и не правятся на месте:
+/// перепривязка — закрытие прежней строки и новая рядом (docs/drivers.md).
+model TelegramLink {
+  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  personId       String  @map("person_id") @db.Uuid
+  telegramChatId BigInt  @map("telegram_chat_id")
+  telegramUserId BigInt? @map("telegram_user_id")
+
+  linkedAt    DateTime         @default(now()) @map("linked_at") @db.Timestamptz(6)
+  closedAt    DateTime?        @map("closed_at") @db.Timestamptz(6)
+  closeReason LinkCloseReason? @map("close_reason")
+  confirmedBy LinkConfirmedBy  @map("confirmed_by")
+  /// Кто из операторов подтвердил, если подтверждал человек.
+  operatorRef String? @map("operator_ref")
+
+  person Person @relation(fields: [personId], references: [id])
+
+  // Одна активная привязка на человека и один активный Telegram — частичными
+  // уникальными индексами в миграции.
+  @@index([personId])
+  /// Поиск по истории, включая закрытые привязки.
+  @@index([telegramChatId])
+  @@map("telegram_links")
+  @@schema("xb")
+}
+
+/// Участие в программе. Наличие строки и есть граница «известен парку / в программе»:
+/// реестр парка живёт без неё (docs/drivers.md).
+model PersonSettings {
+  personId             String   @id @map("person_id") @db.Uuid
+  language             Language
+  notificationsEnabled Boolean  @default(true) @map("notifications_enabled")
+  joinedAt             DateTime @default(now()) @map("joined_at") @db.Timestamptz(6)
+  /// Откуда пришло участие: `telegram`, `legacy_import`, `operator`.
+  joinedSource String @map("joined_source")
+
+  person Person @relation(fields: [personId], references: [id])
+
+  @@map("person_settings")
+  @@schema("xb")
+}
+
+// ---------------------------------------------------------------------------
+// Баллы
+// ---------------------------------------------------------------------------
+
+/// Счёт. Водительский принадлежит человеку, системный — программе.
+/// `balance` — кэш, а не значение: он меняется только вместе с записью в журнал,
+/// в одной транзакции (docs/points.md).
+model Account {
+  id       String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  type     AccountType
+  personId String?     @map("person_id") @db.Uuid
+  balance  BigInt      @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  person Person? @relation(fields: [personId], references: [id])
+
+  entries         PointEntry[]
+  transfersFrom   PointTransfer[] @relation("transfer_from_account")
+  transfersTo     PointTransfer[] @relation("transfer_to_account")
+
+  // Проверки «водительский счёт имеет человека, системный не имеет», «водительский
+  // не уходит в минус» и оба уникальных индекса — сырым SQL в миграции.
+  @@map("accounts")
+  @@schema("xb")
+}
+
+/// Перевод: списание с одного счёта и зачисление на другой. Односторонних операций
+/// не бывает — баллы перемещаются, а не появляются и исчезают (docs/points.md).
+model PointTransfer {
+  id     String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reason PointReason
+  /// Формат — дословно таблица ключей из docs/points.md. Новых схем ключа не бывает:
+  /// нужна — сначала правка документа, потом код.
+  idempotencyKey String @unique @map("idempotency_key")
+  amount         BigInt
+
+  fromAccountId String @map("from_account_id") @db.Uuid
+  toAccountId   String @map("to_account_id") @db.Uuid
+
+  occurredAt DateTime @map("occurred_at") @db.Timestamptz(6)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Контекст операции — явными полями, а не jsonb: колонка с разнородным содержимым
+  // не проверяется ни типом, ни запросом.
+  tripOrderId   String? @map("trip_order_id")
+  legacyOrderId Int?    @map("legacy_order_id")
+  actor         String?
+  note          String?
+
+  fromAccount Account      @relation("transfer_from_account", fields: [fromAccountId], references: [id])
+  toAccount   Account      @relation("transfer_to_account", fields: [toAccountId], references: [id])
+  entries     PointEntry[]
+
+  @@index([reason, occurredAt])
+  @@map("point_transfers")
+  @@schema("xb")
+}
+
+/// Записи журнала. На перевод приходится ровно две строки, их сумма ноль —
+/// ограничением базы это не выражается, проверяется запросом из scripts/invariants.sql.
+model PointEntry {
+  /// Журнальная таблица, на которую никто не ссылается, — bigint identity вместо uuid.
+  id         BigInt   @id @default(autoincrement())
+  transferId String   @map("transfer_id") @db.Uuid
+  accountId  String   @map("account_id") @db.Uuid
+  delta      BigInt
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  transfer PointTransfer @relation(fields: [transferId], references: [id])
+  account  Account       @relation(fields: [accountId], references: [id])
+
+  /// Одна строка на счёт в переводе.
+  @@unique([transferId, accountId])
+  @@index([accountId, id])
+  @@map("point_entries")
+  @@schema("xb")
+}
+
+// ---------------------------------------------------------------------------
+// Поездки
+// ---------------------------------------------------------------------------
+
+/// Заказ из Fleet API. Наполняется только тем, что пришло из API: 1.19 млн старых
+/// поездок не переносятся (docs/decisions.md).
+model Trip {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// То самое ограничение, отсутствие которого в старой базе дало 59 812 лишних строк
+  /// и 4 877 повторно засчитанных завершённых поездок.
+  orderId String @unique @map("order_id")
+  shortId Int?   @map("short_id")
+  /// Человек здесь не хранится и хранить его нельзя: он берётся через профиль,
+  /// иначе склейка двойников превращается в переписывание миллиона строк.
+  profileId String @map("profile_id")
+
+  status        String
+  category      String
+  paymentMethod String  @map("payment_method")
+  provider      String
+  orderTypeId   String? @map("order_type_id")
+  orderTypeName String? @map("order_type_name")
+  workRuleId    String? @map("work_rule_id")
+
+  bookedAt     DateTime  @map("booked_at") @db.Timestamptz(6)
+  apiCreatedAt DateTime  @map("api_created_at") @db.Timestamptz(6)
+  drivingAt    DateTime? @map("driving_at") @db.Timestamptz(6)
+  endedAt      DateTime? @map("ended_at") @db.Timestamptz(6)
+
+  price Decimal  @db.Decimal(12, 2)
+  /// Пробег заполнен у 68% заказов.
+  mileage Decimal? @db.Decimal(12, 2)
+
+  carId            String  @map("car_id")
+  carCallsign      String? @map("car_callsign")
+  carLicenseNumber String  @map("car_license_number")
+  carBrandModel    String  @map("car_brand_model")
+
+  addressFromText String @map("address_from_text")
+  addressFromLat  Float  @map("address_from_lat")
+  addressFromLon  Float  @map("address_from_lon")
+
+  cancellationDescription String?  @map("cancellation_description")
+  flags                   String[]
+  amenities               String[]
+
+  syncRunId String?  @map("sync_run_id") @db.Uuid
+  syncedAt  DateTime @default(now()) @map("synced_at") @db.Timestamptz(6)
+
+  profile     ParkProfile     @relation(fields: [profileId], references: [profileId])
+  syncRun     SyncRun?        @relation(fields: [syncRunId], references: [id])
+  events      TripEvent[]
+  routePoints TripRoutePoint[]
+
+  @@index([profileId, endedAt])
+  @@index([endedAt])
+  @@index([status])
+  @@map("trips")
+  @@schema("xb")
+}
+
+/// Переходы статуса заказа из `events`.
+model TripEvent {
+  id          BigInt   @id @default(autoincrement())
+  tripId      String   @map("trip_id") @db.Uuid
+  orderStatus String   @map("order_status")
+  eventAt     DateTime @map("event_at") @db.Timestamptz(6)
+
+  trip Trip @relation(fields: [tripId], references: [id])
+
+  /// Перекрытие окон опроса не должно плодить копии.
+  @@unique([tripId, orderStatus, eventAt])
+  @@index([tripId, eventAt])
+  @@map("trip_events")
+  @@schema("xb")
+}
+
+/// Точки маршрута: до четырёх, у 3.8% заказов их нет вовсе.
+model TripRoutePoint {
+  id      BigInt @id @default(autoincrement())
+  tripId  String @map("trip_id") @db.Uuid
+  seq     Int
+  address String
+  lat     Float
+  lon     Float
+
+  trip Trip @relation(fields: [tripId], references: [id])
+
+  @@unique([tripId, seq])
+  @@map("trip_route_points")
+  @@schema("xb")
+}
+
+// ---------------------------------------------------------------------------
+// Синхронизация
+// ---------------------------------------------------------------------------
+
+/// Прогон синхронизации.
+model SyncRun {
+  id     String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  kind   SyncKind
+  status SyncStatus
+
+  startedAt  DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  finishedAt DateTime? @map("finished_at") @db.Timestamptz(6)
+  windowFrom DateTime? @map("window_from") @db.Timestamptz(6)
+  windowTo   DateTime? @map("window_to") @db.Timestamptz(6)
+
+  requests     Int     @default(0)
+  rateLimited  Int     @default(0) @map("rate_limited")
+  itemsSeen    Int     @default(0) @map("items_seen")
+  itemsWritten Int     @default(0) @map("items_written")
+  error        String?
+
+  states       SyncState[]
+  trips        Trip[]
+  statusEvents ProfileStatusEvent[]
+
+  @@index([kind, startedAt(sort: Desc)])
+  @@map("sync_runs")
+  @@schema("xb")
+}
+
+/// Отметка синхронизации. Двигается только после успешного прогона — её сдвиг
+/// при неуспехе породил в старом боте счётчик дней простоя и скрыл отказы по лимиту.
+model SyncState {
+  kind      SyncKind  @id
+  watermark DateTime? @db.Timestamptz(6)
+  lastRunId String?   @map("last_run_id") @db.Uuid
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  lastRun SyncRun? @relation(fields: [lastRunId], references: [id])
+
+  @@map("sync_state")
+  @@schema("xb")
+}
+
+// ---------------------------------------------------------------------------
+// Перенос из public
+// ---------------------------------------------------------------------------
+
+/// Соответствие записи старой базы новой сущности. Создаётся этим issue,
+/// наполняется следующим: без неё перенос не идемпотентен и разобраться потом не в чем.
+model LegacyDriverMap {
+  /// `public."Drivers".id` старой базы.
+  legacyDriverId Int         @id @map("legacy_driver_id")
+  profileId      String?     @map("profile_id")
+  personId       String?     @map("person_id") @db.Uuid
+  matchMethod    MatchMethod @map("match_method")
+  /// Куда склеена половина двойника.
+  mergedIntoLegacyDriverId Int?                 @map("merged_into_legacy_driver_id")
+  telegramStatus           LegacyTelegramStatus @map("telegram_status")
+  /// Баланс старой базы как есть; семь `NULL` в `points` переносятся как ноль.
+  legacyPoints Int      @map("legacy_points")
+  note         String?
+  importedAt   DateTime @default(now()) @map("imported_at") @db.Timestamptz(6)
+
+  profile ParkProfile? @relation(fields: [profileId], references: [profileId])
+  person  Person?      @relation(fields: [personId], references: [id])
+
+  @@index([personId])
+  @@index([profileId])
+  @@map("legacy_driver_map")
+  @@schema("xb")
+}
