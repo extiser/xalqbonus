@@ -1,0 +1,107 @@
+/**
+ * Параметры синхронизации заказов.
+ *
+ * Все значения читаются из окружения и имеют умолчание: прогон обязан быть запускаемым
+ * на чистом `.env.example`, а не только у того, кто помнит список переменных.
+ */
+
+export type SyncConfig = {
+  /** Выключатель повторяющейся задачи. Разовый прогон командой работает и при `false`. */
+  liveEnabled: boolean;
+  /** Как часто повторяется скользящий прогон. */
+  liveIntervalSec: number;
+  /** Догоняющий прогон: раз в сутки, широкое окно. Свой выключатель и свой интервал. */
+  catchupEnabled: boolean;
+  catchupIntervalSec: number;
+  catchupDays: number;
+  /** Перекрытие окна назад от отметки. Безопасно: повтор отсекается ключами. */
+  overlapMinutes: number;
+  /**
+   * Отставание верхней границы окна от текущего момента.
+   *
+   * Только что завершившийся заказ появляется в выборке по `ended_at` не мгновенно,
+   * а отметка синхронизации двигается по верхней границе окна. Всё, что доехало до API
+   * после того, как граница его прошла, ловится перекрытием — поэтому отставание держится
+   * заведомо меньшим, чем перекрытие, и служит не защитой, а тем, чтобы граница окна
+   * не стояла на самом горячем крае выборки.
+   */
+  lagSeconds: number;
+  /** Размер страницы курсорной пагинации. Максимум, разрешённый методом, — 500. */
+  pageLimit: number;
+  /**
+   * Потолок ширины скользящего окна за один прогон.
+   *
+   * Воркер, простоявший неделю, иначе построил бы окно в неделю шириной: полсотни страниц
+   * в один прогон, отказы по лимиту и упавший прогон, который не двигает отметку и потому
+   * повторяется вечно. Верхняя граница режется потолком, отметка встаёт на неё, и остаток
+   * догоняется следующими прогонами — без единого пропущенного заказа.
+   */
+  liveMaxWindowMinutes: number;
+};
+
+const readInteger = (name: string, fallback: number): number => {
+  const raw = process.env[name];
+
+  if (raw === undefined || raw === '') {
+    return fallback;
+  }
+
+  const value = Number(raw);
+
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${name} должен быть целым положительным числом, получено «${raw}»`);
+  }
+
+  return value;
+};
+
+// Строка сравнивается с `true`, а не проверяется на непустоту: `SYNC_LIVE_ENABLED=false`
+// иначе включал бы синхронизацию.
+const readFlag = (name: string, fallback: boolean): boolean => {
+  const raw = process.env[name];
+
+  if (raw === undefined || raw === '') {
+    return fallback;
+  }
+
+  return raw.trim().toLowerCase() === 'true';
+};
+
+/** Больше этого метод заказов не принимает. */
+const MAX_PAGE_LIMIT = 500;
+
+export const readSyncConfig = (): SyncConfig => {
+  const pageLimit = readInteger('SYNC_PAGE_LIMIT', 500);
+
+  if (pageLimit > MAX_PAGE_LIMIT) {
+    throw new Error(`SYNC_PAGE_LIMIT не может быть больше ${MAX_PAGE_LIMIT}`);
+  }
+
+  const config: SyncConfig = {
+    liveEnabled: readFlag('SYNC_LIVE_ENABLED', false),
+    liveIntervalSec: readInteger('SYNC_LIVE_INTERVAL_SEC', 60),
+    catchupEnabled: readFlag('SYNC_CATCHUP_ENABLED', false),
+    catchupIntervalSec: readInteger('SYNC_CATCHUP_INTERVAL_SEC', 86_400),
+    catchupDays: readInteger('SYNC_CATCHUP_DAYS', 7),
+    overlapMinutes: readInteger('SYNC_LIVE_OVERLAP_MIN', 10),
+    lagSeconds: readInteger('SYNC_LIVE_LAG_SEC', 60),
+    pageLimit,
+    liveMaxWindowMinutes: readInteger('SYNC_LIVE_MAX_WINDOW_MIN', 360),
+  };
+
+  // Перекрытие меньше отставания означает дыру: заказ, доехавший до API позже, чем через
+  // `lag` после завершения, не попадёт ни в это окно, ни в следующее.
+  if (config.lagSeconds >= config.overlapMinutes * 60) {
+    throw new Error(
+      `SYNC_LIVE_LAG_SEC (${config.lagSeconds} c) должен быть меньше SYNC_LIVE_OVERLAP_MIN (${config.overlapMinutes} мин): иначе окна не перекрываются и между ними остаётся дыра`,
+    );
+  }
+
+  if (config.liveMaxWindowMinutes <= config.overlapMinutes) {
+    throw new Error(
+      `SYNC_LIVE_MAX_WINDOW_MIN (${config.liveMaxWindowMinutes}) должен быть больше SYNC_LIVE_OVERLAP_MIN (${config.overlapMinutes}): иначе окно не сдвигается вперёд и прогон топчется на месте`,
+    );
+  }
+
+  return config;
+};
