@@ -97,6 +97,21 @@ enum SyncStatus {
   @@schema("xb")
 }
 
+/// Почему прогон не записал то, что увидел. Словарь наш и меняется нашей же миграцией —
+/// в отличие от статусов и категорий Fleet API, которые лежат текстом.
+enum SyncSkipReason {
+  /// Заказ водителя, которого нет в `xb.park_profiles`.
+  unknown_profile
+  /// Заказу не хватило обязательного поля — разобрать его нечем.
+  malformed
+  /// Значение чужого словаря, которого мы раньше не видели. Записано текстом,
+  /// ничего не сломало.
+  unknown_value
+
+  @@map("sync_skip_reason")
+  @@schema("xb")
+}
+
 /// Чем запись старой базы сопоставлена с профилем парка.
 enum MatchMethod {
   profile_id
@@ -501,9 +516,94 @@ model SyncRun {
   states       SyncState[]
   trips        Trip[]
   statusEvents ProfileStatusEvent[]
+  orderDetails SyncRunOrders?
+  firstSkips   SyncSkip[]           @relation("skip_first_run")
+  lastSkips    SyncSkip[]           @relation("skip_last_run")
 
   @@index([kind, startedAt(sort: Desc)])
   @@map("sync_runs")
+  @@schema("xb")
+}
+
+/// Строка появляется и у упавшего прогона: у него важнее всего видеть, сколько он успел.
+model SyncRunOrders {
+  runId String @id @map("run_id") @db.Uuid
+
+  pages          Int @default(0)
+  ordersInserted Int @default(0) @map("orders_inserted")
+  ordersUpdated  Int @default(0) @map("orders_updated")
+
+  /// Заказы, которым не хватило обязательного поля. Не записаны, потеряны из виду.
+  malformed             Int @default(0)
+  /// Заказы водителей, которых нет в реестре парка.
+  skippedUnknownProfile Int @default(0) @map("skipped_unknown_profile")
+  /// Сколько разных водителей стоит за предыдущим счётчиком.
+  unknownProfiles       Int @default(0) @map("unknown_profiles")
+
+  // Разбор начисления — теми же именами, что у сводки сервиса баллов.
+  awarded        Int @default(0)
+  alreadyAwarded Int @default(0) @map("already_awarded")
+  notCompleted   Int @default(0) @map("not_completed")
+  withoutEndedAt Int @default(0) @map("without_ended_at")
+  outsideProgram Int @default(0) @map("outside_program")
+  unknownTrip    Int @default(0) @map("unknown_trip")
+
+  run SyncRun @relation(fields: [runId], references: [id])
+
+  @@map("sync_run_orders")
+  @@schema("xb")
+}
+
+/// Что прогон не смог записать или разобрать — поимённо и без обрезки.
+///
+/// Строка одна на пропущенное, а не на прогон: перекрытие окон приносит один и тот же
+/// пропущенный заказ каждый прогон, и без уникальности таблица росла бы линейно по времени,
+/// а вопрос «сколько потеряно» перестал бы иметь ответ. Повтор двигает `last_seen_at`
+/// и увеличивает `times_seen`.
+///
+/// `resolved_at` отличает «что потеряно до сих пор» от «что когда-либо пропускалось»:
+/// он проставляется, когда пропущенное всё-таки записалось.
+model SyncSkip {
+  id        BigInt         @id @default(autoincrement())
+  reason    SyncSkipReason
+  /// Идентификатор заказа — у `unknown_profile` и `malformed`; строка `словарь=значение`
+  /// целиком — у `unknown_value`: одно значение приходит из разных словарей и схлопнулось
+  /// бы уникальностью в одну строку.
+  reference String
+  /// Чего не хватило: имя поля у `malformed`, идентификатор профиля у `unknown_profile`,
+  /// имя словаря у `unknown_value`. Адресов, телефонов и имён здесь не бывает.
+  detail    String?
+
+  firstRunId String @map("first_run_id") @db.Uuid
+  lastRunId  String @map("last_run_id") @db.Uuid
+
+  firstSeenAt DateTime @default(now()) @map("first_seen_at") @db.Timestamptz(6)
+  lastSeenAt  DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  /// В скольких прогонах это пропущенное встретилось — по единице за прогон, сколько бы
+  /// раз он его ни принёс.
+  ///
+  /// «Подряд» здесь не читается: скользящий и догоняющий прогоны идут по пересекающимся
+  /// окнам, и один и тот же заказ приходит в обоих. Счётчик их складывает и порядка
+  /// не помнит.
+  ///
+  /// У строки со ссылкой `(без id)`, куда сходятся записи, разбор которых споткнулся
+  /// раньше идентификатора, он не значит и этого: сколько бы таких записей прогон
+  /// ни принёс, строка одна, и она растёт на единицу. Сколько их было — говорит
+  /// `sync_run_orders.malformed`, а какие именно — не говорит ничто.
+  timesSeen   Int      @default(1) @map("times_seen")
+
+  resolvedAt DateTime? @map("resolved_at") @db.Timestamptz(6)
+
+  firstRun SyncRun @relation("skip_first_run", fields: [firstRunId], references: [id])
+  lastRun  SyncRun @relation("skip_last_run", fields: [lastRunId], references: [id])
+
+  /// То самое ограничение, без которого повтор окна плодит копии.
+  @@unique([reason, reference])
+  /// Разрешение пропущенного ищет строку по одному лишь идентификатору заказа.
+  @@index([reference])
+  /// Список нерешённого — самый частый запрос отчёта.
+  @@index([resolvedAt, timesSeen(sort: Desc)])
+  @@map("sync_skips")
   @@schema("xb")
 }
 
