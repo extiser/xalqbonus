@@ -281,10 +281,9 @@ export class FleetClient {
         try {
           return { kind: 'ok', payload: await response.json() };
         } catch (error) {
-          return {
-            kind: 'retryable',
-            reason: `ответ 200 не разбирается как JSON: ${describeFailure(error)}`,
-          };
+          // Сюда попадают оба случая: прокси, отдавший HTML вместо ответа API, и тело,
+          // не дочитанное до конца — таймаут запроса накрывает и чтение потока тоже.
+          return { kind: 'retryable', reason: `тело ответа 200 не прочиталось: ${describeFailure(error)}` };
         }
       }
 
