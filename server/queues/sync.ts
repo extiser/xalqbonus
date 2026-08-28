@@ -72,14 +72,35 @@ export const applySyncSchedule = async (
   }
 };
 
+/** Когда задача должна была пойти в работу и когда её поставили в очередь. */
+export type ScheduledJobTiming = {
+  /** Момент постановки. У планировщика это момент, когда он произвёл задачу на будущий слот. */
+  timestamp: number;
+  /** Задержка до слота. Ровно на неё задача и лежит в очереди, ничего не ожидая. */
+  delay: number;
+};
+
 /**
- * Задача, пролежавшая в очереди дольше собственного интервала, выполняться не должна:
- * пока она ждала, накопилась очередь таких же, и каждая из них запросит у API то же самое
- * окно. Пропустить её безопасно — окно строится от отметки, а не от времени постановки,
+ * Задача, прождавшая свой слот дольше собственного интервала, выполняться не должна:
+ * пока она ждала, накопилась очередь таких же, и каждая запросит у API одно и то же окно.
+ * Пропустить её безопасно — окно строится от отметки, а не от времени постановки задачи,
  * и ни один заказ от пропуска не теряется.
+ *
+ * Считается от **срока**, а не от постановки. Планировщик BullMQ производит задачу заранее
+ * и кладёт её отлежаться с задержкой до слота: `timestamp` у неё на целый интервал старше
+ * момента запуска всегда, даже когда очередь пуста. Отсчёт от постановки поэтому объявлял
+ * просроченной каждую задачу расписания — и синхронизация замолкала после первого прогона.
  */
-const isStale = (job: Job<SyncJobData>, config: SyncConfig): boolean =>
-  Date.now() - job.timestamp > intervalMs(job.data.kind, config);
+export const isOverdue = (
+  timing: ScheduledJobTiming,
+  intervalMilliseconds: number,
+  now: number = Date.now(),
+): boolean => now - (timing.timestamp + timing.delay) > intervalMilliseconds;
+
+const jobTiming = (job: Job<SyncJobData>): ScheduledJobTiming => ({
+  timestamp: job.timestamp,
+  delay: job.opts.delay ?? 0,
+});
 
 export const createSyncWorker = (): Worker<SyncJobData> =>
   new Worker<SyncJobData>(
@@ -87,10 +108,12 @@ export const createSyncWorker = (): Worker<SyncJobData> =>
     async (job) => {
       const config = readSyncConfig();
 
-      if (isStale(job, config)) {
+      const timing = jobTiming(job);
+
+      if (isOverdue(timing, intervalMs(job.data.kind, config))) {
         log.warn('Задача просрочена и пропущена — окно возьмёт следующий прогон', {
           kind: job.data.kind,
-          ageSec: Math.round((Date.now() - job.timestamp) / 1_000),
+          lateSec: Math.round((Date.now() - timing.timestamp - timing.delay) / 1_000),
         });
         return;
       }
