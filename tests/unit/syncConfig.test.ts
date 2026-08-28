@@ -19,6 +19,8 @@ const config: SyncConfig = {
   lagSeconds: 60,
   pageLimit: 500,
   liveMaxWindowMinutes: 360,
+  abandonedRunMinutes: 180,
+  staleFloorMinutes: 15,
 };
 
 const MINUTE_MS = 60_000;
@@ -45,5 +47,13 @@ describe('порог отставания отметки', () => {
 
   it('у догоняющего прогона считается от его собственных суток', () => {
     expect(staleWatermarkThresholdMs('orders_catchup', config)).toBe(3 * 86_400_000);
+  });
+
+  it('нижняя граница берётся из настроек, а не из константы в коде', () => {
+    // Значение назначается по суточному замеру живой синхронизации, и менять его придётся
+    // без правки кода. Умолчание при этом остаётся прежним — это проверяет тест выше.
+    const patient: SyncConfig = { ...config, staleFloorMinutes: 45 };
+
+    expect(staleWatermarkThresholdMs('orders', patient)).toBe(45 * MINUTE_MS);
   });
 });

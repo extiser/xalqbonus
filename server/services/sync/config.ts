@@ -53,6 +53,15 @@ export type SyncConfig = {
    * это с запасом и при этом не дают строке висеть сутками.
    */
   abandonedRunMinutes: number;
+  /**
+   * Нижняя граница порога отставания отметки.
+   *
+   * Порог считается от интервала прогона, но у минутного скользящего три интервала —
+   * это три минуты, и жалоба на трёхминутное отставание была бы шумом. Значение назначается
+   * по суточному замеру живой синхронизации: пока замера нет, любое новое число было бы
+   * выдумкой, и умолчание остаётся тем, с которым детектор написан.
+   */
+  staleFloorMinutes: number;
 };
 
 const readInteger = (name: string, fallback: number): number => {
@@ -104,6 +113,7 @@ export const readSyncConfig = (): SyncConfig => {
     pageLimit,
     liveMaxWindowMinutes: readInteger('SYNC_LIVE_MAX_WINDOW_MIN', 360),
     abandonedRunMinutes: readInteger('SYNC_ABANDONED_RUN_MIN', 180),
+    staleFloorMinutes: readInteger('SYNC_STALE_FLOOR_MIN', 15),
   };
 
   // Перекрытие меньше отставания означает дыру: заказ, доехавший до API позже, чем через
@@ -130,9 +140,6 @@ export const syncIntervalMs = (kind: OrdersSyncKind, config: SyncConfig): number
 /** Столько интервалов подряд отметка может не двигаться, прежде чем это станет тревогой. */
 const STALE_WATERMARK_INTERVALS = 3;
 
-/** Ниже этого порог не опускается: у минутного прогона три интервала — это три минуты. */
-const STALE_WATERMARK_FLOOR_MS = 15 * 60_000;
-
 /**
  * После какого отставания отметки прогон обязан пожаловаться в лог.
  *
@@ -146,4 +153,4 @@ const STALE_WATERMARK_FLOOR_MS = 15 * 60_000;
  * выглядит работающей.
  */
 export const staleWatermarkThresholdMs = (kind: OrdersSyncKind, config: SyncConfig): number =>
-  Math.max(syncIntervalMs(kind, config) * STALE_WATERMARK_INTERVALS, STALE_WATERMARK_FLOOR_MS);
+  Math.max(syncIntervalMs(kind, config) * STALE_WATERMARK_INTERVALS, config.staleFloorMinutes * 60_000);
