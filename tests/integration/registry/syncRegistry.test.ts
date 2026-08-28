@@ -430,6 +430,7 @@ describe('журнал прогона профилей', () => {
       profilesSeen: summary.profilesSeen,
       profilesInserted: summary.profilesInserted,
       profilesUpdated: summary.profilesUpdated,
+      responseRows: summary.responseRows,
       personsCreated: summary.personsCreated,
       statusEvents: summary.statusEvents,
       phonesOpened: summary.phonesOpened,
@@ -522,6 +523,48 @@ describe('полный обход реестра нарезкой', () => {
     expect(runs).toHaveLength(1);
     expect(runs[0]?.status).toBe('succeeded');
     expect(runs[0]?.itemsWritten).toBe(4);
+  });
+
+  it('различные профили и строки ответа считаются раздельно', async () => {
+    // Кусок крупнее 3 000 берётся с двух концов, половины перекрываются намеренно,
+    // и профиль из прохода `asc` приходит снова в `desc`. Если считать строками ответа,
+    // «увидено» и «обновлено» окажутся больше, чем профилей в парке, — ровно то, что
+    // случилось на живом обходе: 29 345 при 25 391 профиле.
+    const many = Array.from({ length: 3_001 }, (_, index) =>
+      buildRawProfile({
+        profileId: profileId(`bulk-${String(index).padStart(4, '0')}`),
+        licenseNumber: `AC${String(1_000_000 + index)}`,
+        workRuleId: 'rule-a',
+        phones: [],
+        // Даты заведения различны: при равных значениях сортировки offset-пагинация
+        // теряет строки на стыке страниц, и это отдельный сценарий, не этот.
+        createdDate: new Date(Date.UTC(2020, 0, 1) + index * 60_000).toISOString(),
+      }),
+    );
+
+    const summary = await runRegistrySync('registry_full', {
+      now: NOW,
+      client: createFakeFleet(many, { workRules }),
+    });
+
+    expect(summary.status).toBe('succeeded');
+    expect(summary.profilesSeen).toBe(3_001);
+    expect(summary.profilesInserted).toBe(3_001);
+    // Тот же профиль, встреченный встречным проходом, не «ещё один обновлённый»:
+    // новым он остаётся новым, и дважды его не считают.
+    expect(summary.profilesUpdated).toBe(0);
+    // А вот строк ответа больше — это цена нарезки, и её видно отдельным числом.
+    expect(summary.responseRows).toBe(4_000);
+    expect(summary.maxOffsetDepth).toBe(1_000);
+
+    const details = await readSyncRunRegistry(summary.runId as string);
+    expect(details?.profilesSeen).toBe(3_001);
+    expect(details?.responseRows).toBe(4_000);
+
+    const runs = await readSyncRuns('registry_full');
+    // В общей таблице прогонов — тоже профили, а не строки: она складывается по видам.
+    expect(runs[0]?.itemsSeen).toBe(3_001);
+    expect(runs[0]?.itemsWritten).toBe(3_001);
   });
 
   it('кусок, не сошедшийся по числу профилей, роняет прогон и не двигает отметку', async () => {

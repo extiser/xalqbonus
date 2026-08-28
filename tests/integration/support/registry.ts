@@ -225,6 +225,7 @@ export type SyncRunRegistryRow = {
   profilesSeen: number;
   profilesInserted: number;
   profilesUpdated: number;
+  responseRows: number;
   personsCreated: number;
   statusEvents: number;
   phonesOpened: number;
@@ -245,6 +246,7 @@ export const readSyncRunRegistry = async (runId: string): Promise<SyncRunRegistr
            "profiles_seen"           AS "profilesSeen",
            "profiles_inserted"       AS "profilesInserted",
            "profiles_updated"        AS "profilesUpdated",
+           "response_rows"           AS "responseRows",
            "persons_created"         AS "personsCreated",
            "status_events"           AS "statusEvents",
            "phones_opened"           AS "phonesOpened",

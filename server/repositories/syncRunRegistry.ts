@@ -16,9 +16,21 @@ import { db } from '#server/db';
 export type SyncRunRegistryCounters = {
   /** Сколько запросов-страниц сделал обход. Промеры размеров кусков сюда не входят. */
   pages: number;
+  /**
+   * Различных профилей, которые показал API, — а не строк ответа.
+   *
+   * Считать строками нельзя: кусок крупнее 3 000 берётся с двух концов, половины
+   * перекрываются намеренно, и профиль из прохода `asc` пришёл бы снова в `desc`.
+   * Колонка, означающая у одного вида прогона профили, а у другого строки, делает
+   * свод за период бессмысленным.
+   */
   profilesSeen: number;
+  /** Из них появились в реестре впервые. */
   profilesInserted: number;
+  /** Из них уже были: прогон их подтвердил, а не добавил. */
   profilesUpdated: number;
+  /** Строк в ответах API. Цена нарезки с двух концов, а не размер парка. */
+  responseRows: number;
   personsCreated: number;
   statusEvents: number;
   phonesOpened: number;
@@ -60,7 +72,7 @@ export const saveSyncRunRegistry = async (
 ): Promise<void> => {
   await db.$executeRaw`
     INSERT INTO xb.sync_run_registry (
-      "run_id", "pages", "profiles_seen", "profiles_inserted", "profiles_updated",
+      "run_id", "pages", "profiles_seen", "profiles_inserted", "profiles_updated", "response_rows",
       "persons_created", "status_events", "phones_opened", "phones_closed",
       "licenses_updated", "license_conflicts", "skipped_without_license",
       "malformed", "resolved_skips",
@@ -72,6 +84,7 @@ export const saveSyncRunRegistry = async (
       ${counters.profilesSeen},
       ${counters.profilesInserted},
       ${counters.profilesUpdated},
+      ${counters.responseRows},
       ${counters.personsCreated},
       ${counters.statusEvents},
       ${counters.phonesOpened},
@@ -90,6 +103,7 @@ export const saveSyncRunRegistry = async (
            "profiles_seen"           = EXCLUDED."profiles_seen",
            "profiles_inserted"       = EXCLUDED."profiles_inserted",
            "profiles_updated"        = EXCLUDED."profiles_updated",
+           "response_rows"           = EXCLUDED."response_rows",
            "persons_created"         = EXCLUDED."persons_created",
            "status_events"           = EXCLUDED."status_events",
            "phones_opened"           = EXCLUDED."phones_opened",

@@ -569,10 +569,24 @@ model SyncRunRegistry {
   runId String @id @map("run_id") @db.Uuid
 
   /// Страницы выборки. Промеры размеров кусков сюда не входят — они в `sync_runs.requests`.
-  pages            Int @default(0)
-  profilesSeen     Int @default(0) @map("profiles_seen")
+  pages Int @default(0)
+
+  // Все три счётчика ниже считают РАЗЛИЧНЫЕ профили, а не строки ответа. Иначе колонка
+  // означала бы у полного обхода одно, у инкрементального другое, и свод за период
+  // складывал бы несравнимое.
+  /// Различных профилей, которые показал API. С этим числом сверяется `total` каждого куска.
+  profilesSeen Int @default(0) @map("profiles_seen")
+  /// Из них появились в реестре впервые.
   profilesInserted Int @default(0) @map("profiles_inserted")
-  profilesUpdated  Int @default(0) @map("profiles_updated")
+  /// Из них уже были: прогон подтвердил их, а не добавил.
+  profilesUpdated Int @default(0) @map("profiles_updated")
+  /// Строк в ответах API — то есть цена обхода, а не размер парка.
+  ///
+  /// У полного обхода она заметно выше числа профилей: кусок крупнее 3 000 берётся
+  /// с двух концов, половины перекрываются намеренно, и повтор снимается по `id`.
+  /// Разница между этим числом и `profiles_seen` и есть плата за нарезку — её полезно
+  /// видеть: она растёт вместе с парком и первой скажет, что пора менять раскладку кусков.
+  responseRows Int @default(0) @map("response_rows")
 
   /// Люди, заведённые под новые профили. Найденные по номеру ВУ сюда не попадают.
   personsCreated Int @default(0) @map("persons_created")

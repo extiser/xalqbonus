@@ -121,9 +121,20 @@ export type RegistrySyncSummary = {
   requests: number;
   rateLimited: number;
   pages: number;
+  /** Различных профилей, которые показал API. Не строк ответа — см. `responseRows`. */
   profilesSeen: number;
+  /** Из них появились в реестре впервые. */
   profilesInserted: number;
+  /** Из них уже были: прогон их подтвердил. */
   profilesUpdated: number;
+  /**
+   * Строк в ответах API.
+   *
+   * У полного обхода заметно больше числа профилей: половины куска, взятого с двух концов,
+   * перекрываются намеренно. Это мера стоимости нарезки — она растёт вместе с парком
+   * и первой скажет, что раскладку кусков пора менять.
+   */
+  responseRows: number;
   personsCreated: number;
   statusEvents: number;
   phonesOpened: number;
@@ -166,11 +177,17 @@ type RegistryChunk = {
   total: number;
 };
 
+/**
+ * Числовые счётчики прогона.
+ *
+ * Профилей здесь нет намеренно: их считают множества `RunProfiles`. Профиль приходит
+ * дважды на каждом куске, который берётся с двух концов, и сложение строк ответа выдавало
+ * бы «обновлено 29 345» при 25 391 профиле в парке.
+ */
 type Counters = {
   pages: number;
-  profilesSeen: number;
-  profilesInserted: number;
-  profilesUpdated: number;
+  /** Строк в ответах API. Цена нарезки, а не размер парка. */
+  responseRows: number;
   personsCreated: number;
   statusEvents: number;
   phonesOpened: number;
@@ -187,9 +204,7 @@ type Counters = {
 
 const emptyCounters = (): Counters => ({
   pages: 0,
-  profilesSeen: 0,
-  profilesInserted: 0,
-  profilesUpdated: 0,
+  responseRows: 0,
   personsCreated: 0,
   statusEvents: 0,
   phonesOpened: 0,
@@ -202,6 +217,29 @@ const emptyCounters = (): Counters => ({
   chunksTotal: 0,
   chunksWindowed: 0,
   maxOffsetDepth: 0,
+});
+
+/**
+ * Различные профили прогона — тремя множествами, а не тремя числами.
+ *
+ * Проходы с двух концов перекрываются намеренно, и один профиль приезжает дважды.
+ * Сложением строк ответа получилось бы, что прогон видел парк больше раз, чем в парке
+ * профилей, а «вставлено» и «обновлено» считали бы один и тот же новый профиль дважды:
+ * в проходе `asc` он вставляется, в `desc` уже обновляется.
+ */
+type RunProfiles = {
+  /** Всё, что показал API, включая неразобравшиеся: с этим сверяется `total` куска. */
+  seen: Set<string>;
+  /** Доехавшие до базы. */
+  written: Set<string>;
+  /** Из них появившиеся в реестре впервые. */
+  inserted: Set<string>;
+};
+
+const emptyRunProfiles = (): RunProfiles => ({
+  seen: new Set<string>(),
+  written: new Set<string>(),
+  inserted: new Set<string>(),
 });
 
 const toParkProfileInput = (profile: RegistryProfile, personId: string): ParkProfileInput => ({
@@ -414,6 +452,7 @@ const writeProfiles = async (
   runId: string,
   now: Date,
   counters: Counters,
+  written: RunProfiles,
 ): Promise<SyncSkipInput[]> => {
   const skips: SyncSkipInput[] = [];
 
@@ -470,13 +509,16 @@ const writeProfiles = async (
     rows.push(toParkProfileInput(candidate.profile, personId));
   }
 
-  const written = await upsertParkProfiles(rows, now);
+  const upserted = await upsertParkProfiles(rows, now);
 
-  for (const inserted of written.values()) {
+  // Множествами, а не счётчиком: тот же профиль приедет встречным проходом, и второй
+  // раз он не «ещё один обновлённый», а тот же самый. Новым он при этом остаётся новым —
+  // «вставлено» считает первое появление в реестре, а не первую встречу в этом прогоне.
+  for (const [profileId, inserted] of upserted) {
+    written.written.add(profileId);
+
     if (inserted) {
-      counters.profilesInserted += 1;
-    } else {
-      counters.profilesUpdated += 1;
+      written.inserted.add(profileId);
     }
   }
 
@@ -511,7 +553,7 @@ const writeProfiles = async (
 
   // Заказы, лежавшие в журнале пропущенного из-за неизвестного водителя, разрешаются
   // ровно здесь: их профиль появился в реестре. Список нерешённого обязан таять.
-  counters.resolvedSkips += await resolveSkipsForProfiles([...written.keys()]);
+  counters.resolvedSkips += await resolveSkipsForProfiles([...upserted.keys()]);
 
   return skips;
 };
@@ -570,6 +612,7 @@ export const runRegistrySync = async (
   );
 
   const counters = emptyCounters();
+  const profiles = emptyRunProfiles();
   const unknownValues = new Set<string>();
   const malformedIds: MalformedProfile[] = [];
   // Окно есть только у инкрементального прогона: пустое окно у него отсеяно выше,
@@ -579,19 +622,20 @@ export const runRegistrySync = async (
   /** Что делать с каждой пришедшей страницей. Одинаково в обоих режимах. */
   const handlePage = async (page: ProfilesPage, seen?: Set<string>): Promise<void> => {
     counters.pages += 1;
-    counters.profilesSeen += page.received;
+    counters.responseRows += page.received;
     counters.malformed += page.malformed;
 
-    if (seen) {
-      // Сверка идёт по тому, что API показал, а не по тому, что мы сумели разобрать:
-      // неразобранный профиль реестром получен, и кусок обязан сойтись вместе с ним.
-      for (const profile of page.profiles) {
-        seen.add(profile.profileId);
-      }
+    // Различные профили — по тому, что API показал, а не по тому, что мы сумели разобрать:
+    // неразобранный профиль реестром получен, и кусок обязан сойтись вместе с ним.
+    // Сюда же смотрит сверка куска с его `total`, поэтому множество одно на оба вопроса.
+    for (const profile of page.profiles) {
+      profiles.seen.add(profile.profileId);
+      seen?.add(profile.profileId);
+    }
 
-      for (const malformed of page.malformedIds) {
-        seen.add(malformed.profileId);
-      }
+    for (const malformed of page.malformedIds) {
+      profiles.seen.add(malformed.profileId);
+      seen?.add(malformed.profileId);
     }
 
     if (malformedIds.length < SAMPLE_LIMIT) {
@@ -615,7 +659,7 @@ export const runRegistrySync = async (
       pageSkips.push(toUnknownValueSkip(value));
     }
 
-    pageSkips.push(...(await writeProfiles(page.profiles, runId, now, counters)));
+    pageSkips.push(...(await writeProfiles(page.profiles, runId, now, counters, profiles)));
 
     // Пропущенное кладётся постранично: у прогона, упавшего на середине, то, что он успел
     // увидеть, остаётся в базе.
@@ -638,8 +682,10 @@ export const runRegistrySync = async (
       {
         requests: stats.requests,
         rateLimited: stats.rateLimited,
-        itemsSeen: counters.profilesSeen,
-        itemsWritten: counters.profilesInserted + counters.profilesUpdated,
+        // В общую таблицу прогонов уходят различные профили, а не строки ответа:
+        // `sync_runs` складывается по видам прогона, и мерить их разными единицами нельзя.
+        itemsSeen: profiles.seen.size,
+        itemsWritten: profiles.written.size,
       },
       message,
     );
@@ -648,7 +694,7 @@ export const runRegistrySync = async (
     // строки и под своим `try`: прогон падает чаще всего именно потому, что база
     // недоступна, и без перехвата эта запись заменила бы собой настоящую ошибку.
     try {
-      await saveSyncRunRegistry(runId, toRunDetails(counters));
+      await saveSyncRunRegistry(runId, toRunDetails(counters, profiles));
     } catch (detailsError) {
       log.error('Детали упавшего прогона записать не удалось — осталась только строка прогона', {
         kind,
@@ -662,7 +708,7 @@ export const runRegistrySync = async (
       kind,
       runId,
       pages: counters.pages,
-      profilesSeen: counters.profilesSeen,
+      profilesSeen: profiles.seen.size,
       requests: stats.requests,
       rateLimited: stats.rateLimited,
       error: message,
@@ -684,7 +730,7 @@ export const runRegistrySync = async (
   }
 
   // До закрытия строки: успешным прогон объявляется тогда, когда его детали уже в базе.
-  await saveSyncRunRegistry(runId, toRunDetails(counters));
+  await saveSyncRunRegistry(runId, toRunDetails(counters, profiles));
 
   await finishSyncRun(
     runId,
@@ -692,8 +738,8 @@ export const runRegistrySync = async (
     {
       requests: stats.requests,
       rateLimited: stats.rateLimited,
-      itemsSeen: counters.profilesSeen,
-      itemsWritten: counters.profilesInserted + counters.profilesUpdated,
+      itemsSeen: profiles.seen.size,
+      itemsWritten: profiles.written.size,
     },
     null,
   );
@@ -717,9 +763,10 @@ export const runRegistrySync = async (
     requests: stats.requests,
     rateLimited: stats.rateLimited,
     pages: counters.pages,
-    profilesSeen: counters.profilesSeen,
-    profilesInserted: counters.profilesInserted,
-    profilesUpdated: counters.profilesUpdated,
+    profilesSeen: profiles.seen.size,
+    profilesInserted: profiles.inserted.size,
+    profilesUpdated: profiles.written.size - profiles.inserted.size,
+    responseRows: counters.responseRows,
     personsCreated: counters.personsCreated,
     statusEvents: counters.statusEvents,
     phonesOpened: counters.phonesOpened,
@@ -747,9 +794,10 @@ export const runRegistrySync = async (
     pages: counters.pages,
     requests: stats.requests,
     rateLimited: stats.rateLimited,
-    profilesSeen: counters.profilesSeen,
-    profilesInserted: counters.profilesInserted,
-    profilesUpdated: counters.profilesUpdated,
+    profilesSeen: summary.profilesSeen,
+    profilesInserted: summary.profilesInserted,
+    profilesUpdated: summary.profilesUpdated,
+    responseRows: counters.responseRows,
     personsCreated: counters.personsCreated,
     statusEvents: counters.statusEvents,
     phonesOpened: counters.phonesOpened,
@@ -796,6 +844,7 @@ const emptySummary = (kind: RegistrySyncKind): RegistrySyncSummary => ({
   profilesSeen: 0,
   profilesInserted: 0,
   profilesUpdated: 0,
+  responseRows: 0,
   personsCreated: 0,
   statusEvents: 0,
   phonesOpened: 0,
@@ -812,7 +861,19 @@ const emptySummary = (kind: RegistrySyncKind): RegistrySyncSummary => ({
   maxOffsetDepth: 0,
 });
 
-const toRunDetails = (counters: Counters): SyncRunRegistryCounters => ({ ...counters });
+/**
+ * Снимок прогона на этот момент — числами, годными для свода за период.
+ *
+ * Профили считаются размерами множеств: «увидено» и «подтверждено» обязаны означать
+ * одно и то же у обоих видов прогона, иначе сумма за неделю складывает несравнимое.
+ * Цена нарезки живёт отдельным числом — она полезна, но это другой вопрос.
+ */
+const toRunDetails = (counters: Counters, profiles: RunProfiles): SyncRunRegistryCounters => ({
+  ...counters,
+  profilesSeen: profiles.seen.size,
+  profilesInserted: profiles.inserted.size,
+  profilesUpdated: profiles.written.size - profiles.inserted.size,
+});
 
 /**
  * Жалуется в лог, если отметка застряла.
