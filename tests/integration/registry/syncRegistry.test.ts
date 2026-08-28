@@ -77,6 +77,49 @@ describe('инкрементальная синхронизация профил
     );
   });
 
+  it('журнал прогона показывает окно, которое спрашивали у API, а не время прогона', async () => {
+    const summary = await runRegistrySync('registry', {
+      now: NOW,
+      client: createFakeFleet([
+        buildRawProfile({ profileId: profileId('window'), licenseNumber: 'AA1717171' }),
+      ]),
+    });
+
+    const runs = await readSyncRuns('registry');
+
+    // Верхняя граница окна отстаёт от «сейчас» на величину лага, и отметка встаёт на неё же.
+    // Если в журнал писать время прогона, `window_to` разойдётся с отметкой на этот лаг,
+    // и по журналу будет непонятно, за какой отрезок мы на самом деле видели парк.
+    expect(runs[0]?.windowTo?.toISOString()).toBe(new Date(NOW.getTime() - LAG_MS).toISOString());
+    expect(runs[0]?.windowTo?.toISOString()).toBe(summary.watermark?.toISOString());
+    expect(runs[0]?.windowFrom?.toISOString()).toBe(summary.window?.updatedFrom.toISOString());
+  });
+
+  it('телефон открывается любому профилю с номером, а не только работающему', async () => {
+    // Fleet API телефонов уволенных не отдаёт вовсе — в выгрузке 27.08.2026 номер есть
+    // у всех 22 884 работающих и ни у одного из 2 392 уволенных и 114 неработающих.
+    // Это свойство их данных, и нашего фильтра по статусу здесь нет и быть не должно:
+    // появись у уволенного номер, он обязан открыться строкой.
+    const fired = profileId('fired-with-phone');
+
+    const summary = await runRegistrySync('registry', {
+      now: NOW,
+      client: createFakeFleet([
+        buildRawProfile({
+          profileId: fired,
+          licenseNumber: 'AA1818181',
+          workStatus: 'fired',
+          phones: ['+998903333333'],
+        }),
+      ]),
+    });
+
+    expect(summary.phonesOpened).toBe(1);
+    expect(await readPhones(fired)).toEqual([
+      { phoneRaw: '+998903333333', phoneE164: '+998903333333', closedAt: null },
+    ]);
+  });
+
   it('новый профиль с номером существующего человека не создаёт второго человека', async () => {
     // Человек уже известен по номеру ВУ — так его завёл перенос реестра. В парке его
     // переоформили: тот же человек, новый `profile_id`. Ровно эти четыре пары двойников

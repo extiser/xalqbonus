@@ -34,7 +34,7 @@ import {
   saveSyncRunRegistry,
   type SyncRunRegistryCounters,
 } from '#server/repositories/syncRunRegistry';
-import { finishSyncRun, startSyncRun } from '#server/repositories/syncRuns';
+import { finishSyncRun, narrowSyncRunWindow, startSyncRun } from '#server/repositories/syncRuns';
 import {
   recordSyncSkips,
   resolveSkipsForProfiles,
@@ -559,7 +559,15 @@ export const runRegistrySync = async (
       },
     });
 
-  const runId = await startSyncRun(kind, requestedWindow?.updatedFrom ?? null, now);
+  // В журнал уходит окно, которое **спрашивают у API**, а не время прогона: у заказов
+  // отметка совпадает с `window_to` до микросекунды, и у профилей обязана совпадать тоже.
+  // У полного обхода окна нет вовсе — обе границы пусты, и «когда он шёл» отвечает
+  // `started_at`, а не выдуманный фильтр.
+  const runId = await startSyncRun(
+    kind,
+    requestedWindow?.updatedFrom ?? null,
+    requestedWindow?.updatedTo ?? null,
+  );
 
   const counters = emptyCounters();
   const unknownValues = new Set<string>();
@@ -664,6 +672,16 @@ export const runRegistrySync = async (
   }
 
   const stats = client.stats();
+
+  // Окно ужалось по глубине — журнал обязан показать взятую границу, а не запрошенную:
+  // на неё же встанет отметка, и расходиться этим двум числам нельзя.
+  if (
+    requestedWindow &&
+    takenWindow &&
+    takenWindow.updatedTo.getTime() !== requestedWindow.updatedTo.getTime()
+  ) {
+    await narrowSyncRunWindow(runId, takenWindow.updatedTo);
+  }
 
   // До закрытия строки: успешным прогон объявляется тогда, когда его детали уже в базе.
   await saveSyncRunRegistry(runId, toRunDetails(counters));
