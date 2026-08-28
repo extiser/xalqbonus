@@ -119,6 +119,30 @@ describe('разбор страницы заказов', () => {
     ]);
   });
 
+  it('номер точки маршрута считается по присланному массиву, а не по уцелевшим', () => {
+    const page = parseOrdersPage({
+      orders: [
+        {
+          ...completedOrder,
+          route_points: [
+            // Первая точка без координат — в базу не попадёт.
+            { address: 'улица без координат' },
+            { address: 'улица Чаштепа', lat: 41.25, lon: 69.21 },
+            { address: 'улица Бабура', lat: 41.3, lon: 69.2 },
+          ],
+        },
+      ],
+    });
+
+    // Не [1, 2]: иначе, когда API вернёт первую точку целой, upsert по паре
+    // `(trip_id, seq)` перепишет адрес не той точке.
+    expect(page.orders[0]?.routePoints.map((point) => point.seq)).toEqual([2, 3]);
+    expect(page.orders[0]?.routePoints.map((point) => point.address)).toEqual([
+      'улица Чаштепа',
+      'улица Бабура',
+    ]);
+  });
+
   it('пустой курсор читается как конец выборки', () => {
     const page = parseOrdersPage({ orders: [], limit: 500, cursor: '' });
 

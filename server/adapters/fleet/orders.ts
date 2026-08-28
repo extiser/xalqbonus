@@ -283,7 +283,7 @@ const parseRoutePoints = (value: unknown): FleetRoutePoint[] => {
 
   const points: FleetRoutePoint[] = [];
 
-  for (const item of value) {
+  for (const [index, item] of value.entries()) {
     const record = readRecord(item);
     const address = readText(record?.['address']);
     const lat = readNumber(record?.['lat']);
@@ -293,10 +293,11 @@ const parseRoutePoints = (value: unknown): FleetRoutePoint[] => {
       continue;
     }
 
-    // Номер точки — её место в маршруте, а не позиция в отфильтрованном массиве:
-    // считаем от того, что реально попало в маршрут, чтобы пары `(trip_id, seq)`
-    // не разъезжались между прогонами.
-    points.push({ seq: points.length + 1, address, lat, lon });
+    // Номер точки — её место в присланном маршруте, а не позиция среди уцелевших после
+    // разбора. Считать по уцелевшим нельзя: отброшенная первая точка сдвинула бы вторую
+    // на `seq = 1`, и когда API вернёт первую целой, upsert по паре `(trip_id, seq)`
+    // перепишет адрес не той точке.
+    points.push({ seq: index + 1, address, lat, lon });
   }
 
   return points;
