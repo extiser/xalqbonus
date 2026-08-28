@@ -12,6 +12,12 @@ export default defineNuxtConfig({
 
   css: ['~/assets/css/tailwind.css'],
 
+  // Корень ведёт на единственный существующий экран. Своей страницы у него нет: страница,
+  // умеющая только перенаправить, — это лишний файл, который однажды забудут удалить.
+  routeRules: {
+    '/': { redirect: '/sync' },
+  },
+
   nitro: {
     alias: {
       '#server': fileURLToPath(new URL('./server', import.meta.url)),

@@ -62,6 +62,11 @@ export type FleetRequestStats = {
  * Ответ Fleet API, на который повторять запрос бессмысленно: неверные ключи, недостаток
  * прав, кривой запрос. Текст ответа в сообщение не подставляется целиком — тело ошибки
  * может содержать эхо запроса.
+ *
+ * Код ответа в сообщение не идёт: Fleet API кладёт в `code` тот же код состояния, и строка
+ * «Fleet API ответил 403 на «заказы, страница 1» (403)» повторяет одно число дважды.
+ * Само поле остаётся на ошибке — оно приходит от API, и вызывающий код может на него
+ * посмотреть; в журнал прогонов уезжает сообщение, и в нём дубля быть не должно.
  */
 export class FleetApiError extends Error {
   constructor(
@@ -69,7 +74,7 @@ export class FleetApiError extends Error {
     public readonly description: string,
     public readonly code: string | null,
   ) {
-    super(`Fleet API ответил ${status} на «${description}»${code ? ` (${code})` : ''}`);
+    super(`Fleet API ответил ${status} на «${description}»`);
     this.name = 'FleetApiError';
   }
 }
