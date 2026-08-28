@@ -44,6 +44,17 @@ export const buildTripIdempotencyKey = (tripOrderId: string): IdempotencyKey =>
   buildKey('trip', tripOrderId);
 
 /**
+ * Перенос баланса при запуске журнала: `opening:<persons.id>`.
+ *
+ * Ключ строится от человека, а не от записи старой базы, и это не мелочь: у двенадцати
+ * склеенных пар записей две, а человек и баланс — один. Ключ от записи дал бы два
+ * `opening` на один счёт, то есть удвоил бы перенесённый баланс ровно там, где склейка
+ * и нужна (docs/points.md, _reference/legacy/public-schema-2026-08-27.md §7.2).
+ */
+export const buildOpeningIdempotencyKey = (personId: string): IdempotencyKey =>
+  buildKey('opening', personId);
+
+/**
  * Возврат баллов при отмене заказа товара: `order_refund:<order_id>`.
  *
  * Здесь `order_id` — заказ товара за баллы, а не заказ такси. Каталога товаров ещё нет

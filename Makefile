@@ -7,7 +7,7 @@ COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
 .DEFAULT_GOAL := help
 
 .PHONY: help up up-d down restart logs ps shell psql migrate migrate-create typecheck test test-db \
-        db-restore db-schema invariants license-collisions legacy-vs-api \
+        db-restore db-schema invariants license-collisions legacy-vs-api import-legacy \
         prod-up prod-down prod-restart prod-logs prod-ps prod-shell prod-psql prod-migrate \
         proxy-up proxy-down proxy-ps proxy-logs proxy-validate proxy-reload
 
@@ -82,6 +82,12 @@ license-collisions: ## Счётчик коллизий номеров ВУ до 
 # не может физически.
 legacy-vs-api: ## Сверка старой базы с Fleet API: потеря поездок и охват программы
 	python3 scripts/legacy-vs-api.py
+
+# Перенос реестра парка и балансов из public в xb. Гоняется внутри app-контейнера:
+# сеть стека и строка подключения с именем `postgres` живут там же, где тесты.
+# Скрипт идемпотентен — повторный прогон не меняет ни одной цифры отчёта.
+import-legacy: ## Перенести реестр парка и балансы из public в xb (идемпотентно)
+	$(COMPOSE) exec -T app npx tsx scripts/import-legacy.ts
 
 typecheck: ## Проверить типы (nuxt typecheck)
 	npm run typecheck
