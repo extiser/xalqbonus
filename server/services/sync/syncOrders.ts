@@ -18,8 +18,13 @@ import {
   type TripRoutePointInput,
 } from '#server/repositories/trips';
 import { awardTripPoints, type TripAccrualSummary } from '#server/services/points/awardTripPoints';
-import { buildOrdersWindow, type OrdersSyncKind } from '#server/services/sync/buildOrdersWindow';
-import { readSyncConfig } from '#server/services/sync/config';
+import { buildOrdersWindow } from '#server/services/sync/buildOrdersWindow';
+import {
+  readSyncConfig,
+  staleWatermarkThresholdMs,
+  type OrdersSyncKind,
+  type SyncConfig,
+} from '#server/services/sync/config';
 
 /**
  * Прогон синхронизации заказов: опрос Fleet API окном по времени завершения, запись
@@ -140,6 +145,44 @@ const toTripInput = (order: FleetOrder): TripInput => ({
   flags: order.flags,
   amenities: order.amenities,
 });
+
+/**
+ * Жалуется в лог, если отметка застряла.
+ *
+ * Опасен вырожденный случай: если падать начнёт каждый прогон — например, лимит ключа
+ * перестанет отпускать вовсе, — отметка не сдвинется никогда. Прогоны при этом идут минута
+ * за минутой, строки в `sync_runs` появляются, воркер жив, логи пишутся, а баллы
+ * не начисляются вовсе. Это ровно то состояние, в котором годами жил старый бот: система
+ * выглядит работающей.
+ *
+ * Заметить это по одному прогону нельзя — каждый из них выглядит нормальным. Видно только
+ * по расстоянию между отметкой и текущим моментом, и здесь оно и меряется. Экран
+ * наблюдаемости придёт своим этапом, а до тех пор это единственный дешёвый детектор.
+ */
+const warnIfWatermarkStale = (
+  kind: OrdersSyncKind,
+  watermark: Date | null,
+  now: Date,
+  config: SyncConfig,
+): void => {
+  if (!watermark) {
+    return;
+  }
+
+  const lagMs = now.getTime() - watermark.getTime();
+  const thresholdMs = staleWatermarkThresholdMs(kind, config);
+
+  if (lagMs <= thresholdMs) {
+    return;
+  }
+
+  log.warn('Отметка синхронизации отстала — окно не движется, а прогоны идут', {
+    kind,
+    watermark: watermark.toISOString(),
+    lagMinutes: Math.round(lagMs / 60_000),
+    thresholdMinutes: Math.round(thresholdMs / 60_000),
+  });
+};
 
 type PageWriteResult = {
   written: number;
@@ -271,6 +314,8 @@ export const runOrdersSync = async (
       { kind, endedFrom: window.endedFrom },
     );
   }
+
+  warnIfWatermarkStale(kind, state?.watermark ?? null, now, config);
 
   // Клиент собирается до строки прогона: незаполненные реквизиты в окружении — это отказ
   // на старте, а не прогон, навсегда оставшийся в состоянии `running`.

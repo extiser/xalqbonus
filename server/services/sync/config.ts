@@ -5,6 +5,9 @@
  * на чистом `.env.example`, а не только у того, кто помнит список переменных.
  */
 
+/** Виды прогона, опрашивающие заказы. `registry` сюда не относится. */
+export type OrdersSyncKind = 'orders' | 'orders_catchup';
+
 export type SyncConfig = {
   /** Выключатель повторяющейся задачи. Разовый прогон командой работает и при `false`. */
   liveEnabled: boolean;
@@ -105,3 +108,28 @@ export const readSyncConfig = (): SyncConfig => {
 
   return config;
 };
+
+/** Сколько миллисекунд между запусками у этого вида прогона. */
+export const syncIntervalMs = (kind: OrdersSyncKind, config: SyncConfig): number =>
+  kind === 'orders_catchup' ? config.catchupIntervalSec * 1_000 : config.liveIntervalSec * 1_000;
+
+/** Столько интервалов подряд отметка может не двигаться, прежде чем это станет тревогой. */
+const STALE_WATERMARK_INTERVALS = 3;
+
+/** Ниже этого порог не опускается: у минутного прогона три интервала — это три минуты. */
+const STALE_WATERMARK_FLOOR_MS = 15 * 60_000;
+
+/**
+ * После какого отставания отметки прогон обязан пожаловаться в лог.
+ *
+ * Порог считается от интервала этого вида прогона, а не константой: у догоняющего прогона
+ * интервал в сутки, и мерить его тем же числом, что минутный скользящий, бессмысленно.
+ *
+ * Зачем это вообще: если падать начнёт каждый скользящий прогон — например, лимит ключа
+ * перестанет отпускать вовсе, — отметка не сдвинется никогда. Прогоны при этом идут минута
+ * за минутой, строки в `sync_runs` появляются, воркер жив и логи пишутся, а баллы
+ * не начисляются. Это ровно то состояние, в котором годами жил старый бот: система
+ * выглядит работающей.
+ */
+export const staleWatermarkThresholdMs = (kind: OrdersSyncKind, config: SyncConfig): number =>
+  Math.max(syncIntervalMs(kind, config) * STALE_WATERMARK_INTERVALS, STALE_WATERMARK_FLOOR_MS);

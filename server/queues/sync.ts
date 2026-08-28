@@ -1,8 +1,12 @@
 import { Queue, Worker, type Job } from 'bullmq';
 import { consola } from 'consola';
 import { getQueueConnection } from '#server/queues/connection';
-import type { OrdersSyncKind } from '#server/services/sync/buildOrdersWindow';
-import { readSyncConfig, type SyncConfig } from '#server/services/sync/config';
+import {
+  readSyncConfig,
+  syncIntervalMs,
+  type OrdersSyncKind,
+  type SyncConfig,
+} from '#server/services/sync/config';
 import { runOrdersSync } from '#server/services/sync/syncOrders';
 
 /**
@@ -44,10 +48,6 @@ export const createSyncQueue = (): Queue<SyncJobData> =>
     },
   });
 
-/** Сколько миллисекунд между запусками у этого вида прогона. */
-const intervalMs = (kind: OrdersSyncKind, config: SyncConfig): number =>
-  kind === 'orders_catchup' ? config.catchupIntervalSec * 1_000 : config.liveIntervalSec * 1_000;
-
 const isEnabled = (kind: OrdersSyncKind, config: SyncConfig): boolean =>
   kind === 'orders_catchup' ? config.catchupEnabled : config.liveEnabled;
 
@@ -65,7 +65,7 @@ export const applySyncSchedule = async (
       continue;
     }
 
-    const every = intervalMs(kind, config);
+    const every = syncIntervalMs(kind, config);
 
     await queue.upsertJobScheduler(schedulerId, { every }, { name: kind, data: { kind } });
     log.info('Расписание заведено', { kind, everySec: every / 1_000 });
@@ -110,7 +110,7 @@ export const createSyncWorker = (): Worker<SyncJobData> =>
 
       const timing = jobTiming(job);
 
-      if (isOverdue(timing, intervalMs(job.data.kind, config))) {
+      if (isOverdue(timing, syncIntervalMs(job.data.kind, config))) {
         log.warn('Задача просрочена и пропущена — окно возьмёт следующий прогон', {
           kind: job.data.kind,
           lateSec: Math.round((Date.now() - timing.timestamp - timing.delay) / 1_000),

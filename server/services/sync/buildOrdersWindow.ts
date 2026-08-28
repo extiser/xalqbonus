@@ -13,10 +13,7 @@
  * (docs/yandex-fleet.md).
  */
 import type { OrdersWindow } from '#server/adapters/fleet/orders';
-import type { SyncConfig } from '#server/services/sync/config';
-
-/** Виды прогона, опрашивающие заказы. `registry` сюда не относится. */
-export type OrdersSyncKind = 'orders' | 'orders_catchup';
+import type { OrdersSyncKind, SyncConfig } from '#server/services/sync/config';
 
 export type OrdersWindowInput = {
   kind: OrdersSyncKind;

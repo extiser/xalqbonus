@@ -16,7 +16,7 @@
 import { consola } from 'consola';
 
 import { db } from '#server/db';
-import type { OrdersSyncKind } from '#server/services/sync/buildOrdersWindow';
+import type { OrdersSyncKind } from '#server/services/sync/config';
 import { runOrdersSync } from '#server/services/sync/syncOrders';
 
 const log = consola.withTag('sync-orders');
