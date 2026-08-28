@@ -23,6 +23,7 @@ import { db } from '#server/db';
 import { countByMatchMethod, countByTelegramStatus } from '#server/repositories/legacyDriverMap';
 import { openLegacyReadSession } from '#server/repositories/legacyPublic';
 import { readBalanceTotals } from '#server/repositories/points';
+import { countByConfirmedBy } from '#server/repositories/programMembership';
 import { readRegistryCounts } from '#server/repositories/registry';
 import {
   assertControlFigures,
@@ -109,6 +110,7 @@ const main = async (): Promise<void> => {
   const totals = await readBalanceTotals();
   const telegramStatuses = await countByTelegramStatus();
   const matchMethods = await countByMatchMethod();
+  const confirmedBy = await countByConfirmedBy();
 
   const checks = checkControlFigures([
     {
@@ -169,6 +171,7 @@ const main = async (): Promise<void> => {
     watermark,
     telegramStatuses,
     matchMethods,
+    confirmedBy,
     checks,
   });
 
@@ -198,6 +201,7 @@ type ReportInput = {
   watermark: Awaited<ReturnType<typeof markRegistryWatermark>>;
   telegramStatuses: Awaited<ReturnType<typeof countByTelegramStatus>>;
   matchMethods: Awaited<ReturnType<typeof countByMatchMethod>>;
+  confirmedBy: Awaited<ReturnType<typeof countByConfirmedBy>>;
   checks: readonly ControlCheck[];
 };
 
@@ -326,6 +330,18 @@ const renderReport = (input: ReportInput): string => {
       'привязок не создано из-за непригодного `chat_id`',
       formatNumber(input.membership.linksSkippedInvalidChat),
     ),
+  );
+  lines.push('');
+  lines.push('Способ подтверждения привязки в `telegram_links`:');
+  lines.push('');
+  lines.push('| `confirmed_by` | привязок |');
+  lines.push('|---|---:|');
+  for (const [value, total] of input.confirmedBy) {
+    lines.push(`| \`${value}\` | ${formatNumber(total)} |`);
+  }
+  lines.push('');
+  lines.push(
+    'Перенесённые привязки лежат под `legacy_import`, а не под `operator`: ни автоматикой по телефону, ни оператором в офисе они не подтверждались. Значение заведено миграцией этой же ветки.',
   );
   lines.push('');
 

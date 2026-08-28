@@ -106,3 +106,21 @@ export const countTelegramLinks = async (): Promise<TelegramLinkCounts> => {
 
   return { active: Number(rows[0]?.active ?? 0n), closed: Number(rows[0]?.closed ?? 0n) };
 };
+
+/**
+ * Разрез привязок по способу подтверждения.
+ *
+ * Строка отчёта, ради которой запрос и написан: она показывает, что перенесённые
+ * привязки лежат под `legacy_import`, а не под `operator` — то есть система не
+ * утверждает, что 4 091 привязку проверил человек в офисе.
+ */
+export const countByConfirmedBy = async (): Promise<Map<LinkConfirmedBy, number>> => {
+  const rows = await db.$queryRaw<{ confirmedBy: LinkConfirmedBy; total: bigint }[]>`
+    SELECT "confirmed_by" AS "confirmedBy", COUNT(*) AS total
+      FROM xb.telegram_links
+     GROUP BY "confirmed_by"
+     ORDER BY "confirmed_by"
+  `;
+
+  return new Map(rows.map((row) => [row.confirmedBy, Number(row.total)]));
+};
