@@ -1,6 +1,8 @@
 node_modules/
 .nuxt/
 .output/
+# Клиент Prisma генерируется в дерево исходников (prisma/schema.prisma → generator.output).
+server/generated/
 dist/
 .env
 .env.*
@@ -10,6 +12,8 @@ logs/
 .DS_Store
 /data/
 *.sql
+# Наши собственные запросы правило выше закрывает заодно — возвращаем их в индекс.
+!scripts/*.sql
 
 # дампы продовой базы
 _backup/

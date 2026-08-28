@@ -1,0 +1,89 @@
+# Боевой стек. Описан отдельным файлом, а не флагом к локальному: одним файлом их держать
+# нельзя — рано или поздно локальный запустят на сервере, и рядом с боевой базой встанет
+# пустая (docs/infra.md → «Два окружения»).
+# Портов наружу стек не публикует вовсе: снаружи машину слушает только входная дверь
+# (compose.proxy.yml), а приложение видно ей по внешней сети xalqbonus-edge.
+name: xalqbonus-prod
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: xalqbonus:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    # Две сети: своя группа по умолчанию (база, очередь) и общая xalqbonus-edge,
+    # через которую приложение видит дверь.
+    networks:
+      - default
+      - edge
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Тот же образ, другая команда: синхронизацию можно погасить, не трогая веб.
+  worker:
+    image: xalqbonus:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    command: ["node", ".output/server/worker.mjs"]
+    # Проба образа бьёт по HTTP, которого у воркера нет: подменяется возрастом отметки
+    # живого цикла — см. комментарий в compose.local.yml.
+    healthcheck:
+      test: ["CMD-SHELL", "test $$(( $$(date +%s) - $$(stat -c %Y /tmp/worker-heartbeat) )) -lt 30"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  postgres:
+    # Не alpine: musl и glibc сортируют текст по-разному, и кластер, созданный одной сборкой,
+    # другая открывает с расхождением версии сортировки — индексы по тексту начинают врать.
+    # Локальная копия продовой базы создана образом postgres:16, окружения держатся его же.
+    image: postgres:16
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # Проба по TCP, а не по unix-сокету: на первом старте контейнера (пустой том) initdb
+    # поднимает временный сервер, слушающий только сокет, — проба по сокету зеленеет до того,
+    # как база действительно начинает принимать соединения по сети.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+networks:
+  # Сеть создаёт настройка машины, а не подъём стека: стек, поднятый до её создания,
+  # не стартует с внятной ошибкой — это лучше, чем молчаливое создание второй сети
+  # с тем же назначением.
+  edge:
+    name: xalqbonus-edge
+    external: true
+
+volumes:
+  postgres_data:
+  redis_data:

@@ -1,0 +1,13 @@
+node_modules
+.nuxt
+.output
+.git
+.env*
+*.log
+dist
+coverage
+# Дампы продовой базы и выгрузки Fleet API в образ не едут: полсотни мегабайт
+# персональных данных парка в контексте сборки ни одному этапу не нужны.
+_backup
+_reference
+__pycache__
