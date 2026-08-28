@@ -7,7 +7,9 @@ import {
   type OrdersWindow,
 } from '#server/adapters/fleet/orders';
 import { readProfileOwners } from '#server/repositories/registry';
+import { saveSyncRunOrders, type SyncRunOrdersCounters } from '#server/repositories/syncRunOrders';
 import { finishSyncRun, startSyncRun } from '#server/repositories/syncRuns';
+import { recordSyncSkips, resolveSyncSkips, type SyncSkipInput } from '#server/repositories/syncSkips';
 import { readSyncState, setSyncWatermark } from '#server/repositories/syncState';
 import {
   insertTripEvents,
@@ -55,9 +57,9 @@ const COMPLETED_STATUS = 'complete';
 /**
  * Сколько идентификаторов пропущенного показывать в сводке.
  *
- * Списки нужны, чтобы потерянное можно было достать поимённо, а не только сосчитать.
- * Но сводка — одна строка лога, и дамп на полтысячи идентификаторов её убивает: сколько
- * всего, говорят счётчики рядом, а остаток называется отдельным числом.
+ * Ограничение лога и только лога: сводка — одна строка, и дамп на полтысячи
+ * идентификаторов её убивает. В `xb.sync_skips` едет всё до единого, поимённо и без
+ * обрезки, — то, что за пятидесятым, иначе не было бы названо нигде и никогда.
  */
 const SAMPLE_LIMIT = 50;
 
@@ -188,11 +190,37 @@ const warnIfWatermarkStale = (
   });
 };
 
+/**
+ * Незнакомое значение чужого словаря приходит от адаптера строкой `словарь=значение`.
+ * В журнале они разъезжаются по колонкам: значение — ссылка, словарь — деталь, — иначе
+ * «в каком словаре расширение» пришлось бы доставать разбором строки в каждом запросе.
+ */
+const toUnknownValueSkip = (unknownValue: string): SyncSkipInput => {
+  const separator = unknownValue.indexOf('=');
+
+  if (separator < 0) {
+    return { reason: 'unknown_value', reference: unknownValue, detail: null };
+  }
+
+  return {
+    reason: 'unknown_value',
+    reference: unknownValue.slice(separator + 1),
+    detail: unknownValue.slice(0, separator),
+  };
+};
+
+type SkippedOrder = {
+  orderId: string;
+  profileId: string;
+};
+
 type PageWriteResult = {
   inserted: number;
   updated: number;
-  skippedUnknownProfile: number;
-  unknownProfileIds: string[];
+  /** Заказы, чей водитель не нашёлся в реестре, — парами, а не счётчиком. */
+  skippedUnknownProfile: SkippedOrder[];
+  /** Заказы, доехавшие до `xb.trips`. По ним закрывается ранее пропущенное. */
+  writtenOrderIds: string[];
   completedOrderIds: string[];
 };
 
@@ -212,8 +240,8 @@ const writePage = async (
   const result: PageWriteResult = {
     inserted: 0,
     updated: 0,
-    skippedUnknownProfile: 0,
-    unknownProfileIds: [],
+    skippedUnknownProfile: [],
+    writtenOrderIds: [],
     completedOrderIds: [],
   };
 
@@ -222,7 +250,6 @@ const writePage = async (
   }
 
   const knownProfiles = await readProfileOwners([...new Set(orders.map((order) => order.profileId))]);
-  const unknownProfileIds = new Set<string>();
   const writable: FleetOrder[] = [];
 
   for (const order of orders) {
@@ -231,11 +258,8 @@ const writePage = async (
       continue;
     }
 
-    result.skippedUnknownProfile += 1;
-    unknownProfileIds.add(order.profileId);
+    result.skippedUnknownProfile.push({ orderId: order.orderId, profileId: order.profileId });
   }
-
-  result.unknownProfileIds = [...unknownProfileIds];
 
   if (writable.length === 0) {
     return result;
@@ -243,7 +267,9 @@ const writePage = async (
 
   const tripIds = await upsertTrips(writable.map(toTripInput), runId, syncedAt);
 
-  for (const written of tripIds.values()) {
+  for (const [orderId, written] of tripIds) {
+    result.writtenOrderIds.push(orderId);
+
     if (written.inserted) {
       result.inserted += 1;
     } else {
@@ -355,6 +381,22 @@ export const runOrdersSync = async (
   let skippedUnknownProfile = 0;
   let accrual = emptyAccrual();
 
+  /** Снимок счётчиков прогона на этот момент. Кладётся в базу на любом исходе. */
+  const runDetails = (): SyncRunOrdersCounters => ({
+    pages,
+    ordersInserted,
+    ordersUpdated,
+    malformed,
+    skippedUnknownProfile,
+    unknownProfiles: unknownProfileIds.size,
+    awarded: accrual.awarded,
+    alreadyAwarded: accrual.alreadyAwarded,
+    notCompleted: accrual.notCompleted,
+    withoutEndedAt: accrual.withoutEndedAt,
+    outsideProgram: accrual.outsideProgram,
+    unknownTrip: accrual.unknownTrip,
+  });
+
   try {
     for await (const page of readOrdersByEndedAt(client, window, config.pageLimit)) {
       pages += 1;
@@ -366,18 +408,44 @@ export const runOrdersSync = async (
         malformedIds.push(...page.malformedIds.slice(0, SAMPLE_LIMIT - malformedIds.length));
       }
 
+      // Каждый неразобранный заказ — своей строкой в журнал пропущенного, без обрезки:
+      // `SAMPLE_LIMIT` выше режет образец для лога, а не то, что доезжает до базы.
+      const pageSkips: SyncSkipInput[] = page.malformedIds.map((order) => ({
+        reason: 'malformed',
+        reference: order.orderId,
+        detail: order.field,
+      }));
+
+      // Незнакомое значение словаря пишется раз на прогон, а не раз на страницу: иначе
+      // `times_seen` считал бы страницы, а читается он как «столько прогонов принесли это».
       for (const value of page.unknownValues) {
+        if (unknownValues.has(value)) {
+          continue;
+        }
+
         unknownValues.add(value);
+        pageSkips.push(toUnknownValueSkip(value));
       }
 
       const written = await writePage(page.orders, runId, now);
       ordersInserted += written.inserted;
       ordersUpdated += written.updated;
-      skippedUnknownProfile += written.skippedUnknownProfile;
+      skippedUnknownProfile += written.skippedUnknownProfile.length;
 
-      for (const profileId of written.unknownProfileIds) {
-        unknownProfileIds.add(profileId);
+      for (const skipped of written.skippedUnknownProfile) {
+        unknownProfileIds.add(skipped.profileId);
+        pageSkips.push({
+          reason: 'unknown_profile',
+          reference: skipped.orderId,
+          detail: skipped.profileId,
+        });
       }
+
+      // Пропущенное кладётся постранично, а не в конце прогона: у прогона, упавшего
+      // на середине, то, что он успел увидеть, остаётся в базе. Ради этого же и порядок:
+      // сначала запись пропущенного, потом закрытие того, что наконец записалось.
+      await recordSyncSkips(runId, pageSkips);
+      await resolveSyncSkips(written.writtenOrderIds);
 
       // Начисление идёт постранично, а не в конце: у догоняющего прогона страниц полсотни,
       // и держать ради этого весь список заказов в памяти незачем. Повторный вызов
@@ -400,6 +468,11 @@ export const runOrdersSync = async (
       message,
     );
 
+    // Детали пишутся и у упавшего прогона — у него они и важнее всего: сколько он успел
+    // разобрать и начислить до обрыва. Но после закрытия строки, а не до: отказ на записи
+    // деталей иначе заменил бы собой настоящую ошибку и оставил прогон бежать вечно.
+    await saveSyncRunOrders(runId, runDetails());
+
     // Отметка не трогается намеренно: окно будет перечитано целиком следующим прогоном.
     log.error('Прогон синхронизации заказов упал, отметка осталась на месте', {
       kind,
@@ -416,6 +489,10 @@ export const runOrdersSync = async (
   }
 
   const stats = client.stats();
+
+  // До закрытия строки: успешным прогон объявляется тогда, когда его детали уже в базе,
+  // а не тогда, когда их ещё предстоит записать.
+  await saveSyncRunOrders(runId, runDetails());
 
   await finishSyncRun(
     runId,

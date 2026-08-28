@@ -211,13 +211,87 @@ export const cleanupTestData = async (): Promise<void> => {
  * от того, что оставил после себя предыдущий файл тестов.
  */
 export const resetOrdersSyncState = async (): Promise<void> => {
-  // Отметка ссылается на прогон, поездка — тоже. Порядок удаления идёт по ссылкам.
+  // Отметка ссылается на прогон, поездка, детали и пропущенное — тоже. Порядок удаления
+  // идёт по ссылкам: внешние ключи журнала стоят на RESTRICT, и это намеренно — журнал
+  // прогонов не должен уходить молча вслед за строкой прогона.
   await db.$executeRaw`DELETE FROM xb.sync_state WHERE "kind" IN ('orders', 'orders_catchup')`;
   await db.$executeRaw`
     UPDATE xb.trips SET "sync_run_id" = NULL
      WHERE "sync_run_id" IN (SELECT "id" FROM xb.sync_runs WHERE "kind" IN ('orders', 'orders_catchup'))
   `;
+  await db.$executeRaw`
+    DELETE FROM xb.sync_skips
+     WHERE "first_run_id" IN (SELECT "id" FROM xb.sync_runs WHERE "kind" IN ('orders', 'orders_catchup'))
+        OR "last_run_id"  IN (SELECT "id" FROM xb.sync_runs WHERE "kind" IN ('orders', 'orders_catchup'))
+  `;
+  await db.$executeRaw`
+    DELETE FROM xb.sync_run_orders
+     WHERE "run_id" IN (SELECT "id" FROM xb.sync_runs WHERE "kind" IN ('orders', 'orders_catchup'))
+  `;
   await db.$executeRaw`DELETE FROM xb.sync_runs WHERE "kind" IN ('orders', 'orders_catchup')`;
+};
+
+/** Детали прогона заказов — то, что до этой таблицы жило только в одной строке лога. */
+export type SyncRunOrdersRow = {
+  pages: number;
+  ordersInserted: number;
+  ordersUpdated: number;
+  malformed: number;
+  skippedUnknownProfile: number;
+  unknownProfiles: number;
+  awarded: number;
+  alreadyAwarded: number;
+  notCompleted: number;
+  withoutEndedAt: number;
+  outsideProgram: number;
+  unknownTrip: number;
+};
+
+export const readSyncRunOrders = async (runId: string): Promise<SyncRunOrdersRow | null> => {
+  const rows = await db.$queryRaw<SyncRunOrdersRow[]>`
+    SELECT "pages",
+           "orders_inserted"         AS "ordersInserted",
+           "orders_updated"          AS "ordersUpdated",
+           "malformed",
+           "skipped_unknown_profile" AS "skippedUnknownProfile",
+           "unknown_profiles"        AS "unknownProfiles",
+           "awarded",
+           "already_awarded"         AS "alreadyAwarded",
+           "not_completed"           AS "notCompleted",
+           "without_ended_at"        AS "withoutEndedAt",
+           "outside_program"         AS "outsideProgram",
+           "unknown_trip"            AS "unknownTrip"
+      FROM xb.sync_run_orders
+     WHERE "run_id" = ${runId}::uuid
+  `;
+
+  return rows[0] ?? null;
+};
+
+export type SyncSkipRow = {
+  reason: string;
+  reference: string;
+  detail: string | null;
+  firstRunId: string;
+  lastRunId: string;
+  timesSeen: number;
+  resolvedAt: Date | null;
+};
+
+export const readSyncSkips = async (): Promise<SyncSkipRow[]> => {
+  const rows = await db.$queryRaw<SyncSkipRow[]>`
+    SELECT "reason"::text  AS "reason",
+           "reference",
+           "detail",
+           "first_run_id"  AS "firstRunId",
+           "last_run_id"   AS "lastRunId",
+           "times_seen"    AS "timesSeen",
+           "resolved_at"   AS "resolvedAt"
+      FROM xb.sync_skips
+     ORDER BY "reason", "reference"
+  `;
+
+  return rows;
 };
 
 /**

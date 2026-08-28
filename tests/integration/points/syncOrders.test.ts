@@ -12,6 +12,8 @@ import {
   readAccountBalance,
   readSyncRuns,
   readSyncWatermark,
+  readSyncRunOrders,
+  readSyncSkips,
   readTripStatus,
   resetOrdersSyncState,
   type TestPerson,
@@ -96,6 +98,29 @@ const makeTransport = (pages: readonly RawOrder[][]): FleetTransport => {
       return { orders, limit: 500, cursor: isLast ? '' : `page-${issued}` } as Payload;
     },
     stats: () => ({ requests: issued, rateLimited: 0, waitedMs: 0 }),
+  };
+};
+
+/**
+ * Транспорт, отдающий страницы и падающий следом. Так выглядит прогон, оборванный после
+ * того, как часть работы уже сделана: у него и проверяется, что успетое осталось в базе.
+ */
+const transportFailingAfter = (pages: readonly RawOrder[][]): FleetTransport => {
+  let issued = 0;
+
+  return {
+    parkId: 'test-park',
+    post: async <Payload>(): Promise<Payload> => {
+      if (issued >= pages.length) {
+        throw new Error('связь оборвалась');
+      }
+
+      const orders = pages[issued] ?? [];
+      issued += 1;
+
+      return { orders, limit: 500, cursor: `page-${issued}` } as Payload;
+    },
+    stats: () => ({ requests: issued + 1, rateLimited: 0, waitedMs: 0 }),
   };
 };
 
@@ -295,6 +320,210 @@ describe('прогон синхронизации заказов', () => {
     expect(summary.pages).toBe(2);
     expect(summary.ordersWritten).toBe(2);
     expect(await readAccountBalance(driver.personId)).toBe(2n);
+  });
+});
+
+/**
+ * Журнал прогона: всё, что прогон считает и говорит одной строкой в лог, обязано
+ * оставаться в базе и доставаться запросом.
+ *
+ * До этой таблицы на вопрос «сколько заказов мы потеряли за неделю и чьих именно» отвечал
+ * только греп по логам контейнера — до первой ротации лога, перезапуска или `down`.
+ */
+describe('журнал прогона синхронизации', () => {
+  let driver: TestPerson;
+
+  beforeAll(async () => {
+    await resetOrdersSyncState();
+  });
+
+  afterEach(async () => {
+    await cleanupTestData();
+    await resetOrdersSyncState();
+  });
+
+  afterAll(async () => {
+    await disconnectDatabase();
+  });
+
+  it('детали прогона в базе — те же числа, что и в сводке', async () => {
+    driver = await createTestPerson({ inProgram: true });
+    // Реестр парка шире программы: заказ этого водителя записывается, а балл за него
+    // не начисляется. В деталях прогона это отдельный счётчик, а не потеря.
+    const outsider = await createTestPerson({ inProgram: false });
+
+    const summary = await runOrdersSync('orders', {
+      now: NOW,
+      client: makeTransport([
+        [
+          buildRawOrder(`order-1-${driver.profileId}`, driver.profileId, 'complete', '2026-08-28T11:50:00.000+00:00'),
+          buildRawOrder('order-stranger', 'profile-never-seen', 'complete', '2026-08-28T11:51:00.000+00:00'),
+        ],
+        [
+          buildRawOrder(`order-2-${outsider.profileId}`, outsider.profileId, 'complete', '2026-08-28T11:52:00.000+00:00'),
+        ],
+      ]),
+    });
+
+    const details = await readSyncRunOrders(summary.runId as string);
+
+    expect(details).toEqual({
+      pages: summary.pages,
+      ordersInserted: summary.ordersInserted,
+      ordersUpdated: summary.ordersUpdated,
+      malformed: summary.malformed,
+      skippedUnknownProfile: summary.skippedUnknownProfile,
+      unknownProfiles: summary.unknownProfiles,
+      awarded: summary.accrual.awarded,
+      alreadyAwarded: summary.accrual.alreadyAwarded,
+      notCompleted: summary.accrual.notCompleted,
+      withoutEndedAt: summary.accrual.withoutEndedAt,
+      outsideProgram: summary.accrual.outsideProgram,
+      unknownTrip: summary.accrual.unknownTrip,
+    });
+    // Сводка не пустая: сверять нули с нулями смысла нет.
+    expect(details?.pages).toBe(2);
+    expect(details?.ordersInserted).toBe(2);
+    expect(details?.skippedUnknownProfile).toBe(1);
+    expect(details?.unknownProfiles).toBe(1);
+    expect(details?.awarded).toBe(1);
+    expect(details?.outsideProgram).toBe(1);
+  });
+
+  it('упавший прогон оставляет детали того, что успел', async () => {
+    driver = await createTestPerson({ inProgram: true });
+
+    await expect(
+      runOrdersSync('orders', {
+        now: NOW,
+        client: transportFailingAfter([
+          [
+            buildRawOrder(
+              `order-${driver.profileId}`,
+              driver.profileId,
+              'complete',
+              '2026-08-28T11:50:00.000+00:00',
+            ),
+          ],
+        ]),
+      }),
+    ).rejects.toThrow('связь оборвалась');
+
+    const runs = await readSyncRuns('orders');
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.status).toBe('failed');
+
+    // У упавшего прогона детали важнее всего: без них видно только «упал», а сколько он
+    // успел разобрать и начислить до обрыва — неизвестно.
+    const details = await readSyncRunOrders(runs[0]?.id as string);
+    expect(details?.pages).toBe(1);
+    expect(details?.ordersInserted).toBe(1);
+    expect(details?.awarded).toBe(1);
+  });
+
+  it('заказ незнакомого водителя ложится строкой пропущенного, повтор её не удваивает', async () => {
+    driver = await createTestPerson({ inProgram: true });
+    const order = buildRawOrder('order-stranger', 'profile-never-seen', 'complete', '2026-08-28T11:50:00.000+00:00');
+
+    const first = await runOrdersSync('orders', { now: NOW, client: makeTransport([[order]]) });
+
+    const afterFirst = await readSyncSkips();
+    expect(afterFirst).toHaveLength(1);
+    expect(afterFirst[0]?.reason).toBe('unknown_profile');
+    // Ссылка — заказ, деталь — водитель. Именно заказ мы потеряли, и именно по нему
+    // потом видно, что он наконец записался.
+    expect(afterFirst[0]?.reference).toBe('order-stranger');
+    expect(afterFirst[0]?.detail).toBe('profile-never-seen');
+    expect(afterFirst[0]?.timesSeen).toBe(1);
+    expect(afterFirst[0]?.resolvedAt).toBeNull();
+    expect(afterFirst[0]?.firstRunId).toBe(first.runId);
+
+    // Перекрытие окон приносит тот же пропущенный заказ каждый прогон. Без уникальности
+    // по паре «причина + ссылка» таблица росла бы линейно по времени, и вопрос «сколько
+    // потеряно» перестал бы иметь ответ.
+    const second = await runOrdersSync('orders', {
+      now: new Date(NOW.getTime() + 60_000),
+      client: makeTransport([[order]]),
+    });
+
+    const afterSecond = await readSyncSkips();
+    expect(afterSecond).toHaveLength(1);
+    expect(afterSecond[0]?.timesSeen).toBe(2);
+    expect(afterSecond[0]?.firstRunId).toBe(first.runId);
+    expect(afterSecond[0]?.lastRunId).toBe(second.runId);
+  });
+
+  it('пропущенных больше полусотни — в базу едут все, а обрезан только образец для лога', async () => {
+    const strangers = Array.from({ length: 60 }, (_, index) =>
+      buildRawOrder(`order-stranger-${index}`, `profile-never-seen-${index}`, 'complete', '2026-08-28T11:50:00.000+00:00'),
+    );
+
+    const summary = await runOrdersSync('orders', { now: NOW, client: makeTransport([strangers]) });
+
+    expect(summary.skippedUnknownProfile).toBe(60);
+    // Список в сводке — образец для одной строки лога, и он обрезан.
+    expect(summary.unknownProfileIds).toHaveLength(50);
+
+    // В базе обрезки нет: то, что за пятидесятым, иначе не было бы названо нигде.
+    const skips = await readSyncSkips();
+    expect(skips.filter((skip) => skip.reason === 'unknown_profile')).toHaveLength(60);
+  });
+
+  it('неразобранный заказ записан поимённо, а разобравшись — помечен решённым', async () => {
+    driver = await createTestPerson({ inProgram: true });
+    const orderId = `order-${driver.profileId}`;
+    const broken = buildRawOrder(orderId, driver.profileId, 'complete', '2026-08-28T11:50:00.000+00:00');
+    delete broken['payment_method'];
+
+    const first = await runOrdersSync('orders', { now: NOW, client: makeTransport([[broken]]) });
+
+    expect(first.malformed).toBe(1);
+    const afterFirst = await readSyncSkips();
+    expect(afterFirst).toHaveLength(1);
+    expect(afterFirst[0]?.reason).toBe('malformed');
+    expect(afterFirst[0]?.reference).toBe(orderId);
+    expect(afterFirst[0]?.detail).toBe('payment_method');
+    expect(afterFirst[0]?.resolvedAt).toBeNull();
+
+    // Тот же заказ, пришедший целым. `resolved_at` и есть разница между «что потеряно
+    // до сих пор» и «что когда-либо пропускалось».
+    await runOrdersSync('orders', {
+      now: new Date(NOW.getTime() + 60_000),
+      client: makeTransport([
+        [buildRawOrder(orderId, driver.profileId, 'complete', '2026-08-28T11:50:00.000+00:00')],
+      ]),
+    });
+
+    const afterSecond = await readSyncSkips();
+    expect(afterSecond).toHaveLength(1);
+    expect(afterSecond[0]?.resolvedAt).not.toBeNull();
+    expect(await readTripStatus(orderId)).toBe('complete');
+  });
+
+  it('незнакомое значение чужого словаря остаётся в базе с именем словаря', async () => {
+    driver = await createTestPerson({ inProgram: true });
+    const order = buildRawOrder(
+      `order-${driver.profileId}`,
+      driver.profileId,
+      'complete',
+      '2026-08-28T11:50:00.000+00:00',
+    );
+    order['category'] = 'hyperloop';
+
+    const summary = await runOrdersSync('orders', { now: NOW, client: makeTransport([[order]]) });
+
+    // Заказ записан: чужой словарь нам не принадлежит, и новое значение на той стороне
+    // не роняет синхронизацию (docs/decisions.md).
+    expect(summary.ordersWritten).toBe(1);
+
+    const skips = await readSyncSkips();
+    expect(skips).toHaveLength(1);
+    expect(skips[0]?.reason).toBe('unknown_value');
+    expect(skips[0]?.reference).toBe('hyperloop');
+    expect(skips[0]?.detail).toBe('category');
+    // Заказ записался, но незнакомое значение этим не закрывается: словарь закрывается тем,
+    // что мы его узнали, а не следующим прогоном.
+    expect(skips[0]?.resolvedAt).toBeNull();
   });
 });
 
