@@ -7,7 +7,7 @@ COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
 .DEFAULT_GOAL := help
 
 .PHONY: help up up-d down restart logs ps shell psql migrate migrate-create typecheck test \
-        db-restore db-schema invariants license-collisions \
+        db-restore db-schema invariants license-collisions legacy-vs-api \
         prod-up prod-down prod-restart prod-logs prod-ps prod-shell prod-psql prod-migrate \
         proxy-up proxy-down proxy-ps proxy-logs proxy-validate proxy-reload
 
@@ -73,6 +73,12 @@ invariants: ## Прогнать запросы инвариантов журна
 # Считает по выгрузке реестра из _reference/fleet-api/dumps/ — в репозитории её нет.
 license-collisions: ## Счётчик коллизий номеров ВУ до и после нормализации
 	npx tsx scripts/license-collisions.ts
+
+# Читает выгрузки из _reference/fleet-api/dumps/ — в репозитории их нет — и локальную
+# копию старой базы. Сеанс поднимается только для чтения: записать в public скрипт
+# не может физически.
+legacy-vs-api: ## Сверка старой базы с Fleet API: потеря поездок и охват программы
+	python3 scripts/legacy-vs-api.py
 
 typecheck: ## Проверить типы (nuxt typecheck)
 	npm run typecheck
