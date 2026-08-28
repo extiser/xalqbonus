@@ -101,6 +101,22 @@ describe('разбор страницы заказов', () => {
     expect(page.malformed).toBe(1);
     expect(page.orders).toHaveLength(1);
     expect(page.orders[0]?.orderId).toBe('04664a21e948c9d8ab0e49d8c8b1dbcb');
+    // Пропущенный заказ обязан назвать себя: прогон успешен, отметка встанет на верхнюю
+    // границу окна, и достать его потом можно будет только по идентификатору.
+    expect(page.malformedIds).toEqual([{ orderId: 'no-driver', field: 'driver_profile.id' }]);
+  });
+
+  it('заказ без идентификатора вовсе тоже попадает в список пропущенного', () => {
+    const { id: _unused, ...withoutId } = completedOrder;
+
+    const page = parseOrdersPage({ orders: [withoutId, {}, 'не объект'] });
+
+    expect(page.malformed).toBe(3);
+    expect(page.malformedIds).toEqual([
+      { orderId: '(без id)', field: 'id' },
+      { orderId: '(без id)', field: 'id' },
+      { orderId: '(без id)', field: '(запись не объект)' },
+    ]);
   });
 
   it('пустой курсор читается как конец выборки', () => {

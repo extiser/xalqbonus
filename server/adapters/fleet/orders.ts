@@ -139,6 +139,23 @@ export class OrderParseError extends Error {
 }
 
 /**
+ * Заказ, не прошедший разбор, вместе с полем, которого ему не хватило.
+ *
+ * Именно пара, а не счётчик: прогон при этом успешен, отметка встаёт на верхнюю границу
+ * окна, и заказ больше не будет запрошен — кроме окна догоняющего прогона. Знать, что
+ * потеряно N заказов, и не знать какие — это тот же класс ошибки, против которого написана
+ * вся задача, просто со счётчиком вместо тишины.
+ */
+export type MalformedOrder = {
+  /** `(без id)`, если разбор споткнулся до идентификатора. */
+  orderId: string;
+  field: string;
+};
+
+/** Запись страницы, которая вообще не объект: даже поля, по которому спотыкаться, нет. */
+const NOT_AN_OBJECT: MalformedOrder = { orderId: '(без id)', field: '(запись не объект)' };
+
+/**
  * Что встретилось в ответе, кроме самих заказов.
  *
  * `unknownValues` — значения чужих словарей, которых мы раньше не видели. Они уже записаны
@@ -153,6 +170,8 @@ export type OrdersPage = {
   unknownValues: string[];
   /** Заказы, которые не удалось разобрать. Не записываются, считаются отдельно. */
   malformed: number;
+  /** Кто именно не разобрался. Длина равна `malformed`: на странице список не режется. */
+  malformedIds: MalformedOrder[];
 };
 
 export type OrdersWindow = {
@@ -346,13 +365,13 @@ export const parseOrdersPage = (payload: unknown): OrdersPage => {
   const rawOrders = Array.isArray(record?.['orders']) ? record['orders'] : [];
   const unknown = new Set<string>();
   const orders: FleetOrder[] = [];
-  let malformed = 0;
+  const malformedIds: MalformedOrder[] = [];
 
   for (const rawOrder of rawOrders) {
     const asRecord = readRecord(rawOrder);
 
     if (!asRecord) {
-      malformed += 1;
+      malformedIds.push(NOT_AN_OBJECT);
       continue;
     }
 
@@ -360,7 +379,7 @@ export const parseOrdersPage = (payload: unknown): OrdersPage => {
       orders.push(parseOrder(asRecord, unknown));
     } catch (error) {
       if (error instanceof OrderParseError) {
-        malformed += 1;
+        malformedIds.push({ orderId: error.orderId, field: error.field });
         continue;
       }
 
@@ -373,7 +392,8 @@ export const parseOrdersPage = (payload: unknown): OrdersPage => {
     orders,
     cursor: readText(record?.['cursor']),
     unknownValues: [...unknown],
-    malformed,
+    malformed: malformedIds.length,
+    malformedIds,
   };
 };
 

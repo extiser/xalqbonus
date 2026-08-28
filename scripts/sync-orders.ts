@@ -50,8 +50,10 @@ const main = async (): Promise<void> => {
     ordersSeen: summary.ordersSeen,
     ordersWritten: summary.ordersWritten,
     malformed: summary.malformed,
+    malformedIds: summary.malformedIds,
     skippedUnknownProfile: summary.skippedUnknownProfile,
     unknownProfiles: summary.unknownProfiles,
+    unknownProfileIds: summary.unknownProfileIds,
     unknownValues: summary.unknownValues,
     accrual: summary.accrual,
   });

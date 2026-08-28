@@ -3,6 +3,7 @@ import { createFleetClient, type FleetTransport } from '#server/adapters/fleet/c
 import {
   readOrdersByEndedAt,
   type FleetOrder,
+  type MalformedOrder,
   type OrdersWindow,
 } from '#server/adapters/fleet/orders';
 import { readProfileOwners } from '#server/repositories/registry';
@@ -46,6 +47,15 @@ const log = consola.withTag('sync:orders');
 /** Статус заказа, за который начисляется балл. Значение из словаря Fleet API. */
 const COMPLETED_STATUS = 'complete';
 
+/**
+ * Сколько идентификаторов пропущенного показывать в сводке.
+ *
+ * Списки нужны, чтобы потерянное можно было достать поимённо, а не только сосчитать.
+ * Но сводка — одна строка лога, и дамп на полтысячи идентификаторов её убивает: сколько
+ * всего, говорят счётчики рядом, а остаток называется отдельным числом.
+ */
+const SAMPLE_LIMIT = 50;
+
 export type OrdersSyncStatus = 'succeeded' | 'failed' | 'skipped';
 
 export type OrdersSyncSummary = {
@@ -63,10 +73,20 @@ export type OrdersSyncSummary = {
   ordersWritten: number;
   /** Заказы, которым не хватило обязательного поля. Не записаны, потеряны из виду. */
   malformed: number;
+  /**
+   * Кто именно не разобрался — до `SAMPLE_LIMIT` записей.
+   *
+   * Прогон при этом успешен, и отметка встаёт на верхнюю границу окна: заново эти заказы
+   * запросит только догоняющий прогон, и только пока они не старше его окна. Дальше достать
+   * их можно лишь перепроверкой прошлого, и знать, какие именно, к тому моменту неоткуда.
+   */
+  malformedIds: MalformedOrder[];
   /** Заказы водителей, которых нет в `xb.park_profiles`. Норма до синхронизации профилей. */
   skippedUnknownProfile: number;
   /** Сколько разных водителей стоит за предыдущим счётчиком. */
   unknownProfiles: number;
+  /** Какие именно профили — до `SAMPLE_LIMIT` штук. По ним заказы и достаются обратно. */
+  unknownProfileIds: string[];
   /** Значения чужих словарей, которых мы раньше не видели. Записаны текстом, ничего не сломали. */
   unknownValues: string[];
   accrual: TripAccrualSummary;
@@ -236,8 +256,10 @@ export const runOrdersSync = async (
       ordersSeen: 0,
       ordersWritten: 0,
       malformed: 0,
+      malformedIds: [],
       skippedUnknownProfile: 0,
       unknownProfiles: 0,
+      unknownProfileIds: [],
       unknownValues: [],
       accrual: emptyAccrual(),
     };
@@ -264,6 +286,7 @@ export const runOrdersSync = async (
 
   const unknownValues = new Set<string>();
   const unknownProfileIds = new Set<string>();
+  const malformedIds: MalformedOrder[] = [];
   let pages = 0;
   let ordersSeen = 0;
   let ordersWritten = 0;
@@ -276,6 +299,11 @@ export const runOrdersSync = async (
       pages += 1;
       ordersSeen += page.received;
       malformed += page.malformed;
+      // Копим только до потолка: счётчик `malformed` считает всё, а список нужен как
+      // образец — страница, не разобравшаяся целиком, не должна раздувать память прогона.
+      if (malformedIds.length < SAMPLE_LIMIT) {
+        malformedIds.push(...page.malformedIds.slice(0, SAMPLE_LIMIT - malformedIds.length));
+      }
 
       for (const value of page.unknownValues) {
         unknownValues.add(value);
@@ -353,8 +381,10 @@ export const runOrdersSync = async (
     ordersSeen,
     ordersWritten,
     malformed,
+    malformedIds,
     skippedUnknownProfile,
     unknownProfiles: unknownProfileIds.size,
+    unknownProfileIds: [...unknownProfileIds].slice(0, SAMPLE_LIMIT),
     unknownValues: [...unknownValues],
     accrual,
   };
@@ -379,6 +409,12 @@ export const runOrdersSync = async (
     unknownProfiles: unknownProfileIds.size,
     malformed,
     unknownValues: summary.unknownValues,
+    // Пропущенное называется поимённо. Идентификаторы заказа и профиля персональными
+    // данными не являются — в отличие от адресов, телефонов и имён, которых в логе нет.
+    malformedIds: summary.malformedIds,
+    malformedIdsHidden: malformed - summary.malformedIds.length,
+    unknownProfileIds: summary.unknownProfileIds,
+    unknownProfileIdsHidden: unknownProfileIds.size - summary.unknownProfileIds.length,
   });
 
   if (summary.unknownValues.length > 0) {

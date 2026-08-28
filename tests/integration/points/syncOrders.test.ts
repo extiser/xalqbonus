@@ -237,6 +237,9 @@ describe('прогон синхронизации заказов', () => {
     expect(summary.status).toBe('succeeded');
     expect(summary.skippedUnknownProfile).toBe(1);
     expect(summary.unknownProfiles).toBe(1);
+    // Не только сколько, но и кто: заказ этого водителя не записан, и вернуться за ним
+    // можно будет только по идентификатору профиля.
+    expect(summary.unknownProfileIds).toEqual(['profile-never-seen']);
     expect(summary.ordersWritten).toBe(1);
     expect(await readTripStatus('order-unknown-driver')).toBeNull();
     expect(await readAccountBalance(driver.personId)).toBe(1n);
