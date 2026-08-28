@@ -15,7 +15,7 @@ import type { SyncSkipReason } from '#server/generated/prisma/enums';
 
 export type SyncSkipInput = {
   reason: SyncSkipReason;
-  /** Идентификатор заказа либо значение чужого словаря. Персональных данных здесь нет. */
+  /** Идентификатор заказа либо строка `словарь=значение`. Персональных данных здесь нет. */
   reference: string;
   /** Имя недостающего поля, идентификатор профиля или имя словаря — по причине. */
   detail: string | null;

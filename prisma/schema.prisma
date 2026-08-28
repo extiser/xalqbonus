@@ -566,8 +566,9 @@ model SyncRunOrders {
 model SyncSkip {
   id        BigInt         @id @default(autoincrement())
   reason    SyncSkipReason
-  /// Идентификатор заказа — у `unknown_profile` и `malformed`; значение чужого словаря —
-  /// у `unknown_value`.
+  /// Идентификатор заказа — у `unknown_profile` и `malformed`; строка `словарь=значение`
+  /// целиком — у `unknown_value`: одно значение приходит из разных словарей и схлопнулось
+  /// бы уникальностью в одну строку.
   reference String
   /// Чего не хватило: имя поля у `malformed`, идентификатор профиля у `unknown_profile`,
   /// имя словаря у `unknown_value`. Адресов, телефонов и имён здесь не бывает.

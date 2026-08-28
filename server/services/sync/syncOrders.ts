@@ -192,20 +192,23 @@ const warnIfWatermarkStale = (
 
 /**
  * Незнакомое значение чужого словаря приходит от адаптера строкой `словарь=значение`.
- * В журнале они разъезжаются по колонкам: значение — ссылка, словарь — деталь, — иначе
- * «в каком словаре расширение» пришлось бы доставать разбором строки в каждом запросе.
+ *
+ * Ссылкой становится строка целиком, а не одно значение из неё. Одно значение ссылкой
+ * быть не может: статус заказа и статус события проверяются по одному и тому же набору,
+ * и новый статус приходит сразу двумя записями — `status=X` и `event_status=X`.
+ * По уникальности `(reason, reference)` они схлопнулись бы в одну строку, и словарь,
+ * в котором расширение, оказался бы тем, чью запись обработали первой.
+ *
+ * Имя словаря дублируется в `detail` — чтобы «в каком словаре расширение» доставалось
+ * колонкой, а не разбором строки в каждом запросе отчёта.
  */
 const toUnknownValueSkip = (unknownValue: string): SyncSkipInput => {
   const separator = unknownValue.indexOf('=');
 
-  if (separator < 0) {
-    return { reason: 'unknown_value', reference: unknownValue, detail: null };
-  }
-
   return {
     reason: 'unknown_value',
-    reference: unknownValue.slice(separator + 1),
-    detail: unknownValue.slice(0, separator),
+    reference: unknownValue,
+    detail: separator < 0 ? null : unknownValue.slice(0, separator),
   };
 };
 

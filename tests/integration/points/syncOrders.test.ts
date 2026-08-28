@@ -519,11 +519,35 @@ describe('журнал прогона синхронизации', () => {
     const skips = await readSyncSkips();
     expect(skips).toHaveLength(1);
     expect(skips[0]?.reason).toBe('unknown_value');
-    expect(skips[0]?.reference).toBe('hyperloop');
+    expect(skips[0]?.reference).toBe('category=hyperloop');
     expect(skips[0]?.detail).toBe('category');
     // Заказ записался, но незнакомое значение этим не закрывается: словарь закрывается тем,
     // что мы его узнали, а не следующим прогоном.
     expect(skips[0]?.resolvedAt).toBeNull();
+  });
+
+  it('одно значение из двух словарей — две строки, а не одна', async () => {
+    driver = await createTestPerson({ inProgram: true });
+    const order = buildRawOrder(
+      `order-${driver.profileId}`,
+      driver.profileId,
+      'complete',
+      '2026-08-28T11:50:00.000+00:00',
+    );
+    // Статус заказа и статус события проверяются по одному и тому же набору известных
+    // значений, поэтому новый статус приходит сразу из двух словарей.
+    order['status'] = 'teleport';
+    order['events'] = [{ event_at: '2026-08-28T11:50:00.000+00:00', order_status: 'teleport' }];
+
+    await runOrdersSync('orders', { now: NOW, client: makeTransport([[order]]) });
+
+    // Ссылкой служит строка `словарь=значение` целиком. Будь ею одно значение, эти две
+    // записи схлопнулись бы уникальностью в одну, и словарь, в котором расширение,
+    // оказался бы тем, чью запись обработали первой.
+    const skips = await readSyncSkips();
+    expect(skips).toHaveLength(2);
+    expect(skips.map((skip) => skip.reference)).toEqual(['event_status=teleport', 'status=teleport']);
+    expect(skips.map((skip) => skip.detail)).toEqual(['event_status', 'status']);
   });
 });
 
