@@ -8,7 +8,7 @@ COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
 
 .PHONY: help up up-d down restart logs ps shell psql migrate migrate-create typecheck test test-db \
         db-restore db-schema invariants license-collisions legacy-vs-api import-legacy \
-        sync-orders sync-state \
+        sync-orders sync-registry sync-state \
         prod-up prod-down prod-restart prod-logs prod-ps prod-shell prod-psql prod-migrate \
         proxy-up proxy-down proxy-ps proxy-logs proxy-validate proxy-reload
 
@@ -96,6 +96,13 @@ import-legacy: ## Перенести реестр парка и балансы �
 # расписание, а не запрещает синхронизацию.
 sync-orders: ## Разовый прогон синхронизации заказов. Использование: make sync-orders [kind=orders_catchup]
 	$(COMPOSE) exec -T app npx tsx scripts/sync-orders.ts $(or $(kind),orders)
+
+# Разовый прогон синхронизации профилей парка мимо очереди — тем же кодом, каким ходит
+# воркер. Полный обход запускается только отсюда: по расписанию он не ходит никогда,
+# берёт весь парк нарезкой и идёт около получаса. Поводы — первое наполнение реестра,
+# подозрение на расхождение, аудит.
+sync-registry: ## Разовый прогон синхронизации профилей. Использование: make sync-registry [kind=registry_full]
+	$(COMPOSE) exec -T app npx tsx scripts/sync-registry.ts $(or $(kind),registry)
 
 # Что синхронизация думает о себе: отметки и последние прогоны со счётчиками.
 sync-state: ## Показать отметки синхронизации и последние прогоны

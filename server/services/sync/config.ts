@@ -1,12 +1,25 @@
 /**
- * Параметры синхронизации заказов.
+ * Параметры синхронизации — заказов и профилей парка.
  *
  * Все значения читаются из окружения и имеют умолчание: прогон обязан быть запускаемым
  * на чистом `.env.example`, а не только у того, кто помнит список переменных.
  */
 
-/** Виды прогона, опрашивающие заказы. `registry` сюда не относится. */
+/** Виды прогона, опрашивающие заказы. */
 export type OrdersSyncKind = 'orders' | 'orders_catchup';
+
+/**
+ * Виды прогона, опрашивающие профили парка.
+ *
+ * `registry` — инкрементальный по `updated_at`, рабочий режим, ходит по расписанию.
+ * `registry_full` — полный обход нарезкой, запускается командой: первое наполнение,
+ * подозрение на расхождение, аудит (docs/decisions.md → «Полный обход реестра — режим
+ * синхронизации, а не разовый скрипт»).
+ */
+export type RegistrySyncKind = 'registry' | 'registry_full';
+
+/** Виды прогона, у которых бывает расписание. Полный обход в этот список не входит намеренно. */
+export type ScheduledSyncKind = OrdersSyncKind | 'registry';
 
 export type SyncConfig = {
   /** Выключатель повторяющейся задачи. Разовый прогон командой работает и при `false`. */
@@ -17,6 +30,20 @@ export type SyncConfig = {
   catchupEnabled: boolean;
   catchupIntervalSec: number;
   catchupDays: number;
+  /**
+   * Синхронизация профилей парка: выключатель и интервал повторяющейся задачи.
+   *
+   * Интервал выбирается из потребности, а не из экономии. Это единицы запросов в сутки
+   * против 4 062 в час у старого бота: инкрементальный прогон берёт не весь реестр,
+   * а изменившихся по фильтру `updated_at` (docs/decisions.md → «Реестр парка отделён
+   * от участия в программе»).
+   */
+  registryEnabled: boolean;
+  registryIntervalSec: number;
+  /** Перекрытие окна профилей назад от отметки. Повтор отсекается записью по `profile_id`. */
+  registryOverlapMinutes: number;
+  /** Отставание верхней границы окна профилей от текущего момента. */
+  registryLagSeconds: number;
   /** Перекрытие окна назад от отметки. Безопасно: повтор отсекается ключами. */
   overlapMinutes: number;
   /**
@@ -108,6 +135,10 @@ export const readSyncConfig = (): SyncConfig => {
     catchupEnabled: readFlag('SYNC_CATCHUP_ENABLED', false),
     catchupIntervalSec: readInteger('SYNC_CATCHUP_INTERVAL_SEC', 86_400),
     catchupDays: readInteger('SYNC_CATCHUP_DAYS', 7),
+    registryEnabled: readFlag('SYNC_REGISTRY_ENABLED', false),
+    registryIntervalSec: readInteger('SYNC_REGISTRY_INTERVAL_SEC', 3_600),
+    registryOverlapMinutes: readInteger('SYNC_REGISTRY_OVERLAP_MIN', 60),
+    registryLagSeconds: readInteger('SYNC_REGISTRY_LAG_SEC', 60),
     overlapMinutes: readInteger('SYNC_LIVE_OVERLAP_MIN', 10),
     lagSeconds: readInteger('SYNC_LIVE_LAG_SEC', 60),
     pageLimit,
@@ -124,6 +155,14 @@ export const readSyncConfig = (): SyncConfig => {
     );
   }
 
+  // Та же дыра, что у заказов, входящая со стороны профилей: профиль, изменившийся позже,
+  // чем через `lag` после нашего запроса, не попадёт ни в это окно, ни в следующее.
+  if (config.registryLagSeconds >= config.registryOverlapMinutes * 60) {
+    throw new Error(
+      `SYNC_REGISTRY_LAG_SEC (${config.registryLagSeconds} c) должен быть меньше SYNC_REGISTRY_OVERLAP_MIN (${config.registryOverlapMinutes} мин): иначе окна не перекрываются и между ними остаётся дыра`,
+    );
+  }
+
   if (config.liveMaxWindowMinutes <= config.overlapMinutes) {
     throw new Error(
       `SYNC_LIVE_MAX_WINDOW_MIN (${config.liveMaxWindowMinutes}) должен быть больше SYNC_LIVE_OVERLAP_MIN (${config.overlapMinutes}): иначе окно не сдвигается вперёд и прогон топчется на месте`,
@@ -134,8 +173,17 @@ export const readSyncConfig = (): SyncConfig => {
 };
 
 /** Сколько миллисекунд между запусками у этого вида прогона. */
-export const syncIntervalMs = (kind: OrdersSyncKind, config: SyncConfig): number =>
-  kind === 'orders_catchup' ? config.catchupIntervalSec * 1_000 : config.liveIntervalSec * 1_000;
+export const syncIntervalMs = (kind: ScheduledSyncKind, config: SyncConfig): number => {
+  if (kind === 'orders_catchup') {
+    return config.catchupIntervalSec * 1_000;
+  }
+
+  if (kind === 'registry') {
+    return config.registryIntervalSec * 1_000;
+  }
+
+  return config.liveIntervalSec * 1_000;
+};
 
 /** Столько интервалов подряд отметка может не двигаться, прежде чем это станет тревогой. */
 const STALE_WATERMARK_INTERVALS = 3;
@@ -152,5 +200,5 @@ const STALE_WATERMARK_INTERVALS = 3;
  * не начисляются. Это ровно то состояние, в котором годами жил старый бот: система
  * выглядит работающей.
  */
-export const staleWatermarkThresholdMs = (kind: OrdersSyncKind, config: SyncConfig): number =>
+export const staleWatermarkThresholdMs = (kind: ScheduledSyncKind, config: SyncConfig): number =>
   Math.max(syncIntervalMs(kind, config) * STALE_WATERMARK_INTERVALS, config.staleFloorMinutes * 60_000);

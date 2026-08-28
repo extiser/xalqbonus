@@ -80,7 +80,11 @@ enum Language {
 }
 
 enum SyncKind {
+  /// Инкрементальная синхронизация профилей парка: окно по `updated_at`, по расписанию.
   registry
+  /// Полный обход реестра нарезкой: запускается командой — первое наполнение, подозрение
+  /// на расхождение, аудит. Своей отметки не имеет: двигает отметку `registry`.
+  registry_full
   orders
   orders_catchup
 
@@ -107,6 +111,10 @@ enum SyncSkipReason {
   /// Значение чужого словаря, которого мы раньше не видели. Записано текстом,
   /// ничего не сломало.
   unknown_value
+  /// Профилю пришёл номер удостоверения, уже активный у другого человека. Журнал
+  /// удостоверений не тронут: свести двух людей в одного — это перенос баллов,
+  /// и синхронизация его не делает (docs/drivers.md → «Склейка двойников»).
+  license_conflict
 
   @@map("sync_skip_reason")
   @@schema("xb")
@@ -516,7 +524,8 @@ model SyncRun {
   states       SyncState[]
   trips        Trip[]
   statusEvents ProfileStatusEvent[]
-  orderDetails SyncRunOrders?
+  orderDetails    SyncRunOrders?
+  registryDetails SyncRunRegistry?
   firstSkips   SyncSkip[]           @relation("skip_first_run")
   lastSkips    SyncSkip[]           @relation("skip_last_run")
 
@@ -551,6 +560,47 @@ model SyncRunOrders {
   run SyncRun @relation(fields: [runId], references: [id])
 
   @@map("sync_run_orders")
+  @@schema("xb")
+}
+
+/// Детали прогона профилей: то, чего у прогона заказов не бывает. Строка появляется
+/// и у упавшего прогона — у него важнее всего видеть, сколько он успел.
+model SyncRunRegistry {
+  runId String @id @map("run_id") @db.Uuid
+
+  /// Страницы выборки. Промеры размеров кусков сюда не входят — они в `sync_runs.requests`.
+  pages            Int @default(0)
+  profilesSeen     Int @default(0) @map("profiles_seen")
+  profilesInserted Int @default(0) @map("profiles_inserted")
+  profilesUpdated  Int @default(0) @map("profiles_updated")
+
+  /// Люди, заведённые под новые профили. Найденные по номеру ВУ сюда не попадают.
+  personsCreated Int @default(0) @map("persons_created")
+  /// Смены статуса трудоустройства, записанные этим прогоном.
+  statusEvents Int @default(0) @map("status_events")
+  phonesOpened Int @default(0) @map("phones_opened")
+  phonesClosed Int @default(0) @map("phones_closed")
+  /// Удостоверения, у которых закрыта прежняя строка и открыта новая.
+  licensesUpdated Int @default(0) @map("licenses_updated")
+  /// Номер пришёл, но активен у другого человека — журнал не тронут, строка в `sync_skips`.
+  licenseConflicts Int @default(0) @map("license_conflicts")
+  /// Профили без номера ВУ: не заведены, лежат в `sync_skips` причиной `malformed`.
+  skippedWithoutLicense Int @default(0) @map("skipped_without_license")
+  /// Профили, которым не хватило обязательного поля.
+  malformed Int @default(0)
+  /// Заказы, чей водитель наконец нашёлся: строки `unknown_profile` закрыты.
+  resolvedSkips Int @default(0) @map("resolved_skips")
+
+  /// Нарезка полного обхода. У инкрементального прогона нарезки нет — нули.
+  chunksTotal    Int @default(0) @map("chunks_total")
+  chunksWindowed Int @default(0) @map("chunks_windowed")
+  /// Самый глубокий offset обхода. Рабочий предел 3 500 замерен разведкой: прогон,
+  /// подошедший к нему вплотную, — предупреждение, что кусок вырос.
+  maxOffsetDepth Int @default(0) @map("max_offset_depth")
+
+  run SyncRun @relation(fields: [runId], references: [id])
+
+  @@map("sync_run_registry")
   @@schema("xb")
 }
 

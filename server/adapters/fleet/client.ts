@@ -134,8 +134,18 @@ const readErrorCode = (payload: unknown): string | null => {
 export type FleetTransport = {
   readonly parkId: string;
   post<Payload>(path: string, body: unknown, description: string): Promise<Payload>;
+  /** Справочники Fleet API ходят методом GET: параметры в строке запроса, тела нет. */
+  get<Payload>(path: string, query: Record<string, string>, description: string): Promise<Payload>;
   stats(): FleetRequestStats;
 };
+
+/**
+ * Как устроен запрос: списки Fleet API ходят методом POST с телом, справочники — методом
+ * GET со строкой запроса. Отступление, паузы и счётчики у обоих общие.
+ */
+type RequestShape =
+  | { method: 'POST'; body: unknown }
+  | { method: 'GET'; query: Record<string, string> };
 
 /** Что случилось с одной сетевой попыткой. Тело ответа наверх поднимается только у 200. */
 type Attempt =
@@ -178,13 +188,35 @@ export class FleetClient {
   }
 
   /** Список: тело запроса уходит в JSON, как во всех методах выборки Fleet API. */
-  async post<Payload>(path: string, body: unknown, description: string): Promise<Payload> {
+  post<Payload>(path: string, body: unknown, description: string): Promise<Payload> {
+    return this.withRetries<Payload>(path, { method: 'POST', body }, description);
+  }
+
+  /**
+   * Справочник: параметры уходят в строку запроса, тела нет.
+   *
+   * Отступление, паузы и счётчики — те же, что у списков: квота ключа общая, и запрос
+   * за справочником стоит в ней ровно столько же, сколько страница выборки.
+   */
+  get<Payload>(
+    path: string,
+    query: Record<string, string>,
+    description: string,
+  ): Promise<Payload> {
+    return this.withRetries<Payload>(path, { method: 'GET', query }, description);
+  }
+
+  private async withRetries<Payload>(
+    path: string,
+    request: RequestShape,
+    description: string,
+  ): Promise<Payload> {
     let backoffMs = FIRST_BACKOFF_MS;
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
       await this.respectPause();
 
-      const result = await this.singleRequest(path, body);
+      const result = await this.singleRequest(path, request);
       this.lastRequestAt = Date.now();
 
       if (result.kind === 'ok') {
@@ -255,19 +287,24 @@ export class FleetClient {
    * с кодом 200, — это заминка на пути к API, и лечится она тем же повтором, что обрыв
    * связи. Разбор снаружи давал бы необработанное исключение посреди прогона.
    */
-  private async singleRequest(path: string, body: unknown): Promise<Attempt> {
+  private async singleRequest(path: string, request: RequestShape): Promise<Attempt> {
     this.requests += 1;
 
+    const query =
+      request.method === 'GET' && Object.keys(request.query).length > 0
+        ? `?${new URLSearchParams(request.query).toString()}`
+        : '';
+
     try {
-      const response = await fetch(this.credentials.baseUrl + path, {
-        method: 'POST',
+      const response = await fetch(this.credentials.baseUrl + path + query, {
+        method: request.method,
         headers: {
           'X-Client-ID': this.credentials.clientId,
           'X-API-Key': this.credentials.apiKey,
           'Accept-Language': 'ru',
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(body),
+        ...(request.method === 'POST' ? { body: JSON.stringify(request.body) } : {}),
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
 

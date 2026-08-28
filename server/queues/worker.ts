@@ -73,6 +73,8 @@ log.info('воркер запущен', {
   catchupEnabled: config.catchupEnabled,
   overlapMinutes: config.overlapMinutes,
   lagSeconds: config.lagSeconds,
+  registryEnabled: config.registryEnabled,
+  registryIntervalSec: config.registryIntervalSec,
 });
 
 const shutdown = async (signal: string): Promise<void> => {

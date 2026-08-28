@@ -65,6 +65,48 @@ SELECT run."kind",
  LIMIT 20;
 
 \echo ''
+\echo '== Последние прогоны реестра: разбор =='
+-- То, чего у прогона заказов не бывает: что стало с профилями, людьми и журналами.
+-- `registry` — инкрементальный прогон по расписанию, `registry_full` — полный обход
+-- нарезкой, запускаемый командой. Отметка у них одна на двоих.
+SELECT run."kind",
+       run."status",
+       run."started_at",
+       detail."pages"                   AS "страниц",
+       detail."profiles_seen"           AS "увидено",
+       detail."profiles_inserted"       AS "вставлено",
+       detail."profiles_updated"        AS "обновлено",
+       detail."persons_created"         AS "новых людей",
+       detail."status_events"           AS "смен статуса",
+       detail."phones_opened"           AS "телефонов открыто",
+       detail."phones_closed"           AS "телефонов закрыто",
+       detail."licenses_updated"        AS "ву обновлено",
+       detail."license_conflicts"       AS "ву конфликтов",
+       detail."skipped_without_license" AS "без ву",
+       detail."malformed"               AS "не разобрано",
+       detail."resolved_skips"          AS "разрешено заказов",
+       detail."chunks_total"            AS "кусков",
+       detail."chunks_windowed"         AS "дробилось",
+       detail."max_offset_depth"        AS "глубина offset"
+  FROM xb.sync_runs AS run
+  LEFT JOIN xb.sync_run_registry AS detail ON detail."run_id" = run."id"
+ WHERE run."kind" IN ('registry', 'registry_full')
+ ORDER BY run."started_at" DESC
+ LIMIT 20;
+
+\echo ''
+\echo '== Реестр парка: что в базе =='
+-- Отвечает на вопрос «догнали ли мы парк»: сколько профилей знаем, когда последний
+-- раз касались их синхронизацией, сколько людей и открытых телефонов.
+SELECT (SELECT count(*) FROM xb.park_profiles)                                  AS "профилей",
+       (SELECT count(*) FROM xb.park_profiles WHERE "work_status" = 'working')  AS "работающих",
+       (SELECT count(*) FROM xb.park_profiles WHERE "work_status" = 'fired')    AS "уволенных",
+       (SELECT max("last_synced_at") FROM xb.park_profiles)                     AS "последняя синхронизация",
+       (SELECT count(*) FROM xb.persons)                                        AS "людей",
+       (SELECT count(*) FROM xb.profile_phones WHERE "closed_at" IS NULL)       AS "открытых телефонов",
+       (SELECT count(*) FROM xb.profile_status_events)                          AS "записей о статусе";
+
+\echo ''
 \echo '== Свод прогонов заказов за сутки и за неделю =='
 -- Ради этого свода задача и делалась: «сколько заказов мы потеряли за неделю» отвечается
 -- запросом, а не грепом по логам контейнера, переживающим ровно до ротации лога.

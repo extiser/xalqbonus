@@ -66,20 +66,42 @@ export const readPersonIdsByActiveLicense = async (): Promise<Map<string, string
 };
 
 /**
- * Заводит людей, которых ещё нет, — по одному на канонический номер.
+ * Читает соответствие «активный канонический номер → человек» для перечисленных номеров.
  *
- * Человек и его активное удостоверение появляются в одной транзакции: человек без
- * удостоверения не опознаётся ничем, и найти его повторный прогон уже не сможет.
- * Возвращает полное соответствие «номер → человек», включая тех, кто был раньше.
+ * То же самое, что `readPersonIdsByActiveLicense`, но выборкой, а не всей таблицей:
+ * синхронизация спрашивает про десяток номеров и поднимать ради этого 25 390 строк
+ * каждый прогон незачем. Перенос спрашивает про все и пользуется полной версией.
  */
-export const ensurePersonsForLicenses = async (
+export const readPersonIdsByLicenseNumbers = async (
+  numbersCanonical: readonly string[],
+): Promise<Map<string, string>> => {
+  if (numbersCanonical.length === 0) {
+    return new Map();
+  }
+
+  const rows = await db.$queryRaw<{ numberCanonical: string; personId: string }[]>`
+    SELECT "number_canonical" AS "numberCanonical", "person_id" AS "personId"
+      FROM xb.person_licenses
+     WHERE "closed_at" IS NULL
+       AND "number_canonical" = ANY(${[...numbersCanonical]}::text[])
+  `;
+
+  return new Map(rows.map((row) => [row.numberCanonical, row.personId]));
+};
+
+/**
+ * Заводит людей с их активными удостоверениями.
+ *
+ * Человек и его удостоверение появляются в одной транзакции: человек без удостоверения
+ * не опознаётся ничем, и найти его повторный прогон уже не сможет.
+ */
+const insertPersonsWithLicenses = async (
   licenses: readonly PersonLicenseInput[],
   source: string,
 ): Promise<Map<string, string>> => {
-  const known = await readPersonIdsByActiveLicense();
-  const missing = licenses.filter((license) => !known.has(license.numberCanonical));
+  const created = new Map<string, string>();
 
-  for (const chunk of chunked(missing)) {
+  for (const chunk of chunked(licenses)) {
     const personIds = chunk.map(() => randomUUID());
 
     await db.$transaction(async (transaction) => {
@@ -107,11 +129,65 @@ export const ensurePersonsForLicenses = async (
 
     for (const [index, license] of chunk.entries()) {
       // Позиции совпадают: `personIds` построен по этому же массиву и в этом же порядке.
-      known.set(license.numberCanonical, personIds[index] as string);
+      created.set(license.numberCanonical, personIds[index] as string);
     }
   }
 
+  return created;
+};
+
+/**
+ * Заводит людей, которых ещё нет, — по одному на канонический номер.
+ *
+ * Возвращает полное соответствие «номер → человек», включая тех, кто был раньше.
+ * Полная таблица активных номеров читается целиком: перенос спрашивает про все 25 390.
+ */
+export const ensurePersonsForLicenses = async (
+  licenses: readonly PersonLicenseInput[],
+  source: string,
+): Promise<Map<string, string>> => {
+  const known = await readPersonIdsByActiveLicense();
+  const missing = licenses.filter((license) => !known.has(license.numberCanonical));
+
+  for (const [numberCanonical, personId] of await insertPersonsWithLicenses(missing, source)) {
+    known.set(numberCanonical, personId);
+  }
+
   return known;
+};
+
+export type EnsuredPersons = {
+  /** Соответствие «канонический номер → человек» для всех переданных номеров. */
+  personIds: Map<string, string>;
+  /** Сколько людей завелось этим вызовом. Остальные нашлись по своему номеру. */
+  created: number;
+};
+
+/**
+ * То же для синхронизации: заводит человека под новый профиль, но **находит существующего
+ * по каноническому номеру удостоверения**.
+ *
+ * Это и есть краевой случай, ради которого написана вся задача: 672 номера принадлежат
+ * 1 380 профилям, и четыре пары двойников из двенадцати ловятся только номером — людей
+ * переоформили в парке с новым `profile_id` (docs/drivers.md). Заведение второго человека
+ * на тот же номер отбило бы вдобавок ограничение базы `person_licenses_active_number_key`,
+ * но полагаться на исключение вместо поиска нельзя: прогон упал бы посередине.
+ */
+export const ensurePersonsForNewProfiles = async (
+  licenses: readonly PersonLicenseInput[],
+  source: string,
+): Promise<EnsuredPersons> => {
+  const known = await readPersonIdsByLicenseNumbers(
+    licenses.map((license) => license.numberCanonical),
+  );
+  const missing = licenses.filter((license) => !known.has(license.numberCanonical));
+  const created = await insertPersonsWithLicenses(missing, source);
+
+  for (const [numberCanonical, personId] of created) {
+    known.set(numberCanonical, personId);
+  }
+
+  return { personIds: known, created: created.size };
 };
 
 export type ParkProfileInput = {
@@ -143,13 +219,24 @@ export type ParkProfileInput = {
  *
  * `first_seen_at` при обновлении не трогается — это дата, когда парк впервые показал
  * нам этот профиль, и переписывать её каждым прогоном значит потерять её насовсем.
+ *
+ * Возвращает по строке на профиль с признаком «появился впервые»: «тронуто N профилей»
+ * без этого разделения читалось бы как «в парке прибавилось N водителей», хотя чаще всего
+ * не изменилось ничего.
  */
 export const upsertParkProfiles = async (
   profiles: readonly ParkProfileInput[],
   syncedAt: Date,
-): Promise<void> => {
-  for (const chunk of chunked(profiles)) {
-    await db.$executeRaw`
+): Promise<Map<string, boolean>> => {
+  // Повтор `profile_id` внутри одной вставки Postgres отбивает целиком: «ON CONFLICT DO
+  // UPDATE не может тронуть строку дважды». Побеждает последнее вхождение — оно свежее.
+  const unique = new Map<string, ParkProfileInput>(
+    profiles.map((profile) => [profile.profileId, profile]),
+  );
+  const inserted = new Map<string, boolean>();
+
+  for (const chunk of chunked([...unique.values()])) {
+    const rows = await db.$queryRaw<{ profileId: string; inserted: boolean }[]>`
       INSERT INTO xb.park_profiles (
         "profile_id", "person_id", "park_id",
         "first_name", "last_name", "middle_name",
@@ -205,8 +292,46 @@ export const upsertParkProfiles = async (
         "api_modified_at"          = EXCLUDED."api_modified_at",
         "api_updated_at"           = EXCLUDED."api_updated_at",
         "last_synced_at"           = EXCLUDED."last_synced_at"
+      RETURNING "profile_id" AS "profileId", (xmax = 0) AS "inserted"
     `;
+
+    for (const row of rows) {
+      inserted.set(row.profileId, row.inserted);
+    }
   }
+
+  return inserted;
+};
+
+export type ProfileStateRow = {
+  profileId: string;
+  personId: string;
+  workStatus: string;
+};
+
+/**
+ * Читает прежнее состояние профилей: чей он и с каким статусом работы лежит сейчас.
+ *
+ * Спрашивается **до** записи и ради одного: переход `working → fired` виден только
+ * сравнением с тем, что было. Дат смены статуса внешний API в списке не отдаёт,
+ * и журнал трудоустройства мы ведём сами (docs/drivers.md).
+ */
+export const readProfileStates = async (
+  profileIds: readonly string[],
+): Promise<Map<string, ProfileStateRow>> => {
+  if (profileIds.length === 0) {
+    return new Map();
+  }
+
+  const rows = await db.$queryRaw<ProfileStateRow[]>`
+    SELECT "profile_id"  AS "profileId",
+           "person_id"   AS "personId",
+           "work_status" AS "workStatus"
+      FROM xb.park_profiles
+     WHERE "profile_id" = ANY(${[...profileIds]}::text[])
+  `;
+
+  return new Map(rows.map((row) => [row.profileId, row]));
 };
 
 export type ProfilePhoneInput = {
@@ -225,12 +350,17 @@ export type ProfilePhoneInput = {
  *
  * Закрытием исчезнувших номеров занимается синхронизация профилей, а не перенос:
  * разовая заливка видит один снимок парка и сравнивать ей не с чем.
+ *
+ * Возвращает, сколько строк реально открылось: повторный прогон приносит те же номера,
+ * и «телефонов открыто» обязано означать «появились новые», а не «столько пришло».
  */
 export const insertActiveProfilePhones = async (
   phones: readonly ProfilePhoneInput[],
-): Promise<void> => {
+): Promise<number> => {
+  let opened = 0;
+
   for (const chunk of chunked(phones)) {
-    await db.$executeRaw`
+    opened += await db.$executeRaw`
       INSERT INTO xb.profile_phones ("profile_id", "phone_raw", "phone_e164")
       SELECT * FROM unnest(
         ${chunk.map((phone) => phone.profileId)}::text[],
@@ -240,6 +370,58 @@ export const insertActiveProfilePhones = async (
       ON CONFLICT ("profile_id", "phone_raw") WHERE "closed_at" IS NULL DO NOTHING
     `;
   }
+
+  return opened;
+};
+
+export type ProfilePhoneRow = {
+  profileId: string;
+  phoneRaw: string;
+};
+
+/** Читает открытые номера перечисленных профилей: с ними сравнивается то, что пришло. */
+export const readActiveProfilePhones = async (
+  profileIds: readonly string[],
+): Promise<ProfilePhoneRow[]> => {
+  if (profileIds.length === 0) {
+    return [];
+  }
+
+  return db.$queryRaw<ProfilePhoneRow[]>`
+    SELECT "profile_id" AS "profileId", "phone_raw" AS "phoneRaw"
+      FROM xb.profile_phones
+     WHERE "closed_at" IS NULL
+       AND "profile_id" = ANY(${[...profileIds]}::text[])
+  `;
+};
+
+/**
+ * Закрывает номера, которых больше нет в ответе API.
+ *
+ * Именно закрывает, а не удаляет: телефон ведётся журналом, а не полем. Вопрос «по какому
+ * номеру мы писали водителю в марте» должен иметь ответ через год (docs/drivers.md).
+ */
+export const closeProfilePhones = async (
+  phones: readonly ProfilePhoneRow[],
+  closedAt: Date,
+): Promise<number> => {
+  let closed = 0;
+
+  for (const chunk of chunked(phones)) {
+    closed += await db.$executeRaw`
+      UPDATE xb.profile_phones AS phone
+         SET "closed_at" = ${asTimestampLiteral(closedAt)}::text::timestamptz
+        FROM unnest(
+               ${chunk.map((row) => row.profileId)}::text[],
+               ${chunk.map((row) => row.phoneRaw)}::text[]
+             ) AS gone("profile_id", "phone_raw")
+       WHERE phone."closed_at" IS NULL
+         AND phone."profile_id" = gone."profile_id"
+         AND phone."phone_raw"  = gone."phone_raw"
+    `;
+  }
+
+  return closed;
 };
 
 export type ProfileStatusEventInput = {
@@ -274,6 +456,110 @@ export const insertInitialStatusEvents = async (
   }
 
   return written;
+};
+
+export type ProfileStatusChange = {
+  profileId: string;
+  /** Пусто у первой записи профиля: откуда он пришёл, парк не рассказывает. */
+  statusFrom: string | null;
+  statusTo: string;
+};
+
+/**
+ * Пишет переходы статуса трудоустройства — по строке на смену.
+ *
+ * `observed_at` ставится по умолчанию «сейчас» и означает **дату, когда факт стал известен
+ * нам**: дат смены статуса внешний API в списке не отдаёт, а притворяться, что отдаёт,
+ * нельзя (docs/drivers.md → «Статус трудоустройства ведём сами»).
+ *
+ * Повторный прогон того же окна второй строки не создаёт, и держится это не проверкой
+ * здесь, а тем, что сравнение идёт с уже записанным статусом: после первого прогона
+ * профиль лежит с новым статусом, и переходу взяться неоткуда.
+ */
+export const insertProfileStatusEvents = async (
+  events: readonly ProfileStatusChange[],
+  syncRunId: string | null,
+): Promise<number> => {
+  let written = 0;
+
+  for (const chunk of chunked(events)) {
+    written += await db.$executeRaw`
+      INSERT INTO xb.profile_status_events ("profile_id", "status_from", "status_to", "sync_run_id")
+      SELECT incoming."profile_id", incoming."status_from", incoming."status_to", ${syncRunId}::uuid
+        FROM unnest(
+               ${chunk.map((event) => event.profileId)}::text[],
+               ${chunk.map((event) => event.statusFrom)}::text[],
+               ${chunk.map((event) => event.statusTo)}::text[]
+             ) AS incoming("profile_id", "status_from", "status_to")
+    `;
+  }
+
+  return written;
+};
+
+export type ActiveLicenseRow = {
+  personId: string;
+  numberCanonical: string;
+};
+
+/** Читает активные удостоверения перечисленных людей: с ними сравнивается пришедший номер. */
+export const readActiveLicenses = async (
+  personIds: readonly string[],
+): Promise<Map<string, string>> => {
+  if (personIds.length === 0) {
+    return new Map();
+  }
+
+  const rows = await db.$queryRaw<ActiveLicenseRow[]>`
+    SELECT "person_id" AS "personId", "number_canonical" AS "numberCanonical"
+      FROM xb.person_licenses
+     WHERE "closed_at" IS NULL
+       AND "person_id" = ANY(${[...personIds]}::uuid[])
+  `;
+
+  return new Map(rows.map((row) => [row.personId, row.numberCanonical]));
+};
+
+/**
+ * Меняет удостоверение человека: закрывает активную строку и открывает новую рядом.
+ *
+ * Номер перевыпускается — у 171 пары из проверенных он разошёлся между старой базой
+ * и реестром (docs/drivers.md). Правкой на месте это делать нельзя: закрытая строка —
+ * единственное, чем потом объясняется, почему человек когда-то нашёлся по другому номеру.
+ *
+ * Обе записи в одной транзакции: между ними у человека либо два активных удостоверения,
+ * либо ни одного, и оба состояния отбиваются частичным уникальным индексом.
+ */
+export const replacePersonLicense = async (
+  personId: string,
+  license: PersonLicenseInput,
+  source: string,
+  closedAt: Date,
+): Promise<void> => {
+  await db.$transaction(async (transaction) => {
+    await transaction.$executeRaw`
+      UPDATE xb.person_licenses
+         SET "closed_at" = ${asTimestampLiteral(closedAt)}::text::timestamptz
+       WHERE "person_id" = ${personId}::uuid
+         AND "closed_at" IS NULL
+    `;
+
+    await transaction.$executeRaw`
+      INSERT INTO xb.person_licenses (
+        "person_id", "number_raw", "number_canonical",
+        "country", "issue_date", "expiration_date", "source"
+      )
+      VALUES (
+        ${personId}::uuid,
+        ${license.numberRaw},
+        ${license.numberCanonical},
+        ${license.country},
+        ${asTimestampLiteral(license.issueDate)}::text::date,
+        ${asTimestampLiteral(license.expirationDate)}::text::date,
+        ${source}
+      )
+    `;
+  });
 };
 
 export type ProfileOwnerRow = { profileId: string; personId: string };

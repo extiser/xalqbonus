@@ -17,18 +17,25 @@ export type SyncRunCounters = {
   itemsWritten: number;
 };
 
+/**
+ * Заводит строку прогона.
+ *
+ * Нижняя граница окна может быть пустой: у полного обхода реестра окна нет вовсе —
+ * он берёт всё, что знает парк, и подставлять ему выдуманную границу значило бы соврать
+ * в журнале.
+ */
 export const startSyncRun = async (
   kind: SyncKind,
-  windowFrom: Date,
-  windowTo: Date,
+  windowFrom: Date | null,
+  windowTo: Date | null,
 ): Promise<string> => {
   const rows = await db.$queryRaw<{ id: string }[]>`
     INSERT INTO xb.sync_runs ("kind", "status", "window_from", "window_to")
     VALUES (
       ${kind}::xb.sync_kind,
       'running'::xb.sync_status,
-      ${windowFrom.toISOString()}::timestamptz,
-      ${windowTo.toISOString()}::timestamptz
+      ${windowFrom?.toISOString() ?? null}::timestamptz,
+      ${windowTo?.toISOString() ?? null}::timestamptz
     )
     RETURNING "id"
   `;

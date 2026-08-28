@@ -4,10 +4,11 @@ import { getQueueConnection } from '#server/queues/connection';
 import {
   readSyncConfig,
   syncIntervalMs,
-  type OrdersSyncKind,
+  type ScheduledSyncKind,
   type SyncConfig,
 } from '#server/services/sync/config';
 import { runOrdersSync } from '#server/services/sync/syncOrders';
+import { runRegistrySync } from '#server/services/sync/syncRegistry';
 
 /**
  * Очередь синхронизации.
@@ -19,9 +20,16 @@ import { runOrdersSync } from '#server/services/sync/syncOrders';
  * «два прогона одного вида не идут одновременно».
  *
  * Расписание живёт планировщиками BullMQ: `orders` — скользящий прогон с интервалом
- * `SYNC_LIVE_INTERVAL_SEC`, `orders_catchup` — догоняющий раз в сутки. Выключатель
- * снимает планировщик, а не просто перестаёт его заводить: иначе однажды включённое
- * расписание продолжало бы срабатывать после `SYNC_LIVE_ENABLED=false`.
+ * `SYNC_LIVE_INTERVAL_SEC`, `orders_catchup` — догоняющий раз в сутки, `registry` —
+ * инкрементальная синхронизация профилей парка со своим выключателем и интервалом.
+ * Выключатель снимает планировщик, а не просто перестаёт его заводить: иначе однажды
+ * включённое расписание продолжало бы срабатывать после `SYNC_LIVE_ENABLED=false`.
+ *
+ * **Полного обхода реестра в этом списке нет и быть не должно.** Он берёт весь парк
+ * нарезкой, идёт около получаса и запускается по требованию — командой `make sync-registry
+ * kind=registry_full`: первое наполнение, подозрение на расхождение, аудит. Рабочий режим
+ * реестра — инкрементальный (docs/decisions.md → «Полный обход реестра — режим
+ * синхронизации, а не разовый скрипт»).
  */
 
 const log = consola.withTag('queue:sync');
@@ -29,12 +37,13 @@ const log = consola.withTag('queue:sync');
 export const SYNC_QUEUE_NAME = 'sync';
 
 /** Идентификаторы планировщиков. Постоянные: по ним расписание обновляется и снимается. */
-const SCHEDULER_IDS: Record<OrdersSyncKind, string> = {
+const SCHEDULER_IDS: Record<ScheduledSyncKind, string> = {
   orders: 'orders-live',
   orders_catchup: 'orders-catchup',
+  registry: 'registry-live',
 };
 
-export type SyncJobData = { kind: OrdersSyncKind };
+export type SyncJobData = { kind: ScheduledSyncKind };
 
 export const createSyncQueue = (): Queue<SyncJobData> =>
   new Queue<SyncJobData>(SYNC_QUEUE_NAME, {
@@ -48,15 +57,24 @@ export const createSyncQueue = (): Queue<SyncJobData> =>
     },
   });
 
-const isEnabled = (kind: OrdersSyncKind, config: SyncConfig): boolean =>
-  kind === 'orders_catchup' ? config.catchupEnabled : config.liveEnabled;
+const isEnabled = (kind: ScheduledSyncKind, config: SyncConfig): boolean => {
+  if (kind === 'orders_catchup') {
+    return config.catchupEnabled;
+  }
+
+  if (kind === 'registry') {
+    return config.registryEnabled;
+  }
+
+  return config.liveEnabled;
+};
 
 /** Заводит или снимает расписание обоих прогонов по нынешнему состоянию окружения. */
 export const applySyncSchedule = async (
   queue: Queue<SyncJobData>,
   config: SyncConfig,
 ): Promise<void> => {
-  for (const kind of ['orders', 'orders_catchup'] as const) {
+  for (const kind of ['orders', 'orders_catchup', 'registry'] as const) {
     const schedulerId = SCHEDULER_IDS[kind];
 
     if (!isEnabled(kind, config)) {
@@ -115,6 +133,11 @@ export const createSyncWorker = (): Worker<SyncJobData> =>
           kind: job.data.kind,
           lateSec: Math.round((Date.now() - timing.timestamp - timing.delay) / 1_000),
         });
+        return;
+      }
+
+      if (job.data.kind === 'registry') {
+        await runRegistrySync('registry');
         return;
       }
 
