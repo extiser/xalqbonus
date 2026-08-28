@@ -109,3 +109,44 @@ export const resolveSyncSkips = async (orderIds: readonly string[]): Promise<num
        AND "reference" = ANY(${[...orderIds]}::text[])
   `;
 };
+
+export type SyncSkipListRow = {
+  reason: SyncSkipReason;
+  reference: string;
+  detail: string | null;
+  timesSeen: number;
+  firstSeenAt: Date;
+  lastSeenAt: Date;
+};
+
+/**
+ * Нерешённое пропущенное, страницей.
+ *
+ * Порядок — по убыванию числа прогонов, которые его принесли: сверху то, что окно тащит
+ * из раза в раз и не может записать. Решённое сюда не попадает вовсе — это и есть разница
+ * между «что потеряно до сих пор» и «что когда-либо пропускалось».
+ */
+export const listUnresolvedSkips = async (
+  limit: number,
+  offset: number,
+): Promise<SyncSkipListRow[]> =>
+  db.$queryRaw<SyncSkipListRow[]>`
+    SELECT "reason",
+           "reference",
+           "detail",
+           "times_seen"    AS "timesSeen",
+           "first_seen_at" AS "firstSeenAt",
+           "last_seen_at"  AS "lastSeenAt"
+      FROM xb.sync_skips
+     WHERE "resolved_at" IS NULL
+     ORDER BY "times_seen" DESC, "last_seen_at" DESC
+     LIMIT ${limit} OFFSET ${offset}
+  `;
+
+export const countUnresolvedSkips = async (): Promise<number> => {
+  const rows = await db.$queryRaw<{ total: number }[]>`
+    SELECT count(*)::int AS "total" FROM xb.sync_skips WHERE "resolved_at" IS NULL
+  `;
+
+  return rows[0]?.total ?? 0;
+};

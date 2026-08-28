@@ -43,3 +43,23 @@ export const readSyncState = async (kind: SyncKind): Promise<SyncStateRow | null
 
   return rows[0] ?? null;
 };
+
+/** Отметка со всем, что о ней знает база: значение и когда её последний раз трогали. */
+export type SyncStateFullRow = {
+  kind: SyncKind;
+  watermark: Date | null;
+  updatedAt: Date;
+};
+
+/**
+ * Читает все отметки разом.
+ *
+ * Экран наблюдаемости показывает виды прогона списком, и запрашивать их по одному значило бы
+ * четыре круговых обхода вместо одного ради трёх строк.
+ */
+export const readAllSyncStates = async (): Promise<SyncStateFullRow[]> =>
+  db.$queryRaw<SyncStateFullRow[]>`
+    SELECT "kind", "watermark", "updated_at" AS "updatedAt"
+      FROM xb.sync_state
+     ORDER BY "kind"
+  `;
