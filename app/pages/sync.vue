@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { DISPLAY_TIME_ZONE_LABEL } from '~/utils/format';
 import { toLoadState } from '~/utils/loadState';
 
 /**
@@ -46,6 +47,9 @@ const skipsState = computed(() => toLoadState(skipsStatus.value));
         Что синхронизация думает о себе: докуда дошло окно, что сделали прогоны и что
         не записалось.
       </p>
+      <!-- Зона названа на экране: стенд может стоять в любой зоне, а сверяют числа
+           с рабочим днём в Ташкенте, и догадываться о том, чьё это время, не должен никто. -->
+      <p class="mt-1 text-xs text-slate-400">Время показано в зоне {{ DISPLAY_TIME_ZONE_LABEL }}</p>
     </div>
 
     <OrganismsSyncWatermarks :state="watermarksState" :data="watermarks ?? null" />
