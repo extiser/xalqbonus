@@ -2,6 +2,7 @@ import { consola } from 'consola';
 import { writeFileSync } from 'node:fs';
 import { getQueueConnection } from '#server/queues/connection';
 import { applySyncSchedule, createSyncQueue, createSyncWorker } from '#server/queues/sync';
+import { failAbandonedRuns } from '#server/repositories/syncRuns';
 import { readSyncConfig } from '#server/services/sync/config';
 
 const log = consola.withTag('worker');
@@ -49,6 +50,20 @@ syncWorker.on('failed', (job, error) => {
 syncWorker.on('error', (error: Error) => {
   log.warn('очередь синхронизации сообщила об ошибке', { error: error.message });
 });
+
+// Прошлый процесс мог уйти по SIGKILL, не закрыв свою строку прогона: `syncWorker.close()`
+// на SIGTERM дожидается прогона, а `docker stop` по таймауту и убийство по памяти такой
+// возможности не дают. Подбираем брошенное — иначе журнал прогонов копит вечно бегущие строки.
+const abandoned = await failAbandonedRuns(
+  new Date(Date.now() - config.abandonedRunMinutes * 60_000),
+);
+
+if (abandoned > 0) {
+  log.warn('закрыты брошенные прогоны предыдущего процесса', {
+    runs: abandoned,
+    olderThanMinutes: config.abandonedRunMinutes,
+  });
+}
 
 await applySyncSchedule(syncQueue, config);
 

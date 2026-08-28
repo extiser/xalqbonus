@@ -40,6 +40,19 @@ export type SyncConfig = {
    * догоняется следующими прогонами — без единого пропущенного заказа.
    */
   liveMaxWindowMinutes: number;
+  /**
+   * Сколько прогон может законно идти, прежде чем считаться оборванным.
+   *
+   * Строку `running` закрывает сам прогон — успехом или отказом, — но `SIGKILL`
+   * (`docker stop` по таймауту, OOM) не оставляет ему такой возможности, и строка остаётся
+   * бежать вечно. Данные при этом не теряются: отметка не сдвинута, окно перечитается.
+   * Теряется журнал прогонов, а это фундамент будущего экрана наблюдаемости.
+   *
+   * Значение выбрано по самому долгому законному прогону: догоняющий за неделю — это
+   * порядка полусотни страниц, и с бэкоффом на отказах он идёт около часа. Три часа берут
+   * это с запасом и при этом не дают строке висеть сутками.
+   */
+  abandonedRunMinutes: number;
 };
 
 const readInteger = (name: string, fallback: number): number => {
@@ -90,6 +103,7 @@ export const readSyncConfig = (): SyncConfig => {
     lagSeconds: readInteger('SYNC_LIVE_LAG_SEC', 60),
     pageLimit,
     liveMaxWindowMinutes: readInteger('SYNC_LIVE_MAX_WINDOW_MIN', 360),
+    abandonedRunMinutes: readInteger('SYNC_ABANDONED_RUN_MIN', 180),
   };
 
   // Перекрытие меньше отставания означает дыру: заказ, доехавший до API позже, чем через

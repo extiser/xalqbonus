@@ -1,12 +1,14 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import type { FleetTransport } from '#server/adapters/fleet/client';
+import { failAbandonedRuns } from '#server/repositories/syncRuns';
 import { runOrdersSync } from '#server/services/sync/syncOrders';
 import {
   cleanupTestData,
   countTripEvents,
   createTestPerson,
   disconnectDatabase,
+  insertRunningSyncRun,
   readAccountBalance,
   readSyncRuns,
   readSyncWatermark,
@@ -287,5 +289,37 @@ describe('прогон синхронизации заказов', () => {
     expect(summary.pages).toBe(2);
     expect(summary.ordersWritten).toBe(2);
     expect(await readAccountBalance(driver.personId)).toBe(2n);
+  });
+});
+
+describe('брошенные прогоны', () => {
+  afterEach(async () => {
+    await resetOrdersSyncState();
+  });
+
+  afterAll(async () => {
+    await disconnectDatabase();
+  });
+
+  it('строка, оставшаяся бежать после убитого процесса, закрывается отказом', async () => {
+    // SIGKILL не даёт прогону закрыть свою строку: `docker stop` по таймауту и убийство
+    // по памяти оставляют её бежать вечно.
+    const abandonedId = await insertRunningSyncRun('orders', new Date(Date.now() - 4 * 3_600_000));
+    // А эта строка младше порога: рядом с воркером живёт разовый прогон командой,
+    // и он законно идёт в момент перезапуска воркера.
+    const freshId = await insertRunningSyncRun('orders', new Date(Date.now() - 60_000));
+
+    const closed = await failAbandonedRuns(new Date(Date.now() - 3 * 3_600_000));
+
+    expect(closed).toBe(1);
+
+    const runs = await readSyncRuns('orders');
+    const abandoned = runs.find((run) => run.id === abandonedId);
+    const fresh = runs.find((run) => run.id === freshId);
+
+    expect(abandoned?.status).toBe('failed');
+    expect(abandoned?.error).toBe('прогон оборван, воркер перезапущен');
+    expect(fresh?.status).toBe('running');
+    expect(fresh?.error).toBeNull();
   });
 });

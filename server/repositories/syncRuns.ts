@@ -64,3 +64,24 @@ export const finishSyncRun = async (
      WHERE "id" = ${runId}::uuid
   `;
 };
+
+/**
+ * Закрывает прогоны, оставшиеся в состоянии `running` дольше положенного.
+ *
+ * Зовётся при старте воркера. Прогон закрывает свою строку сам — успехом или отказом, —
+ * но `SIGKILL` такой возможности не даёт: `docker stop` по таймауту и убийство по памяти
+ * оставляют строку бежать вечно, и журнал прогонов начинает копить вечно бегущие строки.
+ *
+ * По возрасту, а не «все подряд»: рядом с воркером живёт разовый прогон командой
+ * `make sync-orders`, и он законно идёт своей строкой в тот момент, когда воркер
+ * перезапускается.
+ */
+export const failAbandonedRuns = async (startedBefore: Date): Promise<number> =>
+  db.$executeRaw`
+    UPDATE xb.sync_runs
+       SET "status"      = 'failed'::xb.sync_status,
+           "finished_at" = now(),
+           "error"       = 'прогон оборван, воркер перезапущен'
+     WHERE "status" = 'running'
+       AND "started_at" < ${startedBefore.toISOString()}::timestamptz
+  `;

@@ -220,6 +220,21 @@ export const resetOrdersSyncState = async (): Promise<void> => {
   await db.$executeRaw`DELETE FROM xb.sync_runs WHERE "kind" IN ('orders', 'orders_catchup')`;
 };
 
+/**
+ * Заводит строку прогона в состоянии `running` с заданным временем старта.
+ *
+ * Так выглядит строка, брошенная процессом, которого убили: закрыть её было некому.
+ */
+export const insertRunningSyncRun = async (kind: string, startedAt: Date): Promise<string> => {
+  const rows = await db.$queryRaw<{ id: string }[]>`
+    INSERT INTO xb.sync_runs ("kind", "status", "started_at")
+    VALUES (${kind}::xb.sync_kind, 'running'::xb.sync_status, ${startedAt.toISOString()}::timestamptz)
+    RETURNING "id"
+  `;
+
+  return rows[0]?.id as string;
+};
+
 export type SyncRunRow = {
   id: string;
   kind: string;
