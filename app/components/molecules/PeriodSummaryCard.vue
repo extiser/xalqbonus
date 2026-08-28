@@ -25,22 +25,20 @@ const PERIOD_TITLES: Record<SyncPeriodSummary['period'], string> = {
   week: 'За неделю',
 };
 
-/** Подпись одной границы: покрывает ли она период целиком или обрезает его. */
-type Coverage = { text: string; truncated: boolean };
-
-const buildCoverage = (label: string, since: string | null, emptyText: string): Coverage => {
+/**
+ * Подпись одной границы данных.
+ *
+ * Приглушённой строкой и без выделения цветом: история короче периода — это про возраст
+ * стенда, а не про поломку. Красным на этом экране горит одно — застрявшая отметка.
+ */
+const buildCoverage = (label: string, since: string | null, emptyText: string): string => {
   if (!since) {
-    return { text: emptyText, truncated: true };
+    return emptyText;
   }
 
-  const truncated = new Date(since) > new Date(props.summary.from);
-
-  return {
-    text: truncated
-      ? `${label} только с ${formatDateTime(since)} — период шире, чем история`
-      : `${label} с ${formatDateTime(since)}`,
-    truncated,
-  };
+  return new Date(since) > new Date(props.summary.from)
+    ? `${label} только с ${formatDateTime(since)} — период шире, чем история`
+    : `${label} с ${formatDateTime(since)}`;
 };
 
 const journalCoverage = computed(() =>
@@ -56,13 +54,9 @@ const tripsCoverage = computed(() =>
   <article class="rounded-lg border border-slate-200 bg-white px-4 py-3">
     <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
       <h3 class="text-sm font-semibold text-slate-900">{{ PERIOD_TITLES[summary.period] }}</h3>
-      <div class="text-xs">
-        <p :class="tripsCoverage.truncated ? 'text-amber-700' : 'text-slate-400'">
-          {{ tripsCoverage.text }}
-        </p>
-        <p :class="journalCoverage.truncated ? 'text-amber-700' : 'text-slate-400'">
-          {{ journalCoverage.text }}
-        </p>
+      <div class="text-xs text-slate-400">
+        <p>{{ tripsCoverage }}</p>
+        <p>{{ journalCoverage }}</p>
       </div>
     </div>
 
@@ -83,9 +77,9 @@ const tripsCoverage = computed(() =>
         hint="строк журнала с причиной trip"
       />
       <MoleculesCounterTile
-        label="Баллов начислено"
-        :value="summary.awardedPoints"
-        hint="сумма по тем же строкам"
+        label="Вне программы"
+        :value="summary.outsideProgram"
+        hint="завершённых поездок водителей не в программе"
       />
       <MoleculesCounterTile
         label="Новое пропущенное"

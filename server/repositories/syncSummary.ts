@@ -3,38 +3,47 @@ import { db } from '#server/db';
 /**
  * Свод синхронизации за период — по таблицам данных, а не по журналу прогонов.
  *
- * Почему не суммой счётчиков `xb.sync_run_orders`: окно живой синхронизации — одиннадцать
- * минут, прогон идёт раз в минуту, и один и тот же заказ попадает примерно в одиннадцать
- * прогонов подряд. Сумма счётчиков за период поэтому не является числом заказов и
- * отличается от него на порядок — суточный свод 28.08.2026 показал «вне программы 631»
- * там, где различных поездок было около шестидесяти.
+ * Почему не суммой счётчиков `xb.sync_run_orders`: счётчик прогона считает события этого
+ * прогона, а не сущности. Окно живой синхронизации — одиннадцать минут при прогоне раз
+ * в минуту, один и тот же заказ попадает в несколько прогонов подряд, и каждый из них
+ * считает его заново. Сумма таких счётчиков и число заказов — величины разного смысла,
+ * и насколько они разойдутся, зависит от ширины окна, интервала прогона и того, что
+ * прогон успел записать раньше. Суточный замер 28.08.2026: «вне программы» 732 суммой
+ * против 703 различных. Близость этих чисел ничего не гарантирует — она держится
+ * на текущих настройках окна, а не на смысле счётчика, и с первой же правкой интервала
+ * разъедется молча.
  *
  * Поэтому каждое число здесь — различные сущности по времени события:
  *
  *   - поездки — по `ended_at`, тому самому полю, по которому строится окно опроса;
  *   - начисления — по `occurred_at` журнала, а он равен времени завершения поездки,
  *     то есть считается по тому же времени, что и поездки, и сравним с ними;
+ *   - вне программы — те же завершённые поездки, у чьего водителя нет строки участия;
  *   - пропущенное — по `first_seen_at`: сколько нового потеряно за период, а не сколько
  *     раз старое принесло окно.
  *
- * Счётчиков, которые различным подсчётом не берутся, здесь нет. «Вне программы»,
- * «уже начислено», «не разобрано» живут только в разборе отдельного прогона: там вопрос
- * «что сделал этот прогон», и ответ на него — именно события.
+ * Счётчиков, которые различным подсчётом не берутся, здесь нет. «Уже начислено»
+ * и «не разобрано» живут только в разборе отдельного прогона: там вопрос «что сделал
+ * этот прогон», и ответ на него — именно события.
  */
 
 export type SyncPeriodCounts = {
   trips: number;
   tripsCompleted: number;
   awards: number;
-  awardedPoints: number;
+  /**
+   * Завершённые поездки водителей, которых нет в программе.
+   *
+   * Реестр парка шире программы: участие — это строка `xb.person_settings`, и её
+   * отсутствие штатно. Считается различными поездками через профиль и человека, а не
+   * суммой счётчика прогонов.
+   */
+  outsideProgram: number;
   skipsFirstSeen: number;
   skipsUnresolved: number;
   runs: number;
   runsFailed: number;
 };
-
-/** Строка ответа до приведения: суммы баллов приезжают из Postgres как bigint. */
-type SyncPeriodCountsRow = Omit<SyncPeriodCounts, 'awardedPoints'> & { awardedPoints: bigint };
 
 /** Единственный статус поездки, за который начисляется балл. Значение словаря Fleet API. */
 const COMPLETED_STATUS = 'complete';
@@ -42,7 +51,7 @@ const COMPLETED_STATUS = 'complete';
 export const readSyncPeriodCounts = async (from: Date): Promise<SyncPeriodCounts> => {
   const since = from.toISOString();
 
-  const rows = await db.$queryRaw<SyncPeriodCountsRow[]>`
+  const rows = await db.$queryRaw<SyncPeriodCounts[]>`
     SELECT (SELECT count(*)::int
               FROM xb.trips
              WHERE "ended_at" >= ${since}::timestamptz)                     AS "trips",
@@ -54,10 +63,15 @@ export const readSyncPeriodCounts = async (from: Date): Promise<SyncPeriodCounts
               FROM xb.point_transfers
              WHERE "reason" = 'trip'::xb.point_reason
                AND "occurred_at" >= ${since}::timestamptz)                  AS "awards",
-           (SELECT coalesce(sum("amount"), 0)::bigint
-              FROM xb.point_transfers
-             WHERE "reason" = 'trip'::xb.point_reason
-               AND "occurred_at" >= ${since}::timestamptz)                  AS "awardedPoints",
+           (SELECT count(*)::int
+              FROM xb.trips AS trip
+              JOIN xb.park_profiles AS profile
+                ON profile."profile_id" = trip."profile_id"
+              LEFT JOIN xb.person_settings AS settings
+                ON settings."person_id" = profile."person_id"
+             WHERE trip."ended_at" >= ${since}::timestamptz
+               AND trip."status" = ${COMPLETED_STATUS}
+               AND settings."person_id" IS NULL)                            AS "outsideProgram",
            (SELECT count(*)::int
               FROM xb.sync_skips
              WHERE "first_seen_at" >= ${since}::timestamptz)                AS "skipsFirstSeen",
@@ -80,7 +94,7 @@ export const readSyncPeriodCounts = async (from: Date): Promise<SyncPeriodCounts
     throw new Error('свод за период не посчитался: запрос не вернул строки');
   }
 
-  return { ...row, awardedPoints: Number(row.awardedPoints) };
+  return row;
 };
 
 /**

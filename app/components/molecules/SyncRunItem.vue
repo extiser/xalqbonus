@@ -67,9 +67,9 @@ const hasDetails = computed(() => props.run.orders !== null || props.run.registr
       </div>
       <div class="flex gap-2">
         <dt class="text-slate-500">По лимиту</dt>
-        <dd class="font-mono tabular-nums" :class="run.rateLimited > 0 ? 'text-amber-700' : 'text-slate-700'">
-          {{ formatNumber(run.rateLimited) }}
-        </dd>
+        <!-- Нейтрально: отказ по лимиту Fleet API — штатная работа, прогон повторяет запрос
+             с бэкоффом и забирает то же окно. Выделять его цветом значит тревожить впустую. -->
+        <dd class="font-mono text-slate-700 tabular-nums">{{ formatNumber(run.rateLimited) }}</dd>
       </div>
       <div class="flex gap-2">
         <dt class="text-slate-500">Увидено / записано</dt>
