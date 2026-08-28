@@ -147,7 +147,15 @@ type Attempt =
 export type FleetClientOptions = {
   /** Куда сообщать об отказах по лимиту. Ключ и тело запроса сюда не попадают никогда. */
   onRateLimited?: (description: string, attempt: number, waitMs: number) => void;
+  /**
+   * Чем выдерживается пауза. Подменяется тестом: проверять отступление, честно засыпая
+   * на минуту, — это не проверка, а ожидание.
+   */
+  sleep?: (milliseconds: number) => Promise<void>;
 };
+
+const describeFailure = (error: unknown): string =>
+  error instanceof Error ? error.message : 'неизвестный отказ';
 
 export class FleetClient {
   private requests = 0;
@@ -206,7 +214,7 @@ export class FleetClient {
         this.options.onRateLimited?.(description, attempt, waitMs);
       }
 
-      await sleep(waitMs);
+      await this.wait(waitMs);
       this.waitedMs += waitMs;
       backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
     }
@@ -232,17 +240,26 @@ export class FleetClient {
     const remaining = this.pauseMs - (Date.now() - this.lastRequestAt);
 
     if (remaining > 0) {
-      await sleep(remaining);
+      await this.wait(remaining);
     }
   }
 
+  private wait(milliseconds: number): Promise<void> {
+    return (this.options.sleep ?? sleep)(milliseconds);
+  }
+
+  /**
+   * Один сетевой вызов вместе с разбором тела.
+   *
+   * Разбор тела живёт здесь же, под тем же `try`, а не снаружи: прокси, отдавший HTML
+   * с кодом 200, — это заминка на пути к API, и лечится она тем же повтором, что обрыв
+   * связи. Разбор снаружи давал бы необработанное исключение посреди прогона.
+   */
   private async singleRequest(path: string, body: unknown): Promise<Attempt> {
     this.requests += 1;
 
-    let response: Response;
-
     try {
-      response = await fetch(this.credentials.baseUrl + path, {
+      const response = await fetch(this.credentials.baseUrl + path, {
         method: 'POST',
         headers: {
           'X-Client-ID': this.credentials.clientId,
@@ -253,30 +270,37 @@ export class FleetClient {
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
+
+      if (response.status === TOO_MANY_REQUESTS) {
+        // Тело отказа по лимиту не читается: в нём строка `Limit exceeded.` и эхо запроса.
+        await response.body?.cancel();
+        return { kind: 'rateLimited' };
+      }
+
+      if (response.ok) {
+        try {
+          return { kind: 'ok', payload: await response.json() };
+        } catch (error) {
+          return {
+            kind: 'retryable',
+            reason: `ответ 200 не разбирается как JSON: ${describeFailure(error)}`,
+          };
+        }
+      }
+
+      // Пятисотка на той стороне — это заминка, а не наш неверный запрос.
+      if (response.status >= 500) {
+        return { kind: 'retryable', reason: `HTTP ${response.status}` };
+      }
+
+      const payload: unknown = await response.json().catch(() => null);
+
+      return { kind: 'fatal', status: response.status, code: readErrorCode(payload) };
     } catch (error) {
       // Сеть, таймаут, TLS. Повторяется тем же отступлением, что и отказ по лимиту:
       // разбирать причину незачем, лечение одно.
-      return { kind: 'retryable', reason: error instanceof Error ? error.message : 'сетевой отказ' };
+      return { kind: 'retryable', reason: describeFailure(error) };
     }
-
-    if (response.ok) {
-      return { kind: 'ok', payload: await response.json() };
-    }
-
-    if (response.status === TOO_MANY_REQUESTS) {
-      // Тело отказа по лимиту не читается: в нём строка `Limit exceeded.` и эхо запроса.
-      await response.body?.cancel();
-      return { kind: 'rateLimited' };
-    }
-
-    const payload: unknown = await response.json().catch(() => null);
-
-    // Пятисотка на той стороне — это заминка, а не наш неверный запрос.
-    if (response.status >= 500) {
-      return { kind: 'retryable', reason: `HTTP ${response.status}` };
-    }
-
-    return { kind: 'fatal', status: response.status, code: readErrorCode(payload) };
   }
 }
 
