@@ -224,3 +224,40 @@ export const writeTransfer = async (input: WriteTransferInput): Promise<WriteTra
     return { transfer, applied: true };
   });
 };
+
+export type BalanceTotals = {
+  driverAccounts: number;
+  driverAccountsPositive: number;
+  driverBalanceTotal: bigint;
+  emissionBalance: bigint;
+};
+
+/**
+ * Итоги по счетам для отчёта переноса. Считаются по кэшу баланса, а сходимость кэша
+ * с журналом проверяет `make invariants` — вторым запросом из scripts/invariants.sql.
+ */
+export const readBalanceTotals = async (): Promise<BalanceTotals> => {
+  const rows = await db.$queryRaw<
+    {
+      driverAccounts: bigint;
+      driverAccountsPositive: bigint;
+      driverBalanceTotal: bigint;
+      emissionBalance: bigint;
+    }[]
+  >`
+    SELECT COUNT(*) FILTER (WHERE "type" = 'driver')                     AS "driverAccounts",
+           COUNT(*) FILTER (WHERE "type" = 'driver' AND "balance" > 0)   AS "driverAccountsPositive",
+           COALESCE(SUM("balance") FILTER (WHERE "type" = 'driver'), 0)  AS "driverBalanceTotal",
+           COALESCE(SUM("balance") FILTER (WHERE "type" = 'emission'), 0) AS "emissionBalance"
+      FROM xb.accounts
+  `;
+
+  const row = rows[0];
+
+  return {
+    driverAccounts: Number(row?.driverAccounts ?? 0n),
+    driverAccountsPositive: Number(row?.driverAccountsPositive ?? 0n),
+    driverBalanceTotal: row?.driverBalanceTotal ?? 0n,
+    emissionBalance: row?.emissionBalance ?? 0n,
+  };
+};

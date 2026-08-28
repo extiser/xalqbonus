@@ -31,10 +31,7 @@ const buildKey = (prefix: string, identifier: string): IdempotencyKey => {
 /**
  * Начисление за завершённую поездку: `trip:<trips.order_id>`.
  *
- * Идентификатор заказа Fleet API, а не наш `trips.id`. В таблице docs/points.md ключ
- * записан как `trip:<trip_id>` в терминологии старой базы, где `Trips.trip_id` и был
- * идентификатором заказа Fleet API. Смысл контракта не менялся, разошлись имена полей;
- * документ правится отдельно.
+ * Идентификатор заказа Fleet API, а не наш `trips.id`.
  *
  * На `trips.id` ключ строить нельзя: uuid генерится при вставке, и повторный импорт
  * поездки после удаления строки дал бы новый ключ и второе начисление — то есть ключ
@@ -42,6 +39,17 @@ const buildKey = (prefix: string, identifier: string): IdempotencyKey => {
  */
 export const buildTripIdempotencyKey = (tripOrderId: string): IdempotencyKey =>
   buildKey('trip', tripOrderId);
+
+/**
+ * Перенос баланса при запуске журнала: `opening:<persons.id>`.
+ *
+ * Ключ строится от человека, а не от записи старой базы, и это не мелочь: у двенадцати
+ * склеенных пар записей две, а человек и баланс — один. Ключ от записи дал бы два
+ * `opening` на один счёт, то есть удвоил бы перенесённый баланс ровно там, где склейка
+ * и нужна (docs/points.md, _reference/legacy/public-schema-2026-08-27.md §7.2).
+ */
+export const buildOpeningIdempotencyKey = (personId: string): IdempotencyKey =>
+  buildKey('opening', personId);
 
 /**
  * Возврат баллов при отмене заказа товара: `order_refund:<order_id>`.

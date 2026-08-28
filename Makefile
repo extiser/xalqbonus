@@ -6,8 +6,8 @@ COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
 
 .DEFAULT_GOAL := help
 
-.PHONY: help up up-d down restart logs ps shell psql migrate migrate-create typecheck test \
-        db-restore db-schema invariants license-collisions legacy-vs-api \
+.PHONY: help up up-d down restart logs ps shell psql migrate migrate-create typecheck test test-db \
+        db-restore db-schema invariants license-collisions legacy-vs-api import-legacy \
         prod-up prod-down prod-restart prod-logs prod-ps prod-shell prod-psql prod-migrate \
         proxy-up proxy-down proxy-ps proxy-logs proxy-validate proxy-reload
 
@@ -83,14 +83,38 @@ license-collisions: ## Счётчик коллизий номеров ВУ до 
 legacy-vs-api: ## Сверка старой базы с Fleet API: потеря поездок и охват программы
 	python3 scripts/legacy-vs-api.py
 
+# Перенос реестра парка и балансов из public в xb. Гоняется внутри app-контейнера:
+# сеть стека и строка подключения с именем `postgres` живут там же, где тесты.
+# Скрипт идемпотентен — повторный прогон не меняет ни одной цифры отчёта.
+import-legacy: ## Перенести реестр парка и балансы из public в xb (идемпотентно)
+	$(COMPOSE) exec -T app npx tsx scripts/import-legacy.ts
+
 typecheck: ## Проверить типы (nuxt typecheck)
 	npm run typecheck
 
+# Отдельная база под тесты, в том же контейнере. Схему в ней создаёт та же миграция —
+# второго описания структуры не заводится. Цель идемпотентна: базу создаёт, только если
+# её нет, миграции применяет всегда.
+test-db: ## Завести базу xalqbonus_test и накатить на неё миграции
+	@$(COMPOSE) exec -T postgres sh -c '\
+		test -n "$$POSTGRES_TEST_DB" || { echo "POSTGRES_TEST_DB не задана — см. .env.example"; exit 1; }; \
+		if [ "$$(psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -tAc "SELECT 1 FROM pg_database WHERE datname = '"'"'"$$POSTGRES_TEST_DB"'"'"'")" = "1" ]; then \
+			echo "база $$POSTGRES_TEST_DB уже есть"; \
+		else \
+			createdb -U "$$POSTGRES_USER" "$$POSTGRES_TEST_DB" && echo "база $$POSTGRES_TEST_DB создана"; \
+		fi'
+	$(COMPOSE) exec -T app sh -c 'DATABASE_URL="$$TEST_DATABASE_URL" npx prisma migrate deploy'
+
 # Тесты гоняются внутри app-контейнера, а не на хосте: ядру баллов нужна настоящая база,
 # а имя `postgres` из DATABASE_URL с хоста не разрешается — снаружи у той же базы адрес
-# localhost:5434 (docs/infra.md → «Порты»). Второй строки подключения ради тестов
-# заводить не за чем: стек и так поднят.
-test: ## Прогнать тесты (vitest внутри app-контейнера)
+# localhost:5434 (docs/infra.md → «Порты»).
+#
+# Ходят они ТОЛЬКО в xalqbonus_test: строку подключения подменяет tests/setup.ts из
+# TEST_DATABASE_URL и роняет прогон, если её нет или имя базы не кончается на `_test`.
+# В рабочей базе живут настоящие люди, настоящие балансы и настоящий журнал, а тесты
+# пишут переводы с общего эмиссионного счёта и правят его кэш при уборке — прогон,
+# упавший посередине, оставил бы счёт неверным (docs/infra.md → «Тесты»).
+test: test-db ## Прогнать тесты (vitest внутри app-контейнера, база xalqbonus_test)
 	$(COMPOSE) exec -T app npm run test
 
 # Боевой набор. Сборка образа входит в подъём: отдельной цели build нет, как и цели
