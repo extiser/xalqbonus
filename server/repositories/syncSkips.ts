@@ -71,6 +71,31 @@ export const recordSyncSkips = async (runId: string, skips: readonly SyncSkipInp
  * Причины перечислены явно: `unknown_value` заказом не разрешается — незнакомое значение
  * чужого словаря закрывается тем, что мы его узнали, а не следующим прогоном.
  */
+/**
+ * Отмечает решёнными заказы, чей водитель наконец появился в реестре.
+ *
+ * Ссылка у такой строки — идентификатор заказа, а профиль лежит в `detail`: разрешает
+ * их поэтому синхронизация профилей, а не заказов, и по профилю, а не по заказу. Ровно
+ * ради этого `resolved_at` и заведён — список нерешённого обязан таять после того,
+ * как реестр догнали, а не расти вечно.
+ *
+ * Сам заказ при этом ещё не записан: его перезапросит догоняющий прогон, пока он
+ * не старше его окна. Строка означает «препятствие снято», а не «поездка в базе».
+ */
+export const resolveSkipsForProfiles = async (profileIds: readonly string[]): Promise<number> => {
+  if (profileIds.length === 0) {
+    return 0;
+  }
+
+  return db.$executeRaw`
+    UPDATE xb.sync_skips
+       SET "resolved_at" = now()
+     WHERE "resolved_at" IS NULL
+       AND "reason" = 'unknown_profile'::xb.sync_skip_reason
+       AND "detail" = ANY(${[...profileIds]}::text[])
+  `;
+};
+
 export const resolveSyncSkips = async (orderIds: readonly string[]): Promise<number> => {
   if (orderIds.length === 0) {
     return 0;

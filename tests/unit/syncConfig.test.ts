@@ -15,6 +15,10 @@ const config: SyncConfig = {
   catchupEnabled: true,
   catchupIntervalSec: 86_400,
   catchupDays: 7,
+  registryEnabled: true,
+  registryIntervalSec: 3_600,
+  registryOverlapMinutes: 60,
+  registryLagSeconds: 60,
   overlapMinutes: 10,
   lagSeconds: 60,
   pageLimit: 500,
@@ -29,6 +33,12 @@ describe('интервал прогона', () => {
   it('у скользящего свой, у догоняющего свой', () => {
     expect(syncIntervalMs('orders', config)).toBe(60_000);
     expect(syncIntervalMs('orders_catchup', config)).toBe(86_400_000);
+  });
+
+  it('у синхронизации реестра свой', () => {
+    // Реестр опрашивается не так, как заказы: это единицы запросов в сутки, и интервал
+    // выбирается из потребности, а не из экономии (docs/decisions.md).
+    expect(syncIntervalMs('registry', config)).toBe(3_600_000);
   });
 });
 
@@ -47,6 +57,10 @@ describe('порог отставания отметки', () => {
 
   it('у догоняющего прогона считается от его собственных суток', () => {
     expect(staleWatermarkThresholdMs('orders_catchup', config)).toBe(3 * 86_400_000);
+  });
+
+  it('у реестра считается от его собственного часа', () => {
+    expect(staleWatermarkThresholdMs('registry', config)).toBe(3 * 60 * MINUTE_MS);
   });
 
   it('нижняя граница берётся из настроек, а не из константы в коде', () => {

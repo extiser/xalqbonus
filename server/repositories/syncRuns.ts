@@ -17,18 +17,25 @@ export type SyncRunCounters = {
   itemsWritten: number;
 };
 
+/**
+ * Заводит строку прогона.
+ *
+ * Нижняя граница окна может быть пустой: у полного обхода реестра окна нет вовсе —
+ * он берёт всё, что знает парк, и подставлять ему выдуманную границу значило бы соврать
+ * в журнале.
+ */
 export const startSyncRun = async (
   kind: SyncKind,
-  windowFrom: Date,
-  windowTo: Date,
+  windowFrom: Date | null,
+  windowTo: Date | null,
 ): Promise<string> => {
   const rows = await db.$queryRaw<{ id: string }[]>`
     INSERT INTO xb.sync_runs ("kind", "status", "window_from", "window_to")
     VALUES (
       ${kind}::xb.sync_kind,
       'running'::xb.sync_status,
-      ${windowFrom.toISOString()}::timestamptz,
-      ${windowTo.toISOString()}::timestamptz
+      ${windowFrom?.toISOString() ?? null}::timestamptz,
+      ${windowTo?.toISOString() ?? null}::timestamptz
     )
     RETURNING "id"
   `;
@@ -61,6 +68,25 @@ export const finishSyncRun = async (
            "items_seen"    = ${counters.itemsSeen},
            "items_written" = ${counters.itemsWritten},
            "error"         = ${error}
+     WHERE "id" = ${runId}::uuid
+  `;
+};
+
+/**
+ * Поправляет верхнюю границу окна уже заведённого прогона.
+ *
+ * Нужна ровно одному случаю: инкрементальный прогон профилей ужимает окно по промеру
+ * `total`, если изменившихся в нём больше, чем берётся разрешённой глубиной offset.
+ * Строка прогона заводится до промера — иначе промер шёл бы вне журнала, — и после
+ * ужатия обязана показывать то, что реально спрашивали у API, а не то, что собирались.
+ *
+ * Журнал, в котором `window_to` не равен фактической границе фильтра, хуже отсутствующего:
+ * по нему будут сверять, за какой отрезок времени мы видели парк.
+ */
+export const narrowSyncRunWindow = async (runId: string, windowTo: Date): Promise<void> => {
+  await db.$executeRaw`
+    UPDATE xb.sync_runs
+       SET "window_to" = ${windowTo.toISOString()}::timestamptz
      WHERE "id" = ${runId}::uuid
   `;
 };
