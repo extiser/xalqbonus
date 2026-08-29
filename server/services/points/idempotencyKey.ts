@@ -88,3 +88,29 @@ export const buildOrderSpendIdempotencyKey = (orderId: number): IdempotencyKey =
  */
 export const buildManualIdempotencyKey = (operationId: string): IdempotencyKey =>
   buildKey('manual', operationId);
+
+/**
+ * Читает метку кампании из ключа массового начисления: `campaign:<slug>:<persons.id>`.
+ *
+ * Читается из ключа, а не из колонки: отдельной сущности «кампания» в базе нет — пока
+ * `slug` в ключе отвечает на все вопросы, заводить её незачем (docs/points.md). Экрану
+ * карточки метка нужна, чтобы праздничная раздача на три тысячи человек отличалась
+ * от трёх тысяч независимых решений оператора.
+ *
+ * Разбор идёт по префиксу ключа, а не по причине операции: причина `campaign` появляется
+ * в `xb.point_reason` вместе с первой раздачей (issue #37), а формат ключа зафиксирован
+ * таблицей уже сейчас, и он же — единственное место, где метка хранится.
+ */
+export const readCampaignSlug = (idempotencyKey: string): string | null => {
+  const parts = idempotencyKey.split(':');
+
+  // Ровно три части: `campaign`, метка, человек. Ключ другой длины меткой не считается —
+  // угадывать в ключе идемпотентности нечего.
+  if (parts.length !== 3 || parts[0] !== 'campaign') {
+    return null;
+  }
+
+  const slug = parts[1];
+
+  return slug && slug.length > 0 ? slug : null;
+};

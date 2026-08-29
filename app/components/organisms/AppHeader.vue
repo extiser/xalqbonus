@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import type { NavigationItem } from '~/utils/navigation';
 
@@ -9,7 +8,14 @@ defineProps<{
 }>();
 
 const route = useRoute();
-const currentPath = computed(() => route.path);
+
+/**
+ * Пункт считается текущим и на вложенных страницах: карточка водителя живёт по адресу
+ * `/drivers/<id>`, и шапка, гаснущая при переходе в неё, теряет ответ на вопрос
+ * «где я сейчас».
+ */
+const isCurrent = (path: string): boolean =>
+  route.path === path || route.path.startsWith(`${path}/`);
 </script>
 
 <template>
@@ -23,7 +29,7 @@ const currentPath = computed(() => route.path);
           :to="item.path"
           class="rounded-md px-2 py-1 text-sm font-medium transition-colors"
           :class="
-            currentPath === item.path
+            isCurrent(item.path)
               ? 'bg-slate-100 text-slate-900'
               : 'text-slate-500 hover:text-slate-900'
           "

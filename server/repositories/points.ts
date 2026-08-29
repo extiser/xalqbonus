@@ -261,3 +261,144 @@ export const readBalanceTotals = async (): Promise<BalanceTotals> => {
     emissionBalance: row?.emissionBalance ?? 0n,
   };
 };
+
+export type AccountReconciliationRow = {
+  accountId: string;
+  cachedBalance: bigint;
+  journalBalance: bigint;
+  entriesCount: number;
+  firstEntryAt: Date | null;
+  lastEntryAt: Date | null;
+};
+
+/**
+ * Счёт водителя вместе со сверкой: кэш баланса и сумма журнала по этому счёту, одним
+ * запросом.
+ *
+ * Два числа считаются рядом намеренно. Баланс — производная от журнала, а `accounts.balance`
+ * всего лишь кэш, обновляемый вместе с записью в журнал в одной транзакции; расхождение
+ * означает, что кто-то правит баланс мимо сервиса. Это второй запрос из
+ * `scripts/invariants.sql`, суженный до одного счёта, — экран обязан показывать ровно то же,
+ * что показывает `make invariants`.
+ *
+ * `sum` по `bigint` возвращает `numeric`, поэтому результат приведён обратно к `bigint`:
+ * без приведения драйвер отдал бы строку там, где ожидается число.
+ */
+export const findDriverAccountReconciliation = async (
+  personId: string,
+): Promise<AccountReconciliationRow | null> => {
+  const rows = await db.$queryRaw<AccountReconciliationRow[]>`
+    SELECT account."id"      AS "accountId",
+           account."balance" AS "cachedBalance",
+           journal."journalBalance",
+           journal."entriesCount",
+           journal."firstEntryAt",
+           journal."lastEntryAt"
+      FROM xb.accounts AS account
+      LEFT JOIN LATERAL (
+        SELECT coalesce(sum(entry."delta"), 0)::bigint AS "journalBalance",
+               count(*)::int                           AS "entriesCount",
+               min(transfer."occurred_at")             AS "firstEntryAt",
+               max(transfer."occurred_at")             AS "lastEntryAt"
+          FROM xb.point_entries AS entry
+          JOIN xb.point_transfers AS transfer ON transfer."id" = entry."transfer_id"
+         WHERE entry."account_id" = account."id"
+      ) AS journal ON TRUE
+     WHERE account."type" = 'driver' AND account."person_id" = ${personId}::uuid
+  `;
+
+  return rows[0] ?? null;
+};
+
+export type AccountOperationRow = {
+  transferId: string;
+  reason: PointReason;
+  idempotencyKey: string;
+  amount: bigint;
+  occurredAt: Date;
+  createdAt: Date;
+  delta: bigint;
+  counterpartyAccountId: string;
+  counterpartyType: AccountType;
+  counterpartyPersonId: string | null;
+  counterpartyName: string | null;
+  counterpartyDelta: bigint | null;
+  tripOrderId: string | null;
+  tripStatus: string | null;
+  tripEndedAt: Date | null;
+  tripPrice: string | null;
+  legacyOrderId: number | null;
+  actor: string | null;
+  note: string | null;
+};
+
+/**
+ * Операции по счёту, страницей, новыми вперёд.
+ *
+ * Считается от записей журнала, а не от переводов: на счёт приходится ровно одна запись
+ * перевода, и листание по `(account_id, id)` идёт по индексу.
+ *
+ * Вторая сторона берётся из самого перевода — из пары `from`/`to`, — а её запись журнала
+ * подтягивается отдельным `LEFT JOIN`. Разница не косметическая: перевод без второй записи
+ * нарушает первый инвариант, и внешнее соединение показывает такую операцию с пустой
+ * половиной, а внутреннее спрятало бы её целиком. Экран наблюдаемости, скрывающий битую
+ * запись, бесполезен ровно там, где нужен.
+ */
+export const listAccountOperations = async (
+  accountId: string,
+  limit: number,
+  offset: number,
+): Promise<AccountOperationRow[]> =>
+  db.$queryRaw<AccountOperationRow[]>`
+    SELECT transfer."id"              AS "transferId",
+           transfer."reason",
+           transfer."idempotency_key" AS "idempotencyKey",
+           transfer."amount",
+           transfer."occurred_at"     AS "occurredAt",
+           transfer."created_at"      AS "createdAt",
+           entry."delta",
+           counterparty."id"          AS "counterpartyAccountId",
+           counterparty."type"        AS "counterpartyType",
+           counterparty."person_id"   AS "counterpartyPersonId",
+           counterparty_name."name"   AS "counterpartyName",
+           counterparty_entry."delta" AS "counterpartyDelta",
+           transfer."trip_order_id"   AS "tripOrderId",
+           trip."status"              AS "tripStatus",
+           trip."ended_at"            AS "tripEndedAt",
+           trip."price"::text         AS "tripPrice",
+           transfer."legacy_order_id" AS "legacyOrderId",
+           transfer."actor",
+           transfer."note"
+      FROM xb.point_entries AS entry
+      JOIN xb.point_transfers AS transfer ON transfer."id" = entry."transfer_id"
+      JOIN xb.accounts AS counterparty
+        ON counterparty."id" = CASE
+             WHEN transfer."from_account_id" = entry."account_id" THEN transfer."to_account_id"
+             ELSE transfer."from_account_id"
+           END
+      LEFT JOIN xb.point_entries AS counterparty_entry
+             ON counterparty_entry."transfer_id" = transfer."id"
+            AND counterparty_entry."account_id" = counterparty."id"
+      LEFT JOIN LATERAL (
+        SELECT concat_ws(' ', profile."last_name", profile."first_name", profile."middle_name")
+                 AS "name"
+          FROM xb.park_profiles AS profile
+         WHERE profile."person_id" = counterparty."person_id"
+         ORDER BY (profile."work_status" = 'working') DESC, profile."api_updated_at" DESC
+         LIMIT 1
+      ) AS counterparty_name ON TRUE
+      LEFT JOIN xb.trips AS trip ON trip."order_id" = transfer."trip_order_id"
+     WHERE entry."account_id" = ${accountId}::uuid
+     ORDER BY entry."id" DESC
+     LIMIT ${limit} OFFSET ${offset}
+  `;
+
+export const countAccountOperations = async (accountId: string): Promise<number> => {
+  const rows = await db.$queryRaw<{ total: number }[]>`
+    SELECT count(*)::int AS "total"
+      FROM xb.point_entries
+     WHERE "account_id" = ${accountId}::uuid
+  `;
+
+  return rows[0]?.total ?? 0;
+};
