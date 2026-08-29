@@ -139,3 +139,51 @@ export const formatWindow = (from: string | null, to: string | null): string => 
 
   return `${formatDate(from)} → ${formatDate(to)}`;
 };
+
+/**
+ * Календарная дата: «24.12.2018».
+ *
+ * Приезжает строкой `YYYY-MM-DD` — колонка `date` не знает ни времени, ни зоны, и превращать
+ * её в момент нельзя: момент показывается в зоне, а зона сдвигает дату на соседний день.
+ * Дата выдачи прав, разъезжающаяся с окружением, — повод перестать верить всему экрану.
+ */
+export const formatCalendarDate = (value: string | null): string => {
+  if (!value) {
+    return DASH;
+  }
+
+  const [year, month, day] = value.split('-');
+
+  return year && month && day ? `${day}.${month}.${year}` : value;
+};
+
+/**
+ * Баллы со знаком: «+1», «−2 342».
+ *
+ * Знак обязателен у обоих направлений: в двусторонней записи «1» без знака не отвечает
+ * на вопрос, пришёл балл или ушёл. Минус — типографский, а не дефис: у дефиса другая
+ * ширина, и колонка чисел с ним разъезжается.
+ */
+export const formatSignedNumber = (value: number): string =>
+  value < 0 ? `−${formatNumber(Math.abs(value))}` : `+${formatNumber(value)}`;
+
+/**
+ * Момент календарной датой: «29.08.2026».
+ *
+ * Отличается от `formatCalendarDate` входом, а не выходом: там приходит строка `YYYY-MM-DD`
+ * из колонки `date`, здесь — момент со временем и зоной, и день у него считается в зоне
+ * показа. Нужно там, где важен день, а не час: время внесения записи задним числом
+ * отвечает на вопрос «когда это появилось в журнале», и минуты в этом ответе — шум.
+ */
+export const formatMomentDate = (value: string | null): string => {
+  if (!value) {
+    return DASH;
+  }
+
+  return new Date(value).toLocaleString('ru-RU', {
+    timeZone: DISPLAY_TIME_ZONE,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+};

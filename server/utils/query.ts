@@ -18,3 +18,14 @@ export const readPositiveInteger = (value: unknown, fallback: number): number =>
 
   return parsed;
 };
+
+/**
+ * Идентификатор человека из пути запроса.
+ *
+ * Проверяется здесь, а не в базе: строка, не похожая на uuid, уходит в `::uuid` и роняет
+ * запрос ошибкой Postgres — это пятисотка там, где на самом деле испорченная ссылка.
+ */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export const readUuid = (value: unknown): string | null =>
+  typeof value === 'string' && UUID.test(value) ? value : null;
