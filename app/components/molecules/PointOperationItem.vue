@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { DriverOperation } from '#shared/types/driver';
-import { formatDateTime, formatSignedNumber } from '~/utils/format';
+import { formatDateTime, formatMomentDate, formatSignedNumber } from '~/utils/format';
 import { accountTypeLabel, pointReasonLabel, tripStatusLabel } from '~/utils/labels';
 
 /**
@@ -16,7 +16,26 @@ const props = defineProps<{
   operation: DriverOperation;
 }>();
 
+/**
+ * С какого расхождения времени операции и времени внесения запись считается сделанной
+ * задним числом.
+ *
+ * Сутки, а не любое расхождение: у начисления за поездку между завершением заказа
+ * и записью проходят минуты — окно опроса и очередь, — и подпись у каждой строки
+ * превратилась бы в шум. Сутки и больше означают раздачу по кампании или перепроверку,
+ * и вот о них смотрящий должен узнать, а не вычитать даты в уме.
+ */
+const BACKDATED_THRESHOLD_MS = 24 * 60 * 60 * 1_000;
+
 const incoming = computed(() => props.operation.delta > 0);
+
+/** Записана задним числом: время операции и время внесения разошлись больше чем на сутки. */
+const backdated = computed(() => {
+  const occurredAt = new Date(props.operation.occurredAt).getTime();
+  const createdAt = new Date(props.operation.createdAt).getTime();
+
+  return Math.abs(createdAt - occurredAt) > BACKDATED_THRESHOLD_MS;
+});
 
 /** Имя второй стороны: у системного счёта — его роль, у водительского — человек. */
 const counterpartyTitle = computed(() => {
@@ -57,6 +76,13 @@ const direction = computed(() =>
       </span>
       <span class="text-sm text-slate-500">{{ direction }}</span>
     </div>
+
+    <!-- Список отсортирован по времени операции, и запись задним числом встаёт в нём
+         по своей дате — среди чужих строк того дня. Без этой подписи подарок ко Дню
+         независимости не отличить от начисления, сделанного тогда же. -->
+    <p v-if="backdated" class="mt-0.5 text-xs text-slate-400">
+      внесено {{ formatMomentDate(operation.createdAt) }}
+    </p>
 
     <dl class="mt-1 grid grid-cols-1 gap-x-6 text-sm sm:grid-cols-2">
       <div class="flex gap-2">

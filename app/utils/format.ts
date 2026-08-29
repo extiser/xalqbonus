@@ -166,3 +166,24 @@ export const formatCalendarDate = (value: string | null): string => {
  */
 export const formatSignedNumber = (value: number): string =>
   value < 0 ? `−${formatNumber(Math.abs(value))}` : `+${formatNumber(value)}`;
+
+/**
+ * Момент календарной датой: «29.08.2026».
+ *
+ * Отличается от `formatCalendarDate` входом, а не выходом: там приходит строка `YYYY-MM-DD`
+ * из колонки `date`, здесь — момент со временем и зоной, и день у него считается в зоне
+ * показа. Нужно там, где важен день, а не час: время внесения записи задним числом
+ * отвечает на вопрос «когда это появилось в журнале», и минуты в этом ответе — шум.
+ */
+export const formatMomentDate = (value: string | null): string => {
+  if (!value) {
+    return DASH;
+  }
+
+  return new Date(value).toLocaleString('ru-RU', {
+    timeZone: DISPLAY_TIME_ZONE,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+};
