@@ -8,6 +8,7 @@ COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
 
 .PHONY: help up up-d down restart logs ps shell psql migrate migrate-create typecheck test test-db \
         db-restore db-schema invariants license-collisions legacy-vs-api import-legacy \
+        import-legacy-dump \
         sync-orders sync-registry sync-state \
         prod-up prod-down prod-restart prod-logs prod-ps prod-shell prod-psql prod-migrate \
         proxy-up proxy-down proxy-ps proxy-logs proxy-validate proxy-reload
@@ -89,6 +90,39 @@ legacy-vs-api: ## Сверка старой базы с Fleet API: потеря 
 # Скрипт идемпотентен — повторный прогон не меняет ни одной цифры отчёта.
 import-legacy: ## Перенести реестр парка и балансы из public в xb (идемпотентно)
 	$(COMPOSE) exec -T app npx tsx scripts/import-legacy.ts
+
+# Проверочный прогон переноса на другом дампе старой базы — в отдельной базе рядом,
+# рабочая копия не трогается. Контрольные цифры больше не зашиты в код, и убедиться,
+# что эталон снимается сам, можно только на дампе с другими цифрами: в день выката дамп
+# будет третьим, и цифры третьими (docs/roadmap.md → «Выход в прод»).
+#
+# Схему xb в отдельной базе разворачивает та же миграция — второго описания структуры
+# не заводится. Цель идемпотентна: базу создаёт, только если её нет; дамп восстанавливает,
+# только если public в ней пуста; миграции и перенос применяет всегда.
+#
+# Выгрузка реестра парка берётся та же, что у обычного прогона, либо своя параметром
+# profiles=: реестр приходит из Fleet API, а не из дампа старой базы, и к его дате
+# отношения не имеет.
+import-legacy-dump: ## Прогон переноса на другом дампе в отдельной базе. Использование: make import-legacy-dump dump=_backup/<файл>.dump db=xalqbonus_0907
+	@test -n "$(dump)" || { echo "укажите дамп: make import-legacy-dump dump=_backup/<файл>.dump db=<база>"; exit 1; }
+	@test -f "$(dump)" || { echo "файла нет: $(dump)"; exit 1; }
+	@test -n "$(db)" || { echo "укажите базу: make import-legacy-dump dump=$(dump) db=<база>"; exit 1; }
+	@$(COMPOSE) exec -T postgres sh -c '\
+		test "$(db)" != "$$POSTGRES_DB" || { echo "$(db) — рабочая копия, проверочный прогон идёт в отдельной базе"; exit 1; }; \
+		if [ "$$(psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -tAc "SELECT 1 FROM pg_database WHERE datname = '"'"'$(db)'"'"'")" = "1" ]; then \
+			echo "база $(db) уже есть"; \
+		else \
+			createdb -U "$$POSTGRES_USER" "$(db)" && echo "база $(db) создана"; \
+		fi'
+	@tables=$$($(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$(db)" -tAc "select count(*) from information_schema.tables where table_schema = '"'"'public'"'"'"' 2>/dev/null | tr -d "\r"); \
+	if [ "$$tables" != "0" ]; then \
+		echo "в схеме public базы $(db) уже $$tables таблиц — дамп не перезаливается"; \
+	else \
+		cat "$(dump)" | $(COMPOSE) exec -T postgres sh -c 'pg_restore --no-owner --no-privileges -U "$$POSTGRES_USER" -d "$(db)"'; \
+	fi
+	$(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$(db)" -c "CREATE SCHEMA IF NOT EXISTS xb;"'
+	$(COMPOSE) exec -T app sh -c 'DATABASE_URL="postgresql://$$POSTGRES_USER:$$POSTGRES_PASSWORD@postgres:5432/$(db)?schema=xb" npx prisma migrate deploy'
+	$(COMPOSE) exec -T app sh -c 'DATABASE_URL="postgresql://$$POSTGRES_USER:$$POSTGRES_PASSWORD@postgres:5432/$(db)?schema=xb" npx tsx scripts/import-legacy.ts $(or $(profiles),_reference/fleet-api/dumps/driver-profiles-2026-08-27.jsonl) _reference/legacy/import-report-$(db).md'
 
 # Разовый прогон синхронизации заказов мимо очереди — тем же кодом, каким ходит воркер.
 # Гоняется внутри app-контейнера: сеть стека и строка подключения с именем `postgres`
