@@ -7,6 +7,7 @@ import {
 } from '#server/repositories/legacyDriverMap';
 import type { LegacyDriverRow } from '#server/repositories/legacyPublic';
 import { readProfileOwners } from '#server/repositories/registry';
+import { parseUsableChatId } from '#server/utils/legacyChatId';
 
 /**
  * Шаг 3 переноса: сопоставление записей старой базы с реестром парка.
@@ -17,9 +18,6 @@ import { readProfileOwners } from '#server/repositories/registry';
  */
 
 const log = consola.withTag('legacy-import:match');
-
-/** Годный `chat_id` — 6–10 цифр и ничего больше. */
-const USABLE_CHAT_ID = /^\d{6,10}$/;
 
 /** Запись старой базы после сопоставления. Дальше её читают шаги участия и балансов. */
 export type LegacyMatch = {
@@ -66,9 +64,6 @@ export class UnexpectedMergeGroupError extends Error {
   }
 }
 
-const parseChatId = (chatId: string | null): bigint | null =>
-  chatId !== null && USABLE_CHAT_ID.test(chatId) ? BigInt(chatId) : null;
-
 /**
  * Тестовый аккаунт опознаётся отсутствием `profile_id` в реестре парка.
  *
@@ -84,7 +79,7 @@ export const matchLegacyDrivers = async (rows: readonly LegacyDriverRow[]): Prom
   const matches: LegacyMatch[] = rows.map((row) => {
     const personId = owners.get(row.profileId) ?? null;
     const points = row.points ?? 0;
-    const chatId = parseChatId(row.chatId);
+    const chatId = parseUsableChatId(row.chatId);
 
     if (personId === null) {
       return {

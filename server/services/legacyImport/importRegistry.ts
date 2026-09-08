@@ -32,6 +32,12 @@ const E164_UZBEKISTAN = /^\+998\d{9}$/;
 export type RegistryImportSummary = {
   profilesSeen: number;
   personsTotal: number;
+  /**
+   * Эталон: столько людей с несколькими профилями в самой выгрузке. Снимается по группам
+   * канонических номеров — тем же правилом, которым перенос заводит людей.
+   */
+  personsWithSeveralProfilesInDump: number;
+  /** Результат: столько их получилось в `xb`. Сверяется с эталоном выше. */
   personsWithSeveralProfiles: number;
   phonesWritten: number;
   profilesWithoutPhone: number;
@@ -172,6 +178,9 @@ export const importRegistry = async (
   return {
     profilesSeen: profiles.length,
     personsTotal: groups.size,
+    personsWithSeveralProfilesInDump: [...groups.values()].filter(
+      (group) => group.profiles.length > 1,
+    ).length,
     personsWithSeveralProfiles: await countPersonsWithSeveralProfiles(),
     phonesWritten: phoneRows.length,
     profilesWithoutPhone: profiles.filter((profile) => profile.phones.length === 0).length,
