@@ -11,6 +11,7 @@ COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
         import-legacy-dump \
         sync-orders sync-registry sync-state \
         prod-up prod-down prod-restart prod-logs prod-ps prod-shell prod-psql prod-migrate \
+        prod-deploy prod-rollback \
         proxy-up proxy-down proxy-ps proxy-logs proxy-validate proxy-reload
 
 help: ## Показать список доступных команд
@@ -195,6 +196,17 @@ prod-psql: ## Войти в psql prod-БД
 
 prod-migrate: ## Применить миграции к prod-БД
 	$(COMPOSE_PROD) exec app ./node_modules/.bin/prisma migrate deploy
+
+# Выкат и откат прода. Исполняются на боевой машине, а не с машины разработчика: скрипты
+# работают в каталоге выката /srv/xalqbonus и собирают образ там же. Прочие prod-цели выше —
+# отдельные действия над уже выкаченным стеком; обновление версии делается только этими двумя.
+# Ни одна из них не требует ручного ввода посреди прогона: всё, что нужно, приходит аргументом.
+# Порядок шагов, откат образа и восстановление базы — docker/DEPLOY-MANUAL.md.
+prod-deploy: ## Выкат прода: сборка образа на сервере, миграции, подъём. make prod-deploy [ref=origin/main]
+	bash docker/scripts/deploy-manual.sh $(ref)
+
+prod-rollback: ## Откат прода на последний годный образ. make prod-rollback [sha=<short-sha>]
+	bash docker/scripts/rollback.sh $(sha)
 
 # Входная дверь машины: одна на сервер, окружению не принадлежит. Цели гасят и поднимают
 # только её. Цели с удалением томов здесь нет ни под каким именем — в томе двери живут
