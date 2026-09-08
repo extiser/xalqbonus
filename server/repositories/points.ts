@@ -262,6 +262,28 @@ export const readBalanceTotals = async (): Promise<BalanceTotals> => {
   };
 };
 
+/**
+ * Сколько баллов легло на водительские счета операцией `opening` — то есть сколько
+ * перенёс перенос. Результат, с которым сверяется эталон, снятый со старой базы.
+ *
+ * Считается по журналу и именно по причине `opening`, а не по сумме балансов: балансы
+ * растут поездками с первого же прогона синхронизации, и общая сумма перестала бы
+ * сходиться с перенесённой на следующий день после переноса — по совершенно законной
+ * причине. Сверять перенос надо с тем, что записал перенос.
+ */
+export const readOpeningTotal = async (): Promise<number> => {
+  const rows = await db.$queryRaw<{ total: bigint }[]>`
+    SELECT COALESCE(SUM(entry."delta"), 0) AS total
+      FROM xb.point_entries AS entry
+      JOIN xb.point_transfers AS transfer ON transfer."id" = entry."transfer_id"
+      JOIN xb.accounts AS account ON account."id" = entry."account_id"
+     WHERE transfer."reason" = 'opening'
+       AND account."type" = 'driver'
+  `;
+
+  return Number(rows[0]?.total ?? 0n);
+};
+
 export type AccountReconciliationRow = {
   accountId: string;
   cachedBalance: bigint;

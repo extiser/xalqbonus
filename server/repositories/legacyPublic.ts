@@ -1,5 +1,7 @@
 import pg from 'pg';
 
+import { USABLE_CHAT_ID_PATTERN } from '#server/utils/legacyChatId';
+
 /**
  * Чтение старой схемы `public`. Только чтение — и это свойство сеанса, а не дисциплины.
  *
@@ -37,9 +39,42 @@ type RawLegacyDriverRow = {
   createdAt: Date;
 };
 
+/**
+ * Эталон контрольных цифр, снятый со старой схемы до шагов, которые пишут карту переноса
+ * и балансы.
+ *
+ * Считается один раз, в начале прогона: снятый после переноса, он сравнивал бы результат
+ * сам с собой. Величины здесь — те, что старая схема выводит запросом; склеенные пары
+ * и люди с несколькими профилями запросом к ней не выводятся и берутся правилами самого
+ * переноса.
+ */
+export type LegacyControlBaseline = {
+  /** Когда снят. Уходит в отчёт: цифры принадлежат состоянию базы на этот момент. */
+  takenAt: Date;
+  /** Имя базы-источника, ответ `current_database()`. Тоже в отчёт: дампов у нас несколько. */
+  databaseName: string;
+  legacyRecords: number;
+  matchedRecords: number;
+  unmatchedRecords: number;
+  positiveBalances: number;
+  pointsTransferred: number;
+  invalidChatIds: number;
+};
+
+type RawControlBaselineRow = {
+  databaseName: string;
+  legacyRecords: string;
+  matchedRecords: string;
+  unmatchedRecords: string;
+  positiveBalances: string;
+  pointsTransferred: string;
+  invalidChatIds: string;
+};
+
 /** Соединение открыто, и режим только чтения подтверждён самой базой, а не нами. */
 export type LegacyReadSession = {
   readDrivers: () => Promise<LegacyDriverRow[]>;
+  readControlBaseline: () => Promise<LegacyControlBaseline>;
   /** Что ответила база на `SHOW default_transaction_read_only`. Уходит в отчёт прогона. */
   readOnlyMode: string;
   close: () => Promise<void>;
@@ -94,6 +129,58 @@ export const openLegacyReadSession = async (connectionString: string): Promise<L
         language: row.language,
         createdAt: row.createdAt,
       }));
+    },
+    readControlBaseline: async () => {
+      // Присоединение к `xb.park_profiles` — то, чем «сопоставленная запись» вообще
+      // определяется: сопоставление идёт по `profile_id`, и без реестра парка вопрос
+      // «сколько записей перенесётся» смысла не имеет. Сеанс read-only, читаются обе
+      // схемы, записать он не может ни в одну.
+      //
+      // Годность `chat_id` проверяется шаблоном из `utils/legacyChatId`, тем же самым,
+      // которым её проверяет перенос: правило одно, движка два.
+      const result = await client.query<RawControlBaselineRow>(
+        `SELECT current_database()                                    AS "databaseName",
+                COUNT(*)                                              AS "legacyRecords",
+                COUNT(*) FILTER (WHERE profile."profile_id" IS NOT NULL) AS "matchedRecords",
+                COUNT(*) FILTER (WHERE profile."profile_id" IS NULL)     AS "unmatchedRecords",
+                COUNT(*) FILTER (
+                  WHERE profile."profile_id" IS NOT NULL
+                    AND COALESCE(driver."points", 0) > 0
+                )                                                     AS "positiveBalances",
+                COALESCE(
+                  SUM(COALESCE(driver."points", 0))
+                    FILTER (WHERE profile."profile_id" IS NOT NULL),
+                  0
+                )                                                     AS "pointsTransferred",
+                COUNT(*) FILTER (
+                  WHERE profile."profile_id" IS NOT NULL
+                    AND (driver."chat_id" IS NULL OR driver."chat_id" !~ $1)
+                )                                                     AS "invalidChatIds"
+           FROM public."Drivers" AS driver
+           LEFT JOIN xb.park_profiles AS profile
+             ON profile."profile_id" = driver."profile_id"`,
+        [USABLE_CHAT_ID_PATTERN],
+      );
+
+      const row = result.rows[0];
+
+      if (!row) {
+        throw new LegacySessionError('запрос эталона не вернул ни строки');
+      }
+
+      return {
+        takenAt: new Date(),
+        databaseName: row.databaseName,
+        // `COUNT` и `SUM` приходят из драйвера строками: это `bigint` базы, и молча
+        // терять его точность драйвер не станет. Суммы переноса — девять миллионов,
+        // до предела точности числа отсюда девять порядков.
+        legacyRecords: Number(row.legacyRecords),
+        matchedRecords: Number(row.matchedRecords),
+        unmatchedRecords: Number(row.unmatchedRecords),
+        positiveBalances: Number(row.positiveBalances),
+        pointsTransferred: Number(row.pointsTransferred),
+        invalidChatIds: Number(row.invalidChatIds),
+      };
     },
     close: () => client.end(),
   };

@@ -80,3 +80,60 @@ export const countByMatchMethod = async (): Promise<Map<MatchMethod, number>> =>
 
   return new Map(rows.map((row) => [row.matchMethod, Number(row.total)]));
 };
+
+export type LegacyDriverMapCounts = {
+  records: number;
+  matched: number;
+  unmatched: number;
+  positiveBalances: number;
+  mergedPairs: number;
+  invalidChatIds: number;
+};
+
+/**
+ * Что реально легло в карту переноса. Это результат, с которым сверяется эталон,
+ * снятый со старой схемы до прогона.
+ *
+ * Считается по базе, а не по счётчикам прогона: счётчик прогона знает, что скрипт
+ * собирался записать, и о пропущенной вставке рассказать не может — он и сам её
+ * не заметил.
+ *
+ * Пары двойников считаются различными людьми, а не половинами пополам: половин
+ * нечётное число только при битой записи, и делённое на два оно дало бы дробь вместо
+ * внятного расхождения.
+ */
+export const readLegacyDriverMapCounts = async (): Promise<LegacyDriverMapCounts> => {
+  const rows = await db.$queryRaw<
+    {
+      records: bigint;
+      matched: bigint;
+      unmatched: bigint;
+      positiveBalances: bigint;
+      mergedPairs: bigint;
+      invalidChatIds: bigint;
+    }[]
+  >`
+    SELECT COUNT(*)                                                  AS "records",
+           COUNT(*) FILTER (WHERE "person_id" IS NOT NULL)           AS "matched",
+           COUNT(*) FILTER (WHERE "person_id" IS NULL)               AS "unmatched",
+           COUNT(*) FILTER (
+             WHERE "person_id" IS NOT NULL AND "legacy_points" > 0
+           )                                                         AS "positiveBalances",
+           COUNT(DISTINCT "person_id") FILTER (
+             WHERE "merged_into_legacy_driver_id" IS NOT NULL
+           )                                                         AS "mergedPairs",
+           COUNT(*) FILTER (WHERE "telegram_status" = 'invalid_chat') AS "invalidChatIds"
+      FROM xb.legacy_driver_map
+  `;
+
+  const row = rows[0];
+
+  return {
+    records: Number(row?.records ?? 0n),
+    matched: Number(row?.matched ?? 0n),
+    unmatched: Number(row?.unmatched ?? 0n),
+    positiveBalances: Number(row?.positiveBalances ?? 0n),
+    mergedPairs: Number(row?.mergedPairs ?? 0n),
+    invalidChatIds: Number(row?.invalidChatIds ?? 0n),
+  };
+};
