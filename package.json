@@ -9,7 +9,7 @@
     "dev": "nuxt dev",
     "dev:worker": "tsx watch server/queues/worker.ts",
     "build": "nuxt build",
-    "build:worker": "esbuild server/queues/worker.ts --bundle --platform=node --format=esm --packages=external --alias:#server=./server --outfile=.output/server/worker.mjs",
+    "build:worker": "esbuild server/queues/worker.ts --bundle --platform=node --format=esm --packages=external --alias:#server=./server --outfile=.output/worker.mjs",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare && prisma generate",
     "typecheck": "nuxt typecheck",

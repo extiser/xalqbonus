@@ -31,7 +31,10 @@ services:
     restart: unless-stopped
     env_file:
       - ../.env
-    command: ["node", ".output/server/worker.mjs"]
+    # Бандл лежит рядом с `.output/server/`, а не внутри: изнутри резолв внешних пакетов
+    # упирается в нитровский огрызок @prisma/client и не доходит до полного дерева
+    # (docker/Dockerfile → build:worker).
+    command: ["node", ".output/worker.mjs"]
     # Проба образа бьёт по HTTP, которого у воркера нет: подменяется возрастом отметки
     # живого цикла — см. комментарий в compose.local.yml.
     healthcheck:
