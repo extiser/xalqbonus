@@ -5,6 +5,10 @@
  * Бизнес-логика живёт в `server/services/legacyImport/`, доступ к данным — в репозиториях,
  * разбор выгрузки Fleet — в адаптере (docs/principles.md → «Слои и зависимости»).
  *
+ * Контрольных цифр в коде нет: эталон снимается запросом к `public` и выгрузке реестра
+ * в начале прогона, результат читается из `xb` после переноса, расхождение по любой
+ * из семи величин останавливает прогон (`server/services/legacyImport/controlFigures.ts`).
+ *
  * Шаги фиксированы и каждый идемпотентен по отдельности. Повторный прогон не создаёт
  * вторых людей, не задваивает балансы и не пишет вторую операцию `opening`: прогон
  * на 25 тысячах строк упадёт посередине хотя бы раз, и продолжать придётся с того же места.
@@ -20,14 +24,20 @@ import { dirname } from 'node:path';
 import { consola } from 'consola';
 
 import { db } from '#server/db';
-import { countByMatchMethod, countByTelegramStatus } from '#server/repositories/legacyDriverMap';
+import {
+  countByMatchMethod,
+  countByTelegramStatus,
+  readLegacyDriverMapCounts,
+} from '#server/repositories/legacyDriverMap';
 import { openLegacyReadSession } from '#server/repositories/legacyPublic';
-import { readBalanceTotals } from '#server/repositories/points';
+import { readBalanceTotals, readOpeningTotal } from '#server/repositories/points';
 import { countByConfirmedBy } from '#server/repositories/programMembership';
 import { readRegistryCounts } from '#server/repositories/registry';
 import {
   assertControlFigures,
   checkControlFigures,
+  type ControlActual,
+  type ControlBaseline,
   type ControlCheck,
 } from '#server/services/legacyImport/controlFigures';
 import { importBalances } from '#server/services/legacyImport/importBalances';
@@ -40,20 +50,6 @@ const log = consola.withTag('legacy-import');
 
 const DEFAULT_DUMP = '_reference/fleet-api/dumps/driver-profiles-2026-08-27.jsonl';
 const DEFAULT_REPORT = '_reference/legacy/import-report.md';
-
-/**
- * Контрольные цифры из разбора старой схемы и отчёта по реестру. Расхождение с любой —
- * повод остановиться и разобраться, а не подогнать цифру.
- */
-const EXPECTED = {
-  matchedRecords: 4_098,
-  pointsTransferred: 9_105_694,
-  positiveBalances: 4_049,
-  personsWithSeveralProfiles: 672,
-  mergedPairs: 12,
-  invalidChatIds: 7,
-  unmatchedRecords: 1,
-} as const;
 
 // Разряды разделяются пробелом. BigInt приводится к числу: `toLocaleString` группирует
 // его не во всех сборках Node, а суммы переноса — девять миллионов, до предела точности
@@ -85,9 +81,15 @@ const main = async (): Promise<void> => {
   // Шаг 3. Сопоставление со старой базой. Сеанс только для чтения: записать что-либо
   // в `public` он не может физически.
   const legacy = await openLegacyReadSession(databaseUrl);
+  let legacyBaseline;
   let matchResult;
 
   try {
+    // Эталон снимается здесь и дальше не пересчитывается. Место выбрано единственно
+    // возможное: реестр парка в `xb` уже лежит — без него «сопоставленная запись»
+    // не определена, — а карты переноса и балансов ещё нет. Снятый после переноса эталон
+    // сравнивал бы результат сам с собой.
+    legacyBaseline = await legacy.readControlBaseline();
     matchResult = await matchLegacyDrivers(await legacy.readDrivers());
   } finally {
     await legacy.close();
@@ -108,54 +110,40 @@ const main = async (): Promise<void> => {
   // описывать состояние базы, а не намерения скрипта.
   const counts = await readRegistryCounts();
   const totals = await readBalanceTotals();
+  const mapCounts = await readLegacyDriverMapCounts();
+  const openingTotal = await readOpeningTotal();
   const telegramStatuses = await countByTelegramStatus();
   const matchMethods = await countByMatchMethod();
   const confirmedBy = await countByConfirmedBy();
 
-  const checks = checkControlFigures([
-    {
-      title: 'сопоставленных записей старой базы',
-      expected: EXPECTED.matchedRecords,
-      actual: match.matched,
-      source: 'разбор public §8, шаг 1',
-    },
-    {
-      title: 'перенесённых баллов',
-      expected: EXPECTED.pointsTransferred,
-      actual: Number(totals.driverBalanceTotal),
-      source: 'разбор public §2.9',
-    },
-    {
-      title: 'записей старой базы с положительным балансом',
-      expected: EXPECTED.positiveBalances,
-      actual: match.positiveBalances,
-      source: 'разбор public §8, шаг 4',
-    },
-    {
-      title: 'человек с несколькими профилями в парке',
-      expected: EXPECTED.personsWithSeveralProfiles,
-      actual: registry.personsWithSeveralProfiles,
-      source: 'счётчик коллизий, docs/decisions.md',
-    },
-    {
-      title: 'склеенных пар двойников',
-      expected: EXPECTED.mergedPairs,
-      actual: match.mergedPairs,
-      source: 'разбор public §7.2',
-    },
-    {
-      title: 'непригодных chat_id',
-      expected: EXPECTED.invalidChatIds,
-      actual: match.invalidChatIds,
-      source: 'разбор public §2.6',
-    },
-    {
-      title: 'непереносимых записей',
-      expected: EXPECTED.unmatchedRecords,
-      actual: match.unmatched,
-      source: 'разбор public §7.1',
-    },
-  ]);
+  // Склеенные пары старая схема запросом не выводит: двойники опознаются реестром парка.
+  // Люди с несколькими профилями к ней отношения не имеют вовсе — это свойство выгрузки.
+  // Обе величины берутся правилами самого переноса, а не второй их реализацией.
+  const baseline: ControlBaseline = {
+    takenAt: legacyBaseline.takenAt,
+    databaseName: legacyBaseline.databaseName,
+    matchedRecords: legacyBaseline.matchedRecords,
+    pointsTransferred: legacyBaseline.pointsTransferred,
+    positiveBalances: legacyBaseline.positiveBalances,
+    personsWithSeveralProfiles: registry.personsWithSeveralProfilesInDump,
+    mergedPairs: match.mergedPairs,
+    invalidChatIds: legacyBaseline.invalidChatIds,
+    unmatchedRecords: legacyBaseline.unmatchedRecords,
+  };
+
+  // Результат читается из `xb`, а не из счётчиков прогона: счётчик знает, что скрипт
+  // собирался записать, и о пропущенной вставке рассказать не может.
+  const actual: ControlActual = {
+    matchedRecords: mapCounts.matched,
+    pointsTransferred: openingTotal,
+    positiveBalances: mapCounts.positiveBalances,
+    personsWithSeveralProfiles: registry.personsWithSeveralProfiles,
+    mergedPairs: mapCounts.mergedPairs,
+    invalidChatIds: mapCounts.invalidChatIds,
+    unmatchedRecords: mapCounts.unmatched,
+  };
+
+  const checks = checkControlFigures(baseline, actual);
 
   const report = renderReport({
     dumpPath,
@@ -169,9 +157,11 @@ const main = async (): Promise<void> => {
     balances,
     totals,
     watermark,
+    openingTotal,
     telegramStatuses,
     matchMethods,
     confirmedBy,
+    baseline,
     checks,
   });
 
@@ -199,9 +189,11 @@ type ReportInput = {
   balances: Awaited<ReturnType<typeof importBalances>>;
   totals: Awaited<ReturnType<typeof readBalanceTotals>>;
   watermark: Awaited<ReturnType<typeof markRegistryWatermark>>;
+  openingTotal: number;
   telegramStatuses: Awaited<ReturnType<typeof countByTelegramStatus>>;
   matchMethods: Awaited<ReturnType<typeof countByMatchMethod>>;
   confirmedBy: Awaited<ReturnType<typeof countByConfirmedBy>>;
+  baseline: ControlBaseline;
   checks: readonly ControlCheck[];
 };
 
@@ -221,11 +213,15 @@ const renderReport = (input: ReportInput): string => {
 
   lines.push('## Контрольные цифры');
   lines.push('');
-  lines.push('| показатель | ожидалось | получилось | сошлось | источник |');
-  lines.push('|---|---:|---:|---|---|');
+  lines.push(
+    `Эталон снят ${formatDate(input.baseline.takenAt)} с базы \`${input.baseline.databaseName}\` — по старой схеме и выгрузке реестра, до шагов сопоставления, участия и балансов, — и больше не пересчитывался. Зашитых в код чисел нет: в день выката они будут другими (docs/roadmap.md → «Выход в прод»).`,
+  );
+  lines.push('');
+  lines.push('| показатель | эталон | получилось | сошлось | эталон снят | результат прочитан |');
+  lines.push('|---|---:|---:|---|---|---|');
   for (const check of input.checks) {
     lines.push(
-      `| ${check.title} | ${formatNumber(check.expected)} | ${formatNumber(check.actual)} | ${check.matches ? 'да' : '**НЕТ**'} | ${check.source} |`,
+      `| ${check.title} | ${formatNumber(check.expected)} | ${formatNumber(check.actual)} | ${check.matches ? 'да' : '**НЕТ**'} | ${check.baselineSource} | ${check.actualSource} |`,
     );
   }
   lines.push('');
@@ -366,8 +362,9 @@ const renderReport = (input: ReportInput): string => {
     ),
   );
   lines.push(
-    renderRow('**сумма балансов в `xb`**', `**${formatNumber(input.totals.driverBalanceTotal)}**`),
+    renderRow('**перенесено операциями `opening`**', `**${formatNumber(input.openingTotal)}**`),
   );
+  lines.push(renderRow('сумма балансов в `xb`', formatNumber(input.totals.driverBalanceTotal)));
   lines.push(renderRow('баланс счёта `emission`', formatNumber(input.totals.emissionBalance)));
   lines.push('');
 
