@@ -64,8 +64,18 @@ services:
     # Локальная копия продовой базы создана образом postgres:16, окружения держатся его же.
     image: postgres:16
     restart: unless-stopped
-    env_file:
-      - ../.env
+    # Три переменные поимённо, а не `env_file` целиком, и это не вкусовщина: в .env лежит
+    # IMAGE_TAG, который выкат и откат переписывают после каждой зелёной проверки готовности
+    # (docker/scripts/_common.sh → write_image_tag_to_env). Отданный базе файл целиком делает
+    # это изменение изменением конфигурации сервиса postgres, и compose пересоздаёт контейнер
+    # базы на каждом выкате — рвёт соединения там, где меняется только образ приложения.
+    # Замечено 08-09-2026 на обкатке отката: `Container xalqbonus-prod-postgres-1 Recreated`
+    # при откате одного лишь образа. Базе из .env нужны ровно эти три значения, и меняются
+    # они только вместе с самой базой.
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     # Проба по TCP, а не по unix-сокету: на первом старте контейнера (пустой том) initdb
