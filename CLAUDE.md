@@ -37,7 +37,7 @@
 ## Стек
 
 Nuxt 4 (Vue 3 + Composition API) поверх Nitro v2, TypeScript, PostgreSQL через Prisma,
-BullMQ на Redis, Telegraf для бота. Интерфейсов два — Telegram Mini App и веб.
+BullMQ на Redis, grammY для бота. Интерфейсов два — Telegram Mini App и веб.
 Инфраструктура — Docker и локально, и в проде, принципы в `docs/infra.md`.
 
 Перечень пакетов с версиями и обоснованием — `docs/decisions.md`.
