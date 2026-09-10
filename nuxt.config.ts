@@ -39,5 +39,11 @@ export default defineNuxtConfig({
   runtimeConfig: {
     databaseUrl: process.env.DATABASE_URL ?? '',
     redisUrl: process.env.REDIS_URL ?? '',
+    tgBotToken: process.env.TG_BOT_TOKEN ?? '',
+    // Режим доставки апдейтов. Умолчания нет намеренно: пустая строка не проходит проверку
+    // на старте, а `polling`, случайно доставшийся серверу, снял бы webhook у своего токена.
+    tgBotMode: process.env.TG_BOT_MODE ?? '',
+    tgWebhookUrl: process.env.TG_WEBHOOK_URL ?? '',
+    tgWebhookSecret: process.env.TG_WEBHOOK_SECRET ?? '',
   },
 });
