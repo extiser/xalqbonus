@@ -13,7 +13,10 @@ import { findActiveProfilesByPhone, type ProfileByPhoneRow } from '#server/repos
 import { insertTelegramLinkAttempt } from '#server/repositories/telegramLinkAttempts';
 import { displayName, type LinkedDriver } from '#server/services/drivers/readLinkedDriver';
 import { ensureDriverAccount } from '#server/services/points/ensureDriverAccount';
-import { runProfileSyncByPhone } from '#server/services/sync/syncProfileByPhone';
+import {
+  ParkLookupFailedError,
+  runProfileSyncByPhone,
+} from '#server/services/sync/syncProfileByPhone';
 import { normalizePhoneE164 } from '#server/utils/phoneNumber';
 import { describeDatabaseFailure, UNIQUE_VIOLATION } from '#server/utils/postgresErrors';
 
@@ -123,25 +126,35 @@ const recordAttempt = async (
 /**
  * Профиль, на котором сходится привязка.
  *
- * `null` вместе с исходом — значит привязывать не к чему: уволен, или таких профилей
- * несколько. Уволенный в этом списке не для строгости: у работающего водителя номер
+ * Исход вместо профиля значит, что привязывать не к чему.
+ *
+ * **Уволенный не привязывается** — и не для строгости: у работающего водителя номер
  * поддерживает парк, а номер уволенного два года назад мог быть сдан и выдан другому
  * человеку — тот пройдёт все проверки честно и получит чужой баланс (docs/drivers.md).
+ *
+ * **Несколько профилей у одного человека — это норма, а не повод для офиса.** Человека
+ * переоформляют в парке, и 672 номера удостоверений принадлежат 1 380 профилям: учётка
+ * не является личностью, баланс принадлежит человеку. Привязка в этом случае однозначна,
+ * и профиль берётся первый — список уже отсортирован правилом показа (`findActiveProfilesByPhone`).
+ *
+ * В офис уходит только настоящая неоднозначность: один номер на рабочих профилях **разных
+ * людей**. Тут выбор принадлежит оператору, который видит водителя с документами.
  */
 const pickProfile = (
   profiles: readonly ProfileByPhoneRow[],
 ): { profile: ProfileByPhoneRow } | { outcome: 'profile_fired' | 'several_profiles' } => {
   const working = profiles.filter((profile) => profile.workStatus !== FIRED);
+  const first = working[0];
 
-  if (working.length === 0) {
+  if (!first) {
     return { outcome: 'profile_fired' };
   }
 
-  if (working.length > 1) {
+  if (working.some((profile) => profile.personId !== first.personId)) {
     return { outcome: 'several_profiles' };
   }
 
-  return { profile: working[0] as ProfileByPhoneRow };
+  return { profile: first };
 };
 
 /**
@@ -213,10 +226,20 @@ export const registerDriverByContact = async (
     } catch (error) {
       // Отказ внешнего сервиса не является решением о водителе: отправлять человека в офис
       // из-за чужого таймаута значит создавать поход, который не был нужен.
-      log.error('точечный прогон по телефону не прошёл — исход «попробуйте позже»', {
-        chatId: request.telegramChatId.toString(),
-        error: error instanceof Error ? error.message : String(error),
-      });
+      //
+      // Водителю оба отказа показываются одинаково — сказать ему «у нас упала база» нечего,
+      // делать с этим ему нечего. А вот в логе это два разных происшествия: отказ парка
+      // проходит сам, отказ нашей базы значит, что бот не работает вовсе и никакая
+      // регистрация сейчас не пройдёт.
+      log.error(
+        error instanceof ParkLookupFailedError
+          ? 'Fleet API не ответил на поиск по телефону — исход «попробуйте позже»'
+          : 'точечный прогон упал не на стороне парка — отказала наша база, исход «попробуйте позже»',
+        {
+          chatId: request.telegramChatId.toString(),
+          error: error instanceof Error ? error.message : String(error),
+        },
+      );
 
       await recordAttempt(request, phoneE164, 'park_api_unavailable');
 
@@ -347,10 +370,11 @@ export const registerDriverByContact = async (
       personId: profile.personId,
       name: displayName(profile.firstName, profile.lastName),
       points,
-      // Тот язык, который водитель только что выбрал: у нового участника он же уехал
-      // в `person_settings`, а перенесённому из старой базы этим сообщением отвечают
-      // на его последнем выборе.
-      language: request.language,
+      // У нового участника это только что выбранный язык — он же уехал в `person_settings`.
+      // У существующего участия берётся язык из него: перезаписывать его нельзя, а ответить
+      // на выбранном сейчас значило бы сказать одно сообщение по-узбекски и все следующие
+      // по-русски — язык участника после этой привязки не изменился.
+      language: settings?.language ?? request.language,
     },
     // Приветственный текст с обещанием бонуса — только новому участнику. Перенесённому
     // из старой базы показывается его баланс: обещать ему первые пять поездок незачем.

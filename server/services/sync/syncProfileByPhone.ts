@@ -1,7 +1,11 @@
 import { consola } from 'consola';
 
 import { createFleetClient, type FleetTransport } from '#server/adapters/fleet/client';
-import { PROFILES_SEARCH_LIMIT, readProfilesPage } from '#server/adapters/fleet/profiles';
+import {
+  PROFILES_SEARCH_LIMIT,
+  readProfilesPage,
+  type ProfilesPage,
+} from '#server/adapters/fleet/profiles';
 import { saveSyncRunRegistry } from '#server/repositories/syncRunRegistry';
 import { finishSyncRun, startSyncRun } from '#server/repositories/syncRuns';
 import {
@@ -37,6 +41,21 @@ const log = consola.withTag('sync:profile');
 
 const RUN_KIND = 'registry_profile';
 
+/**
+ * Fleet API не ответил: отказ, таймаут, исчерпанный лимит, неверные реквизиты.
+ *
+ * Отдельным типом, чтобы вызывающий отличал его от отказа **нашей** базы. Водителю оба
+ * случая показываются одинаково — «не смогли проверить, попробуйте позже», — но в логе
+ * это два разных происшествия: одно чинится на той стороне и проходит само, второе значит,
+ * что у нас лежит база, и разбираться надо немедленно.
+ */
+export class ParkLookupFailedError extends Error {
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause), { cause });
+    this.name = 'ParkLookupFailedError';
+  }
+}
+
 export type ProfileLookupSummary = {
   runId: string;
   requests: number;
@@ -62,12 +81,38 @@ export type RunProfileSyncOptions = {
   now?: Date;
 };
 
+/** Одна страница поиска по телефону. Отказ на той стороне приходит своим типом. */
+const readFleetPage = async (
+  client: FleetTransport,
+  phoneE164: string,
+): Promise<ProfilesPage> => {
+  try {
+    // Телефон в описание запроса не попадает: описание уезжает в лог и в текст ошибки.
+    return await readProfilesPage(
+      client,
+      {
+        filter: null,
+        window: null,
+        searchText: phoneE164,
+        sortField: 'created_date',
+        direction: 'asc',
+        offset: 0,
+        limit: PROFILES_SEARCH_LIMIT,
+      },
+      'поиск профиля по телефону',
+    );
+  } catch (error) {
+    throw new ParkLookupFailedError(error);
+  }
+};
+
 /**
  * Ищет профили по телефону и записывает найденное в реестр.
  *
- * Ошибку не глотает: отказ Fleet API и отказ базы закрывают строку прогона и уходят
- * наверх исключением. Что показать водителю, решает тот, кто прогон позвал, — здесь
- * об этом неизвестно ничего (docs/principles.md → «Ошибки»).
+ * Ошибку не глотает: и отказ Fleet API, и отказ базы закрывают строку прогона и уходят
+ * наверх исключением — первый обёрнутым в `ParkLookupFailedError`, второй как есть.
+ * Что показать водителю, решает тот, кто прогон позвал: здесь об этом неизвестно ничего
+ * (docs/principles.md → «Ошибки»).
  */
 export const runProfileSyncByPhone = async (
   phoneE164: string,
@@ -91,20 +136,9 @@ export const runProfileSyncByPhone = async (
   const writeState = createRegistryWriteState();
 
   try {
-    // Телефон в описание запроса не попадает: описание уезжает в лог и в текст ошибки.
-    const page = await readProfilesPage(
-      client,
-      {
-        filter: null,
-        window: null,
-        searchText: phoneE164,
-        sortField: 'created_date',
-        direction: 'asc',
-        offset: 0,
-        limit: PROFILES_SEARCH_LIMIT,
-      },
-      'поиск профиля по телефону',
-    );
+    // Поход в парк — под своим перехватом: всё, что упало здесь, упало на той стороне,
+    // и звать это отказом базы нельзя. Запись ниже идёт уже без обёртки.
+    const page = await readFleetPage(client, phoneE164);
 
     await applyProfilesPage(writeState, page, runId, now);
   } catch (error) {

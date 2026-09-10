@@ -102,8 +102,11 @@ const showOutcome = async (
   if (result.outcome === 'linked') {
     const key = result.isNewMember ? 'linked_new' : 'linked';
 
+    // Языком участника, а не выбранным сейчас: у перенесённого из старой базы язык
+    // в `person_settings` не перезаписывается, и экран успеха обязан говорить на том же,
+    // на котором заговорит следующее сообщение.
     await context.reply(
-      text(key, language, {
+      text(key, result.driver.language, {
         name: result.driver.name,
         points: formatPoints(result.driver.points),
       }),
@@ -229,6 +232,9 @@ export const registerRegistrationHandlers = (bot: Bot): void => {
         },
       });
 
+      // Язык забывается только после удавшейся привязки: дальше он живёт
+      // в `person_settings`. После неудачи он остаётся — повторная попытка идёт той же
+      // кнопкой, без второго выбора языка.
       if (result.outcome === 'linked') {
         forgetLanguage(chatId);
       }

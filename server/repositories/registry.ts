@@ -571,7 +571,7 @@ export type ProfileByPhoneRow = {
 };
 
 /**
- * Профили, у которых этот номер телефона открыт.
+ * Профили, у которых этот номер телефона открыт, — в порядке пригодности для показа.
  *
  * Ровно то чтение, на котором стоит автопривязка Telegram: подтверждённым является только
  * телефон из Telegram, и по нему одному ищется запись в реестре (docs/drivers.md).
@@ -580,25 +580,35 @@ export type ProfileByPhoneRow = {
  * это номер, которого у водителя больше нет: он мог быть сдан и выдан другому человеку,
  * и привязка по нему отдала бы новому владельцу чужой баланс.
  *
- * `DISTINCT` не украшение: один и тот же номер бывает открыт на профиле дважды — парк
- * записал его с пробелами и без, — а нормализация сводит обе строки к одному `phone_e164`.
- * Без него профиль приехал бы дважды и выглядел бы как «несколько профилей на один номер».
+ * Порядок тот же, что у `findDisplayProfile`: работающий важнее прочих, среди равных
+ * берётся свежий по отметке API. У человека законно бывает несколько профилей — его
+ * переоформляли в парке, — и выбирать между ними бот и экран оператора обязаны одинаково.
+ *
+ * Через `EXISTS`, а не соединением: один и тот же номер бывает открыт на профиле дважды —
+ * парк записал его с пробелами и без, — а нормализация сводит обе строки к одному
+ * `phone_e164`. Соединение вернуло бы профиль дважды, и он выглядел бы как «несколько
+ * профилей на один номер».
  */
 export const findActiveProfilesByPhone = async (
   phoneE164: string,
 ): Promise<ProfileByPhoneRow[]> =>
   db.$queryRaw<ProfileByPhoneRow[]>`
-    SELECT DISTINCT
-           profile."profile_id"  AS "profileId",
+    SELECT profile."profile_id"  AS "profileId",
            profile."person_id"   AS "personId",
            profile."work_status" AS "workStatus",
            profile."first_name"  AS "firstName",
            profile."last_name"   AS "lastName"
-      FROM xb.profile_phones AS phone
-      JOIN xb.park_profiles  AS profile ON profile."profile_id" = phone."profile_id"
-     WHERE phone."closed_at" IS NULL
-       AND phone."phone_e164" = ${phoneE164}
-     ORDER BY profile."profile_id"
+      FROM xb.park_profiles AS profile
+     WHERE EXISTS (
+           SELECT 1
+             FROM xb.profile_phones AS phone
+            WHERE phone."profile_id" = profile."profile_id"
+              AND phone."closed_at" IS NULL
+              AND phone."phone_e164" = ${phoneE164}
+     )
+     ORDER BY (profile."work_status" = 'working') DESC,
+              profile."api_updated_at" DESC,
+              profile."profile_id"
   `;
 
 export type DisplayProfileRow = {
