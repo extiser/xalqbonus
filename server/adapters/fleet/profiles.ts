@@ -28,6 +28,14 @@ const WORK_RULES_PATH = '/v1/parks/driver-work-rules';
 /** Максимум, разрешённый документацией этому методу. */
 export const PROFILES_PAGE_SIZE = 1_000;
 
+/**
+ * Сколько профилей берётся поиском по телефону.
+ *
+ * Небольшой намеренно: один номер принадлежит нескольким профилям — переоформленным,
+ * уволенным, — но не сотне, а глубина у этого метода имеет цену.
+ */
+export const PROFILES_SEARCH_LIMIT = 5;
+
 /** Фильтр куска. Профиль попадает ровно в один кусок по паре `(work_status, work_rule_id)`. */
 export type ProfileFilter = {
   workStatus?: readonly string[];
@@ -57,6 +65,12 @@ const SORT_FIELDS: Record<ProfileSortField, string> = {
 export type ProfilesRequest = {
   filter: ProfileFilter | null;
   window: ProfilesWindow | null;
+  /**
+   * Свободный поиск по выборке — тем же полем, каким ищет форма парка. Нужен ровно одному
+   * потребителю: точечному прогону по телефону, когда водитель регистрируется в боте,
+   * а его номера в реестре ещё нет.
+   */
+  searchText?: string | null;
   sortField: ProfileSortField;
   direction: ProfileSortDirection;
   offset: number;
@@ -134,8 +148,17 @@ export const buildProfilesRequestBody = (
     };
   }
 
+  // `text` — сосед `park` внутри `query`, а не поле внутри `park`. Проверено не догадкой:
+  // ровно так строит запрос старый бот (`controllers/yandexApi.js` → `getDriverProfiles`),
+  // и в этом виде поиск по телефону работает на проде пять лет.
+  const query: Record<string, unknown> = { park };
+
+  if (request.searchText) {
+    query['text'] = request.searchText;
+  }
+
   return {
-    query: { park },
+    query,
     sort_order: [{ field: SORT_FIELDS[request.sortField], direction: request.direction }],
     limit: request.limit,
     offset: request.offset,

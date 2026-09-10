@@ -1,6 +1,8 @@
+import { db } from '#server/db';
+import type { Prisma } from '#server/generated/prisma/client';
 import { insertDriverAccount, type AccountRow } from '#server/repositories/points';
 import { UnknownAccountError } from '#server/services/points/errors';
-import { FOREIGN_KEY_VIOLATION, isConstraintViolation } from '#server/services/points/postgresErrors';
+import { FOREIGN_KEY_VIOLATION, isConstraintViolation } from '#server/utils/postgresErrors';
 
 /**
  * Единственное место, где заводится водительский счёт.
@@ -12,10 +14,17 @@ import { FOREIGN_KEY_VIOLATION, isConstraintViolation } from '#server/services/p
  *
  * Счёт принадлежит человеку, а не учётке в парке и не мессенджеру: у одного человека
  * может быть несколько профилей, баланс при этом один.
+ *
+ * `client` подставляется, когда счёт заводится внутри чужой транзакции: при регистрации
+ * в боте привязка, участие и счёт ложатся одной транзакцией — частичный результат означает
+ * человека, который в программе, но без канала.
  */
-export const ensureDriverAccount = async (personId: string): Promise<AccountRow> => {
+export const ensureDriverAccount = async (
+  personId: string,
+  client: Prisma.TransactionClient = db,
+): Promise<AccountRow> => {
   try {
-    return await insertDriverAccount(personId);
+    return await insertDriverAccount(personId, client);
   } catch (error) {
     if (isConstraintViolation(error, FOREIGN_KEY_VIOLATION, 'accounts_person_id_fkey')) {
       throw new UnknownAccountError(`человека ${personId} нет в базе`);
