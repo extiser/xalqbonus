@@ -22,6 +22,17 @@ export type BotConfig = {
 const isBotMode = (value: string): value is BotMode => value === 'polling' || value === 'webhook';
 
 /**
+ * Значение переменной окружения, пустая строка вместо отсутствующей.
+ *
+ * Читается `process.env`, а не `runtimeConfig`: `nuxt.config.ts` исполняется на сборке,
+ * а образ собирается на машине без `.env` в окружении сборки — в бандл запеклась бы пустая
+ * строка. Рантайм-переопределение у Nitro работает только через префикс `NUXT_`
+ * (`tgBotToken` ← `NUXT_TG_BOT_TOKEN`), а `.env` один на приложение и воркер, где
+ * `useRuntimeConfig` не существует вовсе (issue #61).
+ */
+const readEnv = (name: string): string => (process.env[name] ?? '').trim();
+
+/**
  * Читает параметры бота из окружения.
  *
  * `null` означает выключенного бота, а не ошибку: пустой `TG_BOT_TOKEN` — рабочее состояние
@@ -30,14 +41,13 @@ const isBotMode = (value: string): value is BotMode => value === 'polling' || va
  * ломается молча, и в логах об этом нет ни строки.
  */
 export const readBotConfig = (): BotConfig | null => {
-  const runtimeConfig = useRuntimeConfig();
-  const token = runtimeConfig.tgBotToken.trim();
+  const token = readEnv('TG_BOT_TOKEN');
 
   if (token === '') {
     return null;
   }
 
-  const mode = runtimeConfig.tgBotMode.trim();
+  const mode = readEnv('TG_BOT_MODE');
 
   if (!isBotMode(mode)) {
     throw new Error(
@@ -45,8 +55,8 @@ export const readBotConfig = (): BotConfig | null => {
     );
   }
 
-  const webhookUrl = runtimeConfig.tgWebhookUrl.trim();
-  const webhookSecret = runtimeConfig.tgWebhookSecret.trim();
+  const webhookUrl = readEnv('TG_WEBHOOK_URL');
+  const webhookSecret = readEnv('TG_WEBHOOK_SECRET');
 
   if (mode === 'webhook' && webhookUrl === '') {
     throw new Error('TG_WEBHOOK_URL обязателен в режиме webhook: без адреса Telegram некуда слать апдейты');
