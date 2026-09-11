@@ -2,6 +2,7 @@ import { consola } from 'consola';
 import { Bot, webhookCallback } from 'grammy';
 import type { Update } from 'grammy/types';
 import type { BotConfig } from '#server/bot/config';
+import { registerProbeLogging } from '#server/bot/probeLog';
 import { registerRegistrationHandlers } from '#server/bot/registration';
 
 const log = consola.withTag('bot');
@@ -41,6 +42,9 @@ const createBot = (config: BotConfig): Bot => {
 
     await next();
   });
+
+  // РАЗВЕДКА issue #81, снимается вместе с заглушкой: апдейт целиком в лог, до обработки.
+  registerProbeLogging(bot);
 
   // Регистрация водителя: `/start`, выбор языка, контакт. Обработчики живут своим модулем,
   // а правила привязки — в сервисе: бот является входом, а не местом, где живут правила.
