@@ -18,6 +18,7 @@ import {
   resetOrdersSyncState,
   type TestPerson,
 } from '../support/database';
+import { disconnectQueues } from '../support/queues';
 
 /**
  * Прогон синхронизации заказов против настоящей базы и поддельного транспорта.
@@ -147,6 +148,7 @@ describe('прогон синхронизации заказов', () => {
 
   afterAll(async () => {
     await disconnectDatabase();
+    await disconnectQueues();
   });
 
   it('записывает завершённый заказ, начисляет балл и двигает отметку по верхней границе окна', async () => {
@@ -344,6 +346,7 @@ describe('журнал прогона синхронизации', () => {
 
   afterAll(async () => {
     await disconnectDatabase();
+    await disconnectQueues();
   });
 
   it('детали прогона в базе — те же числа, что и в сводке', async () => {
@@ -559,6 +562,7 @@ describe('брошенные прогоны', () => {
 
   afterAll(async () => {
     await disconnectDatabase();
+    await disconnectQueues();
   });
 
   it('строка, оставшаяся бежать после убитого процесса, закрывается отказом', async () => {

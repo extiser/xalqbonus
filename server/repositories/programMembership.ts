@@ -199,3 +199,63 @@ export const countByConfirmedBy = async (): Promise<Map<LinkConfirmedBy, number>
 
   return new Map(rows.map((row) => [row.confirmedBy, Number(row.total)]));
 };
+
+export type NotificationRecipientRow = {
+  /** Привязка, в которую пойдёт сообщение. По ней же она и закрывается, если чат умер. */
+  linkId: string;
+  telegramChatId: bigint;
+  language: Language;
+  notificationsEnabled: boolean;
+};
+
+/**
+ * Куда и на каком языке писать человеку. Пусто — писать некуда.
+ *
+ * Соединение внутреннее: строка участия без привязки и привязка без строки участия —
+ * оба случая означают одно и то же, человека вне программы, и разделять их отправке
+ * уведомления незачем.
+ *
+ * Язык и выключатель уведомлений читаются здесь же, в момент отправки, а не при постановке
+ * задания: между постановкой и отправкой проходит время, и человек за это время успевает
+ * и сменить язык, и выключить уведомления.
+ */
+export const findNotificationRecipient = async (
+  personId: string,
+): Promise<NotificationRecipientRow | null> => {
+  const rows = await db.$queryRaw<NotificationRecipientRow[]>`
+    SELECT link."id"               AS "linkId",
+           link."telegram_chat_id" AS "telegramChatId",
+           settings."language",
+           settings."notifications_enabled" AS "notificationsEnabled"
+      FROM xb.telegram_links AS link
+      JOIN xb.person_settings AS settings ON settings."person_id" = link."person_id"
+     WHERE link."closed_at" IS NULL
+       AND link."person_id" = ${personId}::uuid
+  `;
+
+  return rows[0] ?? null;
+};
+
+/**
+ * Закрывает привязку. Возвращает `false`, если закрывать было нечего: пока задание лежало
+ * в очереди, привязку мог закрыть оператор или перепривязка.
+ *
+ * Закрытие идёт по самой привязке, а не по человеку: за время между чтением получателя
+ * и отказом Telegram активной у человека могла стать уже другая, и закрывать её из-за
+ * отказа по прежнему чату нельзя.
+ */
+export const closeTelegramLink = async (
+  linkId: string,
+  closeReason: LinkCloseReason,
+  closedAt: Date,
+): Promise<boolean> => {
+  const updated = await db.$executeRaw`
+    UPDATE xb.telegram_links
+       SET "closed_at"    = ${closedAt.toISOString()}::text::timestamptz,
+           "close_reason" = ${closeReason}::text::xb.link_close_reason
+     WHERE "id" = ${linkId}::uuid
+       AND "closed_at" IS NULL
+  `;
+
+  return updated > 0;
+};

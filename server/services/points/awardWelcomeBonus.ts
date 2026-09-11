@@ -1,4 +1,5 @@
 import { consola } from 'consola';
+import { enqueueNotification } from '#server/queues/notifications';
 import { hasLegacyRecord } from '#server/repositories/legacyDriverMap';
 import { hasTransferByIdempotencyKey } from '#server/repositories/points';
 import { countCompletedTripsByPerson } from '#server/repositories/trips';
@@ -39,6 +40,34 @@ export type WelcomeBonusInput = {
    * шестой поездки — на минуты, и это ни на что не влияет: порядок ради этого не наводится.
    */
   occurredAt: Date;
+};
+
+/**
+ * Ставит водителю уведомление о бонусе — ровно один раз, потому что зовётся только
+ * из-под применённого перевода: повтор по ключу сюда не доходит.
+ *
+ * Отказ очереди наверх не поднимается. Баллы уже начислены и записаны в журнал, а прогон
+ * начисления в этот момент держит в руках ещё несколько десятков поездок: уронить его
+ * из-за недоступного Redis значило бы разменять начисления на уведомление. Потерянное
+ * уведомление стоит строки в логе — потерянный прогон стоит повторного разбора.
+ *
+ * Кому и на каком языке писать, решает отправка: здесь неизвестно ни про привязку,
+ * ни про выключатель уведомлений, и знать про них начислению баллов незачем
+ * (server/services/notifications/sendNotification.ts).
+ */
+const notifyAboutBonus = async (personId: string): Promise<void> => {
+  try {
+    await enqueueNotification({
+      personId,
+      template: 'welcome_bonus',
+      params: { points: WELCOME_BONUS_POINTS },
+    });
+  } catch (error) {
+    log.error('уведомление о приветственном бонусе не поставлено в очередь', {
+      personId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 };
 
 /**
@@ -102,6 +131,8 @@ export const awardWelcomeBonus = async (input: WelcomeBonusInput): Promise<boole
       personId: input.personId,
       amount: WELCOME_BONUS_POINTS,
     });
+
+    await notifyAboutBonus(input.personId);
   }
 
   return applied;

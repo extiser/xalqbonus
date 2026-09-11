@@ -12,6 +12,7 @@ import {
   setTripStatus,
   type TestPerson,
 } from '../support/database';
+import { disconnectQueues } from '../support/queues';
 
 const COMPLETED_AT = new Date('2026-08-20T12:00:00.000Z');
 
@@ -42,7 +43,10 @@ const createCompletedTrips = async (person: TestPerson, count: number): Promise<
 
 describe('начисление за завершённые поездки', () => {
   afterEach(cleanupTestData);
-  afterAll(disconnectDatabase);
+  afterAll(async () => {
+    await disconnectDatabase();
+    await disconnectQueues();
+  });
 
   it('начисляет по баллу за завершённую поездку', async () => {
     const person = await createTestPerson({ inProgram: true });

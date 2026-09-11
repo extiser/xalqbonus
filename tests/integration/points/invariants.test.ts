@@ -18,6 +18,7 @@ import {
   disconnectDatabase,
   runRawQuery,
 } from '../support/database';
+import { disconnectQueues } from '../support/queues';
 
 /**
  * Четыре инварианта журнала из docs/points.md. Запросы берутся из scripts/invariants.sql —
@@ -42,7 +43,10 @@ describe('инварианты журнала', () => {
   });
 
   afterEach(cleanupTestData);
-  afterAll(disconnectDatabase);
+  afterAll(async () => {
+    await disconnectDatabase();
+    await disconnectQueues();
+  });
 
   it('в файле лежат ровно четыре запроса', () => {
     // Пятый инвариант появляется правкой docs/points.md, а не молча.

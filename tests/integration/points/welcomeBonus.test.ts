@@ -14,6 +14,7 @@ import {
   setTripStatus,
   type TestPerson,
 } from '../support/database';
+import { disconnectQueues } from '../support/queues';
 
 /**
  * Приветственный бонус: 300 баллов после пяти завершённых поездок, только новым участникам.
@@ -47,7 +48,10 @@ const createCompletedTrips = async (person: TestPerson, count: number): Promise<
 
 describe('приветственный бонус', () => {
   afterEach(cleanupTestData);
-  afterAll(disconnectDatabase);
+  afterAll(async () => {
+    await disconnectDatabase();
+    await disconnectQueues();
+  });
 
   it('выдаётся на пятой поездке и ровно один раз', async () => {
     const person = await createTestPerson({ inProgram: true });

@@ -33,6 +33,16 @@ const isBotMode = (value: string): value is BotMode => value === 'polling' || va
 const readEnv = (name: string): string => (process.env[name] ?? '').trim();
 
 /**
+ * Токен бота отдельно от остальных параметров.
+ *
+ * Нужен воркеру: тот шлёт исходящие сообщения и о режиме доставки апдейтов не знает
+ * ничего — ни webhook, ни polling его не касаются, и падать из-за незаполненного
+ * `TG_BOT_MODE` отправка уведомления не должна. Пустая строка означает выключенного бота,
+ * ровно как и в `readBotConfig`.
+ */
+export const readBotToken = (): string => readEnv('TG_BOT_TOKEN');
+
+/**
  * Читает параметры бота из окружения.
  *
  * `null` означает выключенного бота, а не ошибку: пустой `TG_BOT_TOKEN` — рабочее состояние
@@ -41,7 +51,7 @@ const readEnv = (name: string): string => (process.env[name] ?? '').trim();
  * ломается молча, и в логах об этом нет ни строки.
  */
 export const readBotConfig = (): BotConfig | null => {
-  const token = readEnv('TG_BOT_TOKEN');
+  const token = readBotToken();
 
   if (token === '') {
     return null;
