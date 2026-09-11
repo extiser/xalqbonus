@@ -2,7 +2,8 @@ import type { Language } from '#server/generated/prisma/enums';
 
 /**
  * Состояние диалога регистрации: выбранный язык между экраном выбора и присланным
- * контактом и идентификатор последнего отправленного ботом экрана.
+ * контактом, идентификатор последнего отправленного ботом экрана и очередь отправок
+ * в этот чат.
  *
  * **В базу оно не пишется.** Человек, выбравший язык, ещё не участник программы: строка
  * `person_settings` и есть граница «известен парку / в программе», и писать в неё
@@ -34,6 +35,8 @@ type DialogState = {
   language: Language | null;
   /** `null` — бот в этом чате ещё ничего не отправлял с последней уборки. */
   lastScreenMessageId: number | null;
+  /** Хвост цепочки отправок в этот чат. Отказы в него не попадают — см. `enqueueScreen`. */
+  screenQueue: Promise<void>;
   expiresAt: number;
 };
 
@@ -100,7 +103,13 @@ const touch = (telegramChatId: bigint): DialogState => {
   sweep(now);
 
   const state =
-    recall(telegramChatId) ?? { language: null, lastScreenMessageId: null, expiresAt: 0 };
+    recall(telegramChatId) ??
+    ({
+      language: null,
+      lastScreenMessageId: null,
+      screenQueue: Promise.resolve(),
+      expiresAt: 0,
+    } satisfies DialogState);
   state.expiresAt = now + TTL_MS;
   states().set(keyOf(telegramChatId), state);
 
@@ -146,3 +155,45 @@ export const rememberLastScreen = (telegramChatId: bigint, messageId: number): v
 /** Идентификатор прошлого экрана или `null`, если его нет или он протух. */
 export const recallLastScreen = (telegramChatId: bigint): number | null =>
   recall(telegramChatId)?.lastScreenMessageId ?? null;
+
+/**
+ * Ставит отправку экрана в хвост цепочки этого чата: она начнётся, когда завершится
+ * предыдущая.
+ *
+ * **Без очереди два апдейта одного чата затирают друг друга.** Отправка читает прежний
+ * идентификатор, шлёт сообщение и только потом запоминает новый; два обработчика, идущие
+ * одновременно, прочитают один и тот же прежний id, оба попробуют удалить одно и то же
+ * сообщение — второе удаление отвалится в лог, — а из двух новых экранов в состоянии
+ * останется лишь последний, и первый повиснет в чате навсегда. Ровно то, что задача
+ * обязана исключить.
+ *
+ * На локальном стенде это не воспроизводится: встроенный long polling grammY обрабатывает
+ * апдейты строго по одному. Гонка живёт в режиме webhook, где каждый апдейт приходит
+ * отдельным HTTP-запросом — то есть на стенде и на проде.
+ *
+ * `sequentialize` из `@grammyjs/runner` не берётся: ради полутора десятков строк заводить
+ * зависимость незачем, и он сериализует обработку апдейта целиком, а сериализовать надо
+ * только отправку.
+ *
+ * Чтение хвоста и подстановка нового происходят в одном синхронном участке — между ними
+ * нет ни одного `await`, и вклиниться второму вызову некуда. Хвост намеренно не несёт
+ * отказа: упавшая отправка иначе отклонила бы все следующие, а её исключение нужно тому,
+ * кто её заказал, и уходит ему.
+ *
+ * Побочный выигрыш: порядок экранов перестаёт зависеть от того, в каком порядке ответил
+ * Telegram.
+ */
+export const enqueueScreen = <Result>(
+  telegramChatId: bigint,
+  send: () => Promise<Result>,
+): Promise<Result> => {
+  const state = touch(telegramChatId);
+  const sent = state.screenQueue.then(send);
+
+  state.screenQueue = sent.then(
+    () => undefined,
+    () => undefined,
+  );
+
+  return sent;
+};

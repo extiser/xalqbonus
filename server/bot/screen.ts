@@ -1,7 +1,7 @@
 import { consola } from 'consola';
 import type { Context } from 'grammy';
 
-import { recallLastScreen, rememberLastScreen } from '#server/bot/state';
+import { enqueueScreen, recallLastScreen, rememberLastScreen } from '#server/bot/state';
 
 /**
  * Экран бота: единственная отправка сообщения в чат водителя.
@@ -20,6 +20,10 @@ import { recallLastScreen, rememberLastScreen } from '#server/bot/state';
  *
  * Сообщения водителя не трогаются: в приватном чате бот их удалять не может, и присланный
  * контакт остаётся в переписке.
+ *
+ * Отправки на один чат идут по одной: апдейты в режиме webhook приходят отдельными
+ * HTTP-запросами и обрабатываются одновременно, а «прочитать прежний экран — отправить —
+ * запомнить новый» одновременности не терпит (server/bot/state.ts → `enqueueScreen`).
  */
 
 const log = consola.withTag('bot:screen');
@@ -36,32 +40,33 @@ type ScreenOptions = Parameters<Context['reply']>[1];
  * поэтому неудача удаления обработчик не роняет и водителю продолжить не мешает —
  * она уходит строкой в лог.
  */
-export const sendScreen = async (
+export const sendScreen = (
   context: Context,
   telegramChatId: bigint,
   messageText: string,
   options?: ScreenOptions,
-): Promise<void> => {
-  const previousMessageId = recallLastScreen(telegramChatId);
-  const message = await context.reply(messageText, options);
+): Promise<void> =>
+  enqueueScreen(telegramChatId, async () => {
+    const previousMessageId = recallLastScreen(telegramChatId);
+    const message = await context.reply(messageText, options);
 
-  rememberLastScreen(telegramChatId, message.message_id);
+    rememberLastScreen(telegramChatId, message.message_id);
 
-  if (previousMessageId === null) {
-    return;
-  }
+    if (previousMessageId === null) {
+      return;
+    }
 
-  try {
-    // Числом, а не bigint: id чата у Telegram укладывается в безопасное целое JS,
-    // и сюда он приехал числом же — из `context.chat.id`.
-    await context.api.deleteMessage(Number(telegramChatId), previousMessageId);
-  } catch (error) {
-    // Телефона в строке нет и быть не должно: причина отказа и то, где он случился,
-    // отвечают на вопрос целиком.
-    log.warn('прошлый экран не удалился', {
-      chatId: telegramChatId.toString(),
-      messageId: previousMessageId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-};
+    try {
+      // Строкой: метод принимает `chat_id` и числом, и строкой, а строка не требует
+      // предположений о том, что id чата укладывается в безопасное целое JS.
+      await context.api.deleteMessage(telegramChatId.toString(), previousMessageId);
+    } catch (error) {
+      // Телефона в строке нет и быть не должно: причина отказа и то, где он случился,
+      // отвечают на вопрос целиком.
+      log.warn('прошлый экран не удалился', {
+        chatId: telegramChatId.toString(),
+        messageId: previousMessageId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
