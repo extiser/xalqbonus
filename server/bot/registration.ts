@@ -1,6 +1,7 @@
 import { consola } from 'consola';
 import { InlineKeyboard, Keyboard, type Bot, type Context } from 'grammy';
 
+import { sendScreen } from '#server/bot/screen';
 import { forgetLanguage, recallLanguage, rememberLanguage } from '#server/bot/state';
 import { comeToOfficeText, formatPoints, text } from '#server/bot/texts';
 import type { Language } from '#server/generated/prisma/enums';
@@ -28,6 +29,9 @@ import {
  *
  * Отказы «в офис» не различаются текстом намеренно: «номер не найден» против «уже
  * привязан» отвечает любому, кто знает номер коллеги, состоит ли тот в программе.
+ *
+ * Все экраны уходят через `sendScreen`: в чате живёт один экран бота, и прямых
+ * `context.reply` здесь нет ни одного (server/bot/screen.ts).
  */
 
 const log = consola.withTag('bot:registration');
@@ -65,8 +69,14 @@ const languageKeyboard = (): InlineKeyboard =>
  * Язык берётся его собственный — тот, что лежит в `person_settings` с регистрации,
  * а не тот, который он мог только что нажать на старом сообщении.
  */
-const showMainMenu = async (context: Context, driver: LinkedDriver): Promise<void> => {
-  await context.reply(
+const showMainMenu = async (
+  context: Context,
+  chatId: bigint,
+  driver: LinkedDriver,
+): Promise<void> => {
+  await sendScreen(
+    context,
+    chatId,
     text('linked', driver.language, {
       name: driver.name,
       points: formatPoints(driver.points),
@@ -75,14 +85,20 @@ const showMainMenu = async (context: Context, driver: LinkedDriver): Promise<voi
   );
 };
 
-const showLanguageChoice = async (context: Context): Promise<void> => {
-  await context.reply(text('select_language', DEFAULT_LANGUAGE), {
+const showLanguageChoice = async (context: Context, chatId: bigint): Promise<void> => {
+  await sendScreen(context, chatId, text('select_language', DEFAULT_LANGUAGE), {
     reply_markup: languageKeyboard(),
   });
 };
 
-const showPhoneRequest = async (context: Context, language: Language): Promise<void> => {
-  await context.reply(text('ask_phone', language), { reply_markup: contactKeyboard(language) });
+const showPhoneRequest = async (
+  context: Context,
+  chatId: bigint,
+  language: Language,
+): Promise<void> => {
+  await sendScreen(context, chatId, text('ask_phone', language), {
+    reply_markup: contactKeyboard(language),
+  });
 };
 
 /**
@@ -96,6 +112,7 @@ const showPhoneRequest = async (context: Context, language: Language): Promise<v
  */
 const showOutcome = async (
   context: Context,
+  chatId: bigint,
   language: Language,
   result: RegistrationResult,
 ): Promise<void> => {
@@ -105,7 +122,9 @@ const showOutcome = async (
     // Языком участника, а не выбранным сейчас: у перенесённого из старой базы язык
     // в `person_settings` не перезаписывается, и экран успеха обязан говорить на том же,
     // на котором заговорит следующее сообщение.
-    await context.reply(
+    await sendScreen(
+      context,
+      chatId,
       text(key, result.driver.language, {
         name: result.driver.name,
         points: formatPoints(result.driver.points),
@@ -117,7 +136,7 @@ const showOutcome = async (
   }
 
   if (result.outcome === 'contact_not_own') {
-    await context.reply(text('contact_not_own', language), {
+    await sendScreen(context, chatId, text('contact_not_own', language), {
       reply_markup: contactKeyboard(language),
     });
 
@@ -125,14 +144,14 @@ const showOutcome = async (
   }
 
   if (result.outcome === 'park_api_unavailable') {
-    await context.reply(text('park_api_unavailable', language), {
+    await sendScreen(context, chatId, text('park_api_unavailable', language), {
       reply_markup: contactKeyboard(language),
     });
 
     return;
   }
 
-  await context.reply(comeToOfficeText(language), {
+  await sendScreen(context, chatId, comeToOfficeText(language), {
     parse_mode: 'HTML',
     // Ссылки на карту — единственное, ради чего разметка и нужна; разворачивать их
     // превью незачем, оно занимает пол-экрана на каждый офис.
@@ -158,14 +177,14 @@ export const registerRegistrationHandlers = (bot: Bot): void => {
     if (driver) {
       // Телефон у привязанного водителя не спрашивается повторно, и второй строки
       // в `telegram_links` от повторного `/start` не появляется.
-      await showMainMenu(context, driver);
+      await showMainMenu(context, chatId, driver);
 
       return;
     }
 
     // Повторный `/start` на шаге запроса телефона начинает с выбора языка заново:
     // прежний выбор перезапишется, когда водитель нажмёт кнопку.
-    await showLanguageChoice(context);
+    await showLanguageChoice(context, chatId);
   });
 
   // По обработчику на язык, а не один с разбором `callback_data`: значение приходит
@@ -186,13 +205,13 @@ export const registerRegistrationHandlers = (bot: Bot): void => {
       // Кнопка выбора языка живёт в старом сообщении и нажимается когда угодно — в том
       // числе после привязки. Спрашивать у привязанного водителя телефон заново нельзя.
       if (driver) {
-        await showMainMenu(context, driver);
+        await showMainMenu(context, chatId, driver);
 
         return;
       }
 
       rememberLanguage(chatId, language);
-      await showPhoneRequest(context, language);
+      await showPhoneRequest(context, chatId, language);
     });
   }
 
@@ -209,7 +228,7 @@ export const registerRegistrationHandlers = (bot: Bot): void => {
     // при этом не теряется молча: водитель выбирает язык и нажимает кнопку ещё раз.
     // Подставить русский за него нельзя — это выбор, который поедет в `person_settings`.
     if (!language) {
-      await showLanguageChoice(context);
+      await showLanguageChoice(context, chatId);
 
       return;
     }
@@ -228,7 +247,7 @@ export const registerRegistrationHandlers = (bot: Bot): void => {
         // Поход в Fleet API занимает секунды, и водитель всё это время смотрит
         // на неотвеченное сообщение. Привязка после ответа продолжается сама.
         onLookupStarted: async () => {
-          await context.reply(text('checking_phone', language));
+          await sendScreen(context, chatId, text('checking_phone', language));
         },
       });
 
@@ -239,7 +258,7 @@ export const registerRegistrationHandlers = (bot: Bot): void => {
         forgetLanguage(chatId);
       }
 
-      await showOutcome(context, language, result);
+      await showOutcome(context, chatId, language, result);
     } catch (error) {
       // Сюда попадает то, чего мы не предусмотрели: недоступная база, отказ Telegram
       // на промежуточном сообщении. Отправлять человека в офис из-за нашей поломки нельзя —
@@ -249,7 +268,7 @@ export const registerRegistrationHandlers = (bot: Bot): void => {
         error: error instanceof Error ? error.message : String(error),
       });
 
-      await context.reply(text('park_api_unavailable', language), {
+      await sendScreen(context, chatId, text('park_api_unavailable', language), {
         reply_markup: contactKeyboard(language),
       });
     }
@@ -267,7 +286,7 @@ export const registerRegistrationHandlers = (bot: Bot): void => {
     const driver = await readLinkedDriver(chatId);
 
     if (driver) {
-      await showMainMenu(context, driver);
+      await showMainMenu(context, chatId, driver);
 
       return;
     }
@@ -275,11 +294,11 @@ export const registerRegistrationHandlers = (bot: Bot): void => {
     const language = recallLanguage(chatId);
 
     if (!language) {
-      await showLanguageChoice(context);
+      await showLanguageChoice(context, chatId);
 
       return;
     }
 
-    await showPhoneRequest(context, language);
+    await showPhoneRequest(context, chatId, language);
   });
 };
