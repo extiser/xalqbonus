@@ -100,6 +100,11 @@ const hasDetails = computed(() => props.run.orders !== null || props.run.registr
       <MoleculesCounterTile label="Обновлено" :value="run.orders.ordersUpdated" />
       <MoleculesCounterTile label="Начислено" :value="run.orders.awarded" />
       <MoleculesCounterTile
+        label="Приветственных бонусов"
+        :value="run.orders.welcomeAwarded"
+        hint="водителей дошло до пятой поездки"
+      />
+      <MoleculesCounterTile
         label="Уже начислено"
         :value="run.orders.alreadyAwarded"
         hint="повтор по ключу, баланс не тронут"

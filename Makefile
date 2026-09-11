@@ -6,7 +6,7 @@ COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
 
 .DEFAULT_GOAL := help
 
-.PHONY: help up up-d down restart logs ps shell psql migrate migrate-create typecheck test test-db \
+.PHONY: help up up-d down restart logs ps shell psql migrate migrate-create generate typecheck test test-db \
         db-restore db-schema invariants license-collisions legacy-vs-api import-legacy \
         import-legacy-dump \
         sync-orders sync-registry sync-state \
@@ -46,6 +46,12 @@ migrate: ## Применить миграции к локальной БД
 
 migrate-create: ## Создать миграцию из изменённой схемы, не применяя. Использование: make migrate-create name=point_entries
 	$(COMPOSE) exec app npx prisma migrate dev --create-only --name $(name)
+
+# Клиент собирается при установке зависимостей (postinstall), а `migrate deploy` его
+# не трогает: после правки схемы типы в `server/generated/` остаются прежними, и правка
+# доезжает до кода только этой целью.
+generate: ## Пересобрать клиент Prisma из схемы
+	$(COMPOSE) exec app npx prisma generate
 
 # Схема наших таблиц. `public` не трогается ничем и никогда: она принадлежит старому боту
 # и только читается (CLAUDE.md → «Важные ограничения»).

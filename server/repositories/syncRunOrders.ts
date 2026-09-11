@@ -20,6 +20,8 @@ export type SyncRunOrdersCounters = {
   skippedUnknownProfile: number;
   unknownProfiles: number;
   awarded: number;
+  /** Приветственных бонусов выдано: столько новых водителей дошло до пятой поездки. */
+  welcomeAwarded: number;
   alreadyAwarded: number;
   notCompleted: number;
   withoutEndedAt: number;
@@ -40,7 +42,7 @@ export const saveSyncRunOrders = async (
     INSERT INTO xb.sync_run_orders (
       "run_id", "pages", "orders_inserted", "orders_updated",
       "malformed", "skipped_unknown_profile", "unknown_profiles",
-      "awarded", "already_awarded", "not_completed",
+      "awarded", "welcome_awarded", "already_awarded", "not_completed",
       "without_ended_at", "outside_program", "unknown_trip"
     )
     VALUES (
@@ -52,6 +54,7 @@ export const saveSyncRunOrders = async (
       ${counters.skippedUnknownProfile},
       ${counters.unknownProfiles},
       ${counters.awarded},
+      ${counters.welcomeAwarded},
       ${counters.alreadyAwarded},
       ${counters.notCompleted},
       ${counters.withoutEndedAt},
@@ -66,6 +69,7 @@ export const saveSyncRunOrders = async (
            "skipped_unknown_profile" = EXCLUDED."skipped_unknown_profile",
            "unknown_profiles"        = EXCLUDED."unknown_profiles",
            "awarded"                 = EXCLUDED."awarded",
+           "welcome_awarded"         = EXCLUDED."welcome_awarded",
            "already_awarded"         = EXCLUDED."already_awarded",
            "not_completed"           = EXCLUDED."not_completed",
            "without_ended_at"        = EXCLUDED."without_ended_at",

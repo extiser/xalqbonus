@@ -8,6 +8,9 @@ import { db } from '#server/db';
  * записей иначе превращалась бы в переписывание миллиона строк (prisma/schema.prisma).
  */
 
+/** Единственный статус завершённой поездки. Значение из словаря Fleet API. */
+const COMPLETED_STATUS = 'complete';
+
 export type TripForAccrual = {
   tripOrderId: string;
   status: string;
@@ -40,6 +43,45 @@ export const findTripsForAccrual = async (tripOrderIds: string[]): Promise<TripF
     personId: trip.profile.personId,
     inProgram: trip.profile.person.settings !== null,
   }));
+};
+
+/**
+ * Сколько завершённых поездок человек сделал после вступления в программу — по всем его
+ * профилям в парке, не больше `limit`.
+ *
+ * Счёт идёт на человека, а не на учётку парка: переоформленный в парке водитель иначе
+ * начал бы отсчёт заново, а баланс и участие принадлежат человеку (prisma/schema.prisma).
+ *
+ * Отсечка по `person_settings.joined_at` — не уточнение, а половина смысла запроса: поездки
+ * пишутся для всего реестра парка независимо от участия (счётчик `outsideProgram` — ровно
+ * про это), и без неё водитель, отъездивший три месяца и зарегистрировавшийся вчера, пришёл
+ * бы в программу с сотнями завершённых поездок. Строки `person_settings` нет — человек
+ * не в программе, и поездок у него ноль по тому же правилу.
+ *
+ * Потолок здесь не оптимизация ради оптимизации: вопрос к этому запросу один — набралось
+ * ли пять, — а у работающего водителя поездок тысячи, и считать их все на каждой новой
+ * ради порога незачем. Ответ `limit` читается как «столько или больше».
+ */
+export const countCompletedTripsByPerson = async (
+  personId: string,
+  limit: number,
+): Promise<number> => {
+  const rows = await db.$queryRaw<{ total: bigint }[]>`
+    SELECT COUNT(*) AS total
+      FROM (
+            SELECT 1
+              FROM xb.trips AS trip
+              JOIN xb.park_profiles AS profile ON profile."profile_id" = trip."profile_id"
+              JOIN xb.person_settings AS settings ON settings."person_id" = profile."person_id"
+             WHERE profile."person_id" = ${personId}::uuid
+               AND trip."status" = ${COMPLETED_STATUS}
+               AND trip."ended_at" IS NOT NULL
+               AND trip."ended_at" >= settings."joined_at"
+             LIMIT ${limit}
+           ) AS capped
+  `;
+
+  return Number(rows[0]?.total ?? 0n);
 };
 
 /**

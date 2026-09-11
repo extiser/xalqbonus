@@ -375,6 +375,7 @@ describe('журнал прогона синхронизации', () => {
       skippedUnknownProfile: summary.skippedUnknownProfile,
       unknownProfiles: summary.unknownProfiles,
       awarded: summary.accrual.awarded,
+      welcomeAwarded: summary.accrual.welcomeAwarded,
       alreadyAwarded: summary.accrual.alreadyAwarded,
       notCompleted: summary.accrual.notCompleted,
       withoutEndedAt: summary.accrual.withoutEndedAt,

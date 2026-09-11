@@ -55,6 +55,8 @@ export type OrdersRunDetails = {
   skippedUnknownProfile: number;
   unknownProfiles: number;
   awarded: number;
+  /** Приветственных бонусов выдано: столько новых водителей дошло до пятой поездки. */
+  welcomeAwarded: number;
   alreadyAwarded: number;
   notCompleted: number;
   withoutEndedAt: number;

@@ -20,16 +20,48 @@ if (process.env.NODE_ENV === 'production') {
 /** Люди, заведённые этим файлом тестов. Уборка идёт по ним и только по ним. */
 const createdPersonIds = new Set<string>();
 
+/**
+ * Идентификаторы записей старой базы для фикстур переноса.
+ *
+ * Отрицательные и убывающие: `legacy_driver_id` — первичный ключ, пришедший из чужой
+ * базы, и занять им номер настоящей записи тест не должен даже на локальной копии.
+ */
+let lastLegacyDriverId = -1;
+
+const nextLegacyDriverId = (): number => {
+  lastLegacyDriverId -= 1;
+
+  return lastLegacyDriverId;
+};
+
 export type TestPerson = {
   personId: string;
   profileId: string;
 };
 
 /**
+ * Время вступления в программу по умолчанию — заведомо раньше поездок любого теста.
+ *
+ * Приветственный бонус считает поездки от `joined_at`, и умолчание `now()` означало бы,
+ * что у каждого тестового участника все поездки сделаны до вступления: сценарии, к бонусу
+ * отношения не имеющие, молча проверяли бы не то, что написано в их названии.
+ */
+const DEFAULT_JOINED_AT = new Date('2026-01-01T00:00:00.000Z');
+
+export type CreateTestPersonInput = {
+  inProgram: boolean;
+  /** Когда человек вступил в программу. Поездки до этого момента бонусу не засчитываются. */
+  joinedAt?: Date;
+};
+
+/**
  * Заводит человека с профилем в парке. `inProgram` управляет наличием `person_settings` —
  * это и есть граница «известен парку / участвует в программе» (docs/drivers.md).
  */
-export const createTestPerson = async ({ inProgram }: { inProgram: boolean }): Promise<TestPerson> => {
+export const createTestPerson = async ({
+  inProgram,
+  joinedAt = DEFAULT_JOINED_AT,
+}: CreateTestPersonInput): Promise<TestPerson> => {
   const person = await db.person.create({ data: {} });
   createdPersonIds.add(person.id);
 
@@ -57,11 +89,44 @@ export const createTestPerson = async ({ inProgram }: { inProgram: boolean }): P
 
   if (inProgram) {
     await db.personSettings.create({
-      data: { personId: person.id, language: 'ru', joinedSource: 'test' },
+      data: { personId: person.id, language: 'ru', joinedSource: 'test', joinedAt },
     });
   }
 
   return { personId: person.id, profileId };
+};
+
+/**
+ * Отмечает человека перенесённым из старой базы — строкой в карте переноса.
+ *
+ * Именно этот признак закрывает приветственный бонус (docs/decisions.md → «Приветственный
+ * бонус — только новым»), и проверять его надо настоящей строкой: условие живёт в запросе,
+ * а не в коде, и заглушка подтвердила бы работу кода, а не правила.
+ */
+export const markPersonAsLegacy = async (personId: string): Promise<void> => {
+  await db.$executeRaw`
+    INSERT INTO xb.legacy_driver_map (
+      "legacy_driver_id", "person_id", "match_method", "telegram_status", "legacy_points"
+    )
+    VALUES (
+      ${nextLegacyDriverId()},
+      ${personId}::uuid,
+      'license'::xb.match_method,
+      'skipped'::xb.legacy_telegram_status,
+      0
+    )
+  `;
+};
+
+/**
+ * Переводит профиль парка на другого человека — так выглядит переоформление в парке
+ * и склейка двойных учётных записей: профилей два, человек один.
+ */
+export const reassignProfileToPerson = async (
+  profileId: string,
+  personId: string,
+): Promise<void> => {
+  await db.parkProfile.update({ where: { profileId }, data: { personId } });
 };
 
 export type CreateTestTripInput = {
@@ -183,6 +248,9 @@ export const cleanupTestData = async (): Promise<void> => {
        WHERE "profile_id" IN (SELECT "profile_id" FROM xb.park_profiles WHERE "person_id" = ANY(${personIds}::uuid[]))
     `;
     await transaction.$executeRaw`
+      DELETE FROM xb.legacy_driver_map WHERE "person_id" = ANY(${personIds}::uuid[])
+    `;
+    await transaction.$executeRaw`
       DELETE FROM xb.park_profiles WHERE "person_id" = ANY(${personIds}::uuid[])
     `;
     await transaction.$executeRaw`
@@ -240,6 +308,7 @@ export type SyncRunOrdersRow = {
   skippedUnknownProfile: number;
   unknownProfiles: number;
   awarded: number;
+  welcomeAwarded: number;
   alreadyAwarded: number;
   notCompleted: number;
   withoutEndedAt: number;
@@ -256,6 +325,7 @@ export const readSyncRunOrders = async (runId: string): Promise<SyncRunOrdersRow
            "skipped_unknown_profile" AS "skippedUnknownProfile",
            "unknown_profiles"        AS "unknownProfiles",
            "awarded",
+           "welcome_awarded"         AS "welcomeAwarded",
            "already_awarded"         AS "alreadyAwarded",
            "not_completed"           AS "notCompleted",
            "without_ended_at"        AS "withoutEndedAt",
