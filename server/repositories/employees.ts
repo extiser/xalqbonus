@@ -21,7 +21,7 @@ export type EmployeeRow = {
   id: string;
   role: EmployeeRole;
   fullName: string;
-  phoneE164: string | null;
+  phoneE164: string;
   /** `argon2id`. Пуст у того, кто в веб не ходит. */
   passwordHash: string | null;
   passwordChangedAt: Date | null;
@@ -93,14 +93,14 @@ export const findEmployeeByTelegramUserId = async (
  */
 export const findEmployeeByTelegramOrPhone = async (
   telegramUserId: bigint | null,
-  phoneE164: string | null,
+  phoneE164: string,
   client: Executor = db,
 ): Promise<EmployeeRow | null> => {
   const rows = await client.$queryRaw<EmployeeRow[]>`
     SELECT ${EMPLOYEE_COLUMNS}
       FROM xb.employees
      WHERE ("telegram_user_id" IS NOT NULL AND "telegram_user_id" = ${telegramUserId})
-        OR ("phone_e164" IS NOT NULL AND "phone_e164" = ${phoneE164})
+        OR "phone_e164" = ${phoneE164}
      LIMIT 1
   `;
 
@@ -110,7 +110,7 @@ export const findEmployeeByTelegramOrPhone = async (
 export type InsertEmployeeInput = {
   role: EmployeeRole;
   fullName: string;
-  phoneE164: string | null;
+  phoneE164: string;
   passwordHash: string | null;
   passwordChangedAt: Date | null;
   telegramUserId: bigint | null;

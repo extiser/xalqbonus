@@ -102,22 +102,24 @@ export const loginByPassword = async (request: LoginRequest): Promise<LoginResul
     return { outcome: 'invalid_credentials' };
   }
 
-  if (employee.disabledAt !== null) {
-    // Пароль у выключенной учётки не проверяется вовсе: сверять его значило бы отвечать
-    // «пароль верен, но вы выключены» — сведение, которого выключенному знать незачем.
-    await registerFailure();
-
-    log.warn('вход в выключенную учётку', { employeeId: employee.id });
-
-    return { outcome: 'disabled' };
-  }
-
   if (!(await verifyPassword(employee.passwordHash, request.password))) {
     await registerFailure();
 
     log.warn('неверный пароль', { employeeId: employee.id });
 
     return { outcome: 'invalid_credentials' };
+  }
+
+  // Отказ по выключенной учётке — только после сошедшегося пароля. Проверь мы его раньше,
+  // и по одному телефону, не зная пароля, выключенная учётка отличалась бы от всего
+  // остального: форма входа отвечала бы, кто из сотрудников парка заведён и уволен.
+  //
+  // Неудачей это не считается и счётчик не двигает: пароль верен, перебора здесь нет.
+  // Не чистится он тоже — вход не состоялся, и прежние неудачи остаются в силе.
+  if (employee.disabledAt !== null) {
+    log.warn('вход в выключенную учётку', { employeeId: employee.id });
+
+    return { outcome: 'disabled' };
   }
 
   await clearLoginFailures(phoneE164, request.clientAddress);

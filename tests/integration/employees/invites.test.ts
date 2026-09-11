@@ -239,6 +239,32 @@ describe('приглашения сотрудников', () => {
     expect(result.outcome).toBe('driver_link_exists');
   });
 
+  it('перенесённая привязка — только chat_id, без отправителя — приглашение тоже не принимает', async () => {
+    const owner = await createTestEmployee({ role: 'owner' });
+    const { token } = await insertInviteFor(
+      owner.employeeId,
+      'manager',
+      new Date(Date.now() + INVITE_LIFETIME_MS),
+    );
+    const driver = await createTestPerson({ inProgram: true });
+    const telegramChatId = nextTestTelegramUserId();
+
+    // Так выглядит почти весь парк: у 4 091 привязки, перенесённой из старой базы,
+    // заполнен один `chat_id`, а отправителя старый бот не записывал вовсе. Проверка,
+    // смотрящая только на `telegram_user_id`, пропустила бы их все.
+    await linkTestDriver(driver.personId, telegramChatId);
+
+    const result = await acceptInvite({
+      token,
+      telegramUserId: telegramChatId,
+      contactUserId: telegramChatId,
+      phoneRaw: nextTestPhone(),
+      fullName: 'Перенесённый водитель',
+    });
+
+    expect(result.outcome).toBe('driver_link_exists');
+  });
+
   it('телефон за активной водительской привязкой приглашение не принимает', async () => {
     const owner = await createTestEmployee({ role: 'owner' });
     const { token } = await insertInviteFor(

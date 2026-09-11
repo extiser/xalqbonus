@@ -56,7 +56,7 @@ export const nextTestPhone = (): string => {
 
 export type CreateTestEmployeeInput = {
   role: EmployeeRole;
-  phoneE164?: string | null;
+  phoneE164?: string;
   passwordHash?: string | null;
   passwordChangedAt?: Date | null;
   telegramUserId?: bigint | null;
@@ -65,12 +65,12 @@ export type CreateTestEmployeeInput = {
 
 export const createTestEmployee = async (
   input: CreateTestEmployeeInput,
-): Promise<{ employeeId: string; phoneE164: string | null; telegramUserId: bigint | null }> => {
+): Promise<{ employeeId: string; phoneE164: string; telegramUserId: bigint | null }> => {
   const employee = await db.employee.create({
     data: {
       role: input.role,
       fullName: 'Тестовый Сотрудник',
-      phoneE164: input.phoneE164 === undefined ? nextTestPhone() : input.phoneE164,
+      phoneE164: input.phoneE164 ?? nextTestPhone(),
       passwordHash: input.passwordHash ?? null,
       passwordChangedAt: input.passwordChangedAt ?? null,
       telegramUserId:
@@ -102,6 +102,11 @@ export const readInviteById = async (inviteId: string) =>
 /**
  * Активная водительская привязка на готового человека — вторая сторона правила «водителем
  * и сотрудником одновременно быть нельзя».
+ *
+ * `telegramUserId` пуст по умолчанию, и это не мелочь фикстуры: так выглядит почти весь
+ * парк. У 4 091 привязки, перенесённой из старой базы, от Telegram сохранился один лишь
+ * `chat_id` — отправителя старый бот не записывал вовсе (docs/decisions.md → «Из public
+ * в xb переносятся водители и балансы»).
  */
 export const linkTestDriver = async (
   personId: string,

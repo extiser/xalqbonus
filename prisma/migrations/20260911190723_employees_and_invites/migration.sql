@@ -51,7 +51,7 @@ CREATE TABLE "employees" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "role" "employee_role" NOT NULL,
     "full_name" TEXT NOT NULL,
-    "phone_e164" TEXT,
+    "phone_e164" TEXT NOT NULL,
     "password_hash" TEXT,
     "password_changed_at" TIMESTAMPTZ(6),
     "telegram_user_id" BIGINT,
@@ -109,11 +109,16 @@ ALTER TABLE "point_transfers" ADD CONSTRAINT "point_transfers_actor_employee_id_
 -- Меняется руками.
 -- ---------------------------------------------------------------------------
 
+-- Телефон обязателен: учётка без него не заводится ни одним путём. При принятии
+-- приглашения он приходит контактом из Telegram, в make-цели владельца — аргументом,
+-- третьего способа завести сотрудника нет. Необязательная колонка, которую нечем оставить
+-- пустой, — это разрешение на состояние, которого никто не проверял.
+--
 -- Учётка, в которую нельзя войти ниоткуда, заводиться не должна.
 --
--- Дверей две, и вход в веб состоит из пары «телефон + пароль»: пароль без телефона
--- не пускает никуда, поэтому половина этой пары способом входа не считается. Вторая
--- дверь — Mini App — держится на одном `telegram_user_id`.
+-- Проверка остаётся парной, хотя телефон теперь обязателен: способ входа в веб — это
+-- пароль вместе с телефоном, и половина пары входом не является. Одного `password_hash`
+-- в ней хватило бы ровно до дня, когда телефон снова станет необязательным.
 ALTER TABLE "employees" ADD CONSTRAINT "employees_login_present_check"
     CHECK (
         ("password_hash" IS NOT NULL AND "phone_e164" IS NOT NULL)
