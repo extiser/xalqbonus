@@ -33,7 +33,6 @@ export type TextKey =
   | 'several_profiles'
   | 'person_already_linked'
   | 'telegram_already_linked'
-  | 'come_to_office'
   | 'park_api_unavailable'
   | 'notification_welcome_bonus';
 
@@ -107,11 +106,6 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   telegram_already_linked: {
     ru: 'Этот Telegram уже привязан к другому водителю: один аккаунт нельзя использовать для двух человек. Если вы пользуетесь общим телефоном, откройте бота со своего аккаунта Telegram. Если это ошибка, подойдите в любой офис с водительским удостоверением.',
     uz: "Bu Telegram boshqa haydovchiga biriktirilgan: bitta akkauntdan ikki kishi foydalana olmaydi. Agar umumiy telefondan foydalanayotgan bo'lsangiz, botni o'z Telegram akkauntingizdan oching. Agar bu xato bo'lsa, haydovchilik guvohnomangiz bilan istalgan ofisga murojaat qiling.",
-  },
-  /** Запасной исход: значение `LinkAttemptOutcome`, не разобранное ветвлением. */
-  come_to_office: {
-    ru: 'Не получилось привязать номер автоматически. Подойдите в любой офис Xalq Taxi с водительским удостоверением — менеджер привяжет ваш Telegram.',
-    uz: "Raqamni avtomatik bog'lash imkoni bo'lmadi. Haydovchilik guvohnomangiz bilan Xalq Taxi'ning istalgan ofisiga murojaat qiling — menejer Telegram'ingizni bog'laydi.",
   },
   park_api_unavailable: {
     ru: 'Не удалось проверить номер — база таксопарка сейчас не отвечает. Попробуйте, пожалуйста, через несколько минут.',
