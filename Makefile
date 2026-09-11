@@ -8,6 +8,7 @@ COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
 
 .PHONY: help up up-d down restart logs ps shell psql migrate migrate-create generate typecheck test test-db \
         db-restore db-schema invariants license-collisions legacy-vs-api import-legacy \
+        employee-owner \
         import-legacy-dump \
         sync-orders sync-registry sync-state \
         prod-up prod-down prod-restart prod-logs prod-ps prod-shell prod-psql prod-migrate \
@@ -81,6 +82,20 @@ db-restore: ## Восстановить продовый дамп в локал�
 # догадываться, вглядываясь в вывод, бесполезна.
 invariants: ## Прогнать запросы инвариантов журнала баллов по локальной БД (ненулевой код при расхождении)
 	$(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -q' < scripts/invariants.sql
+
+# Первый владелец: единственный сотрудник, которого заводят руками. Приглашением `owner`
+# не заводится — приглашать можно роль строго ниже своей, а выше владельца ролей нет
+# (docs/decisions.md → «Учётка сотрудника и роли»). Дальше цепочка идёт сама: владелец
+# приглашает админов, админы — менеджеров.
+#
+# Идемпотентна: повторный прогон на существующем телефоне второй учётки не создаёт и пароль
+# не меняет. Пароль приходит аргументом и остаётся в истории команд — на боевой машине его
+# стоит сменить из приложения после первого входа.
+employee-owner: ## Завести владельца. make employee-owner phone=+998XXXXXXXXX name="Имя Фамилия" password=<пароль>
+	@test -n "$(phone)" || { echo 'укажите телефон: make employee-owner phone=+998XXXXXXXXX name="Имя Фамилия" password=<пароль>'; exit 1; }
+	@test -n "$(name)" || { echo 'укажите имя: make employee-owner phone=$(phone) name="Имя Фамилия" password=<пароль>'; exit 1; }
+	@test -n "$(password)" || { echo 'укажите пароль: make employee-owner phone=$(phone) name="$(name)" password=<пароль>'; exit 1; }
+	$(COMPOSE) exec -T app npx tsx scripts/create-owner.ts "$(phone)" "$(name)" "$(password)"
 
 # Считает по выгрузке реестра из _reference/fleet-api/dumps/ — в репозитории её нет.
 license-collisions: ## Счётчик коллизий номеров ВУ до и после нормализации

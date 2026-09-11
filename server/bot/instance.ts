@@ -2,6 +2,7 @@ import { consola } from 'consola';
 import { Bot, webhookCallback } from 'grammy';
 import type { Update } from 'grammy/types';
 import type { BotConfig } from '#server/bot/config';
+import { registerEmployeeInviteHandlers } from '#server/bot/employeeInvite';
 import { registerRegistrationHandlers } from '#server/bot/registration';
 
 const log = consola.withTag('bot');
@@ -41,6 +42,11 @@ const createBot = (config: BotConfig): Bot => {
 
     await next();
   });
+
+  // Приглашение сотрудника: `/start inv_<токен>` и контакт следом. Идёт первым и уступает
+  // водительским обработчикам всё, что к приглашению не относится, — `/start` без параметра
+  // и контакт от чата, который ссылку не открывал (server/bot/employeeInvite.ts).
+  registerEmployeeInviteHandlers(bot);
 
   // Регистрация водителя: `/start`, выбор языка, контакт. Обработчики живут своим модулем,
   // а правила привязки — в сервисе: бот является входом, а не местом, где живут правила.

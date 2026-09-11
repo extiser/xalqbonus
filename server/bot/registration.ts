@@ -115,7 +115,7 @@ const showPhoneRequest = async (
  */
 type OfficeOutcome = Exclude<
   LinkAttemptOutcome,
-  'linked' | 'contact_not_own' | 'park_api_unavailable'
+  'linked' | 'contact_not_own' | 'employee_account' | 'park_api_unavailable'
 >;
 
 /**
@@ -175,6 +175,17 @@ const showOutcome = async (
   if (result.outcome === 'contact_not_own') {
     await sendScreen(context, chatId, text('contact_not_own', language), {
       reply_markup: contactKeyboard(language),
+    });
+
+    return;
+  }
+
+  // Сотруднику парка список офисов не нужен: он в офисе и работает, а нужное ему действие —
+  // открыть приложение кнопкой меню. Клавиатура запроса контакта снимается: второй контакт
+  // ответит тем же.
+  if (result.outcome === 'employee_account') {
+    await sendScreen(context, chatId, text('employee_account', language), {
+      reply_markup: REMOVE_KEYBOARD,
     });
 
     return;

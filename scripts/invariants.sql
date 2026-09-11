@@ -1,4 +1,5 @@
--- Инварианты журнала баллов. Четыре запроса из docs/points.md.
+-- Инварианты базы: четыре запроса журнала баллов из docs/points.md и один запрос
+-- о пересечении ролей.
 --
 -- Каждый запрос возвращает ПУСТОЙ результат, когда всё хорошо. Непустой — повод
 -- разбираться, а не чинить автоматически.
@@ -14,6 +15,9 @@
 -- Пары `-- invariant:begin N` / `-- invariant:end` — контракт с тестом
 -- tests/integration/points/invariants.test.ts: он берёт запросы отсюда, а не держит
 -- их вторую копию у себя. Копия инварианта разошлась бы с оригиналом на первой правке.
+-- Ими размечены ровно четыре инварианта журнала: пятый появляется правкой docs/points.md,
+-- а не молча. Проверка пересечения ролей журналу баллов не принадлежит и размечена своей
+-- парой `-- cross-role:begin` / `-- cross-role:end` — её берёт тест сотрудников.
 --
 -- На переходный период, пока жив старый бот, расхождение по второму инварианту
 -- ожидаемо: старый бот продолжает править балансы в `public` мимо нашего журнала.
@@ -84,6 +88,42 @@ WHERE type = 'driver' AND balance < 0
 ;
 SELECT :ROW_COUNT > 0 AS violated_fourth \gset
 
+\warn '=== 5. Пересечение ролей: сотрудник с активной водительской привязкой ==='
+-- cross-role:begin
+-- Водителем и сотрудником одновременно быть нельзя. Правило держится кодом — проверкой
+-- с обеих сторон, при принятии приглашения и при привязке водителя, — потому что таблицы
+-- не связаны и уникальным индексом не пересекаются (docs/decisions.md → «Учётка сотрудника
+-- и роли»). Этот запрос ловит пересечение, если код однажды его пропустит.
+--
+-- Телефон сверяется наравне с Telegram: учётка сотрудника, заведённая на номер, по которому
+-- у водителя идёт автопривязка, — то же самое пересечение, только со второй стороны.
+SELECT
+    employee.id                AS employee_id,
+    employee.role,
+    employee.telegram_user_id,
+    employee.phone_e164,
+    link.person_id             AS driver_person_id,
+    link.telegram_chat_id
+FROM xb.employees AS employee
+JOIN xb.telegram_links AS link
+  ON link.closed_at IS NULL
+ AND (
+      (employee.telegram_user_id IS NOT NULL
+        AND (link.telegram_chat_id = employee.telegram_user_id
+          OR link.telegram_user_id = employee.telegram_user_id))
+   OR (employee.phone_e164 IS NOT NULL
+        AND link.person_id IN (
+              SELECT profile.person_id
+                FROM xb.profile_phones AS phone
+                JOIN xb.park_profiles AS profile ON profile.profile_id = phone.profile_id
+               WHERE phone.closed_at IS NULL
+                 AND phone.phone_e164 = employee.phone_e164
+            ))
+     )
+-- cross-role:end
+;
+SELECT :ROW_COUNT > 0 AS violated_fifth \gset
+
 -- Значения подставляются как литералы (`:'имя'`), а не как голый текст: без кавычек
 -- в запрос уехало бы `t`, что для SQL не булево, а неизвестное имя.
 SELECT (
@@ -91,12 +131,13 @@ SELECT (
  OR :'violated_second'::boolean
  OR :'violated_third'::boolean
  OR :'violated_fourth'::boolean
+ OR :'violated_fifth'::boolean
 ) AS any_violated \gset
 
 \if :any_violated
 DO $$ BEGIN
-    RAISE EXCEPTION 'инварианты журнала баллов нарушены — разбирать по выводу выше';
+    RAISE EXCEPTION 'инварианты нарушены — разбирать по выводу выше';
 END $$;
 \else
-\warn 'Инварианты журнала баллов сходятся.'
+\warn 'Инварианты сходятся: журнал баллов и разделение ролей.'
 \endif

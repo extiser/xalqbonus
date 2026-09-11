@@ -33,8 +33,19 @@ export type TextKey =
   | 'several_profiles'
   | 'person_already_linked'
   | 'telegram_already_linked'
+  | 'employee_account'
   | 'park_api_unavailable'
-  | 'notification_welcome_bonus';
+  | 'notification_welcome_bonus'
+  | 'invite_ask_contact'
+  | 'invite_accepted'
+  | 'invite_not_found'
+  | 'invite_expired'
+  | 'invite_already_accepted'
+  | 'invite_revoked'
+  | 'invite_contact_not_own'
+  | 'invite_phone_invalid'
+  | 'invite_driver_link_exists'
+  | 'invite_employee_exists';
 
 const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   select_language: {
@@ -107,6 +118,16 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Этот Telegram уже привязан к другому водителю: один аккаунт нельзя использовать для двух человек. Если вы пользуетесь общим телефоном, откройте бота со своего аккаунта Telegram. Если это ошибка, подойдите в любой офис с водительским удостоверением.',
     uz: "Bu Telegram boshqa haydovchiga biriktirilgan: bitta akkauntdan ikki kishi foydalana olmaydi. Agar umumiy telefondan foydalanayotgan bo'lsangiz, botni o'z Telegram akkauntingizdan oching. Agar bu xato bo'lsa, haydovchilik guvohnomangiz bilan istalgan ofisga murojaat qiling.",
   },
+  /**
+   * Седьмой исход привязки: контакт боту прислал сотрудник парка.
+   *
+   * Списка офисов под ним нет намеренно, в отличие от шести отказов «в офис»: сотрудник
+   * в офисе и так работает, а нужное ему действие — открыть приложение кнопкой меню.
+   */
+  employee_account: {
+    ru: 'Этот аккаунт заведён как сотрудник парка. Регистрация водителя для него недоступна: откройте приложение кнопкой меню.',
+    uz: "Bu akkaunt park xodimi sifatida ro'yxatdan o'tgan. Unga haydovchi sifatida ro'yxatdan o'tish mumkin emas: ilovani menyu tugmasi orqali oching.",
+  },
   park_api_unavailable: {
     ru: 'Не удалось проверить номер — база таксопарка сейчас не отвечает. Попробуйте, пожалуйста, через несколько минут.',
     uz: "Raqamni tekshirib bo'lmadi — taksopark ma'lumotlar bazasi hozir javob bermayapti. Iltimos, bir necha daqiqadan so'ng qayta urinib ko'ring.",
@@ -114,6 +135,50 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   notification_welcome_bonus: {
     ru: '🎁 Вам начислено {points} баллов за первые 5 поездок! Обменять их на подарки можно в любом офисе Xalq Taxi.',
     uz: "🎁 Birinchi 5 ta safaringiz uchun sizga {points} ball hisoblandi! Ularni Xalq Taxi'ning istalgan ofisida sovg'alarga almashtirishingiz mumkin.",
+  },
+
+  // Приглашение сотрудника. Отказы разведены по причинам все до одного: учётка заводится
+  // в офисе, рядом с тем, кто выписал ссылку, и «что-то пошло не так» здесь означает
+  // разговор двух людей, которые оба не понимают, что чинить.
+  invite_ask_contact: {
+    ru: 'Вас приглашают сотрудником Xalq Taxi. Нажмите кнопку ниже, чтобы подтвердить номер телефона — по нему вы будете входить в систему.',
+    uz: "Sizni Xalq Taxi xodimi sifatida taklif qilishmoqda. Telefon raqamingizni tasdiqlash uchun pastdagi tugmani bosing — tizimga shu raqam orqali kirasiz.",
+  },
+  invite_accepted: {
+    ru: 'Готово, {name}: учётная запись сотрудника создана. Откройте приложение кнопкой меню и задайте себе пароль — он понадобится для входа с компьютера.',
+    uz: "Tayyor, {name}: xodim hisobi yaratildi. Menyu tugmasi orqali ilovani oching va o'zingizga parol belgilang — u kompyuterdan kirish uchun kerak bo'ladi.",
+  },
+  invite_not_found: {
+    ru: 'Такого приглашения нет. Проверьте, полностью ли скопирована ссылка, или попросите выписать новую.',
+    uz: "Bunday taklif topilmadi. Havola to'liq nusxalanganini tekshiring yoki yangisini so'rang.",
+  },
+  invite_expired: {
+    ru: 'Срок действия приглашения истёк — ссылка живёт двое суток. Попросите выписать новую.',
+    uz: "Taklif muddati tugagan — havola ikki kun amal qiladi. Yangisini so'rang.",
+  },
+  invite_already_accepted: {
+    ru: 'Этим приглашением уже воспользовались: ссылка одноразовая. Если учётную запись завели не вы, сообщите тому, кто выписал ссылку.',
+    uz: "Bu takliddan allaqachon foydalanilgan: havola bir martalik. Agar hisobni siz yaratmagan bo'lsangiz, havolani bergan xodimga xabar bering.",
+  },
+  invite_revoked: {
+    ru: 'Приглашение отозвано. Если это ошибка, попросите выписать новую ссылку.',
+    uz: "Taklif bekor qilingan. Agar bu xato bo'lsa, yangi havola so'rang.",
+  },
+  invite_contact_not_own: {
+    ru: 'Отправьте, пожалуйста, свой номер телефона кнопкой ниже — чужой контакт мы принять не можем.',
+    uz: "Iltimos, pastdagi tugma bilan o'z telefon raqamingizni yuboring — boshqa shaxsning kontaktini qabul qila olmaymiz.",
+  },
+  invite_phone_invalid: {
+    ru: 'Не получилось разобрать ваш номер телефона. Учётную запись сотрудника заводят на узбекский номер вида +998 XX XXX XX XX.',
+    uz: "Telefon raqamingizni aniqlay olmadik. Xodim hisobi +998 XX XXX XX XX ko'rinishidagi o'zbek raqamiga ochiladi.",
+  },
+  invite_driver_link_exists: {
+    ru: 'Этот аккаунт Telegram или этот номер уже зарегистрирован как водитель Xalq Taxi. Водителем и сотрудником одновременно быть нельзя: сообщите тому, кто выписал ссылку, — он закроет водительскую регистрацию или заведёт вас на другой аккаунт.',
+    uz: "Bu Telegram akkaunti yoki bu raqam Xalq Taxi haydovchisi sifatida ro'yxatdan o'tgan. Bir vaqtning o'zida ham haydovchi, ham xodim bo'lish mumkin emas: havolani bergan xodimga ayting — u haydovchi ro'yxatini yopadi yoki sizni boshqa akkauntga biriktiradi.",
+  },
+  invite_employee_exists: {
+    ru: 'На этот аккаунт Telegram или на этот номер уже заведена учётная запись сотрудника. Откройте приложение кнопкой меню — вы уже в системе.',
+    uz: "Bu Telegram akkaunti yoki bu raqam uchun xodim hisobi allaqachon mavjud. Menyu tugmasi orqali ilovani oching — siz tizimdasiz.",
   },
 };
 

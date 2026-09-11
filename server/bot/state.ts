@@ -33,6 +33,14 @@ const SWEEP_INTERVAL_MS = 10 * 60 * 1_000;
 type DialogState = {
   /** `null` — язык ещё не выбран или уже уехал в `person_settings` вместе с привязкой. */
   language: Language | null;
+  /**
+   * Токен приглашения сотрудника, открывшего ссылку и ещё не приславшего контакт.
+   *
+   * `null` — приглашения в этом чате не ждут. Хранится ровно столько же, сколько язык,
+   * и по той же причине: перезапуск процесса стоит человеку одного повторного открытия
+   * ссылки, а учётки до присланного контакта всё равно не существует.
+   */
+  inviteToken: string | null;
   /** `null` — бот в этом чате ещё ничего не отправлял с последней уборки. */
   lastScreenMessageId: number | null;
   /** Хвост цепочки отправок в этот чат. Отказы в него не попадают — см. `enqueueScreen`. */
@@ -106,6 +114,7 @@ const touch = (telegramChatId: bigint): DialogState => {
     recall(telegramChatId) ??
     ({
       language: null,
+      inviteToken: null,
       lastScreenMessageId: null,
       screenQueue: Promise.resolve(),
       expiresAt: 0,
@@ -141,6 +150,36 @@ export const forgetLanguage = (telegramChatId: bigint): void => {
 
   if (state) {
     state.language = null;
+  }
+};
+
+/**
+ * Запоминает, что этот чат открыл ссылку-приглашение и у него ждут контакт.
+ *
+ * Повторное открытие другой ссылки перезаписывает токен: принимается та, по которой
+ * человек пришёл последней, а не первая из открытых.
+ */
+export const rememberInviteToken = (telegramChatId: bigint, token: string): void => {
+  touch(telegramChatId).inviteToken = token;
+};
+
+/** Токен приглашения, которого ждут в этом чате, или `null`. */
+export const recallInviteToken = (telegramChatId: bigint): string | null =>
+  recall(telegramChatId)?.inviteToken ?? null;
+
+/**
+ * Забывает приглашение.
+ *
+ * Зовётся на любом окончательном исходе — и на принятии, и на отказе, который повтором
+ * того же действия не чинится: ссылка одноразовая, и второй контакт по ней приведёт
+ * к тому же ответу. Остаётся токен ровно там, где повтор осмыслен: человек прислал чужой
+ * контакт и может прислать свой.
+ */
+export const forgetInviteToken = (telegramChatId: bigint): void => {
+  const state = recall(telegramChatId);
+
+  if (state) {
+    state.inviteToken = null;
   }
 };
 
