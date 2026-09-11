@@ -1,10 +1,16 @@
 /**
- * Проверка подписи `initData` — строки, которую Telegram передаёт в Mini App.
+ * Проверка подписанных строк Telegram: `initData` приложения и строка контакта.
  *
- * Это единственное основание доверять тому, кто открыл приложение. Всё остальное, что
- * приходит от клиента — тело запроса, заголовки, идентификатор в адресе, — контролирует
- * сам клиент, и личностью не является (docs/miniapp.md → «Личность приходит
+ * Это единственное основание доверять тому, кто открыл приложение, и единственное
+ * основание доверять присланному номеру. Всё остальное, что приходит от клиента — тело
+ * запроса, заголовки, идентификатор в адресе, — контролирует сам клиент, и ни личностью,
+ * ни подтверждённым телефоном не является (docs/miniapp.md → «Личность приходит
  * от мессенджера»).
+ *
+ * Строк две, и они разного состава, но подписаны одинаково: тем же секретом, той же
+ * сборкой проверяемой строки. Поэтому проверки живут одним модулем и делят вывод ключа,
+ * сборку и сверку — второе место, знающее, как Telegram подписывает свои строки,
+ * разошлось бы с первым на ближайшей правке.
  *
  * Алгоритм не наш, он описан Telegram и воспроизводится буквально:
  *
@@ -20,7 +26,7 @@
  * без токена бота. Мы токен держим, поэтому ходим по пути HMAC, и вторую проверку
  * не заводим.
  *
- * Функция чистая: ни базы, ни сети, ни `process.env`. Токен приходит аргументом — его
+ * Функции чистые: ни базы, ни сети, ни `process.env`. Токен приходит аргументом — его
  * читает `server/bot/config.ts`, и второго места, знающего, откуда берётся токен,
  * не появляется.
  */
@@ -158,6 +164,72 @@ const buildDataCheckString = (fields: URLSearchParams): string =>
     .map(([key, value]) => `${key}=${value}`)
     .join('\n');
 
+/**
+ * Общее у обеих строк: подпись и возраст.
+ *
+ * Дальше строки расходятся составом полей — в `initData` личность лежит в `user`,
+ * в строке контакта её нет вовсе, а есть `contact`, — но до этого места проверка
+ * одинакова, и разводить её по двум местам значит заводить два разных ответа на вопрос,
+ * подписана ли строка Telegram.
+ *
+ * Поля возвращаются разобранными **только после** сошедшейся подписи: прочитать что-либо
+ * из непроверенной строки значит поверить клиенту на слово.
+ */
+type SignatureCheck =
+  | { outcome: 'valid'; fields: URLSearchParams; authDate: Date; ageSeconds: number }
+  | { outcome: 'expired'; authDate: Date; ageSeconds: number }
+  | { outcome: 'missing' | 'malformed' | 'hash_mismatch' };
+
+const checkSignature = (
+  signed: string,
+  token: string,
+  maxAgeSeconds: number,
+  now: Date,
+): SignatureCheck => {
+  // Пустой токен — не отказ подписи, а машина без бота: проверять на ней подпись нечем.
+  // Отказом в доступе это притворяться не должно, иначе Mini App на такой машине молча
+  // не работает у всех, и в логе лежат `hash_mismatch` вместо незаполненной переменной.
+  if (token === '') {
+    throw new Error('проверка подписи Telegram вызвана с пустым токеном бота: сверять нечем');
+  }
+
+  if (signed.trim() === '') {
+    return { outcome: 'missing' };
+  }
+
+  const fields = new URLSearchParams(signed);
+  const receivedHash = fields.get(HASH_FIELD);
+  const rawAuthDate = fields.get('auth_date');
+
+  if (receivedHash === null || rawAuthDate === null) {
+    return { outcome: 'malformed' };
+  }
+
+  const authDateSeconds = Number(rawAuthDate);
+
+  if (!Number.isInteger(authDateSeconds) || authDateSeconds <= 0) {
+    return { outcome: 'malformed' };
+  }
+
+  const secretKey = createHmac('sha256', SECRET_KEY_SALT).update(token).digest();
+  const expectedHash = createHmac('sha256', secretKey)
+    .update(buildDataCheckString(fields))
+    .digest('hex');
+
+  if (!hashesMatch(expectedHash, receivedHash)) {
+    return { outcome: 'hash_mismatch' };
+  }
+
+  const authDate = new Date(authDateSeconds * 1000);
+  const ageSeconds = Math.floor((now.getTime() - authDate.getTime()) / 1000);
+
+  if (ageSeconds > maxAgeSeconds) {
+    return { outcome: 'expired', authDate, ageSeconds };
+  }
+
+  return { outcome: 'valid', fields, authDate, ageSeconds };
+};
+
 const parseUser = (rawJson: string): InitDataUser | null => {
   let parsed: RawUser;
 
@@ -205,49 +277,18 @@ export type InitDataCheckRequest = {
  * ровно то, из-за чего в старом проекте роль назначалась одним сообщением боту.
  */
 export const checkInitData = (request: InitDataCheckRequest): InitDataCheck => {
-  const { initData, token } = request;
-  const maxAgeSeconds = request.maxAgeSeconds ?? INIT_DATA_MAX_AGE_SECONDS;
-  const now = request.now ?? new Date();
+  const checked = checkSignature(
+    request.initData,
+    request.token,
+    request.maxAgeSeconds ?? INIT_DATA_MAX_AGE_SECONDS,
+    request.now ?? new Date(),
+  );
 
-  // Пустой токен — не отказ подписи, а машина без бота: проверять на ней подпись нечем.
-  // Отказом в доступе это притворяться не должно, иначе Mini App на такой машине молча
-  // не работает у всех, и в логе лежат `hash_mismatch` вместо незаполненной переменной.
-  if (token === '') {
-    throw new Error('проверка initData вызвана с пустым токеном бота: подпись сверять нечем');
+  if (checked.outcome !== 'valid') {
+    return checked;
   }
 
-  if (initData.trim() === '') {
-    return { outcome: 'missing' };
-  }
-
-  const fields = new URLSearchParams(initData);
-  const receivedHash = fields.get(HASH_FIELD);
-  const rawAuthDate = fields.get('auth_date');
-
-  if (receivedHash === null || rawAuthDate === null) {
-    return { outcome: 'malformed' };
-  }
-
-  const authDateSeconds = Number(rawAuthDate);
-
-  if (!Number.isInteger(authDateSeconds) || authDateSeconds <= 0) {
-    return { outcome: 'malformed' };
-  }
-
-  const secretKey = createHmac('sha256', SECRET_KEY_SALT).update(token).digest();
-  const expectedHash = createHmac('sha256', secretKey).update(buildDataCheckString(fields)).digest('hex');
-
-  if (!hashesMatch(expectedHash, receivedHash)) {
-    return { outcome: 'hash_mismatch' };
-  }
-
-  const authDate = new Date(authDateSeconds * 1000);
-  const ageSeconds = Math.floor((now.getTime() - authDate.getTime()) / 1000);
-
-  if (ageSeconds > maxAgeSeconds) {
-    return { outcome: 'expired', authDate, ageSeconds };
-  }
-
+  const { fields, authDate, ageSeconds } = checked;
   const rawUser = fields.get('user');
 
   if (rawUser === null) {
@@ -268,4 +309,146 @@ export const checkInitData = (request: InitDataCheckRequest): InitDataCheck => {
     queryId: fields.get('query_id'),
     startParam: fields.get('start_param'),
   };
+};
+
+/**
+ * Кто и с каким номером — то, что лежит в поле `contact` после удачной проверки подписи.
+ *
+ * Разведка `#81` сняла состав ответа с живого прогона, а не со страницы документации:
+ * Telegram обещает статус, а отдаёт вдобавок подписанную строку, и именно она делает
+ * номер подтверждённым (docs/miniapp.md → «Подпись строки контакта проверяется тем же
+ * способом, что `initData`»).
+ */
+export type SignedContact = {
+  /**
+   * Владелец контакта — то же значение, что `contact.user_id` у апдейта бота.
+   *
+   * `null`, если Telegram его не показал: такой контакт ничего не подтверждает, и сверить
+   * его с отправителем нечем. Решение по нему принимает сервис привязки, а не эта функция.
+   */
+  userId: bigint | null;
+  /** Номер ровно как пришёл, без единой правки: нормализация живёт своим местом. */
+  phoneNumber: string;
+  firstName: string;
+  lastName: string;
+};
+
+/** Причины отказа. Все, кроме `valid`, означают «телефон не подтверждён». */
+export type ContactDataOutcome =
+  | 'valid'
+  /** Строки нет вовсе — клиент прислал запрос без ответа на `requestContact`. */
+  | 'missing'
+  /** Нет `hash`, нет `auth_date` или он не число, `contact` не разбирается как JSON. */
+  | 'malformed'
+  /** Подпись не сошлась: строку собрал не Telegram или её правили по дороге. */
+  | 'hash_mismatch'
+  /** Подпись верна, но строка старше предела. */
+  | 'expired'
+  /** Подпись верна, а поля `contact` в строке нет. */
+  | 'no_contact';
+
+export type ContactDataCheck =
+  | {
+      outcome: 'valid';
+      contact: SignedContact;
+      /** Когда человек поделился номером — поле `auth_date`. */
+      authDate: Date;
+      /** Возраст строки на момент проверки, в секундах. */
+      ageSeconds: number;
+    }
+  | {
+      outcome: 'expired';
+      authDate: Date;
+      ageSeconds: number;
+    }
+  | { outcome: 'missing' | 'malformed' | 'hash_mismatch' | 'no_contact' };
+
+/** Сырое содержимое поля `contact`: чужой JSON до того, как мы в нём что-то признали. */
+type RawContact = {
+  user_id?: unknown;
+  phone_number?: unknown;
+  first_name?: unknown;
+  last_name?: unknown;
+};
+
+const parseContact = (rawJson: string): SignedContact | null => {
+  let parsed: RawContact;
+
+  try {
+    parsed = JSON.parse(rawJson) as RawContact;
+  } catch {
+    return null;
+  }
+
+  const phoneNumber = readString(parsed.phone_number).trim();
+
+  // Строка контакта без номера — не контакт: регистрировать по ней нечего, и притворяться,
+  // что телефон подтверждён пустой строкой, нельзя.
+  if (phoneNumber === '') {
+    return null;
+  }
+
+  // Чужое поле обязано быть целым числом, а не «чем-то, что приводится к числу»: строка
+  // `"12e9"` молча превратилась бы в идентификатор постороннего человека.
+  const hasUserId = typeof parsed.user_id === 'number' && Number.isInteger(parsed.user_id);
+
+  return {
+    userId: hasUserId ? BigInt(parsed.user_id as number) : null,
+    phoneNumber,
+    firstName: readString(parsed.first_name),
+    lastName: readString(parsed.last_name),
+  };
+};
+
+export type ContactDataCheckRequest = {
+  /** Строка целиком, как её отдал клиент: поле `response` в ответе `requestContact`. */
+  contactData: string;
+  token: string;
+  /** Предел возраста строки. Задаётся явно, чтобы проверка не зависела от глобального состояния. */
+  maxAgeSeconds?: number;
+  /** Момент проверки. Аргументом — чтобы «просроченная строка» проверялась тестом, а не ожиданием. */
+  now?: Date;
+};
+
+/**
+ * Проверяет подпись строки контакта и читает из неё номер.
+ *
+ * Отдельной функцией, а не `checkInitData` на другой строке: состав полей другой — здесь
+ * только `contact` и `auth_date`, поля `user` нет вовсе, и `checkInitData` на такой строке
+ * возвращает `no_user`. Всё остальное общее и живёт в `checkSignature`.
+ *
+ * Возраст меряется тем же порогом, что у `initData`, и по той же причине: строка
+ * выписывается один раз и сама не обновляется, а предел решает, сколько украденная строка
+ * остаётся годной — здесь для того, чтобы привязать чужой номер к своему Telegram.
+ *
+ * «Контакт принадлежит отправителю» здесь **не** проверяется: функция чистая и про
+ * `initData` ничего не знает. Сверка `contact.user_id` с `user.id` стоит в сервисе
+ * привязки — там же, где стояла для контакта, присланного боту в чат.
+ */
+export const checkContactData = (request: ContactDataCheckRequest): ContactDataCheck => {
+  const checked = checkSignature(
+    request.contactData,
+    request.token,
+    request.maxAgeSeconds ?? INIT_DATA_MAX_AGE_SECONDS,
+    request.now ?? new Date(),
+  );
+
+  if (checked.outcome !== 'valid') {
+    return checked;
+  }
+
+  const { fields, authDate, ageSeconds } = checked;
+  const rawContact = fields.get('contact');
+
+  if (rawContact === null) {
+    return { outcome: 'no_contact' };
+  }
+
+  const contact = parseContact(rawContact);
+
+  if (contact === null) {
+    return { outcome: 'malformed' };
+  }
+
+  return { outcome: 'valid', contact, authDate, ageSeconds };
 };

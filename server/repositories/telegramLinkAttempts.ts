@@ -16,9 +16,14 @@ export type TelegramLinkAttemptInput = {
   telegramChatId: bigint;
   /** Отправитель апдейта. Пуст, если Telegram его не показал. */
   telegramUserId: bigint | null;
-  /** Номер ровно как пришёл в контакте. */
-  phoneRaw: string;
-  /** Наша нормализация. Пусто, если номер к каноническому виду не приводится. */
+  /**
+   * Номер ровно как пришёл в контакте.
+   *
+   * `null` — номера в строке не будет вовсе: так пишется попытка с чужим контактом.
+   * Не пустая строка: та означала бы «номер был, и он пустой».
+   */
+  phoneRaw: string | null;
+  /** Наша нормализация. Пусто, если номер не приводится к каноническому виду или его нет. */
   phoneE164: string | null;
   outcome: LinkAttemptOutcome;
   profileId: string | null;
