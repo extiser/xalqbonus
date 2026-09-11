@@ -3,6 +3,7 @@ import { consola } from 'consola';
 import { db } from '#server/db';
 import type { Language, LinkAttemptOutcome } from '#server/generated/prisma/enums';
 import { findPersonSettings } from '#server/repositories/drivers';
+import { findEmployeeByTelegramOrPhone } from '#server/repositories/employees';
 import {
   findActiveLinkByChat,
   findActiveLinkByPerson,
@@ -29,7 +30,7 @@ import { describeDatabaseFailure, UNIQUE_VIOLATION } from '#server/utils/postgre
  *
  * Автоматика строится на одном признаке — подтверждённом телефоне из Telegram. Всё
  * остальное, что водитель может ввести руками, секретом от коллег не является: машину
- * видно каждый день, права он показывает. Поэтому исходов ровно девять, и каждый из них
+ * видно каждый день, права он показывает. Поэтому исходов ровно десять, и каждый из них
  * пишется в журнал попыток — включая удачный.
  *
  * Чего здесь нет и не будет:
@@ -209,6 +210,25 @@ export const registerDriverByContact = async (
     await recordAttempt(request, null, 'not_in_registry');
 
     return { outcome: 'not_in_registry' };
+  }
+
+  // Сотрудник, приславший боту контакт как водитель, получает отказ, а не вторую роль:
+  // водителем и сотрудником одновременно быть нельзя, и вторая сторона этого же правила
+  // стоит при принятии приглашения (docs/decisions.md → «Учётка сотрудника и роли»).
+  //
+  // Проверка идёт до похода в Fleet API: решение о водителе она не меняет, а вот лишний
+  // запрос во внешнюю систему на узкой квоте — меняет.
+  const employee = await findEmployeeByTelegramOrPhone(request.telegramUserId, phoneE164);
+
+  if (employee) {
+    log.info('контакт прислал сотрудник парка — регистрация водителя отклонена', {
+      chatId: request.telegramChatId.toString(),
+      employeeId: employee.id,
+    });
+
+    await recordAttempt(request, phoneE164, 'employee_account');
+
+    return { outcome: 'employee_account' };
   }
 
   let profiles = await findActiveProfilesByPhone(phoneE164);

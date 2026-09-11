@@ -170,6 +170,47 @@ export const findActiveLinkByPerson = async (
   return rows[0] ?? null;
 };
 
+/**
+ * Активная водительская привязка, за которой числится этот Telegram или этот телефон.
+ *
+ * Спрашивается с той стороны, где заводят сотрудника: водителем и сотрудником одновременно
+ * быть нельзя, и приглашение, пришедшее на аккаунт работающего водителя, отклоняется
+ * текстом, а не привязывается молча (docs/decisions.md → «Учётка сотрудника и роли»).
+ *
+ * Telegram сверяется и по чату, и по отправителю: в приватном чате это одно число, но
+ * у перенесённых из старой базы привязок `telegram_user_id` пуст, а `telegram_chat_id` —
+ * нет, и проверка по одному только отправителю их бы не увидела.
+ *
+ * Телефон доходит до привязки через парк: номер живёт на профиле, профиль принадлежит
+ * человеку, привязка — человеку. Своего места, где у нас хранится телефон водителя,
+ * нет намеренно (docs/drivers.md → «Смена номера чинится в парке, а не у нас»).
+ */
+export const findActiveLinkByTelegramOrPhone = async (
+  telegramUserId: bigint | null,
+  phoneE164: string | null,
+): Promise<ActiveTelegramLinkRow | null> => {
+  const rows = await db.$queryRaw<ActiveTelegramLinkRow[]>`
+    SELECT link."person_id"        AS "personId",
+           link."telegram_chat_id" AS "telegramChatId"
+      FROM xb.telegram_links AS link
+     WHERE link."closed_at" IS NULL
+       AND (
+             link."telegram_chat_id" = ${telegramUserId === null ? null : telegramUserId.toString()}::text::bigint
+          OR link."telegram_user_id" = ${telegramUserId === null ? null : telegramUserId.toString()}::text::bigint
+          OR link."person_id" IN (
+               SELECT profile."person_id"
+                 FROM xb.profile_phones AS phone
+                 JOIN xb.park_profiles AS profile ON profile."profile_id" = phone."profile_id"
+                WHERE phone."closed_at" IS NULL
+                  AND phone."phone_e164" = ${phoneE164}
+             )
+           )
+     LIMIT 1
+  `;
+
+  return rows[0] ?? null;
+};
+
 export type TelegramLinkCounts = { active: number; closed: number };
 
 export const countTelegramLinks = async (): Promise<TelegramLinkCounts> => {
