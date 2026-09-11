@@ -3,8 +3,8 @@ import { InlineKeyboard, Keyboard, type Bot, type Context } from 'grammy';
 
 import { sendScreen } from '#server/bot/screen';
 import { forgetLanguage, recallLanguage, rememberLanguage } from '#server/bot/state';
-import { comeToOfficeText, formatPoints, text } from '#server/bot/texts';
-import type { Language } from '#server/generated/prisma/enums';
+import { formatPoints, text, withOffices, type TextKey } from '#server/bot/texts';
+import type { Language, LinkAttemptOutcome } from '#server/generated/prisma/enums';
 import { readLinkedDriver, type LinkedDriver } from '#server/services/drivers/readLinkedDriver';
 import {
   registerDriverByContact,
@@ -24,11 +24,12 @@ import {
  *      телефон второй раз не спрашивается. Нет — выбор языка;
  *   2. язык выбран — экран «пришлите номер» с кнопкой запроса контакта. Выбор языка
  *      до базы не доезжает: человек ещё не участник, и строки `person_settings` у него нет;
- *   3. пришёл контакт — сервис решает исход, обработчик показывает один из трёх ответов:
- *      успех, «в офис» или «попробуйте позже».
+ *   3. пришёл контакт — сервис решает исход, обработчик показывает ответ на него:
+ *      успех, «попробуйте позже» или причину отказа со списком офисов под ней.
  *
- * Отказы «в офис» не различаются текстом намеренно: «номер не найден» против «уже
- * привязан» отвечает любому, кто знает номер коллеги, состоит ли тот в программе.
+ * Причины отказа разведены текстом (`#77`): из шести исходов «в офис» два решаются
+ * не походом через город, а нажатием — водитель зашёл со второго аккаунта Telegram
+ * или прислал не тот номер, — и узнать об этом он может только из ответа бота.
  *
  * Все экраны уходят через `sendScreen`: в чате живёт один экран бота, и прямых
  * `context.reply` здесь нет ни одного (server/bot/screen.ts).
@@ -102,6 +103,23 @@ const showPhoneRequest = async (
 };
 
 /**
+ * Текст на каждую причину отказа. Список офисов приклеивается к любому из них.
+ *
+ * Таблицей, а не цепочкой `if`: ответ у всех шести устроен одинаково и отличается
+ * только ключом текста.
+ * Через `Partial` намеренно — `LinkAttemptOutcome` пополняется, и новое значение,
+ * забытое здесь, обязано дать водителю общий текст, а не пустое сообщение.
+ */
+const OFFICE_TEXT_KEYS: Readonly<Partial<Record<LinkAttemptOutcome, TextKey>>> = {
+  not_in_registry: 'not_in_registry',
+  not_in_park: 'not_in_park',
+  profile_fired: 'profile_fired',
+  several_profiles: 'several_profiles',
+  person_already_linked: 'person_already_linked',
+  telegram_already_linked: 'telegram_already_linked',
+};
+
+/**
  * Ответ на исход регистрации.
  *
  * Клавиатура запроса контакта снимается у всех решений о водителе — и у успеха, и у «в
@@ -151,7 +169,9 @@ const showOutcome = async (
     return;
   }
 
-  await sendScreen(context, chatId, comeToOfficeText(language), {
+  const key = OFFICE_TEXT_KEYS[result.outcome] ?? 'come_to_office';
+
+  await sendScreen(context, chatId, withOffices(key, language), {
     parse_mode: 'HTML',
     // Ссылки на карту — единственное, ради чего разметка и нужна; разворачивать их
     // превью незачем, оно занимает пол-экрана на каждый офис.

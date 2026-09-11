@@ -27,6 +27,12 @@ export type TextKey =
   | 'contact_not_own'
   | 'linked'
   | 'linked_new'
+  | 'not_in_registry'
+  | 'not_in_park'
+  | 'profile_fired'
+  | 'several_profiles'
+  | 'person_already_linked'
+  | 'telegram_already_linked'
   | 'come_to_office'
   | 'park_api_unavailable'
   | 'notification_welcome_bonus';
@@ -62,6 +68,47 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Добро пожаловать, {name}! Спасибо, что выбрали Xalq Taxi. Завершите первые 5 поездок и получите 300 баллов — их можно обменять на подарки в наших офисах.',
     uz: "Xush kelibsiz, {name}! Xalq Taxi'ni tanlaganingiz uchun rahmat. Birinchi 5 ta safarni yakunlang va 300 ball oling — ularni ofislarimizdagi sovg'alarga almashtirish mumkin.",
   },
+  not_in_registry: {
+    ru: 'Не получилось привязать номер автоматически — в данных таксопарка чего-то не хватает. Это чинится только в офисе: подойдите в любой офис Xalq Taxi с водительским удостоверением.',
+    uz: "Raqamni avtomatik bog'lash imkoni bo'lmadi — taksopark ma'lumotlarida nimadir yetishmayapti. Bu faqat ofisda hal qilinadi: haydovchilik guvohnomangiz bilan Xalq Taxi'ning istalgan ofisiga murojaat qiling.",
+  },
+  /**
+   * Четыре абзаца намеренно: исход несёт три разных положения — водитель прислал не тот
+   * номер, данные оформленного сегодня ещё не доехали, водитель уволен (телефонов
+   * нерабочих профилей Fleet API не отдаёт, и до `profile_fired` дело не доходит).
+   * Различить их в коде сегодня нечем, поэтому человек находит себя в одной из строк.
+   */
+  not_in_park: {
+    ru: [
+      'Этот номер не числится за водителем Xalq Taxi.',
+      'Проверьте, тот ли номер вы отправили: привязка идёт по номеру, на который вы оформлены в таксопарке.',
+      'Если вы оформились сегодня, данные появятся в течение суток — попробуйте завтра.',
+      'Если работаете давно и номер верный, подойдите в офис с водительским удостоверением.',
+    ].join('\n\n'),
+    uz: [
+      'Bu raqam Xalq Taxi haydovchisiga biriktirilmagan.',
+      "Qaysi raqamni yuborganingizni tekshiring: bog'lash siz taksoparkda ro'yxatdan o'tgan raqam bo'yicha amalga oshiriladi.",
+      "Agar bugun rasmiylashtirilgan bo'lsangiz, ma'lumotlar bir kun ichida paydo bo'ladi — ertaga urinib ko'ring.",
+      "Agar ancha vaqtdan beri ishlayotgan bo'lsangiz va raqam to'g'ri bo'lsa, haydovchilik guvohnomangiz bilan ofisga murojaat qiling.",
+    ].join('\n\n'),
+  },
+  profile_fired: {
+    ru: 'По данным таксопарка вы сейчас не работаете в Xalq Taxi, поэтому привязать номер автоматически мы не можем. Если это не так, подойдите в любой офис с водительским удостоверением.',
+    uz: "Taksopark ma'lumotlariga ko'ra siz hozir Xalq Taxi'da ishlamaysiz, shuning uchun raqamni avtomatik bog'lay olmaymiz. Agar bu noto'g'ri bo'lsa, haydovchilik guvohnomangiz bilan istalgan ofisga murojaat qiling.",
+  },
+  several_profiles: {
+    ru: 'На ваш номер в таксопарке заведено несколько профилей, и мы не можем определить, который ваш. Подойдите в любой офис Xalq Taxi с водительским удостоверением — менеджер разберётся и привяжет ваш Telegram.',
+    uz: "Sizning raqamingizga taksoparkda bir nechta profil ochilgan va qaysi biri sizniki ekanini aniqlay olmaymiz. Haydovchilik guvohnomangiz bilan Xalq Taxi'ning istalgan ofisiga murojaat qiling — menejer aniqlab, Telegram'ingizni bog'laydi.",
+  },
+  person_already_linked: {
+    ru: 'Вы уже зарегистрированы в программе, но с другого аккаунта Telegram. Откройте бота с него — баллы на месте. Если доступа к тому аккаунту больше нет, подойдите в офис с водительским удостоверением.',
+    uz: "Siz dasturda allaqachon ro'yxatdan o'tgansiz, lekin boshqa Telegram akkaunti orqali. Botni o'sha akkauntdan oching — ballaringiz joyida. Agar o'sha akkauntga kira olmasangiz, haydovchilik guvohnomangiz bilan ofisga murojaat qiling.",
+  },
+  telegram_already_linked: {
+    ru: 'Этот Telegram уже привязан к другому водителю: один аккаунт нельзя использовать для двух человек. Если вы пользуетесь общим телефоном, откройте бота со своего аккаунта Telegram. Если это ошибка, подойдите в любой офис с водительским удостоверением.',
+    uz: "Bu Telegram boshqa haydovchiga biriktirilgan: bitta akkauntdan ikki kishi foydalana olmaydi. Agar umumiy telefondan foydalanayotgan bo'lsangiz, botni o'z Telegram akkauntingizdan oching. Agar bu xato bo'lsa, haydovchilik guvohnomangiz bilan istalgan ofisga murojaat qiling.",
+  },
+  /** Запасной исход: значение `LinkAttemptOutcome`, не разобранное ветвлением. */
   come_to_office: {
     ru: 'Не получилось привязать номер автоматически. Подойдите в любой офис Xalq Taxi с водительским удостоверением — менеджер привяжет ваш Telegram.',
     uz: "Raqamni avtomatik bog'lash imkoni bo'lmadi. Haydovchilik guvohnomangiz bilan Xalq Taxi'ning istalgan ofisiga murojaat qiling — menejer Telegram'ingizni bog'laydi.",
@@ -170,6 +217,12 @@ export const text = (
   );
 };
 
-/** Сообщение «в офис» целиком: причина отказа и список офисов под ней. */
-export const comeToOfficeText = (language: Language): string =>
-  `${text('come_to_office', language)}\n\n${officesBlock(language)}`;
+/**
+ * Сообщение «в офис» целиком: причина отказа и список офисов под ней.
+ *
+ * Ключом, а не одним зашитым текстом: причин отказа шесть, и список офисов нужен
+ * каждой — но зовёт в него каждая своими словами, потому что два исхода из шести
+ * решаются не походом через город, а нажатием.
+ */
+export const withOffices = (key: TextKey, language: Language): string =>
+  `${text(key, language)}\n\n${officesBlock(language)}`;
