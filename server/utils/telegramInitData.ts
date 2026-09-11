@@ -144,12 +144,18 @@ const hashesMatch = (expected: string, received: string): boolean => {
  *
  * Сортировка обязана идти по сырым именам полей, а не по чему-то нашему: порядок полей
  * в строке от Telegram произвольный, и сошлась подпись или нет, решает именно этот порядок.
+ *
+ * Сортируется **ключ**, а не готовая пара `key=value`. Сегодня это одно и то же, но стоит
+ * Telegram завести поле, имя которого — существующее имя плюс цифра, и порядок разъедется:
+ * в `auth_date2=…` на девятом знаке стоит `2`, а в `auth_date=…` — `=`, и цифра меньше.
+ * Подпись перестала бы сходиться разом у всех, и искать причину пришлось бы в знаке,
+ * которого в именах полей нет вовсе.
  */
 const buildDataCheckString = (fields: URLSearchParams): string =>
   [...fields.entries()]
     .filter(([key]) => key !== HASH_FIELD)
+    .sort(([leftKey], [rightKey]) => (leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0))
     .map(([key, value]) => `${key}=${value}`)
-    .sort()
     .join('\n');
 
 const parseUser = (rawJson: string): InitDataUser | null => {

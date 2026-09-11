@@ -43,9 +43,11 @@ const nowSeconds = (): number => Math.floor(Date.now() / 1000);
  */
 const signInitData = (fields: Record<string, string>, token: string): string => {
   const parameters = new URLSearchParams(fields);
+  // По алфавиту сортируются имена полей — так сказано у Telegram, и так здесь написано
+  // независимо от того, как это сделано в проверяемом модуле.
   const dataCheckString = [...parameters.entries()]
+    .sort(([leftKey], [rightKey]) => (leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0))
     .map(([key, value]) => `${key}=${value}`)
-    .sort()
     .join('\n');
 
   const secretKey = createHmac('sha256', 'WebAppData').update(token).digest();
@@ -114,6 +116,16 @@ describe('checkInitData', () => {
       { ...freshFields(), signature: 'TYJxVcisqbWjtodPepiJ6ghziUL94' },
       TOKEN,
     );
+
+    expect(checkInitData({ initData: signed, token: TOKEN }).outcome).toBe('valid');
+  });
+
+  it('сортирует поля по именам, а не по готовым парам `key=value`', () => {
+    // Разница видна только на паре имён, где одно является началом другого: в `auth_date2=…`
+    // на девятом знаке стоит `2`, в `auth_date=…` — `=`, и цифра меньше. Сортировка готовых
+    // пар поставила бы их в обратном порядке, и подпись не сошлась бы. Поля с такой парой
+    // имён у Telegram сегодня нет, и тест держит порядок до того дня, когда оно появится.
+    const signed = signInitData({ ...freshFields(), auth_date2: '1789126043' }, TOKEN);
 
     expect(checkInitData({ initData: signed, token: TOKEN }).outcome).toBe('valid');
   });
