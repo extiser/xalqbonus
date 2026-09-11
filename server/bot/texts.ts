@@ -13,7 +13,10 @@ import type { Language } from '#server/generated/prisma/enums';
  * и правится он здесь же — другого места у текста нет.
  */
 
-/** Ключи всех экранов регистрации. Новый экран — новый ключ здесь, и сразу оба языка. */
+/**
+ * Ключи всех текстов бота — экранов диалога и уведомлений. Новый текст — новый ключ здесь,
+ * и сразу оба языка.
+ */
 export type TextKey =
   | 'select_language'
   | 'button_language_ru'
@@ -25,7 +28,8 @@ export type TextKey =
   | 'linked'
   | 'linked_new'
   | 'come_to_office'
-  | 'park_api_unavailable';
+  | 'park_api_unavailable'
+  | 'notification_welcome_bonus';
 
 const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   select_language: {
@@ -65,6 +69,10 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   park_api_unavailable: {
     ru: 'Не удалось проверить номер — база таксопарка сейчас не отвечает. Попробуйте, пожалуйста, через несколько минут.',
     uz: "Raqamni tekshirib bo'lmadi — taksopark ma'lumotlar bazasi hozir javob bermayapti. Iltimos, bir necha daqiqadan so'ng qayta urinib ko'ring.",
+  },
+  notification_welcome_bonus: {
+    ru: '🎁 Вам начислено {points} баллов за первые 5 поездок! Обменять их на подарки можно в любом офисе Xalq Taxi.',
+    uz: "🎁 Birinchi 5 ta safaringiz uchun sizga {points} ball hisoblandi! Ularni Xalq Taxi'ning istalgan ofisida sovg'alarga almashtirishingiz mumkin.",
   },
 };
 

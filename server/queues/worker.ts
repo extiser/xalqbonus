@@ -1,6 +1,11 @@
 import { consola } from 'consola';
 import { writeFileSync } from 'node:fs';
-import { getQueueConnection } from '#server/queues/connection';
+import { closeQueueConnection, getQueueConnection } from '#server/queues/connection';
+import {
+  closeNotificationsQueue,
+  createNotificationsWorker,
+  getNotificationsQueue,
+} from '#server/queues/notifications';
 import { applySyncSchedule, createSyncQueue, createSyncWorker } from '#server/queues/sync';
 import { failAbandonedRuns } from '#server/repositories/syncRuns';
 import { readSyncConfig } from '#server/services/sync/config';
@@ -51,6 +56,31 @@ syncWorker.on('error', (error: Error) => {
   log.warn('очередь синхронизации сообщила об ошибке', { error: error.message });
 });
 
+// Уведомления — отдельная очередь и отдельный воркер. Общей очереди с синхронизацией
+// у них быть не может: та идёт строго по одному прогону, и уведомление, вставшее
+// за получасовым обходом реестра, приехало бы к водителю через полчаса
+// (server/queues/notifications.ts).
+const notificationsQueue = getNotificationsQueue();
+const notificationsWorker = createNotificationsWorker(notificationsQueue);
+
+notificationsWorker.on('completed', (job, outcome) => {
+  // Исход каждого задания — строка в логе. Сама отправка пишет свою, эта отвечает
+  // на вопрос «очередь жива и разгребается».
+  log.debug('задание уведомления выполнено', { template: job.name, outcome });
+});
+
+notificationsWorker.on('failed', (job, error) => {
+  log.error('уведомление не отправлено', {
+    template: job?.name,
+    attempts: job?.attemptsMade,
+    error: error.message,
+  });
+});
+
+notificationsWorker.on('error', (error: Error) => {
+  log.warn('очередь уведомлений сообщила об ошибке', { error: error.message });
+});
+
 // Прошлый процесс мог уйти по SIGKILL, не закрыв свою строку прогона: `syncWorker.close()`
 // на SIGTERM дожидается прогона, а `docker stop` по таймауту и убийство по памяти такой
 // возможности не дают. Подбираем брошенное — иначе журнал прогонов копит вечно бегущие строки.
@@ -84,7 +114,11 @@ const shutdown = async (signal: string): Promise<void> => {
   // синхронизация оставила бы строку `sync_runs` навсегда в состоянии `running`.
   await syncWorker.close();
   await syncQueue.close();
-  await connection.quit();
+  // Воркер уведомлений дожидается отправок, которые уже в руках: оборванная на середине
+  // отправка — это сообщение, про которое неизвестно, ушло оно или нет.
+  await notificationsWorker.close();
+  await closeNotificationsQueue();
+  await closeQueueConnection();
   process.exit(0);
 };
 
