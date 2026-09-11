@@ -34,6 +34,7 @@ export type TextKey =
   | 'ask_phone'
   | 'button_send_phone'
   | 'checking_phone'
+  | 'client_outdated'
   | 'contact_not_own'
   | 'linked'
   | 'linked_new'
@@ -91,6 +92,18 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   checking_phone: {
     ru: 'Проверяем ваш номер в базе таксопарка, это займёт несколько секунд…',
     uz: "Telefon raqamingiz taksopark ma'lumotlar bazasida tekshirilmoqda, bu bir necha soniya davom etadi…",
+  },
+  /**
+   * Клиент Telegram старее Bot API 6.9: вызова `requestContact` в нём нет вовсе, и взять
+   * номер внутри приложения нечем.
+   *
+   * Отдельным текстом от «откройте приложение через Telegram»: тот адресован человеку,
+   * открывшему страницу в обычном браузере, и человеку в устаревшем Telegram он советует
+   * ровно то, что тот уже сделал.
+   */
+  client_outdated: {
+    ru: 'Ваш Telegram устарел: поделиться номером внутри приложения в нём нельзя. Обновите Telegram до последней версии и откройте приложение снова.',
+    uz: "Telegram ilovangiz eskirgan: uning ichida raqam bilan bo'lishish mumkin emas. Telegram'ni so'nggi versiyaga yangilang va ilovani qaytadan oching.",
   },
   contact_not_own: {
     ru: 'Отправьте, пожалуйста, свой номер телефона кнопкой ниже — чужой контакт мы принять не можем.',

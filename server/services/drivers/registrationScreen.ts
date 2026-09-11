@@ -79,6 +79,7 @@ const screenTexts = (language: Language): RegistrationScreenTexts => ({
   askPhone: plainText('ask_phone', language),
   sendPhone: plainText('button_send_phone', language),
   checkingPhone: plainText('checking_phone', language),
+  outdatedClient: plainText('client_outdated', language),
 });
 
 /**
