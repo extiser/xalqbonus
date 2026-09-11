@@ -149,6 +149,56 @@ describe('приветственный бонус', () => {
     expect(await readAccountBalance(person.personId)).toBe(5n + WELCOME_BONUS_POINTS);
   });
 
+  it('поездки до вступления в программу в счёт не идут', async () => {
+    // Поездки пишутся для всего реестра парка независимо от участия. Водитель, отъездивший
+    // в парке три месяца и зарегистрировавшийся вчера, иначе получил бы 300 баллов
+    // в первом же прогоне — за поездки, сделанные до всякой программы.
+    const joinedAt = new Date('2026-09-09T00:00:00.000Z');
+    const person = await createTestPerson({ inProgram: true, joinedAt });
+
+    const beforeJoining: string[] = [];
+
+    for (let index = 0; index < 8; index += 1) {
+      const tripOrderId = `test-welcome-${person.personId}-before-${index}`;
+      await createTestTrip({
+        profileId: person.profileId,
+        tripOrderId,
+        status: 'complete',
+        endedAt: new Date('2026-08-20T12:00:00.000Z'),
+      });
+      beforeJoining.push(tripOrderId);
+    }
+
+    const beforeJoiningRun = await awardTripPoints(beforeJoining);
+
+    // Баллы за поездки начисляются — участие проверяется на момент прогона, а не поездки.
+    // Бонус не выдаётся: до вступления этих поездок для него не существует.
+    expect(beforeJoiningRun.awarded).toBe(8);
+    expect(beforeJoiningRun.welcomeAwarded).toBe(0);
+    expect(await readAccountBalance(person.personId)).toBe(8n);
+
+    // Четыре поездки после вступления — порог всё ещё не сошёлся.
+    const afterJoining = await createCompletedTrips(person, 4);
+    const beforeThreshold = await awardTripPoints(afterJoining);
+
+    expect(beforeThreshold.welcomeAwarded).toBe(0);
+    expect(await readAccountBalance(person.personId)).toBe(12n);
+
+    const fifthTripOrderId = `test-welcome-${person.personId}-after-fifth`;
+    await createTestTrip({
+      profileId: person.profileId,
+      tripOrderId: fifthTripOrderId,
+      status: 'complete',
+      endedAt: COMPLETED_AT,
+    });
+
+    const atThreshold = await awardTripPoints([fifthTripOrderId]);
+
+    expect(atThreshold.welcomeAwarded).toBe(1);
+    expect(await readAccountBalance(person.personId)).toBe(13n + WELCOME_BONUS_POINTS);
+    expect(await countTransfersByKey(buildWelcomeIdempotencyKey(person.personId))).toBe(1);
+  });
+
   it('незавершённые поездки в счёт не идут', async () => {
     const person = await createTestPerson({ inProgram: true });
     const tripOrderIds = await createCompletedTrips(person, 5);

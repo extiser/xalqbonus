@@ -1,5 +1,6 @@
 import { consola } from 'consola';
 import { hasLegacyRecord } from '#server/repositories/legacyDriverMap';
+import { hasTransferByIdempotencyKey } from '#server/repositories/points';
 import { countCompletedTripsByPerson } from '#server/repositories/trips';
 import { buildWelcomeIdempotencyKey } from '#server/services/points/idempotencyKey';
 import { transferPoints } from '#server/services/points/transfer';
@@ -30,8 +31,12 @@ export type WelcomeBonusInput = {
   driverAccountId: string;
   emissionAccountId: string;
   /**
-   * Время операции — завершение поездки, на которой порог сошёлся: журнал показывает,
-   * когда бонус был заработан, а не когда прогон до него добрался.
+   * Время операции — завершение той поездки, на которой порог обнаружен: журнал показывает
+   * время самой поездки, а не время прогона.
+   *
+   * Именно обнаружен, а не «пятой»: поездки приходят из выборки без `ORDER BY`, и когда
+   * пятая и шестая приезжают одним окном, порядок отдаёт база. Бонус может встать во времени
+   * шестой поездки — на минуты, и это ни на что не влияет: порядок ради этого не наводится.
    */
   occurredAt: Date;
 };
@@ -44,7 +49,20 @@ export type WelcomeBonusInput = {
  * держало их в руках, и второй круг запросов на каждую поездку ничего бы не уточнил.
  */
 export const awardWelcomeBonus = async (input: WelcomeBonusInput): Promise<boolean> => {
-  // Перенесённый из старой базы проверяется первым, и не только потому, что запрос дешевле
+  const idempotencyKey = buildWelcomeIdempotencyKey(input.personId);
+
+  // Первым делом — выданный бонус, и это не проверка «мы уже начисляли»: от повтора держит
+  // уникальное ограничение внутри перевода, и снимать его нельзя. Запрос здесь стоит потому,
+  // что порог «поездок не меньше пяти» у получившего бонус сошёлся навсегда, и без выхода
+  // перевод звался бы на каждой следующей поездке этого человека — на шестой, на сотой,
+  // на тысячной. Пустой вызов не бесплатен: он берёт `SELECT … FOR UPDATE` на оба счёта,
+  // включая общий `emission`, и только потом упирается в ключ, — то есть удваивает захват
+  // счёта, из-за которого поездки и обрабатываются по одной.
+  if (await hasTransferByIdempotencyKey(idempotencyKey)) {
+    return false;
+  }
+
+  // Перенесённый из старой базы проверяется следующим, и не только потому, что запрос дешевле
   // счёта поездок: таких людей 4 099, и до подсчёта поездок большинству доходить незачем.
   // Само условие обязано стоять в коде, а не подразумеваться: без него перенесённый водитель
   // сделает после выката пять поездок и получит 300 баллов как новичок — до 1.23 млн баллов,
@@ -55,7 +73,10 @@ export const awardWelcomeBonus = async (input: WelcomeBonusInput): Promise<boole
   }
 
   // Поездки считаются по всем профилям человека, а не по учётке парка: переоформленный
-  // в парке водитель иначе начал бы отсчёт заново.
+  // в парке водитель иначе начал бы отсчёт заново. И только те, что после вступления
+  // в программу: поездки пишутся для всего парка независимо от участия, и за всё время
+  // счёт выдал бы 300 баллов в первом же прогоне тому, кто ездил три месяца и только что
+  // зарегистрировался. Обещано другое — первые пять поездок нового участника.
   const completedTrips = await countCompletedTripsByPerson(input.personId, WELCOME_TRIPS_REQUIRED);
 
   if (completedTrips < WELCOME_TRIPS_REQUIRED) {
@@ -69,7 +90,7 @@ export const awardWelcomeBonus = async (input: WelcomeBonusInput): Promise<boole
   // (docs/points.md → «Каждая операция идемпотентна»).
   const { applied } = await transferPoints({
     reason: 'welcome',
-    idempotencyKey: buildWelcomeIdempotencyKey(input.personId),
+    idempotencyKey,
     amount: WELCOME_BONUS_POINTS,
     fromAccountId: input.emissionAccountId,
     toAccountId: input.driverAccountId,

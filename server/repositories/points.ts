@@ -119,6 +119,27 @@ export const insertDriverAccount = async (
   return existing;
 };
 
+/**
+ * Есть ли уже перевод с таким ключом. Обычный `SELECT` по уникальному индексу
+ * `idempotency_key`: ни транзакции, ни блокировок.
+ *
+ * **Идемпотентность на этот запрос не переезжает и переехать не может.** Повтор по-прежнему
+ * отсекает уникальное ограничение внутри `writeTransfer`, и только оно: между этим чтением
+ * и вставкой помещается второй прогон. Запрос нужен ровно для одного — не открывать
+ * транзакцию впустую там, где ответ известен заранее: `writeTransfer` первым делом берёт
+ * `SELECT … FOR UPDATE` на оба счёта, включая общий для всех водителей `emission`,
+ * и конфликт по ключу обнаруживает уже после захвата.
+ */
+export const hasTransferByIdempotencyKey = async (idempotencyKey: string): Promise<boolean> => {
+  const rows = await db.$queryRaw<{ exists: boolean }[]>`
+    SELECT EXISTS(
+             SELECT 1 FROM xb.point_transfers WHERE "idempotency_key" = ${idempotencyKey}
+           ) AS "exists"
+  `;
+
+  return rows[0]?.exists ?? false;
+};
+
 // Клиент передаётся параметром: внутри транзакции читать глобальным клиентом нельзя —
 // это другое соединение, и собственных, ещё не зафиксированных строк оно не видит.
 const selectTransferByIdempotencyKey = async (

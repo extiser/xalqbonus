@@ -40,10 +40,28 @@ export type TestPerson = {
 };
 
 /**
+ * Время вступления в программу по умолчанию — заведомо раньше поездок любого теста.
+ *
+ * Приветственный бонус считает поездки от `joined_at`, и умолчание `now()` означало бы,
+ * что у каждого тестового участника все поездки сделаны до вступления: сценарии, к бонусу
+ * отношения не имеющие, молча проверяли бы не то, что написано в их названии.
+ */
+const DEFAULT_JOINED_AT = new Date('2026-01-01T00:00:00.000Z');
+
+export type CreateTestPersonInput = {
+  inProgram: boolean;
+  /** Когда человек вступил в программу. Поездки до этого момента бонусу не засчитываются. */
+  joinedAt?: Date;
+};
+
+/**
  * Заводит человека с профилем в парке. `inProgram` управляет наличием `person_settings` —
  * это и есть граница «известен парку / участвует в программе» (docs/drivers.md).
  */
-export const createTestPerson = async ({ inProgram }: { inProgram: boolean }): Promise<TestPerson> => {
+export const createTestPerson = async ({
+  inProgram,
+  joinedAt = DEFAULT_JOINED_AT,
+}: CreateTestPersonInput): Promise<TestPerson> => {
   const person = await db.person.create({ data: {} });
   createdPersonIds.add(person.id);
 
@@ -71,7 +89,7 @@ export const createTestPerson = async ({ inProgram }: { inProgram: boolean }): P
 
   if (inProgram) {
     await db.personSettings.create({
-      data: { personId: person.id, language: 'ru', joinedSource: 'test' },
+      data: { personId: person.id, language: 'ru', joinedSource: 'test', joinedAt },
     });
   }
 
