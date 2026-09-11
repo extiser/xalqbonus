@@ -18,6 +18,7 @@ const RUN_KIND_LABELS: Record<SyncRunRow['kind'], string> = {
   orders_catchup: 'Заказы, догоняющий',
   registry: 'Реестр',
   registry_full: 'Реестр, полный обход',
+  registry_profile: 'Реестр, один телефон',
 };
 
 export const runKindLabel = (kind: SyncRunRow['kind']): string => RUN_KIND_LABELS[kind];

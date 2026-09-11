@@ -1,4 +1,5 @@
 import { db } from '#server/db';
+import type { Prisma } from '#server/generated/prisma/client';
 import type { Language, LinkCloseReason, LinkConfirmedBy } from '#server/generated/prisma/enums';
 
 /**
@@ -6,9 +7,24 @@ import type { Language, LinkCloseReason, LinkConfirmedBy } from '#server/generat
  *
  * Граница «известен парку / в программе» проходит по наличию строки `person_settings`,
  * а не по договорённости (docs/drivers.md). Реестр парка живёт без неё.
+ *
+ * Записи принимают клиент транзакции параметром. Причина одна и не стилистическая:
+ * при регистрации в боте привязка, участие и водительский счёт обязаны лечь одной
+ * транзакцией — частичный результат означает человека, который в программе, но без канала,
+ * и разбираться с этим придётся руками. Перенос из старой базы зовёт те же функции без
+ * параметра и работает как работал: внутри транзакции читать и писать глобальным клиентом
+ * нельзя — это другое соединение, и собственных незафиксированных строк оно не видит.
  */
 
 const CHUNK_SIZE = 1_000;
+
+/**
+ * Кто исполняет запрос: глобальный клиент или клиент транзакции.
+ *
+ * `PrismaClient` подходит под `TransactionClient` структурно — у него есть всё то же
+ * и сверх того, — поэтому умолчанием стоит `db` и вызывающему коду думать не о чем.
+ */
+type Executor = Prisma.TransactionClient;
 
 export type PersonSettingsInput = {
   personId: string;
@@ -23,11 +39,12 @@ export type PersonSettingsInput = {
 export const upsertPersonSettings = async (
   settings: readonly PersonSettingsInput[],
   joinedSource: string,
+  client: Executor = db,
 ): Promise<void> => {
   for (let offset = 0; offset < settings.length; offset += CHUNK_SIZE) {
     const chunk = settings.slice(offset, offset + CHUNK_SIZE);
 
-    await db.$executeRaw`
+    await client.$executeRaw`
       INSERT INTO xb.person_settings ("person_id", "language", "joined_at", "joined_source")
       SELECT * FROM unnest(
         ${chunk.map((row) => row.personId)}::text[]::uuid[],
@@ -46,6 +63,11 @@ export const upsertPersonSettings = async (
 export type TelegramLinkInput = {
   personId: string;
   telegramChatId: bigint;
+  /**
+   * Отправитель, чей контакт подтвердил номер. Пуст у перенесённых из старой базы:
+   * там от Telegram сохранился один лишь `chat_id`.
+   */
+  telegramUserId?: bigint | null;
   /**
    * Закрытая привязка заводится сразу закрытой — так переносятся обе половины двойника,
    * у которых активной не делается ни одна: выбор канала связи принадлежит ответу самого
@@ -66,24 +88,30 @@ export type TelegramLinkInput = {
 export const insertTelegramLinks = async (
   links: readonly TelegramLinkInput[],
   confirmedBy: LinkConfirmedBy,
+  client: Executor = db,
 ): Promise<number> => {
   let written = 0;
 
   for (let offset = 0; offset < links.length; offset += CHUNK_SIZE) {
     const chunk = links.slice(offset, offset + CHUNK_SIZE);
 
-    written += await db.$executeRaw`
+    written += await client.$executeRaw`
       INSERT INTO xb.telegram_links (
-        "person_id", "telegram_chat_id", "closed_at", "close_reason", "confirmed_by"
+        "person_id", "telegram_chat_id", "telegram_user_id",
+        "closed_at", "close_reason", "confirmed_by"
       )
       SELECT incoming.*
         FROM unnest(
                ${chunk.map((link) => link.personId)}::text[]::uuid[],
                ${chunk.map((link) => link.telegramChatId.toString())}::text[]::bigint[],
+               ${chunk.map((link) => link.telegramUserId?.toString() ?? null)}::text[]::bigint[],
                ${chunk.map((link) => link.closedAt?.toISOString() ?? null)}::text[]::timestamptz[],
                ${chunk.map((link) => link.closeReason)}::text[]::xb.link_close_reason[],
                ${chunk.map(() => confirmedBy)}::text[]::xb.link_confirmed_by[]
-             ) AS incoming("person_id", "telegram_chat_id", "closed_at", "close_reason", "confirmed_by")
+             ) AS incoming(
+               "person_id", "telegram_chat_id", "telegram_user_id",
+               "closed_at", "close_reason", "confirmed_by"
+             )
        WHERE NOT EXISTS (
              SELECT 1 FROM xb.telegram_links AS existing
               WHERE existing."person_id" = incoming."person_id"
@@ -93,6 +121,53 @@ export const insertTelegramLinks = async (
   }
 
   return written;
+};
+
+export type ActiveTelegramLinkRow = {
+  personId: string;
+  telegramChatId: bigint;
+};
+
+/**
+ * Активная привязка этого чата. Пусто — этот Telegram сейчас ничей.
+ *
+ * С неё начинается каждый `/start`: привязка есть — водитель уже участник, и телефон
+ * у него второй раз не спрашивают.
+ */
+export const findActiveLinkByChat = async (
+  telegramChatId: bigint,
+): Promise<ActiveTelegramLinkRow | null> => {
+  const rows = await db.$queryRaw<ActiveTelegramLinkRow[]>`
+    SELECT "person_id"        AS "personId",
+           "telegram_chat_id" AS "telegramChatId"
+      FROM xb.telegram_links
+     WHERE "closed_at" IS NULL
+       AND "telegram_chat_id" = ${telegramChatId.toString()}::text::bigint
+  `;
+
+  return rows[0] ?? null;
+};
+
+/**
+ * Активная привязка этого человека. Пусто — он ещё не в программе или его канал закрыт.
+ *
+ * Читается при регистрации ради одного: у человека с активной привязкой автопривязки
+ * не бывает **ни при каких совпадениях телефона**. Перепривязка — операция оператора,
+ * с уведомлением на прежний чат (docs/drivers.md → «Перепривязка — операция, а не
+ * побочный эффект»).
+ */
+export const findActiveLinkByPerson = async (
+  personId: string,
+): Promise<ActiveTelegramLinkRow | null> => {
+  const rows = await db.$queryRaw<ActiveTelegramLinkRow[]>`
+    SELECT "person_id"        AS "personId",
+           "telegram_chat_id" AS "telegramChatId"
+      FROM xb.telegram_links
+     WHERE "closed_at" IS NULL
+       AND "person_id" = ${personId}::uuid
+  `;
+
+  return rows[0] ?? null;
 };
 
 export type TelegramLinkCounts = { active: number; closed: number };

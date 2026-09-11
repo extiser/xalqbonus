@@ -2,6 +2,7 @@ import { consola } from 'consola';
 import { Bot, webhookCallback } from 'grammy';
 import type { Update } from 'grammy/types';
 import type { BotConfig } from '#server/bot/config';
+import { registerRegistrationHandlers } from '#server/bot/registration';
 
 const log = consola.withTag('bot');
 
@@ -41,9 +42,9 @@ const createBot = (config: BotConfig): Bot => {
     await next();
   });
 
-  // Каркас умеет ровно одно: сказать, что он жив, и назвать свой режим. Ботов три, включая
-  // боевого, и с одного взгляда должно быть понятно, кто именно ответил.
-  bot.command('start', (context) => context.reply(`XalqBonus, каркас бота. Режим: ${config.mode}`));
+  // Регистрация водителя: `/start`, выбор языка, контакт. Обработчики живут своим модулем,
+  // а правила привязки — в сервисе: бот является входом, а не местом, где живут правила.
+  registerRegistrationHandlers(bot);
 
   // Ошибка обработчика в режиме polling: без своего обработчика grammY останавливает бота
   // на первом же исключении. В режиме webhook эта настройка не действует вовсе — там

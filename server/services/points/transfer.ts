@@ -12,7 +12,7 @@ import {
   CHECK_VIOLATION,
   FOREIGN_KEY_VIOLATION,
   isConstraintViolation,
-} from '#server/services/points/postgresErrors';
+} from '#server/utils/postgresErrors';
 
 /**
  * Примитив перевода — единственная точка записи в журнал баллов.

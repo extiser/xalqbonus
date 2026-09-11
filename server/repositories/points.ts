@@ -71,8 +71,11 @@ export const findSystemAccount = async (type: AccountType): Promise<AccountRow |
   return rows[0] ?? null;
 };
 
-export const findDriverAccountByPerson = async (personId: string): Promise<AccountRow | null> => {
-  const rows = await db.$queryRaw<AccountRow[]>`
+export const findDriverAccountByPerson = async (
+  personId: string,
+  client: Prisma.TransactionClient = db,
+): Promise<AccountRow | null> => {
+  const rows = await client.$queryRaw<AccountRow[]>`
     SELECT "id", "type", "person_id" AS "personId", "balance"
       FROM xb.accounts
      WHERE "type" = 'driver' AND "person_id" = ${personId}::uuid
@@ -88,8 +91,11 @@ export const findDriverAccountByPerson = async (personId: string): Promise<Accou
  * успевает вклиниться второй воркер. Конфликт разрешается по частичному уникальному
  * индексу `accounts_driver_person_key`, поэтому условие индекса повторено в `ON CONFLICT`.
  */
-export const insertDriverAccount = async (personId: string): Promise<AccountRow> => {
-  const inserted = await db.$queryRaw<AccountRow[]>`
+export const insertDriverAccount = async (
+  personId: string,
+  client: Prisma.TransactionClient = db,
+): Promise<AccountRow> => {
+  const inserted = await client.$queryRaw<AccountRow[]>`
     INSERT INTO xb.accounts ("type", "person_id")
     VALUES ('driver', ${personId}::uuid)
     ON CONFLICT ("person_id") WHERE "type" = 'driver' DO NOTHING
@@ -100,7 +106,9 @@ export const insertDriverAccount = async (personId: string): Promise<AccountRow>
     return inserted[0];
   }
 
-  const existing = await findDriverAccountByPerson(personId);
+  // Тем же клиентом: внутри транзакции глобальный не увидит строку, вставленную только что
+  // соседним запросом этой же транзакции.
+  const existing = await findDriverAccountByPerson(personId, client);
 
   // Конфликт был, значит строка есть. Пусто здесь означало бы, что счёт удалили
   // между двумя запросами, — такого сценария в программе нет.

@@ -562,6 +562,85 @@ export const replacePersonLicense = async (
   });
 };
 
+export type ProfileByPhoneRow = {
+  profileId: string;
+  personId: string;
+  workStatus: string;
+  firstName: string;
+  lastName: string;
+};
+
+/**
+ * Профили, у которых этот номер телефона открыт, — в порядке пригодности для показа.
+ *
+ * Ровно то чтение, на котором стоит автопривязка Telegram: подтверждённым является только
+ * телефон из Telegram, и по нему одному ищется запись в реестре (docs/drivers.md).
+ *
+ * Учитываются только строки `profile_phones` с пустым `closed_at`. Закрытая строка —
+ * это номер, которого у водителя больше нет: он мог быть сдан и выдан другому человеку,
+ * и привязка по нему отдала бы новому владельцу чужой баланс.
+ *
+ * Порядок тот же, что у `findDisplayProfile`: работающий важнее прочих, среди равных
+ * берётся свежий по отметке API. У человека законно бывает несколько профилей — его
+ * переоформляли в парке, — и выбирать между ними бот и экран оператора обязаны одинаково.
+ *
+ * Через `EXISTS`, а не соединением: один и тот же номер бывает открыт на профиле дважды —
+ * парк записал его с пробелами и без, — а нормализация сводит обе строки к одному
+ * `phone_e164`. Соединение вернуло бы профиль дважды, и он выглядел бы как «несколько
+ * профилей на один номер».
+ */
+export const findActiveProfilesByPhone = async (
+  phoneE164: string,
+): Promise<ProfileByPhoneRow[]> =>
+  db.$queryRaw<ProfileByPhoneRow[]>`
+    SELECT profile."profile_id"  AS "profileId",
+           profile."person_id"   AS "personId",
+           profile."work_status" AS "workStatus",
+           profile."first_name"  AS "firstName",
+           profile."last_name"   AS "lastName"
+      FROM xb.park_profiles AS profile
+     WHERE EXISTS (
+           SELECT 1
+             FROM xb.profile_phones AS phone
+            WHERE phone."profile_id" = profile."profile_id"
+              AND phone."closed_at" IS NULL
+              AND phone."phone_e164" = ${phoneE164}
+     )
+     ORDER BY (profile."work_status" = 'working') DESC,
+              profile."api_updated_at" DESC,
+              profile."profile_id"
+  `;
+
+export type DisplayProfileRow = {
+  profileId: string;
+  firstName: string;
+  lastName: string;
+  workStatus: string;
+};
+
+/**
+ * Учётка человека, которой его называют.
+ *
+ * У человека бывает несколько профилей — его переоформляли в парке, — и показать надо один.
+ * Порядок тот же, что на экране оператора: работающий важнее уволенного, среди равных
+ * берётся свежий по отметке API. Разные ответы на один вопрос в боте и в админке
+ * означали бы, что кто-то из них врёт.
+ */
+export const findDisplayProfile = async (personId: string): Promise<DisplayProfileRow | null> => {
+  const rows = await db.$queryRaw<DisplayProfileRow[]>`
+    SELECT "profile_id"  AS "profileId",
+           "first_name"  AS "firstName",
+           "last_name"   AS "lastName",
+           "work_status" AS "workStatus"
+      FROM xb.park_profiles
+     WHERE "person_id" = ${personId}::uuid
+     ORDER BY ("work_status" = 'working') DESC, "api_updated_at" DESC
+     LIMIT 1
+  `;
+
+  return rows[0] ?? null;
+};
+
 export type ProfileOwnerRow = { profileId: string; personId: string };
 
 /** Читает соответствие «профиль парка → человек» для перечисленных профилей. */
