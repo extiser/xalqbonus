@@ -1,11 +1,19 @@
 import type { Language } from '#server/generated/prisma/enums';
+// Относительным путём, а не через `#shared`: этот модуль собирается ещё и в воркер,
+// а там из псевдонимов настроен один `#server` (package.json → `build:worker`).
+import type { OfficeContact } from '../../shared/types/miniapp';
 
 /**
- * Тексты бота — ключами в коде, а не строками в базе.
+ * Тексты, которые система говорит водителю и сотруднику, — ключами в коде, а не строками
+ * в базе.
+ *
+ * Читателей два: бот и экран Mini App. Файл остался здесь, где был написан, а не переехал
+ * следом за регистрацией: словарь один, и делить его по получателям значит заводить второе
+ * место, куда придётся дописывать узбекский.
  *
  * Таблица переводов старого бота не переносится (`#18`), а экранов здесь меньше десяти:
- * таблица ради них — это второе место, где живёт текст, и вопрос «почему бот сказал так»
- * начинает требовать запроса к базе.
+ * таблица ради них — это второе место, где живёт текст, и вопрос «почему система сказала
+ * так» начинает требовать запроса к базе.
  *
  * **Языка два, и они разные.** В старом боте из 236 строк переводов у 223 узбекский
  * побайтово равнялся русскому: язык спрашивался, писался в базу и показывал русский текст.
@@ -14,10 +22,12 @@ import type { Language } from '#server/generated/prisma/enums';
  */
 
 /**
- * Ключи всех текстов бота — экранов диалога и уведомлений. Новый текст — новый ключ здесь,
- * и сразу оба языка.
+ * Ключи всех текстов — экранов, исходов привязки и уведомлений. Новый текст — новый ключ
+ * здесь, и сразу оба языка.
  */
 export type TextKey =
+  | 'start_greeting'
+  | 'button_open_app'
   | 'select_language'
   | 'button_language_ru'
   | 'button_language_uz'
@@ -33,6 +43,7 @@ export type TextKey =
   | 'several_profiles'
   | 'person_already_linked'
   | 'telegram_already_linked'
+  | 'link_closed_in_history'
   | 'employee_account'
   | 'park_api_unavailable'
   | 'notification_welcome_bonus'
@@ -48,6 +59,21 @@ export type TextKey =
   | 'invite_employee_exists';
 
 const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
+  /**
+   * Единственный экран, оставшийся у бота от регистрации.
+   *
+   * Про кнопку под собой он не говорит ни слова намеренно: на машине без `TG_MINIAPP_URL`
+   * кнопки нет вовсе, и приглашение нажать то, чего не видно, — худшее из состояний
+   * (server/bot/greeting.ts).
+   */
+  start_greeting: {
+    ru: 'Xalq Taxi — бонусная программа для водителей: за поездки начисляются баллы, а обменять их на подарки можно в офисах парка. Регистрация и баланс живут в приложении.',
+    uz: "Xalq Taxi — haydovchilar uchun bonus dasturi: safarlar uchun ball hisoblanadi, ularni park ofislarida sovg'alarga almashtirish mumkin. Ro'yxatdan o'tish va hisob ilovada.",
+  },
+  button_open_app: {
+    ru: '🎁 Открыть приложение',
+    uz: '🎁 Ilovani ochish',
+  },
   select_language: {
     ru: 'Tilni tanlang: / Выберите язык:',
     uz: 'Tilni tanlang: / Выберите язык:',
@@ -119,9 +145,21 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     uz: "Bu Telegram boshqa haydovchiga biriktirilgan: bitta akkauntdan ikki kishi foydalana olmaydi. Agar umumiy telefondan foydalanayotgan bo'lsangiz, botni o'z Telegram akkauntingizdan oching. Agar bu xato bo'lsa, haydovchilik guvohnomangiz bilan istalgan ofisga murojaat qiling.",
   },
   /**
-   * Седьмой исход привязки: контакт боту прислал сотрудник парка.
+   * Пара «человек + чат» закрыта в истории: её закрыл оператор или склейка двойников.
    *
-   * Списка офисов под ним нет намеренно, в отличие от шести отказов «в офис»: сотрудник
+   * Отдельным текстом, а не общим «вы уже зарегистрированы с другого аккаунта»: тот зовёт
+   * человека открыть бота с прежнего Telegram, а здесь прежнего Telegram нет — это и есть
+   * тот самый, и активной привязки не осталось ни у кого. Совет «откройте с того аккаунта»
+   * отправил бы его пробовать то, что заведомо не сработает.
+   */
+  link_closed_in_history: {
+    ru: 'Связь этого Telegram с вашей учётной записью была закрыта раньше. Восстановить её может только сотрудник парка: подойдите в офис с водительским удостоверением.',
+    uz: "Bu Telegram hisobingiz bilan bog'lanishi avval yopilgan. Uni faqat park xodimi tiklashi mumkin: haydovchilik guvohnomangiz bilan ofisga murojaat qiling.",
+  },
+  /**
+   * Седьмой исход привязки: контакт прислал сотрудник парка.
+   *
+   * Списка офисов под ним нет намеренно, в отличие от семи отказов «в офис»: сотрудник
    * в офисе и так работает, а нужное ему действие — открыть приложение кнопкой меню.
    */
   employee_account: {
@@ -230,6 +268,22 @@ const mapLink = (office: Office): string =>
   `https://yandex.ru/navi/?whatshere[point]=${office.longitude},${office.latitude}&whatshere[zoom]=18`;
 
 /**
+ * Офисы на языке водителя — данными, а не готовым куском разметки.
+ *
+ * Раньше отсюда уходила склеенная строка с тегами `<a>`: получателем был Telegram,
+ * и разметка была его. Получатель сменился на экран приложения, и склеенный HTML пришлось
+ * бы вставлять в страницу через `v-html` — то есть отдавать разметку месту, которое
+ * её не писало. Список отдаётся полями, а как он выглядит, решает компонент.
+ */
+export const officeContacts = (language: Language): OfficeContact[] =>
+  OFFICES.map((office) => ({
+    name: office.name[language],
+    hours: office.hours[language],
+    phone: office.phone,
+    mapUrl: mapLink(office),
+  }));
+
+/**
  * Экранирование для `parse_mode: HTML`.
  *
  * Имя водителя приходит из чужой системы и подставляется в разметку: угловая скобка
@@ -237,16 +291,6 @@ const mapLink = (office: Office): string =>
  */
 const escapeHtml = (value: string): string =>
   value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-/** Название ссылкой на карту, затем режим работы и телефон. */
-const officeLine = (office: Office, language: Language): string =>
-  `• <a href="${mapLink(office)}">${escapeHtml(office.name[language])}</a> — ${escapeHtml(
-    office.hours[language],
-  )}, ${escapeHtml(office.phone)}`;
-
-/** Список офисов, которым кончается сообщение «в офис». */
-export const officesBlock = (language: Language): string =>
-  OFFICES.map((office) => officeLine(office, language)).join('\n');
 
 /**
  * Число баллов в человеческом виде: разряды разделены неразрывным пробелом.
@@ -257,31 +301,43 @@ export const officesBlock = (language: Language): string =>
 export const formatPoints = (points: bigint): string =>
   points.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '\u00A0');
 
+/** Подстановки по именам в фигурных скобках. Экранирование — забота вызывающего. */
+const render = (
+  key: TextKey,
+  language: Language,
+  values: Readonly<Record<string, string>>,
+  escape: (value: string) => string,
+): string =>
+  Object.entries(values).reduce(
+    (result, [name, value]) => result.replaceAll(`{${name}}`, escape(value)),
+    TEXTS[key][language],
+  );
+
 /**
- * Текст экрана. Подстановки — по именам в фигурных скобках.
+ * Текст сообщения бота. Подстановки экранируются под разметку Telegram.
  *
- * Значения подстановок экранируются здесь: сообщения уходят с `parse_mode: HTML`,
- * и единственное место, где в разметку попадает чужая строка, — это оно.
+ * Сообщения уходят с `parse_mode: HTML`, и единственное место, где в разметку попадает
+ * чужая строка — имя водителя из реестра парка, — это оно. Угловая скобка в имени иначе
+ * ломает сообщение целиком, и водитель не получает ничего.
  */
 export const text = (
   key: TextKey,
   language: Language,
   values: Readonly<Record<string, string>> = {},
-): string => {
-  const template = TEXTS[key][language];
-
-  return Object.entries(values).reduce(
-    (result, [name, value]) => result.replaceAll(`{${name}}`, escapeHtml(value)),
-    template,
-  );
-};
+): string => render(key, language, values, escapeHtml);
 
 /**
- * Сообщение «в офис» целиком: причина отказа и список офисов под ней.
+ * Тот же текст для экрана приложения — без экранирования.
  *
- * Ключом, а не одним зашитым текстом: причин отказа шесть, и список офисов нужен
- * каждой — но зовёт в него каждая своими словами, потому что два исхода из шести
- * решаются не походом через город, а нажатием.
+ * Разметки у получателя нет: Vue подставляет строку текстовым узлом и экранирует сам.
+ * Прогони мы её через `escapeHtml`, водитель с амперсандом в имени увидел бы `&amp;`
+ * буквально — то самое враньё экрана, только с другой стороны.
+ *
+ * Двумя функциями над одним словарём, а не флагом в аргументах: экранирование —
+ * свойство получателя, а не текста, и получателей ровно два.
  */
-export const withOffices = (key: TextKey, language: Language): string =>
-  `${text(key, language)}\n\n${officesBlock(language)}`;
+export const plainText = (
+  key: TextKey,
+  language: Language,
+  values: Readonly<Record<string, string>> = {},
+): string => render(key, language, values, (value) => value);

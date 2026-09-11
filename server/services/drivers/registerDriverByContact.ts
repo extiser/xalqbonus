@@ -24,13 +24,18 @@ import { describeDatabaseFailure, UNIQUE_VIOLATION } from '#server/utils/postgre
 /**
  * Привязка Telegram к записи реестра по подтверждённому телефону.
  *
- * Здесь живут правила, а не бот: обработчик апдейта эту функцию только зовёт и рисует
- * ответ. Бот **никогда не создаёт водителя** — он связывает Telegram с записью, которая
- * уже есть в реестре парка (docs/drivers.md).
+ * Здесь живут правила, а не дверь: вызывающий — ручка приложения — эту функцию только
+ * зовёт и рисует ответ. Регистрация **никогда не создаёт водителя**: она связывает Telegram
+ * с записью, которая уже есть в реестре парка (docs/drivers.md).
+ *
+ * Источник телефона сменился с чата на Mini App (`#86`), правила от этого не изменились
+ * ни в одной ветке: сюда приходит подтверждённый номер и владелец контакта, а чем именно
+ * они подтверждены — кнопкой в чате или подписанной строкой `requestContact` — функция
+ * не знает и знать не должна.
  *
  * Автоматика строится на одном признаке — подтверждённом телефоне из Telegram. Всё
  * остальное, что водитель может ввести руками, секретом от коллег не является: машину
- * видно каждый день, права он показывает. Поэтому исходов ровно десять, и каждый из них
+ * видно каждый день, права он показывает. Поэтому исходов одиннадцать, и каждый из них
  * пишется в журнал попыток — включая удачный.
  *
  * Чего здесь нет и не будет:
@@ -45,7 +50,7 @@ import { describeDatabaseFailure, UNIQUE_VIOLATION } from '#server/utils/postgre
  *   - **записи в реестр.** Профиль заводит прогон синхронизации, и только он.
  */
 
-const log = consola.withTag('bot:register');
+const log = consola.withTag('drivers:register');
 
 /** Откуда пришло участие. Значение колонки `person_settings.joined_source`. */
 const JOINED_SOURCE = 'telegram';
@@ -54,8 +59,14 @@ const JOINED_SOURCE = 'telegram';
 const FIRED = 'fired';
 
 export type RegistrationRequest = {
+  /**
+   * Чат, в который система пишет этому человеку.
+   *
+   * Приходит из проверенного подписью источника и ниоткуда больше: в Mini App чата нет
+   * вовсе, и для личной переписки идентификатор чата равен `user.id` из `initData`.
+   */
   telegramChatId: bigint;
-  /** Отправитель апдейта — `from.id`. */
+  /** Кто пришёл — `user.id` из `initData` либо `from.id` у апдейта бота. */
   telegramUserId: bigint | null;
   /**
    * Владелец присланного контакта — `contact.user_id`.
@@ -65,15 +76,8 @@ export type RegistrationRequest = {
    */
   contactUserId: bigint | null;
   phoneRaw: string;
-  /** Выбранный в боте язык. Доезжает до базы только вместе с началом участия. */
+  /** Выбранный язык. Доезжает до базы только вместе с началом участия. */
   language: Language;
-  /**
-   * Зовётся один раз перед походом в Fleet API.
-   *
-   * Поход занимает секунды, и водитель в это время смотрит на неотвеченное сообщение.
-   * Сервис не знает, что именно показать, — он лишь сообщает, что пора.
-   */
-  onLookupStarted?: () => Promise<void>;
 };
 
 export type RegistrationResult =
@@ -93,6 +97,19 @@ class LinkClosedInHistoryError extends Error {
   }
 }
 
+/** Что из номера попадает в строку журнала. Обе колонки пусты там, где номер чужой. */
+type AttemptPhone = { raw: string; e164: string | null };
+
+/**
+ * Номер, которого в журнале не будет.
+ *
+ * Стоит ровно у исхода `contact_not_own`: там номер принадлежит человеку, который нам
+ * ничего не присылал, о программе не знает и спросить его мы не можем. Хранить чужие
+ * персональные данные ради счёта попыток незачем — счёт от их отсутствия не страдает,
+ * строка пишется как и прежде.
+ */
+const NO_PHONE: AttemptPhone = { raw: '', e164: null };
+
 /**
  * Пишет строку попытки и отдаёт исход наверх.
  *
@@ -101,15 +118,15 @@ class LinkClosedInHistoryError extends Error {
  */
 const recordAttempt = async (
   request: RegistrationRequest,
-  phoneE164: string | null,
+  phone: AttemptPhone,
   outcome: LinkAttemptOutcome,
   found: { profileId: string | null; personId: string | null } = { profileId: null, personId: null },
 ): Promise<void> => {
   await insertTelegramLinkAttempt({
     telegramChatId: request.telegramChatId,
     telegramUserId: request.telegramUserId,
-    phoneRaw: request.phoneRaw,
-    phoneE164,
+    phoneRaw: phone.raw,
+    phoneE164: phone.e164,
     outcome,
     profileId: found.profileId,
     personId: found.personId,
@@ -187,27 +204,33 @@ const outcomeForConstraint = (
 export const registerDriverByContact = async (
   request: RegistrationRequest,
 ): Promise<RegistrationResult> => {
-  const phoneE164 = normalizePhoneE164(request.phoneRaw);
-
-  // Контакт прикладывается не только кнопкой: через скрепку шлётся любая запись адресной
-  // книги. Старый бот брал `contact.phone_number` как есть, и знания номера коллеги
+  // Контакт подтверждает телефон, только если принадлежит отправителю. В чате его
+  // прикладывали не только кнопкой — через скрепку шлётся любая запись адресной книги,
+  // — а в Mini App `contact.user_id` приезжает подписанной строкой и сверяется с `user.id`
+  // из `initData`. Старый бот брал `contact.phone_number` как есть, и знания номера коллеги
   // хватало, чтобы его аккаунт вместе с баллами переехал на отправителя (docs/drivers.md
   // → «Телефон подтверждает только сам владелец»).
+  //
+  // Проверка идёт до нормализации номера: чужой номер здесь ни во что не превращается
+  // и никуда не записывается.
   if (
     request.contactUserId === null ||
     request.telegramUserId === null ||
     request.contactUserId !== request.telegramUserId
   ) {
-    await recordAttempt(request, phoneE164, 'contact_not_own');
+    await recordAttempt(request, NO_PHONE, 'contact_not_own');
 
     return { outcome: 'contact_not_own' };
   }
+
+  const phoneE164 = normalizePhoneE164(request.phoneRaw);
+  const phone: AttemptPhone = { raw: request.phoneRaw, e164: phoneE164 };
 
   // Номер, который не приводится к каноническому виду, искать в реестре нечем: по этому
   // полю идёт автопривязка, и дописывать за водителя код страны нельзя — номер с чужим
   // кодом найдёт постороннего человека вместе с его баллами.
   if (!phoneE164) {
-    await recordAttempt(request, null, 'not_in_registry');
+    await recordAttempt(request, phone, 'not_in_registry');
 
     return { outcome: 'not_in_registry' };
   }
@@ -226,7 +249,7 @@ export const registerDriverByContact = async (
       employeeId: employee.id,
     });
 
-    await recordAttempt(request, phoneE164, 'employee_account');
+    await recordAttempt(request, phone, 'employee_account');
 
     return { outcome: 'employee_account' };
   }
@@ -237,11 +260,9 @@ export const registerDriverByContact = async (
   let knownToPark = profiles.length > 0;
 
   if (profiles.length === 0) {
-    await request.onLookupStarted?.();
-
     try {
-      // Бот в реестр не пишет: он просит сходить в Fleet API сервис синхронизации, и тот
-      // записывает найденное сам, своим обычным путём.
+      // Регистрация в реестр не пишет: она просит сходить в Fleet API сервис синхронизации,
+      // и тот записывает найденное сам, своим обычным путём.
       knownToPark = (await runProfileSyncByPhone(phoneE164)).profilesSeen > 0;
     } catch (error) {
       // Отказ внешнего сервиса не является решением о водителе: отправлять человека в офис
@@ -249,7 +270,7 @@ export const registerDriverByContact = async (
       //
       // Водителю оба отказа показываются одинаково — сказать ему «у нас упала база» нечего,
       // делать с этим ему нечего. А вот в логе это два разных происшествия: отказ парка
-      // проходит сам, отказ нашей базы значит, что бот не работает вовсе и никакая
+      // проходит сам, отказ нашей базы значит, что не работает вовсе ничего и никакая
       // регистрация сейчас не пройдёт.
       log.error(
         error instanceof ParkLookupFailedError
@@ -261,7 +282,7 @@ export const registerDriverByContact = async (
         },
       );
 
-      await recordAttempt(request, phoneE164, 'park_api_unavailable');
+      await recordAttempt(request, phone, 'park_api_unavailable');
 
       return { outcome: 'park_api_unavailable' };
     }
@@ -271,7 +292,7 @@ export const registerDriverByContact = async (
 
   if (profiles.length === 0) {
     const outcome = knownToPark ? 'not_in_registry' : 'not_in_park';
-    await recordAttempt(request, phoneE164, outcome);
+    await recordAttempt(request, phone, outcome);
 
     return { outcome };
   }
@@ -280,9 +301,9 @@ export const registerDriverByContact = async (
 
   if ('outcome' in picked) {
     // Профиль в строку попытки пишется и здесь: без него потом не ответить, кого именно
-    // бот не пустил.
+    // не пустили.
     const first = profiles[0] as ProfileByPhoneRow;
-    await recordAttempt(request, phoneE164, picked.outcome, {
+    await recordAttempt(request, phone, picked.outcome, {
       profileId: first.profileId,
       personId: first.personId,
     });
@@ -296,7 +317,7 @@ export const registerDriverByContact = async (
   const personLink = await findActiveLinkByPerson(profile.personId);
 
   if (personLink && personLink.telegramChatId !== request.telegramChatId) {
-    await recordAttempt(request, phoneE164, 'person_already_linked', found);
+    await recordAttempt(request, phone, 'person_already_linked', found);
 
     return { outcome: 'person_already_linked' };
   }
@@ -304,7 +325,7 @@ export const registerDriverByContact = async (
   const chatLink = await findActiveLinkByChat(request.telegramChatId);
 
   if (chatLink && chatLink.personId !== profile.personId) {
-    await recordAttempt(request, phoneE164, 'telegram_already_linked', found);
+    await recordAttempt(request, phone, 'telegram_already_linked', found);
 
     return { outcome: 'telegram_already_linked' };
   }
@@ -364,25 +385,29 @@ export const registerDriverByContact = async (
         constraint: describeDatabaseFailure(error)?.constraintName ?? null,
       });
 
-      await recordAttempt(request, phoneE164, constraintOutcome, found);
+      await recordAttempt(request, phone, constraintOutcome, found);
 
       return { outcome: constraintOutcome };
     }
 
+    // Своим исходом, а не `person_already_linked`, которым это писалось раньше. Поведение
+    // было верным и не меняется — активной привязки нет ни у кого, а вернуть закрытый
+    // канал связи может только оператор, — врал журнал: в разборе строка читалась как
+    // занятый чужой Telegram, то есть как совсем другой разговор у стойки в офисе (`#86`).
     if (error instanceof LinkClosedInHistoryError) {
       log.warn('привязка этой пары человек+чат закрыта в истории — исход «в офис»', {
         chatId: request.telegramChatId.toString(),
       });
 
-      await recordAttempt(request, phoneE164, 'person_already_linked', found);
+      await recordAttempt(request, phone, 'link_closed_in_history', found);
 
-      return { outcome: 'person_already_linked' };
+      return { outcome: 'link_closed_in_history' };
     }
 
     throw error;
   }
 
-  await recordAttempt(request, phoneE164, 'linked', found);
+  await recordAttempt(request, phone, 'linked', found);
 
   return {
     outcome: 'linked',

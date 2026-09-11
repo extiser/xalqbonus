@@ -1,13 +1,14 @@
 import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
-import { checkInitData } from '#server/utils/telegramInitData';
+import { checkContactData, checkInitData } from '#server/utils/telegramInitData';
 
 /**
- * Проверка подписи `initData` покрыта тестом, хотя ручки и интерфейс не покрываются
+ * Проверка подписанных строк Telegram покрыта тестом, хотя ручки и интерфейс не покрываются
  * (docs/infra.md → «Тесты»). Исключение того же рода, что нормализация телефона: это
- * единственное место, где решается, кто открыл приложение, и сломанная проверка не падает,
- * а тихо начинает пускать кого угодно — либо, наоборот, не пускать никого.
+ * единственные два места, где решается, кто открыл приложение и какой у него номер,
+ * и сломанная проверка не падает, а тихо начинает пускать кого угодно — либо, наоборот,
+ * не пускать никого.
  *
  * Чего этот файл **не** доказывает: что алгоритм совпадает с тем, который применяет
  * Telegram. Подписывает строки здесь тот же алгоритм, что и проверяет, поэтому сойтись
@@ -182,5 +183,119 @@ describe('checkInitData', () => {
     expect(() => checkInitData({ initData: signInitData(freshFields(), TOKEN), token: '' })).toThrow(
       /пустым токеном/,
     );
+  });
+});
+
+const CONTACT_JSON = JSON.stringify({
+  user_id: 111222333,
+  phone_number: '+998901234567',
+  first_name: 'Рустам',
+  last_name: 'Каримов',
+});
+
+/**
+ * Строка контакта подписывается тем же алгоритмом, что `initData`, — это и есть главный
+ * результат разведки `#81`, снятый с живой строки перебором вывода ключа. Состав полей
+ * при этом другой: `contact` и `auth_date`, поля `user` нет вовсе.
+ */
+const freshContactFields = (): Record<string, string> => ({
+  auth_date: String(nowSeconds()),
+  contact: CONTACT_JSON,
+});
+
+describe('checkContactData', () => {
+  it('принимает подписанную строку контакта и читает из неё номер', () => {
+    const result = checkContactData({
+      contactData: signInitData(freshContactFields(), TOKEN),
+      token: TOKEN,
+    });
+
+    expect(result.outcome).toBe('valid');
+
+    if (result.outcome !== 'valid') {
+      return;
+    }
+
+    expect(result.contact.userId).toBe(111222333n);
+    expect(result.contact.phoneNumber).toBe('+998901234567');
+    expect(result.contact.firstName).toBe('Рустам');
+  });
+
+  it('не принимает строку с подменённым после подписи номером', () => {
+    // Ровно та подделка, ради которой проверка и существует: подписан один номер, прислан
+    // другой. Без неё телефон стал бы полем, которое выбирает клиент.
+    const signed = signInitData(freshContactFields(), TOKEN);
+    const tampered = signed.replace(
+      encodeURIComponent('+998901234567'),
+      encodeURIComponent('+998907654321'),
+    );
+
+    expect(tampered).not.toBe(signed);
+    expect(checkContactData({ contactData: tampered, token: TOKEN }).outcome).toBe('hash_mismatch');
+  });
+
+  it('не принимает строку, подписанную чужим токеном', () => {
+    const signed = signInitData(freshContactFields(), OTHER_TOKEN);
+
+    expect(checkContactData({ contactData: signed, token: TOKEN }).outcome).toBe('hash_mismatch');
+  });
+
+  it('отличает просроченную строку от подделанной', () => {
+    // Тот же порог, что у `initData`, и по той же причине: строка не обновляется сама,
+    // а предел решает, сколько украденная остаётся годной — здесь для того, чтобы привязать
+    // чужой номер к своему Telegram.
+    const authDate = nowSeconds() - 3 * 60 * 60;
+    const signed = signInitData({ ...freshContactFields(), auth_date: String(authDate) }, TOKEN);
+
+    expect(
+      checkContactData({ contactData: signed, token: TOKEN, maxAgeSeconds: 60 * 60 }).outcome,
+    ).toBe('expired');
+  });
+
+  it('подписанная строка без номера контактом не является', () => {
+    // Подпись верна, а телефона в ней нет: регистрировать по такой строке нечего,
+    // и притворяться, что номер подтверждён пустой строкой, нельзя.
+    const withoutPhone = signInitData(
+      { auth_date: String(nowSeconds()), contact: JSON.stringify({ user_id: 111222333 }) },
+      TOKEN,
+    );
+
+    expect(checkContactData({ contactData: withoutPhone, token: TOKEN }).outcome).toBe('malformed');
+  });
+
+  it('оставляет владельца пустым, когда Telegram его не показал', () => {
+    // Такой контакт ничего не подтверждает: сверить его с отправителем нечем. Решение
+    // по нему принимает сервис привязки — исходом `contact_not_own`, а не эта функция.
+    const signed = signInitData(
+      {
+        auth_date: String(nowSeconds()),
+        contact: JSON.stringify({ phone_number: '+998901234567' }),
+      },
+      TOKEN,
+    );
+
+    const result = checkContactData({ contactData: signed, token: TOKEN });
+
+    expect(result.outcome).toBe('valid');
+
+    if (result.outcome !== 'valid') {
+      return;
+    }
+
+    expect(result.contact.userId).toBeNull();
+  });
+
+  it('строку `initData` на этой проверке не путает с контактом', () => {
+    // И наоборот: у `checkInitData` на строке контакта нет поля `user`, и она отвечает
+    // `no_user`. Две проверки делят подпись, но не состав полей — потому их и две.
+    const contact = signInitData(freshContactFields(), TOKEN);
+    const initData = signInitData(freshFields(), TOKEN);
+
+    expect(checkInitData({ initData: contact, token: TOKEN }).outcome).toBe('no_user');
+    expect(checkContactData({ contactData: initData, token: TOKEN }).outcome).toBe('no_contact');
+  });
+
+  it('пустая строка — это «номером не делились», а не подделка', () => {
+    expect(checkContactData({ contactData: '', token: TOKEN }).outcome).toBe('missing');
   });
 });

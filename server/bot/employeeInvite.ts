@@ -11,13 +11,15 @@ import {
   type AcceptInviteResult,
 } from '#server/services/employees/acceptInvite';
 import { readInviteToken } from '#server/services/employees/inviteToken';
+import { preferredLanguage } from '#server/utils/language';
 
 /**
  * Приём приглашения сотрудника в боте: `/start inv_<токен>` и контакт следом.
  *
- * Обработчики регистрируются **до** водительских и уступают им всё, что к приглашению
- * не относится: `/start` без параметра, контакт от чата, который ссылку не открывал.
- * Так две ветки живут в одном боте, не разбирая чужие апдейты (`next()` в каждом отказе).
+ * Обработчики регистрируются **до** приветствия и уступают ему `/start` без параметра
+ * (`next()` в каждом отказе). Контакт от чата, который ссылку не открывал, тоже уходит
+ * в `next()` и дальше не разбирается никем: регистрация водителя уехала в Mini App,
+ * и присланный боту контакт её больше не начинает (`#86`).
  *
  * Правила целиком в сервисе: обработчик разбирает апдейт, зовёт `acceptInvite` и рисует
  * ответ (docs/principles.md → «Слои и зависимости»).
@@ -36,12 +38,8 @@ const contactKeyboard = (language: Language) =>
 
 const REMOVE_KEYBOARD = { remove_keyboard: true } as const;
 
-/**
- * Язык из настроек Telegram. Узбекский — только по явному `uz`, всё остальное на русском:
- * так же, как служебные ответы до выбора языка у водителя.
- */
-const languageOf = (context: Context): Language =>
-  context.from?.language_code === 'uz' ? 'uz' : 'ru';
+/** Язык из настроек Telegram. Правило одно на все двери — `server/utils/language.ts`. */
+const languageOf = (context: Context): Language => preferredLanguage(context.from?.language_code);
 
 const displayName = (context: Context): string =>
   [context.from?.first_name, context.from?.last_name].filter(Boolean).join(' ').trim();
