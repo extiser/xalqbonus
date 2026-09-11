@@ -52,6 +52,17 @@ export const buildOpeningIdempotencyKey = (personId: string): IdempotencyKey =>
   buildKey('opening', personId);
 
 /**
+ * Приветственный бонус за первые пять завершённых поездок: `welcome:<persons.id>`.
+ *
+ * Ключ строится от человека, а не от поездки, на которой порог сошёлся: бонус случается
+ * с человеком один раз за всё время, и пятая поездка — только момент, когда это стало
+ * видно. Ключ от поездки выдал бы второй бонус тому, у кого пятая поездка переоформилась
+ * в парке на другой профиль, и был бы бессмыслен при склейке двойников.
+ */
+export const buildWelcomeIdempotencyKey = (personId: string): IdempotencyKey =>
+  buildKey('welcome', personId);
+
+/**
  * Возврат баллов при отмене заказа товара: `order_refund:<order_id>`.
  *
  * Здесь `order_id` — заказ товара за баллы, а не заказ такси. Каталога товаров ещё нет

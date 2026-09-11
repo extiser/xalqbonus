@@ -623,6 +623,9 @@ model SyncRunOrders {
 
   // Разбор начисления — теми же именами, что у сводки сервиса баллов.
   awarded        Int @default(0)
+  /// Приветственных бонусов выдано: столько новых водителей дошло до пятой поездки.
+  /// В `awarded` он не виден — там поездки, а не люди.
+  welcomeAwarded Int @default(0) @map("welcome_awarded")
   alreadyAwarded Int @default(0) @map("already_awarded")
   notCompleted   Int @default(0) @map("not_completed")
   withoutEndedAt Int @default(0) @map("without_ended_at")

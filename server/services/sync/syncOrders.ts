@@ -106,6 +106,7 @@ export type OrdersSyncSummary = {
 const emptyAccrual = (): TripAccrualSummary => ({
   requested: 0,
   awarded: 0,
+  welcomeAwarded: 0,
   alreadyAwarded: 0,
   notCompleted: 0,
   withoutEndedAt: 0,
@@ -116,6 +117,7 @@ const emptyAccrual = (): TripAccrualSummary => ({
 const addAccrual = (total: TripAccrualSummary, page: TripAccrualSummary): TripAccrualSummary => ({
   requested: total.requested + page.requested,
   awarded: total.awarded + page.awarded,
+  welcomeAwarded: total.welcomeAwarded + page.welcomeAwarded,
   alreadyAwarded: total.alreadyAwarded + page.alreadyAwarded,
   notCompleted: total.notCompleted + page.notCompleted,
   withoutEndedAt: total.withoutEndedAt + page.withoutEndedAt,
@@ -393,6 +395,7 @@ export const runOrdersSync = async (
     skippedUnknownProfile,
     unknownProfiles: unknownProfileIds.size,
     awarded: accrual.awarded,
+    welcomeAwarded: accrual.welcomeAwarded,
     alreadyAwarded: accrual.alreadyAwarded,
     notCompleted: accrual.notCompleted,
     withoutEndedAt: accrual.withoutEndedAt,
@@ -560,6 +563,7 @@ export const runOrdersSync = async (
     ordersInserted,
     ordersUpdated,
     awarded: accrual.awarded,
+    welcomeAwarded: accrual.welcomeAwarded,
     alreadyAwarded: accrual.alreadyAwarded,
     outsideProgram: accrual.outsideProgram,
     notCompleted: accrual.notCompleted,

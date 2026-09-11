@@ -147,6 +147,7 @@ export type SyncRunOrdersDetails = {
   skippedUnknownProfile: number;
   unknownProfiles: number;
   awarded: number;
+  welcomeAwarded: number;
   alreadyAwarded: number;
   notCompleted: number;
   withoutEndedAt: number;
@@ -198,6 +199,7 @@ type SyncRunJoinedRow = {
   ordersSkippedUnknownProfile: number | null;
   ordersUnknownProfiles: number | null;
   ordersAwarded: number | null;
+  ordersWelcomeAwarded: number | null;
   ordersAlreadyAwarded: number | null;
   ordersNotCompleted: number | null;
   ordersWithoutEndedAt: number | null;
@@ -240,6 +242,7 @@ const toOrdersDetails = (row: SyncRunJoinedRow): SyncRunOrdersDetails | null => 
     skippedUnknownProfile: row.ordersSkippedUnknownProfile ?? 0,
     unknownProfiles: row.ordersUnknownProfiles ?? 0,
     awarded: row.ordersAwarded ?? 0,
+    welcomeAwarded: row.ordersWelcomeAwarded ?? 0,
     alreadyAwarded: row.ordersAlreadyAwarded ?? 0,
     notCompleted: row.ordersNotCompleted ?? 0,
     withoutEndedAt: row.ordersWithoutEndedAt ?? 0,
@@ -301,6 +304,7 @@ export const listSyncRuns = async (limit: number, offset: number): Promise<SyncR
            orders."skipped_unknown_profile" AS "ordersSkippedUnknownProfile",
            orders."unknown_profiles"        AS "ordersUnknownProfiles",
            orders."awarded"                 AS "ordersAwarded",
+           orders."welcome_awarded"         AS "ordersWelcomeAwarded",
            orders."already_awarded"         AS "ordersAlreadyAwarded",
            orders."not_completed"           AS "ordersNotCompleted",
            orders."without_ended_at"        AS "ordersWithoutEndedAt",

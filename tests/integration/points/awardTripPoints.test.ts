@@ -15,6 +15,13 @@ import {
 
 const COMPLETED_AT = new Date('2026-08-20T12:00:00.000Z');
 
+/**
+ * Приветственный бонус за первые пять поездок. Человек, у которого их пять, получает его
+ * вместе с баллами — начисление и бонус живут в одном прогоне, и баланс в этом файле
+ * сверяется с тем, что реально лежит на счету, а не с одной его половиной.
+ */
+const WELCOME_BONUS_POINTS = 300n;
+
 /** Заводит человеку пачку завершённых поездок и возвращает их идентификаторы заказов. */
 const createCompletedTrips = async (person: TestPerson, count: number): Promise<string[]> => {
   const tripOrderIds: string[] = [];
@@ -62,17 +69,22 @@ describe('начисление за завершённые поездки', () =
     const secondRun = await awardTripPoints(secondWindow);
 
     expect(firstRun.awarded).toBe(3);
+    // Пять завершённых поездок уже лежат в `xb.trips`, и порог бонуса сошёлся на первом
+    // же прогоне: он считается по записанным поездкам, а не по тому, сколько их в окне.
+    expect(firstRun.welcomeAwarded).toBe(1);
     expect(secondRun.awarded).toBe(2);
     // Пересечение из одной поездки опознано как повтор, а не начислено второй раз.
     expect(secondRun.alreadyAwarded).toBe(1);
-    expect(await readAccountBalance(person.personId)).toBe(5n);
+    expect(secondRun.welcomeAwarded).toBe(0);
+    expect(await readAccountBalance(person.personId)).toBe(5n + WELCOME_BONUS_POINTS);
 
     // Третий прогон по всему набору сразу не меняет ничего.
     const thirdRun = await awardTripPoints(tripOrderIds);
 
     expect(thirdRun.awarded).toBe(0);
     expect(thirdRun.alreadyAwarded).toBe(5);
-    expect(await readAccountBalance(person.personId)).toBe(5n);
+    expect(thirdRun.welcomeAwarded).toBe(0);
+    expect(await readAccountBalance(person.personId)).toBe(5n + WELCOME_BONUS_POINTS);
   });
 
   it('поездка в промежуточном статусе не начисляется, а после завершения — ровно раз', async () => {

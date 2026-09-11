@@ -137,3 +137,22 @@ export const readLegacyDriverMapCounts = async (): Promise<LegacyDriverMapCounts
     invalidChatIds: Number(row?.invalidChatIds ?? 0n),
   };
 };
+
+/**
+ * Приехал ли этот человек из старой базы.
+ *
+ * Строка карты с непустым `person_id` — единственный признак перенесённого участника,
+ * и на нём стоит запрет приветственного бонуса (docs/decisions.md → «Приветственный
+ * бонус — только новым, заявки старого бота не переносятся»). Строки с пустым `person_id` —
+ * записи старой базы, которые не сопоставились ни с кем: человека за ними нет,
+ * и к вопросу «новичок ли этот человек» они отношения не имеют.
+ */
+export const hasLegacyRecord = async (personId: string): Promise<boolean> => {
+  const rows = await db.$queryRaw<{ exists: boolean }[]>`
+    SELECT EXISTS(
+             SELECT 1 FROM xb.legacy_driver_map WHERE "person_id" = ${personId}::uuid
+           ) AS "exists"
+  `;
+
+  return rows[0]?.exists ?? false;
+};

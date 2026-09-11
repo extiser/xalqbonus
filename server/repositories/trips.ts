@@ -8,6 +8,9 @@ import { db } from '#server/db';
  * записей иначе превращалась бы в переписывание миллиона строк (prisma/schema.prisma).
  */
 
+/** Единственный статус завершённой поездки. Значение из словаря Fleet API. */
+const COMPLETED_STATUS = 'complete';
+
 export type TripForAccrual = {
   tripOrderId: string;
   status: string;
@@ -40,6 +43,36 @@ export const findTripsForAccrual = async (tripOrderIds: string[]): Promise<TripF
     personId: trip.profile.personId,
     inProgram: trip.profile.person.settings !== null,
   }));
+};
+
+/**
+ * Сколько завершённых поездок у человека — по всем его профилям в парке, не больше `limit`.
+ *
+ * Счёт идёт на человека, а не на учётку парка: переоформленный в парке водитель иначе
+ * начал бы отсчёт заново, а баланс и участие принадлежат человеку (prisma/schema.prisma).
+ *
+ * Потолок здесь не оптимизация ради оптимизации: вопрос к этому запросу один — набралось
+ * ли пять, — а у работающего водителя поездок тысячи, и считать их все на каждой новой
+ * ради порога незачем. Ответ `limit` читается как «столько или больше».
+ */
+export const countCompletedTripsByPerson = async (
+  personId: string,
+  limit: number,
+): Promise<number> => {
+  const rows = await db.$queryRaw<{ total: bigint }[]>`
+    SELECT COUNT(*) AS total
+      FROM (
+            SELECT 1
+              FROM xb.trips AS trip
+              JOIN xb.park_profiles AS profile ON profile."profile_id" = trip."profile_id"
+             WHERE profile."person_id" = ${personId}::uuid
+               AND trip."status" = ${COMPLETED_STATUS}
+               AND trip."ended_at" IS NOT NULL
+             LIMIT ${limit}
+           ) AS capped
+  `;
+
+  return Number(rows[0]?.total ?? 0n);
 };
 
 /**

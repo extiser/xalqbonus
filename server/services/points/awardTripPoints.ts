@@ -1,5 +1,6 @@
 import { consola } from 'consola';
 import { findTripsForAccrual, type TripForAccrual } from '#server/repositories/trips';
+import { awardWelcomeBonus } from '#server/services/points/awardWelcomeBonus';
 import { ensureDriverAccount } from '#server/services/points/ensureDriverAccount';
 import { getSystemAccount } from '#server/services/points/getSystemAccount';
 import { buildTripIdempotencyKey } from '#server/services/points/idempotencyKey';
@@ -15,6 +16,10 @@ import { transferPoints } from '#server/services/points/transfer';
  * Прогон безопасно повторять сколько угодно раз и по перекрывающимся наборам поездок:
  * идемпотентность держится ключом `trip:<order_id>` и уникальным ограничением в базе,
  * а не тем, чтобы не позвать дважды.
+ *
+ * Здесь же проверяется приветственный бонус за первые пять поездок: отдельной регулярной
+ * задачи под него нет намеренно — второй независимый писатель в баланс и погубил начисления
+ * в старом боте (`awardWelcomeBonus.ts`).
  */
 
 const log = consola.withTag('points:trip-accrual');
@@ -30,6 +35,8 @@ export type TripAccrualSummary = {
   requested: number;
   /** Начислено сейчас. */
   awarded: number;
+  /** Приветственных бонусов выдано сейчас: столько водителей дошло до пятой поездки. */
+  welcomeAwarded: number;
   /** Уже было начислено раньше: повтор по ключу, ни один баланс не тронут. */
   alreadyAwarded: number;
   /** Промежуточный статус: балл не начислен и поездка не помечена обработанной. */
@@ -45,6 +52,7 @@ export type TripAccrualSummary = {
 const emptySummary = (requested: number): TripAccrualSummary => ({
   requested,
   awarded: 0,
+  welcomeAwarded: 0,
   alreadyAwarded: 0,
   notCompleted: 0,
   withoutEndedAt: 0,
@@ -129,6 +137,22 @@ export const awardTripPoints = async (tripOrderIds: string[]): Promise<TripAccru
       summary.awarded += 1;
     } else {
       summary.alreadyAwarded += 1;
+    }
+
+    // Бонус проверяется и у поездки, балл за которую был начислен раньше. Иначе прогон,
+    // упавший между баллом за пятую поездку и бонусом, не дочинился бы сам: пятая поездка
+    // вернётся в следующем окне уже начисленной, а шестой у этого водителя может не быть
+    // никогда. Лишней работы это не создаёт — до перевода дело доходит только при сошедшемся
+    // пороге, а сам перевод идемпотентен.
+    const welcomeAwarded = await awardWelcomeBonus({
+      personId: trip.personId,
+      driverAccountId: driverAccount.id,
+      emissionAccountId: emissionAccount.id,
+      occurredAt: decision.occurredAt,
+    });
+
+    if (welcomeAwarded) {
+      summary.welcomeAwarded += 1;
     }
   }
 
