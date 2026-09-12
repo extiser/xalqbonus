@@ -12,6 +12,7 @@ import { useMemberHistory } from '~/composables/useMemberHistory';
 import {
   hasSignedInitData,
   loadTelegramWebApp,
+  resolveInitData,
   TELEGRAM_SDK_URL,
   type TelegramWebApp,
 } from '~/composables/useTelegramWebApp';
@@ -76,10 +77,22 @@ const result = ref<MiniAppRegisterResponse | null>(null);
 let webApp: TelegramWebApp | null = null;
 
 /**
+ * Подписанная строка этой загрузки страницы.
+ *
+ * Берётся не у объекта Telegram напрямую: после перезагрузки страницы адрес уже испорчен
+ * роутером, SDK разбирает по нему огрызок, и личность в этот момент есть только в нашей
+ * копии (`resolveInitData`, issue #105).
+ */
+let initData = '';
+
+/** Перечитывание экрана кнопкой в пути: второе нажатие не отправляет тот же запрос дважды. */
+const refreshing = ref(false);
+
+/**
  * История участника. Своим запросом, а не полем экрана: экран читается один раз, а история
  * листается кнопкой, и пересобирать ради каждой страницы весь экран незачем.
  */
-const memberHistory = useMemberHistory(() => webApp?.initData ?? '');
+const memberHistory = useMemberHistory(() => initData);
 
 const applyState = (state: MiniAppStateResponse): void => {
   if (state.screen === 'member') {
@@ -103,18 +116,16 @@ const failWith = (message: string): void => {
   stage.value = 'error';
 };
 
+/** Запрос состояния экрана. Один на первую загрузку и на кнопку обновления: спрашивается то же. */
+const fetchState = (): Promise<MiniAppStateResponse> =>
+  $fetch<MiniAppStateResponse>('/api/miniapp/me', {
+    headers: { [INIT_DATA_HEADER]: initData },
+  });
+
 /** Спрашивает сервер, что показать этому человеку, и показывает. */
 const loadState = async (): Promise<void> => {
-  if (!webApp) {
-    return;
-  }
-
   try {
-    applyState(
-      await $fetch<MiniAppStateResponse>('/api/miniapp/me', {
-        headers: { [INIT_DATA_HEADER]: webApp.initData },
-      }),
-    );
+    applyState(await fetchState());
   } catch (error) {
     // Текст на экране прежний — причина отказа водителю ничего не чинит. Но в консоли
     // она обязана быть: это единственное окно наружу, которое у Mini App есть, и без
@@ -124,39 +135,63 @@ const loadState = async (): Promise<void> => {
   }
 };
 
+/**
+ * Перечитывает экран участника по кнопке: баланс, отметку свежести и первую страницу истории.
+ *
+ * Отдельно от `loadState`, потому что отказ здесь значит другое. При первой загрузке
+ * показывать нечего, и отказ — это весь экран; при обновлении на экране уже стоит
+ * прочитанный баланс, и увести его в красный текст значило бы стереть верные данные
+ * в ответ на просьбу их обновить. Отметка свежести при этом остаётся прежней — она
+ * и честна: ничего не обновилось.
+ */
+const refresh = async (): Promise<void> => {
+  if (refreshing.value) {
+    return;
+  }
+
+  refreshing.value = true;
+
+  try {
+    applyState(await fetchState());
+  } catch (error) {
+    console.error('[miniapp] не удалось перечитать экран участника', error);
+  } finally {
+    refreshing.value = false;
+  }
+};
+
 onMounted(async () => {
   webApp = await loadTelegramWebApp();
+  initData = resolveInitData(webApp);
 
-  // Ни объекта Telegram, ни строки с подписью — значит страницу открыли не из мессенджера.
+  // Ни строки от Telegram, ни своей копии — значит страницу открыли не из мессенджера.
   // Это не поломка, и разбирать её незачем: человеку нужно сказать, где дверь.
   //
   // Признак — `hash` и `auth_date` в строке, а не её непустота: в обычном браузере SDK
   // отдаёт непустой огрызок, и по пустоте человек вне Telegram получал бы сообщение
   // о поломке вместо указания, где вход.
-  if (!webApp || !hasSignedInitData(webApp.initData)) {
+  if (!hasSignedInitData(initData)) {
     failWith(OPEN_FROM_TELEGRAM);
 
     return;
   }
 
-  webApp.ready();
-  webApp.expand();
+  // Вызовы объекта, а не строки: после перезагрузки страницы личность приехала из копии,
+  // а заставку убирает и окно разворачивает по-прежнему клиент Telegram.
+  webApp?.ready();
+  webApp?.expand();
 
   await loadState();
 });
 
 /** Отправляет подписанную строку контакта на сервер и показывает исход. */
 const register = async (contactData: string): Promise<void> => {
-  if (!webApp) {
-    return;
-  }
-
   sending.value = true;
 
   try {
     const response = await $fetch<MiniAppRegisterResponse>('/api/miniapp/register', {
       method: 'POST',
-      headers: { [INIT_DATA_HEADER]: webApp.initData },
+      headers: { [INIT_DATA_HEADER]: initData },
       body: { contactData, language: language.value },
     });
 
@@ -229,6 +264,9 @@ const share = (): void => {
       :name="member.name"
       :updated-note="member.updatedNote"
       :promise="member.promise"
+      :refresh-label="member.texts.refresh"
+      :refreshing="refreshing"
+      @refresh="refresh"
     />
 
     <OrganismsMemberHistory

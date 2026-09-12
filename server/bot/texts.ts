@@ -44,6 +44,7 @@ export type TextKey =
   | 'history_empty'
   | 'history_failed'
   | 'button_show_more'
+  | 'button_refresh'
   | 'day_today'
   | 'day_yesterday'
   | 'reason_trip'
@@ -178,6 +179,14 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   button_show_more: {
     ru: 'Показать ещё',
     uz: "Yana ko'rsatish",
+  },
+  /**
+   * Кнопка обновления на экране участника. На экране стоит значком, а текст читает
+   * экранный диктор — и он же всплывает подсказкой.
+   */
+  button_refresh: {
+    ru: 'Обновить',
+    uz: 'Yangilash',
   },
   day_today: {
     ru: 'Сегодня',

@@ -101,3 +101,110 @@ export const loadTelegramWebApp = (): Promise<TelegramWebApp | null> => {
 
   return Promise.resolve(window.Telegram?.WebApp ?? null);
 };
+
+/**
+ * Ключ, под которым лежит наша копия подписанной строки.
+ *
+ * Свой, а не `__telegram__initParams`: тот ключ — недокументированная внутренность чужого
+ * SDK, и он же её затирает. Перезагрузка страницы с испорченным хешем приводит SDK
+ * к разбору огрызка, и в своей копии он оставляет огрызок — то есть единственный
+ * источник личности после перезагрузки портит сам себя (issue #105).
+ */
+const INIT_DATA_KEY = 'xalqbonus:init-data';
+
+/**
+ * Хранилище на время жизни окна приложения или `null`, если его нет.
+ *
+ * Обращение обёрнуто, потому что доступ к `sessionStorage` бывает запрещён настройками
+ * браузера и в этом случае бросает на самом чтении свойства. Отказ в хранилище —
+ * не поломка приложения: без копии оно работает ровно как до этой правки.
+ */
+const sessionStore = (): Storage | null => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Копия подписанной строки, если она есть и годна.
+ *
+ * Проверяется на чтении, а не только на записи: в хранилище могло остаться что угодно —
+ * от строки прошлой версии приложения до чужой записи по тому же ключу.
+ */
+export const readSavedInitData = (): string | null => {
+  const saved = sessionStore()?.getItem(INIT_DATA_KEY) ?? '';
+
+  return hasSignedInitData(saved) ? saved : null;
+};
+
+/**
+ * Кладёт строку в копию — **только** годную.
+ *
+ * Негодной строкой копия не перезаписывается ни при каких условиях: это единственный
+ * оставшийся источник личности, и запись в него огрызка — та самая поломка, из-за которой
+ * `__telegram__initParams` перестал годиться.
+ *
+ * `sessionStorage`, а не `localStorage`: строка годна сутки и является действующим
+ * пропуском. Она обязана умереть вместе с окном приложения, а не лежать в браузере
+ * до следующей недели.
+ */
+export const saveInitData = (initData: string): void => {
+  if (!hasSignedInitData(initData)) {
+    return;
+  }
+
+  try {
+    sessionStore()?.setItem(INIT_DATA_KEY, initData);
+  } catch {
+    // Переполненное или запрещённое хранилище: копии не будет, приложение работает
+    // как раньше — до первой перезагрузки страницы.
+  }
+};
+
+/**
+ * Стирает хеш из адреса.
+ *
+ * Хеш к этому моменту уже испорчен роутером: `%3D` стал `=`, `%26` стал `&`, и при
+ * перезагрузке страницы SDK разберёт по нему огрызок вместо личности. Убрать его —
+ * значит привести перезагрузку на чистый адрес, где портить уже нечего.
+ *
+ * Вызывается **после** того, как строка прочитана и сохранена. Раньше — значит потерять
+ * личность, позже — нечего: адрес к тому моменту и так без хеша.
+ */
+export const dropAddressHash = (): void => {
+  if (typeof window === 'undefined' || window.location.hash === '') {
+    return;
+  }
+
+  const { pathname, search } = window.location;
+
+  window.history.replaceState(window.history.state, '', `${pathname}${search}`);
+};
+
+/**
+ * Личность этой загрузки страницы: строка от SDK, а если она негодна — своя копия.
+ *
+ * Свежая строка от Telegram всегда главнее копии: приложение, открытое заново кнопкой меню,
+ * получает новую подписанную строку, и жить по старой в этот момент незачем.
+ *
+ * Пустая строка — рабочий ответ, а не поломка: так выглядит страница, открытая в обычном
+ * браузере, где ни SDK, ни копии нет (docs/principles.md → «Ошибки»).
+ */
+export const resolveInitData = (webApp: TelegramWebApp | null): string => {
+  const fromTelegram = webApp?.initData ?? '';
+
+  if (hasSignedInitData(fromTelegram)) {
+    saveInitData(fromTelegram);
+    dropAddressHash();
+
+    return fromTelegram;
+  }
+
+  return readSavedInitData() ?? '';
+};
