@@ -17,7 +17,10 @@ const props = defineProps<{
 
 const emit = defineEmits<{ page: [offset: number] }>();
 
-/** Строка «по чему искали»: номер, телефон, слова имени — только те, что были признаны. */
+/**
+ * Строка «по чему искали»: номер, телефон, слова имени, позывной — только те признаки,
+ * что были распознаны в запросе.
+ */
 const criteriaNote = computed(() => {
   const data = props.data;
 
@@ -39,6 +42,10 @@ const criteriaNote = computed(() => {
     parts.push(`имя: ${data.nameTerms.join(' ')}`);
   }
 
+  if (data.callsignTerm) {
+    parts.push(`позывной, содержащий ${data.callsignTerm}`);
+  }
+
   return parts.length > 0 ? `Искали: ${parts.join(' · ')}` : null;
 });
 </script>
@@ -57,7 +64,7 @@ const criteriaNote = computed(() => {
     <MoleculesStateNotice
       v-else-if="!data || data.query.length === 0"
       state="empty"
-      message="Введите номер удостоверения, телефон или имя."
+      message="Введите номер удостоверения, телефон, имя или позывной."
     />
     <div v-else-if="data.rows.length === 0">
       <MoleculesStateNotice

@@ -2,11 +2,11 @@ import type { DriverSearchCriteria } from '#server/repositories/drivers';
 import { normalizeLicenseNumber } from '#server/utils/licenseNumber';
 
 /**
- * Разбор строки поиска на три признака: номер ВУ, телефон и имя.
+ * Разбор строки поиска на четыре признака: номер ВУ, телефон, имя и позывной.
  *
- * Поле ввода одно, а признака три, и выбирать между ними должен не оператор. Он не знает
- * заранее, что ему сейчас продиктуют — номер, телефон или фамилию, а на каждом водителе
- * этот выбор стоит времени.
+ * Поле ввода одно, а признака четыре, и выбирать между ними должен не оператор. Он не знает
+ * заранее, что ему сейчас продиктуют — номер, телефон, фамилию или позывной, а на каждом
+ * водителе этот выбор стоит времени.
  *
  * Логика живёт в сервисе, а не в обработчике и не в компоненте: «что считается номером»
  * и «сколько цифр достаточно для поиска телефона» — вопросы предметной области,
@@ -21,6 +21,14 @@ const MIN_PHONE_DIGITS = 5;
 
 /** Слово короче двух букв признаком имени не является. */
 const MIN_NAME_TERM_LENGTH = 2;
+
+/**
+ * Порог позывного — тот же, что у слова имени.
+ *
+ * Тот же намеренно: и там, и там ищется вхождение, и два разных порога на соседних полях
+ * одной строки поиска означали бы разное поведение на один и тот же ввод.
+ */
+const MIN_CALLSIGN_LENGTH = MIN_NAME_TERM_LENGTH;
 
 const LETTER = /\p{L}/u;
 const DIGIT = /[0-9]/;
@@ -92,17 +100,37 @@ const readNameTerms = (query: string): string[] => {
     .map(escapeLikePattern);
 };
 
+/**
+ * Позывной — запрос целиком, одним словом.
+ *
+ * Целиком, а не по словам: в реестре парка пробела нет ни в одном позывном из 22 682,
+ * и запрос из двух слов — это имя с фамилией, а не позывной.
+ *
+ * Цифры из запроса не вычищаются и признаком не считаются: 22 542 позывных из реестра —
+ * чистые цифры, чаще всего три-пять. Ровно такой ввод сегодня и проваливается — телефон
+ * требует пяти цифр и ищет по хвосту, имя отбрасывается на первой же цифре, — и человек
+ * остаётся ненайденным.
+ */
+const readCallsignTerm = (query: string): string | null => {
+  if (query.length < MIN_CALLSIGN_LENGTH || /\s/.test(query)) {
+    return null;
+  }
+
+  return escapeLikePattern(query);
+};
+
 export const buildSearchCriteria = (query: string): DriverSearchCriteria => {
   const trimmed = query.trim();
 
   if (trimmed.length === 0) {
-    return { licenseCanonical: null, phoneDigits: null, nameTerms: [] };
+    return { licenseCanonical: null, phoneDigits: null, nameTerms: [], callsignTerm: null };
   }
 
   return {
     licenseCanonical: readLicenseCanonical(trimmed),
     phoneDigits: readPhoneDigits(trimmed),
     nameTerms: readNameTerms(trimmed),
+    callsignTerm: readCallsignTerm(trimmed),
   };
 };
 
@@ -110,4 +138,5 @@ export const buildSearchCriteria = (query: string): DriverSearchCriteria => {
 export const hasSearchCriteria = (criteria: DriverSearchCriteria): boolean =>
   criteria.licenseCanonical !== null ||
   criteria.phoneDigits !== null ||
-  criteria.nameTerms.length > 0;
+  criteria.nameTerms.length > 0 ||
+  criteria.callsignTerm !== null;

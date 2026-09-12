@@ -139,6 +139,13 @@ export type DriverSearchRow = {
   licenseNumberCanonical: string | null;
   /** Действующие телефоны всех профилей человека. */
   phones: string[];
+  /**
+   * Позывные всех учёток человека. Пусто, если позывного нет ни у одной.
+   *
+   * Всех, а не показываемой учётки: найти могли по позывному второго профиля, и не увидеть
+   * в строке того, по чему нашёл, — значит гадать, тот ли это водитель.
+   */
+  callsigns: string[];
   /** Статусы трудоустройства по всем профилям человека. */
   workStatuses: string[];
   profilesCount: number;
@@ -161,6 +168,8 @@ export type DriverSearchResponse = {
   phoneDigits: string | null;
   /** Слова, по которым искали имя. */
   nameTerms: string[];
+  /** Строка, по вхождению которой искали позывной. Пусто, если запрос на позывной не похож. */
+  callsignTerm: string | null;
   rows: DriverSearchRow[];
   total: number;
   limit: number;

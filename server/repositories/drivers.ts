@@ -28,14 +28,16 @@ export type DriverSearchCriteria = {
   phoneDigits: string | null;
   /** Слова имени. Пусто, если искать по имени нечего. */
   nameTerms: string[];
+  /** Позывной. Пусто, если запрос на позывной не похож: пустой, короткий или в два слова. */
+  callsignTerm: string | null;
 };
 
 /**
- * Люди, подходящие под запрос, — тремя ветками, объединёнными `UNION`.
+ * Люди, подходящие под запрос, — четырьмя ветками, объединёнными `UNION`.
  *
- * Одно поле ввода на три признака намеренно: оператор не знает заранее, что ему диктуют —
- * номер, телефон или фамилию, и заставлять его выбирать вкладку значит терять время
- * на каждом водителе.
+ * Одно поле ввода на четыре признака намеренно: оператор не знает заранее, что ему диктуют —
+ * номер, телефон, фамилию или позывной, и заставлять его выбирать вкладку значит терять
+ * время на каждом водителе.
  *
  * Номер ищется по нормализованному значению: `number_canonical` для того и заведён, что
  * один и тот же номер лежит в реестре в двух написаниях — с префиксом `UZ` и без него,
@@ -71,6 +73,13 @@ const matchedPersons = (criteria: DriverSearchCriteria): Prisma.Sql => Prisma.sq
        )
          FROM unnest(${criteria.nameTerms}::text[]) AS term
      )
+   UNION
+  SELECT profile."person_id" AS "personId"
+    FROM xb.park_profiles AS profile
+   WHERE ${criteria.callsignTerm}::text IS NOT NULL
+     -- Вхождение и без учёта регистра — ровно как у имени: позывные в парке пишутся
+     -- как придётся, и требовать точного совпадения значит не находить половину.
+     AND profile."callsign" ILIKE '%' || ${criteria.callsignTerm} || '%'
 `;
 
 export type DriverSearchListRow = {
@@ -81,6 +90,7 @@ export type DriverSearchListRow = {
   licenseNumberRaw: string | null;
   licenseNumberCanonical: string | null;
   phones: string[];
+  callsigns: string[];
   workStatuses: string[];
   profilesCount: number;
   isMember: boolean;
@@ -109,6 +119,7 @@ export const listMatchedDrivers = async (
            license."numberRaw"                  AS "licenseNumberRaw",
            license."numberCanonical"            AS "licenseNumberCanonical",
            phones."phones",
+           profiles."callsigns",
            profiles."workStatuses",
            profiles."profilesCount",
            (settings."person_id" IS NOT NULL)   AS "isMember",
@@ -137,7 +148,16 @@ export const listMatchedDrivers = async (
       LEFT JOIN LATERAL (
         SELECT count(*)::int AS "profilesCount",
                coalesce(array_agg(DISTINCT candidate."work_status"), ARRAY[]::text[])
-                 AS "workStatuses"
+                 AS "workStatuses",
+               -- Позывные всех учёток, а не одной показываемой: нашли человека по позывному
+               -- второго профиля — увидеть в строке нужно именно его, иначе непонятно,
+               -- тот ли это водитель. Агрегат с FILTER, а не просто DISTINCT: без отбора
+               -- у профиля без позывного в массив попадает NULL и строка показывает дыру.
+               coalesce(
+                 array_agg(DISTINCT candidate."callsign")
+                   FILTER (WHERE candidate."callsign" IS NOT NULL),
+                 ARRAY[]::text[]
+               ) AS "callsigns"
           FROM xb.park_profiles AS candidate
          WHERE candidate."person_id" = person."id"
       ) AS profiles ON TRUE

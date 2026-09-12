@@ -22,6 +22,14 @@ const fullName = computed(() => {
 
   return parts.length > 0 ? parts.join(' ') : 'имя не заведено';
 });
+
+/**
+ * Позывные всех учёток человека — через запятую.
+ *
+ * Все, а не один: искали по позывному второго профиля, и показать в строке другой значит
+ * заставить человека гадать, тот ли это водитель.
+ */
+const callsigns = computed(() => props.driver.callsigns.join(', '));
 </script>
 
 <template>
@@ -33,6 +41,9 @@ const fullName = computed(() => {
       >
         {{ fullName }}
       </NuxtLink>
+      <!-- Рядом с именем, а не в сетке ниже: позывной — то, чем водитель называет себя сам
+           и что произносится вслух в офисе, наравне с фамилией. -->
+      <span v-if="callsigns" class="font-mono text-sm text-slate-500">{{ callsigns }}</span>
       <AtomsStatusBadge
         :tone="driver.isMember ? 'ok' : 'muted'"
         :label="driver.isMember ? 'в программе' : 'не в программе'"
