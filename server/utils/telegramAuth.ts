@@ -1,3 +1,4 @@
+import { consola } from 'consola';
 import type { H3Event } from 'h3';
 
 import { readBotToken } from '#server/bot/config';
@@ -22,6 +23,8 @@ import { INIT_DATA_HEADER } from '#shared/types/miniapp';
 // без личности.
 export const readInitDataHeader = (event: H3Event): string => getHeader(event, INIT_DATA_HEADER) ?? '';
 
+const log = consola.withTag('miniapp:auth');
+
 /**
  * Кто открыл приложение. Отказ поднимается исключением: до сюда доходят только запросы,
  * которым дальше делать нечего.
@@ -43,8 +46,30 @@ export const requireTelegramUser = (event: H3Event): InitDataUser => {
   const check = checkInitData({ initData: readInitDataHeader(event), token });
 
   if (check.outcome !== 'valid') {
-    // Причина отказа наружу не уходит: снаружи она ничего не чинит, а внутри разведена
-    // по значениям и попадает в лог того, кто её позвал.
+    // Причина отказа наружу не уходит: снаружи она ничего не чинит. Внутрь — уходит,
+    // и записать её обязательно: снаружи `malformed` и `hash_mismatch` выглядят
+    // одинаково, а без записи не различимы и изнутри (issue #90).
+    //
+    // Сама строка в лог не попадает ни целиком, ни частями: `initData` — действующий
+    // пропуск, годный сутки, и в логе он становится ключом ко входу под чужим именем.
+    // Пишется исход и, у просроченной, возраст строки в секундах.
+    //
+    // Уровни разведены, потому что исходы значат разное. `missing`, `malformed`,
+    // `expired` и `no_user` — житейское: страницу открыли не из мессенджера, приложение
+    // провисело открытым дольше суток, окно оказалось не личным чатом. А `hash_mismatch`
+    // — это строка, подписанная не тем, кем должна: либо попытка войти подделанной,
+    // либо разошедшийся токен бота. В общем потоке `info` такое теряется, а найти его
+    // надо с первого взгляда.
+    if (check.outcome === 'hash_mismatch') {
+      log.warn(`отказ ${check.outcome}`);
+    } else {
+      log.info(
+        check.outcome === 'expired'
+          ? `отказ ${check.outcome}: строке ${check.ageSeconds} с`
+          : `отказ ${check.outcome}`,
+      );
+    }
+
     throw createError({
       statusCode: 401,
       statusMessage: 'Unauthorized',
