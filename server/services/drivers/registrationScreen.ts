@@ -1,6 +1,5 @@
 import { formatPoints, officeContacts, plainText, type TextKey } from '#server/bot/texts';
 import type { Language, LinkAttemptOutcome } from '#server/generated/prisma/enums';
-import type { LinkedDriver } from '#server/services/drivers/readLinkedDriver';
 import type { RegistrationResult } from '#server/services/drivers/registerDriverByContact';
 import type {
   MiniAppRegisterResponse,
@@ -71,13 +70,6 @@ const RETRYABLE_OUTCOMES: ReadonlySet<LinkAttemptOutcome> = new Set<LinkAttemptO
   'internal_failure',
 ]);
 
-/** Приветствие участника: имя и баланс. Тем же текстом, которым отвечало главное меню бота. */
-export const describeMember = (driver: LinkedDriver): string =>
-  plainText('linked', driver.language, {
-    name: driver.name,
-    points: formatPoints(driver.points),
-  });
-
 /** Тексты экрана регистрации на одном языке. */
 const screenTexts = (language: Language): RegistrationScreenTexts => ({
   selectLanguage: plainText('select_language', language),
@@ -113,14 +105,14 @@ export const describeRegistrationResult = (
   chosenLanguage: Language,
 ): MiniAppRegisterResponse => {
   if (result.outcome === 'linked') {
-    // Приветственный текст с обещанием бонуса — только новому участнику. Перенесённому
-    // из старой базы показывается его баланс: обещать ему первые пять поездок незачем.
-    const key: TextKey = result.isNewMember ? 'linked_new' : 'linked';
-
+    // Приветствие с балансом — и без обещания бонуса: оно переехало на экран участника
+    // и показывается там по журналу, а не по факту сегодняшней регистрации. Экран после
+    // удачной привязки перечитывает своё состояние и показывает его целиком, вместе
+    // с балансом и историей (issue #101).
     return {
       outcome: 'linked',
       language: result.driver.language,
-      message: plainText(key, result.driver.language, {
+      message: plainText('linked', result.driver.language, {
         name: result.driver.name,
         points: formatPoints(result.driver.points),
       }),

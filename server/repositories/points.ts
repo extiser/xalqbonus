@@ -466,3 +466,89 @@ export const countAccountOperations = async (accountId: string): Promise<number>
 
   return rows[0]?.total ?? 0;
 };
+
+/**
+ * Строка истории, какой её видит владелец счёта: когда, за что и на сколько.
+ *
+ * Отдельным запросом от `listAccountOperations`, а не полем-выключателем у неё: та строка
+ * собирается для сотрудника, разбирающего спор у стойки, и несёт вторую сторону перевода
+ * с именем, ключ идемпотентности, автора правки и заказ. Водителю не уходит ничего
+ * из этого — ни к чему показывать ему имя человека, с чьим счётом сведён его перевод,
+ * ни номер заказа, которым он всё равно не воспользуется (issue #101).
+ */
+export type OwnOperationRow = {
+  /** Строка журнала. `bigint` в базе, поэтому текстом: JSON таких чисел не знает. */
+  entryId: string;
+  reason: PointReason;
+  occurredAt: Date;
+  delta: bigint;
+};
+
+/** Последняя показанная строка: с неё продолжается следующая страница. */
+export type OwnOperationsCursor = {
+  occurredAt: Date;
+  entryId: string;
+};
+
+/**
+ * Страница истории по счёту, новыми вперёд.
+ *
+ * **Листается курсором, а не смещением.** Порядок идёт по времени операции, и прогон
+ * заказов, приехавший между двумя нажатиями «Показать ещё», вставляет новые строки
+ * в начало списка — смещение после этого указывает на строку, которую водитель уже
+ * прочитал, и она приезжает ему вторым экземпляром. Спорить с водителем про историю,
+ * показывающую одну поездку дважды, хуже, чем не показывать историю вовсе.
+ *
+ * Сравнение кортежное — `(occurred_at, id) < (…, …)`: у него та же форма, что у порядка
+ * сортировки, и оба поля обязательны. `occurred_at` в одиночку не годится — у поездок
+ * одной минуты он совпадает, и страница либо потеряла бы соседей, либо повторила их.
+ *
+ * Индекса под этот порядок нет и не нужно: сортировка идёт по колонке присоединённой
+ * таблицы, индексом её не закрыть, а записей на одном счёте сотни.
+ */
+export const listAccountOperationsForOwner = async (
+  accountId: string,
+  limit: number,
+  cursor: OwnOperationsCursor | null,
+): Promise<OwnOperationRow[]> =>
+  db.$queryRaw<OwnOperationRow[]>`
+    SELECT entry."id"::text        AS "entryId",
+           transfer."reason",
+           transfer."occurred_at"  AS "occurredAt",
+           entry."delta"
+      FROM xb.point_entries AS entry
+      JOIN xb.point_transfers AS transfer ON transfer."id" = entry."transfer_id"
+     WHERE entry."account_id" = ${accountId}::uuid
+       AND (
+             ${cursor?.occurredAt ?? null}::timestamptz IS NULL
+             OR (transfer."occurred_at", entry."id")
+                < (${cursor?.occurredAt ?? null}::timestamptz, ${cursor?.entryId ?? null}::bigint)
+           )
+     ORDER BY transfer."occurred_at" DESC, entry."id" DESC
+     LIMIT ${limit}
+  `;
+
+/**
+ * Есть ли у человека хоть одна поездка в журнале.
+ *
+ * По журналу, а не по `xb.trips`: обещание бонуса за первые пять поездок отвечает
+ * на вопрос «начислялось ли этому человеку хоть раз», а поездка, лежащая в базе и ещё
+ * не начисленная, на него отвечает «нет».
+ *
+ * Ложь у человека без счёта — счёта нет ровно у тех, кому ни разу ничего не начисляли.
+ */
+export const hasTripOperations = async (personId: string): Promise<boolean> => {
+  const rows = await db.$queryRaw<{ exists: boolean }[]>`
+    SELECT EXISTS(
+             SELECT 1
+               FROM xb.point_entries AS entry
+               JOIN xb.point_transfers AS transfer ON transfer."id" = entry."transfer_id"
+               JOIN xb.accounts AS account ON account."id" = entry."account_id"
+              WHERE account."type" = 'driver'
+                AND account."person_id" = ${personId}::uuid
+                AND transfer."reason" = 'trip'::xb.point_reason
+           ) AS "exists"
+  `;
+
+  return rows[0]?.exists ?? false;
+};

@@ -38,6 +38,23 @@ export type TextKey =
   | 'contact_not_own'
   | 'linked'
   | 'linked_new'
+  | 'balance_title'
+  | 'data_updated'
+  | 'history_empty'
+  | 'history_failed'
+  | 'button_show_more'
+  | 'day_today'
+  | 'day_yesterday'
+  | 'reason_trip'
+  | 'reason_welcome'
+  | 'reason_opening'
+  | 'reason_order_spend'
+  | 'reason_order_refund'
+  | 'reason_manual_credit'
+  | 'reason_manual_debit'
+  | 'reason_raffle'
+  | 'reason_expire'
+  | 'reason_correction'
   | 'not_in_registry'
   | 'not_in_park'
   | 'profile_fired'
@@ -113,9 +130,107 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Добро пожаловать, {name}! Ваш баланс: {points}.',
     uz: 'Xush kelibsiz, {name}! Hisobingiz: {points}.',
   },
+  /**
+   * Обещание бонуса за первые поездки. Показывается на экране участника тому, у кого
+   * в журнале нет ни одной поездки, — а не по факту сегодняшней регистрации: перенесённому
+   * из старой базы с тысячей поездок за спиной обещать первые пять незачем (issue #101).
+   */
   linked_new: {
     ru: 'Добро пожаловать, {name}! Спасибо, что выбрали Xalq Taxi. Завершите первые 5 поездок и получите 300 баллов — их можно обменять на подарки в наших офисах.',
     uz: "Xush kelibsiz, {name}! Xalq Taxi'ni tanlaganingiz uchun rahmat. Birinchi 5 ta safarni yakunlang va 300 ball oling — ularni ofislarimizdagi sovg'alarga almashtirish mumkin.",
+  },
+  balance_title: {
+    ru: 'Ваш баланс',
+    uz: 'Hisobingiz',
+  },
+  /**
+   * Время последнего успешного прогона заказов.
+   *
+   * Стоит под балансом, потому что поездки приезжают прогоном, а не в момент завершения
+   * заказа: водитель, закрывший заказ минуту назад, своей поездки не увидит — и эта строка
+   * объясняет почему, до того как он придёт с вопросом в офис.
+   */
+  data_updated: {
+    ru: 'Данные обновлены в {time}',
+    uz: "Ma'lumotlar {time} da yangilandi",
+  },
+  /**
+   * Пустая история. Подписывается всегда: у нового участника операций нет ни одной,
+   * и голый пустой список читается как поломка приложения.
+   */
+  history_empty: {
+    ru: 'Здесь будет история начислений',
+    uz: "Bu yerda ballar tarixi ko'rinadi",
+  },
+  history_failed: {
+    ru: 'Не удалось загрузить историю. Попробуйте ещё раз.',
+    uz: "Tarixni yuklab bo'lmadi. Qaytadan urinib ko'ring.",
+  },
+  button_show_more: {
+    ru: 'Показать ещё',
+    uz: "Yana ko'rsatish",
+  },
+  day_today: {
+    ru: 'Сегодня',
+    uz: 'Bugun',
+  },
+  day_yesterday: {
+    ru: 'Вчера',
+    uz: 'Kecha',
+  },
+  /**
+   * Причины операций человеческим языком — по одному тексту на значение `point_reason`.
+   *
+   * Водителю называется то, что с ним произошло, а не то, как это устроено в журнале:
+   * ни второй стороны перевода, ни ключа идемпотентности он не видит и видеть не должен.
+   */
+  reason_trip: {
+    ru: 'Поездка',
+    uz: 'Safar',
+  },
+  reason_welcome: {
+    ru: 'Бонус за первые поездки',
+    uz: 'Birinchi safarlar uchun bonus',
+  },
+  reason_opening: {
+    ru: 'Перенос баланса',
+    uz: "Balansning o'tkazilishi",
+  },
+  reason_order_spend: {
+    ru: 'Обмен на товар',
+    uz: 'Mahsulotga almashtirildi',
+  },
+  reason_order_refund: {
+    ru: 'Возврат заказа',
+    uz: 'Buyurtma qaytarildi',
+  },
+  /** Ручная правка сотрудника. Разведена по знаку суммы: одним словом это два разных события. */
+  reason_manual_credit: {
+    ru: 'Начислено сотрудником',
+    uz: 'Xodim tomonidan hisoblandi',
+  },
+  reason_manual_debit: {
+    ru: 'Списано сотрудником',
+    uz: 'Xodim tomonidan yechildi',
+  },
+  reason_raffle: {
+    ru: 'Розыгрыш',
+    uz: "Qur'a",
+  },
+  reason_expire: {
+    ru: 'Сгорание баллов',
+    uz: 'Ballar muddati tugadi',
+  },
+  /**
+   * Сверка журнала (`recon`) и склейка двойников (`merge`) — одним текстом на обе причины.
+   *
+   * Намеренно: объяснять водителю, чем перепроверка отличается от объединения учётных
+   * записей, незачем, а два разных слова про одно и то же он прочтёт как две разные
+   * непонятные вещи.
+   */
+  reason_correction: {
+    ru: 'Корректировка',
+    uz: 'Tuzatish',
   },
   not_in_registry: {
     ru: 'Не получилось привязать номер автоматически — в данных таксопарка чего-то не хватает. Это чинится только в офисе: подойдите в любой офис Xalq Taxi с водительским удостоверением.',

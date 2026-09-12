@@ -1,8 +1,6 @@
 import { readLinkedDriver } from '#server/services/drivers/readLinkedDriver';
-import {
-  describeMember,
-  registrationScreenTexts,
-} from '#server/services/drivers/registrationScreen';
+import { readMemberScreen } from '#server/services/drivers/readMemberScreen';
+import { registrationScreenTexts } from '#server/services/drivers/registrationScreen';
 import { preferredLanguage } from '#server/utils/language';
 import { requireTelegramUser } from '#server/utils/telegramAuth';
 import type { MiniAppStateResponse } from '#shared/types/miniapp';
@@ -22,12 +20,10 @@ export default defineEventHandler(async (event): Promise<MiniAppStateResponse> =
   const user = requireTelegramUser(event);
   const driver = await readLinkedDriver(user.id);
 
+  // Состав экрана, а не готовое приветствие одной строкой: баланс на экране участника
+  // стоит крупно и отдельно от имени, а истории он собирает свою ручка (issue #101).
   if (driver) {
-    return {
-      screen: 'member',
-      language: driver.language,
-      message: describeMember(driver),
-    };
+    return readMemberScreen(driver);
   }
 
   return {

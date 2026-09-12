@@ -3,10 +3,12 @@ import { onMounted, ref } from 'vue';
 import {
   INIT_DATA_HEADER,
   type Language,
+  type MiniAppMemberScreen,
   type MiniAppRegisterResponse,
   type MiniAppStateResponse,
   type RegistrationScreenTexts,
 } from '#shared/types/miniapp';
+import { useMemberHistory } from '~/composables/useMemberHistory';
 import {
   hasSignedInitData,
   loadTelegramWebApp,
@@ -63,8 +65,8 @@ type Stage = 'loading' | 'error' | 'member' | 'registration';
 const stage = ref<Stage>('loading');
 const errorMessage = ref('');
 
-/** Приветствие участника: имя и баланс. Собрано сервером на его собственном языке. */
-const memberMessage = ref('');
+/** Экран участника: баланс, имя, отметка свежести и обещание бонуса новичку. */
+const member = ref<MiniAppMemberScreen | null>(null);
 
 const texts = ref<Record<Language, RegistrationScreenTexts> | null>(null);
 const language = ref<Language>('ru');
@@ -73,10 +75,20 @@ const result = ref<MiniAppRegisterResponse | null>(null);
 
 let webApp: TelegramWebApp | null = null;
 
+/**
+ * История участника. Своим запросом, а не полем экрана: экран читается один раз, а история
+ * листается кнопкой, и пересобирать ради каждой страницы весь экран незачем.
+ */
+const memberHistory = useMemberHistory(() => webApp?.initData ?? '');
+
 const applyState = (state: MiniAppStateResponse): void => {
   if (state.screen === 'member') {
-    memberMessage.value = state.message;
+    member.value = state;
     stage.value = 'member';
+
+    // История догружается следом, своим состоянием: её отказ гасит список, а не экран
+    // с балансом — баланс уже прочитан и врать о нём нечему.
+    void memberHistory.loadFirstPage();
 
     return;
   }
@@ -89,6 +101,27 @@ const applyState = (state: MiniAppStateResponse): void => {
 const failWith = (message: string): void => {
   errorMessage.value = message;
   stage.value = 'error';
+};
+
+/** Спрашивает сервер, что показать этому человеку, и показывает. */
+const loadState = async (): Promise<void> => {
+  if (!webApp) {
+    return;
+  }
+
+  try {
+    applyState(
+      await $fetch<MiniAppStateResponse>('/api/miniapp/me', {
+        headers: { [INIT_DATA_HEADER]: webApp.initData },
+      }),
+    );
+  } catch (error) {
+    // Текст на экране прежний — причина отказа водителю ничего не чинит. Но в консоли
+    // она обязана быть: это единственное окно наружу, которое у Mini App есть, и без
+    // записи `malformed` и `hash_mismatch` снаружи выглядят одинаково (issue #90).
+    console.error('[miniapp] не удалось получить состояние экрана', error);
+    failWith(LOAD_FAILED);
+  }
 };
 
 onMounted(async () => {
@@ -109,19 +142,7 @@ onMounted(async () => {
   webApp.ready();
   webApp.expand();
 
-  try {
-    applyState(
-      await $fetch<MiniAppStateResponse>('/api/miniapp/me', {
-        headers: { [INIT_DATA_HEADER]: webApp.initData },
-      }),
-    );
-  } catch (error) {
-    // Текст на экране прежний — причина отказа водителю ничего не чинит. Но в консоли
-    // она обязана быть: это единственное окно наружу, которое у Mini App есть, и без
-    // записи `malformed` и `hash_mismatch` снаружи выглядят одинаково (issue #90).
-    console.error('[miniapp] не удалось получить состояние экрана', error);
-    failWith(LOAD_FAILED);
-  }
+  await loadState();
 });
 
 /** Отправляет подписанную строку контакта на сервер и показывает исход. */
@@ -141,10 +162,11 @@ const register = async (contactData: string): Promise<void> => {
 
     if (response.outcome === 'linked') {
       // Привязались — экрана регистрации у этого человека больше нет, как и у всякого
-      // участника. Язык здесь уже его собственный: у перенесённого из старой базы тот,
-      // что лежал в `person_settings`, а не выбранный минуту назад.
-      memberMessage.value = response.message;
-      stage.value = 'member';
+      // участника. Экран участника перечитывается у сервера целиком, а не собирается
+      // из ответа привязки: баланс, отметка свежести и обещание бонуса приходят оттуда же,
+      // откуда придут при следующем открытии приложения, — иначе первый экран нового
+      // участника отличался бы от всех последующих.
+      await loadState();
 
       return;
     }
@@ -200,9 +222,25 @@ const share = (): void => {
     {{ errorMessage }}
   </p>
 
-  <p v-else-if="stage === 'member'" class="whitespace-pre-line py-6 text-lg leading-relaxed">
-    {{ memberMessage }}
-  </p>
+  <div v-else-if="stage === 'member' && member" class="flex flex-col gap-2">
+    <OrganismsMemberSummary
+      :balance-title="member.texts.balanceTitle"
+      :balance="member.balance"
+      :name="member.name"
+      :updated-note="member.updatedNote"
+      :promise="member.promise"
+    />
+
+    <OrganismsMemberHistory
+      :state="memberHistory.state.value"
+      :operations="memberHistory.operations.value"
+      :has-more="memberHistory.nextCursor.value !== null"
+      :loading-more="memberHistory.loadingMore.value"
+      :more-failed="memberHistory.moreFailed.value"
+      :texts="member.texts"
+      @more="memberHistory.loadMore()"
+    />
+  </div>
 
   <OrganismsDriverRegistration
     v-else-if="texts"
