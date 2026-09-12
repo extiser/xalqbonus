@@ -99,6 +99,19 @@ export const readTestEmployee = async (employeeId: string) =>
 export const readInviteById = async (inviteId: string) =>
   db.employeeInvite.findUnique({ where: { id: inviteId } });
 
+/** Учётка по отправителю апдейта — «завелась ли она вообще» без знания её идентификатора. */
+export const findTestEmployeeByTelegram = async (telegramUserId: bigint) =>
+  db.employee.findFirst({ where: { telegramUserId } });
+
+/**
+ * Сколько попыток привязки записано на этот чат.
+ *
+ * Нужно там, где проверяется обратное: бот регистрацию не начинает, и присланный ему
+ * контакт строки в журнале попыток не оставляет (docs/miniapp.md → «Что остаётся в боте»).
+ */
+export const countTestLinkAttempts = async (telegramChatId: bigint): Promise<number> =>
+  db.telegramLinkAttempt.count({ where: { telegramChatId } });
+
 /**
  * Активная водительская привязка на готового человека — вторая сторона правила «водителем
  * и сотрудником одновременно быть нельзя».

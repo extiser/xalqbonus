@@ -28,9 +28,14 @@ const globalForBot = globalThis as typeof globalThis & { botRuntime?: BotRuntime
 const updateKind = (update: Update): string =>
   Object.keys(update).find((key) => key !== 'update_id') ?? 'unknown';
 
-const createBot = (config: BotConfig): Bot => {
-  const bot = new Bot(config.token);
-
+/**
+ * Обработчики апдейтов в том порядке, в котором они разбирают апдейт.
+ *
+ * Отдельной функцией и экспортом наружу — ради теста разведения приглашения и приветствия:
+ * порядок здесь и есть то, что он проверяет, а собранный в тесте заново, он проверял бы
+ * свою же копию (tests/integration/bot/greeting.test.ts).
+ */
+export const registerBotHandlers = (bot: Bot): void => {
   // Каждый принятый апдейт — строка в логе, до всякой обработки. В обоих режимах одна и та же:
   // это единственное место, где видно, что канал до Telegram живой.
   bot.use(async (context, next) => {
@@ -44,13 +49,20 @@ const createBot = (config: BotConfig): Bot => {
   });
 
   // Приглашение сотрудника: `/start inv_<токен>` и контакт следом. Идёт первым и уступает
-  // приветствию `/start` без параметра (server/bot/employeeInvite.ts).
+  // приветствию всё, что к приглашению не относится, — и `/start` без параметра, и контакт
+  // от чата, который ссылку не открывал (server/bot/employeeInvite.ts).
   registerEmployeeInviteHandlers(bot);
 
-  // Всё, что осталось от водительской части: приветствие с кнопкой запуска приложения.
-  // Регистрация уехала в Mini App целиком — телефон берётся там и проверяется подписью
-  // (server/bot/greeting.ts).
+  // Всё, что осталось от водительской части: приветствие с кнопкой запуска приложения —
+  // ответ на любое сообщение в личном чате. Идёт последним и отвечает на то, что не разобрал
+  // никто до него (server/bot/greeting.ts).
   registerGreetingHandlers(bot);
+};
+
+const createBot = (config: BotConfig): Bot => {
+  const bot = new Bot(config.token);
+
+  registerBotHandlers(bot);
 
   // Ошибка обработчика в режиме polling: без своего обработчика grammY останавливает бота
   // на первом же исключении. В режиме webhook эта настройка не действует вовсе — там
