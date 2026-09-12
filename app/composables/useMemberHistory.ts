@@ -7,7 +7,7 @@ import {
 import type { LoadState } from '~/types/loadState';
 
 /**
- * История операций участника: первая страница и догрузка кнопкой.
+ * История операций участника: первая страница, тихая перезагрузка и догрузка кнопкой.
  *
  * Запросы живут здесь, а не в компонентах: список получает готовые строки свойством
  * и отдаёт нажатие событием (docs/frontend.md → «Данные в компоненты не ходят»).
@@ -41,15 +41,41 @@ export const useMemberHistory = (readInitData: () => string) => {
       query: cursor === null ? {} : { cursor },
     });
 
+  /**
+   * Тихая перезагрузка первой страницы: показанные строки стоят на экране, пока не пришли
+   * новые, и заменяются по приходу.
+   *
+   * Для кнопки обновления, которую нажимают часто и обычно впустую: данные те же самые,
+   * а список на время запроса собирался заново и моргал — водитель просил проверить,
+   * не появилось ли новое, и получал перерисовку прочитанного (issue #107).
+   *
+   * Отказ не перехватывается и не гасит список: показанные строки верны, увести их
+   * в ошибку в ответ на просьбу обновить — то же самое, что стереть баланс. Сказать
+   * об отказе — дело вызывающего, у обновления для этого есть своё место в шапке.
+   */
+  const reloadFirstPage = async (): Promise<void> => {
+    const page = await fetchPage(null);
+
+    operations.value = page.operations;
+    nextCursor.value = page.nextCursor;
+    state.value = 'ready';
+
+    // Отказ догрузки относился к странице, которой после перечитывания нет: список снова
+    // в одну страницу, и сообщение о непришедшем продолжении говорило бы о прошлом.
+    moreFailed.value = false;
+  };
+
+  /**
+   * Первая загрузка списка: на время запроса показывается состояние загрузки.
+   *
+   * Показывать в этот момент нечего, и «загрузка» — честное состояние, в отличие
+   * от обновления по кнопке.
+   */
   const loadFirstPage = async (): Promise<void> => {
     state.value = 'loading';
 
     try {
-      const page = await fetchPage(null);
-
-      operations.value = page.operations;
-      nextCursor.value = page.nextCursor;
-      state.value = 'ready';
+      await reloadFirstPage();
     } catch (error) {
       // Текст на экране придёт с сервера, а причина обязана быть в консоли: это
       // единственное окно наружу, которое у Mini App есть (issue #90).
@@ -83,5 +109,14 @@ export const useMemberHistory = (readInitData: () => string) => {
     }
   };
 
-  return { state, operations, nextCursor, loadingMore, moreFailed, loadFirstPage, loadMore };
+  return {
+    state,
+    operations,
+    nextCursor,
+    loadingMore,
+    moreFailed,
+    loadFirstPage,
+    reloadFirstPage,
+    loadMore,
+  };
 };

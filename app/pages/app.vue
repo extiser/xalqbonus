@@ -107,14 +107,16 @@ const refreshFailedNote = computed(() =>
  */
 const memberHistory = useMemberHistory(() => initData);
 
+/**
+ * Показывает то, что ответил сервер.
+ *
+ * Историю поднимает вызывающий, а не этот код: первая загрузка экрана и обновление
+ * по кнопке читают её по-разному — с состоянием загрузки и тихо (issue #107).
+ */
 const applyState = (state: MiniAppStateResponse): void => {
   if (state.screen === 'member') {
     member.value = state;
     stage.value = 'member';
-
-    // История догружается следом, своим состоянием: её отказ гасит список, а не экран
-    // с балансом — баланс уже прочитан и врать о нём нечему.
-    void memberHistory.loadFirstPage();
 
     return;
   }
@@ -138,7 +140,15 @@ const fetchState = (): Promise<MiniAppStateResponse> =>
 /** Спрашивает сервер, что показать этому человеку, и показывает. */
 const loadState = async (): Promise<void> => {
   try {
-    applyState(await fetchState());
+    const state = await fetchState();
+
+    applyState(state);
+
+    if (state.screen === 'member') {
+      // История догружается следом, своим состоянием: её отказ гасит список, а не экран
+      // с балансом — баланс уже прочитан и врать о нём нечему.
+      void memberHistory.loadFirstPage();
+    }
   } catch (error) {
     // Текст на экране прежний — причина отказа водителю ничего не чинит. Но в консоли
     // она обязана быть: это единственное окно наружу, которое у Mini App есть, и без
@@ -169,7 +179,16 @@ const refresh = async (): Promise<void> => {
   refreshing.value = true;
 
   try {
-    applyState(await fetchState());
+    const state = await fetchState();
+
+    applyState(state);
+
+    if (state.screen === 'member') {
+      // Тихо: строки истории стоят на экране, пока не пришли новые. Кнопка крутится,
+      // и этого признака довольно — мигание списка им никогда не было (issue #107).
+      await memberHistory.reloadFirstPage();
+    }
+
     refreshFailed.value = false;
   } catch (error) {
     console.error('[miniapp] не удалось перечитать экран участника', error);
