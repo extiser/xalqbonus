@@ -34,14 +34,20 @@ type RefusalOutcome = Exclude<LinkAttemptOutcome, 'linked'>;
  * текст. Запасное «подойдите в офис» сломать ничего не может — оно молча вернуло бы ровно
  * то общее сообщение, ради избавления от которого заведён `#77`.
  *
- * Без офисов три исхода, и у каждого своя причина. Чужой контакт чинится второй попыткой.
- * Сотрудник парка в офисе и так работает. А молчащий Fleet API — это сломались мы,
- * и посылать за это человека через город значит создавать поход, который не был нужен.
+ * Без офисов четыре исхода, и у каждого своя причина. Чужой контакт чинится второй попыткой.
+ * Сотрудник парка в офисе и так работает. А не прошедшая проверка — молчащий Fleet API
+ * или наша собственная поломка — это сломались мы, и посылать за это человека через город
+ * значит создавать поход, который не был нужен.
+ *
+ * У этих двух исходов один ключ текста на двоих намеренно: в журнале они разведены, потому
+ * что разбору нужно «их сторона или наша», а водителю разница не видна и видна быть
+ * не должна — действие у него одно, подождать и нажать ещё раз (issue #95).
  */
 const REFUSALS: Readonly<Record<RefusalOutcome, { key: TextKey; withOffices: boolean }>> = {
   contact_not_own: { key: 'contact_not_own', withOffices: false },
   employee_account: { key: 'employee_account', withOffices: false },
-  park_api_unavailable: { key: 'park_api_unavailable', withOffices: false },
+  park_api_unavailable: { key: 'check_unavailable', withOffices: false },
+  internal_failure: { key: 'check_unavailable', withOffices: false },
   not_in_registry: { key: 'not_in_registry', withOffices: true },
   not_in_park: { key: 'not_in_park', withOffices: true },
   profile_fired: { key: 'profile_fired', withOffices: true },
@@ -54,14 +60,15 @@ const REFUSALS: Readonly<Record<RefusalOutcome, { key: TextKey; withOffices: boo
 /**
  * Исходы, после которых повтор тем же нажатием осмыслен.
  *
- * Водитель поделился не своим контактом или напоролся на молчащий Fleet API — оба чинятся
- * второй попыткой, и обе идут той же кнопкой. Под всеми остальными кнопка гаснет: она
- * звала бы в действие, которое даст тот же ответ. Это то же решение, что снимало
+ * Водитель поделился не своим контактом или проверка не прошла — на стороне парка либо
+ * на нашей, — и всё это чинится второй попыткой той же кнопкой. Под всеми остальными кнопка
+ * гаснет: она звала бы в действие, которое даст тот же ответ. Это то же решение, что снимало
  * клавиатуру запроса контакта в боте, — и принято оно было там по той же причине.
  */
 const RETRYABLE_OUTCOMES: ReadonlySet<LinkAttemptOutcome> = new Set<LinkAttemptOutcome>([
   'contact_not_own',
   'park_api_unavailable',
+  'internal_failure',
 ]);
 
 /** Приветствие участника: имя и баланс. Тем же текстом, которым отвечало главное меню бота. */

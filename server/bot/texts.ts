@@ -46,7 +46,7 @@ export type TextKey =
   | 'telegram_already_linked'
   | 'link_closed_in_history'
   | 'employee_account'
-  | 'park_api_unavailable'
+  | 'check_unavailable'
   | 'notification_welcome_bonus'
   | 'invite_ask_contact'
   | 'invite_accepted'
@@ -179,9 +179,20 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Этот аккаунт заведён как сотрудник парка. Регистрация водителя для него недоступна: откройте приложение кнопкой меню.',
     uz: "Bu akkaunt park xodimi sifatida ro'yxatdan o'tgan. Unga haydovchi sifatida ro'yxatdan o'tish mumkin emas: ilovani menyu tugmasi orqali oching.",
   },
-  park_api_unavailable: {
-    ru: 'Не удалось проверить номер — база таксопарка сейчас не отвечает. Попробуйте, пожалуйста, через несколько минут.',
-    uz: "Raqamni tekshirib bo'lmadi — taksopark ma'lumotlar bazasi hozir javob bermayapti. Iltimos, bir necha daqiqadan so'ng qayta urinib ko'ring.",
+  /**
+   * Проверка не прошла — и неважно, у кого именно отказало.
+   *
+   * Один текст на два исхода, `park_api_unavailable` и `internal_failure`: водителю от нашей
+   * внутренней разницы ни холодно ни жарко, а действие у него одно и то же — подождать
+   * и нажать ещё раз.
+   *
+   * Про парк текст больше не утверждает ничего. Прежняя формулировка называла виновником
+   * базу таксопарка, и это оказалось враньём в самом частом случае: у нас не было заполнено
+   * окружение, и запрос в парк не уходил вовсе (issue #95).
+   */
+  check_unavailable: {
+    ru: 'Сейчас не получилось проверить ваш номер. Попробуйте, пожалуйста, через несколько минут.',
+    uz: "Hozir raqamingizni tekshirib bo'lmadi. Iltimos, bir necha daqiqadan so'ng qayta urinib ko'ring.",
   },
   notification_welcome_bonus: {
     ru: '🎁 Вам начислено {points} баллов за первые 5 поездок! Обменять их на подарки можно в любом офисе Xalq Taxi.',

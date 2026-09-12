@@ -96,11 +96,30 @@ export class FleetRateLimitError extends Error {
   }
 }
 
+/**
+ * Реквизитов Fleet API нет в окружении — идти наружу нечем.
+ *
+ * Отдельным типом, а не голым `Error`: до парка такой отказ не доходит вовсе, и вызывающий
+ * обязан отличать его и от ответа Fleet API, и от отказа нашей базы. Незаполненная
+ * переменная и упавший Postgres — разные происшествия с разной починкой, и называть их
+ * одним предложением в логе значит терять минуты там, где у водителей уже не работает
+ * регистрация (issue #95).
+ *
+ * Имя переменной остаётся полем, а не только частью сообщения: чинит этот отказ тот, кто
+ * знает, что именно дописать в `.env`. Значения в ошибку не попадают ни при каких условиях.
+ */
+export class FleetCredentialsMissingError extends Error {
+  constructor(public readonly variableName: string) {
+    super(`в окружении не заполнен ${variableName}`);
+    this.name = 'FleetCredentialsMissingError';
+  }
+}
+
 const requireEnv = (name: string): string => {
   const value = process.env[name];
 
   if (!value) {
-    throw new Error(`в окружении не заполнен ${name}`);
+    throw new FleetCredentialsMissingError(name);
   }
 
   return value;
