@@ -32,26 +32,33 @@ defineEmits<{
 }>();
 
 /**
- * Показывать ли кнопку.
+ * Предлагает ли экран повторить попытку.
  *
- * Под окончательным отказом её нет: она звала бы человека нажать то, что даст тот же
- * ответ. Решает сервер — он же знает, чинится ли исход повтором.
+ * Под окончательным отказом не предлагает: остаётся ответ и офисы, а всё, что зовёт
+ * нажать, — заголовок выбора языка, переключатель, просьба поделиться номером и сама
+ * кнопка — уходит. Оно звало бы человека в действие, которое даст тот же ответ, и язык,
+ * который на уже принятый исход не влияет ничем.
+ *
+ * Признак один и приходит с сервера: своего перечисления окончательных исходов здесь нет
+ * и быть не должно — решает тот, кто знает, чинится ли исход повтором.
  */
-const canShare = computed(() => props.result === null || props.result.canRetry);
+const canRetry = computed(() => props.result === null || props.result.canRetry);
 </script>
 
 <template>
   <div class="flex flex-1 flex-col gap-6">
-    <h1 class="text-xl font-semibold">{{ texts.selectLanguage }}</h1>
+    <template v-if="canRetry">
+      <h1 class="text-xl font-semibold">{{ texts.selectLanguage }}</h1>
 
-    <MoleculesLanguageChoice
-      :model-value="language"
-      :label-ru="texts.languageRu"
-      :label-uz="texts.languageUz"
-      @update:model-value="$emit('update:language', $event)"
-    />
+      <MoleculesLanguageChoice
+        :model-value="language"
+        :label-ru="texts.languageRu"
+        :label-uz="texts.languageUz"
+        @update:model-value="$emit('update:language', $event)"
+      />
 
-    <p class="text-base leading-relaxed text-slate-600">{{ texts.askPhone }}</p>
+      <p class="text-base leading-relaxed text-slate-600">{{ texts.askPhone }}</p>
+    </template>
 
     <div v-if="result" class="flex flex-col gap-4">
       <p class="whitespace-pre-line rounded-2xl bg-slate-50 px-4 py-4 text-base leading-relaxed">
@@ -62,13 +69,8 @@ const canShare = computed(() => props.result === null || props.result.canRetry);
 
     <p v-if="sending" class="text-sm text-slate-500">{{ texts.checkingPhone }}</p>
 
-    <div class="mt-auto pt-6">
-      <AtomsMiniAppButton
-        v-if="canShare"
-        :label="texts.sendPhone"
-        :disabled="sending"
-        @click="$emit('share')"
-      />
+    <div v-if="canRetry" class="mt-auto pt-6">
+      <AtomsMiniAppButton :label="texts.sendPhone" :disabled="sending" @click="$emit('share')" />
     </div>
   </div>
 </template>
