@@ -7,6 +7,7 @@ import {
   denialText,
   WEB_LANGUAGE,
   type DenialPayload,
+  type DenialValueArgs,
   type ServerDenialCode,
 } from '#shared/denials';
 
@@ -43,17 +44,20 @@ const STATUS_MESSAGE: Readonly<Record<401 | 403 | 429, string>> = {
  *
  * Текст берётся по коду из словаря, а не пишется в ручке: написанный по месту, он однажды
  * расходится с тем, что показывает соседний экран, и перевести его нечем.
+ *
+ * Подстановки идут вслед за кодом и проверяются им же: отказу без них передать нечего,
+ * а `throttled` без минут не собирается (`shared/denials.ts`).
  */
-export const denyAccess = (
-  code: ServerDenialCode,
-  values: Readonly<Record<string, string>> = {},
+export const denyAccess = <Code extends ServerDenialCode>(
+  code: Code,
+  ...values: DenialValueArgs<Code>
 ): H3Error => {
   const statusCode = DENIAL_STATUS[code];
 
   return createError({
     statusCode,
     statusMessage: STATUS_MESSAGE[statusCode],
-    message: denialText(code, WEB_LANGUAGE, values),
+    message: denialText(code, WEB_LANGUAGE, ...values),
     // Тело отказа собирает Nitro, и единственное место в нём под наше — `data`.
     data: { code } satisfies DenialPayload,
   });

@@ -1,4 +1,9 @@
-import { denialText, isDenialCode, WEB_LANGUAGE, type DenialCode } from '#shared/denials';
+import {
+  denialText,
+  isServerDenialCode,
+  WEB_LANGUAGE,
+  type ServerDenialCode,
+} from '#shared/denials';
 
 /**
  * Отказ ручки, приведённый к тому, по чему решают и что показывают человеку.
@@ -21,10 +26,10 @@ const failureBody = (error: unknown): Record<string, unknown> | null =>
   asRecord(asRecord(error)?.data);
 
 /** Код отказа. `null`, если ответа не было или код в нём не наш. */
-export const failureDenial = (error: unknown): DenialCode | null => {
+export const failureDenial = (error: unknown): ServerDenialCode | null => {
   const code = asRecord(failureBody(error)?.data)?.code;
 
-  return isDenialCode(code) ? code : null;
+  return isServerDenialCode(code) ? code : null;
 };
 
 /** Что показать человеку. */

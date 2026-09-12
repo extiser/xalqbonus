@@ -92,6 +92,9 @@ const submit = async (): Promise<void> => {
       </p>
 
       <form class="mt-6 space-y-4" @submit.prevent="submit">
+        <!-- Оба поля обязательны: пустую форму останавливает браузер, и ответ «нужны
+             телефон и пароль» остаётся тем, чем он и является — ответом неполному запросу
+             из чужого клиента, а не текстом, который читает сотрудник. -->
         <MoleculesFormField
           v-model="phone"
           label="Телефон"
@@ -99,12 +102,14 @@ const submit = async (): Promise<void> => {
           autocomplete="username"
           placeholder="+998 90 123 45 67"
           autofocus
+          required
         />
         <MoleculesFormField
           v-model="password"
           label="Пароль"
           type="password"
           autocomplete="current-password"
+          required
         />
 
         <p v-if="error" class="text-sm text-red-700">{{ error }}</p>

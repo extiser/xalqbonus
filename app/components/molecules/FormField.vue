@@ -15,6 +15,8 @@ withDefaults(
     placeholder?: string;
     autocomplete?: string;
     autofocus?: boolean;
+    /** Пустым не отправляется: форму останавливает браузер, и он же говорит, чего не хватает. */
+    required?: boolean;
     /** Что не так с этим полем. `null` — всё в порядке. */
     error?: string | null;
     /** Подсказка под полем: правило ввода, а не отказ. */
@@ -24,6 +26,7 @@ withDefaults(
     placeholder: undefined,
     autocomplete: undefined,
     autofocus: false,
+    required: false,
     error: null,
     hint: null,
   },
@@ -42,6 +45,7 @@ const model = defineModel<string>({ required: true });
       :placeholder="placeholder"
       :autocomplete="autocomplete"
       :autofocus="autofocus"
+      :required="required"
     />
     <span v-if="error" class="mt-1 block text-sm text-red-700">{{ error }}</span>
     <span v-else-if="hint" class="mt-1 block text-sm text-slate-500">{{ hint }}</span>

@@ -1,5 +1,6 @@
 import { PASSWORD_MIN_LENGTH } from '#server/services/employees/config';
 import { setPassword } from '#server/services/employees/setPassword';
+import { denyAccess } from '#server/utils/denial';
 import { requireEmployee } from '#server/utils/employeeAuth';
 import { SESSION_COOKIE_NAME } from '#server/utils/employeeSession';
 import type { EmployeePasswordResponse } from '#shared/types/employee';
@@ -31,12 +32,11 @@ export default defineEventHandler(async (event): Promise<EmployeePasswordRespons
 
   // Учётки не стало между проверкой доступа и записью — редкость, но отвечать на это
   // пятисоткой нечестно: доступа у этого запроса действительно больше нет.
+  //
+  // Код тот же, что у проверки доступа на этот же случай: состояние одно, и своя строка
+  // здесь — это второй текст про одно состояние, то самое, от чего избавляет словарь.
   if (outcome === 'unknown_employee') {
-    throw createError({
-      statusCode: 403,
-      statusMessage: 'Forbidden',
-      message: 'учётки больше нет',
-    });
+    throw denyAccess('unknown_employee');
   }
 
   // Смена пароля гасит все выданные cookie, включая тот, которым сделан этот запрос:

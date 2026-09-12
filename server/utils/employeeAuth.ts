@@ -41,15 +41,16 @@ const readSessionCookie = (event: H3Event): string | null =>
  * не те». Один код на оба случая показал бы «неверный пароль» человеку, который пароля
  * не набирал.
  */
-const DENIAL_BY_OUTCOME: Readonly<
-  Record<Exclude<AuthOutcome, 'authenticated'>, ServerDenialCode>
-> = {
+const DENIAL_BY_OUTCOME = {
   no_credentials: 'no_credentials',
   invalid_credentials: 'invalid_session',
   sessions_revoked: 'sessions_revoked',
   unknown_employee: 'unknown_employee',
   disabled: 'disabled',
-};
+  // `satisfies`, а не аннотация: аннотация расширила бы значения до всех кодов сразу,
+  // включая `throttled`, и вызов `denyAccess` начал бы требовать подстановку минут
+  // на каждый исход проверки. Полноту таблицы `satisfies` проверяет так же.
+} as const satisfies Record<Exclude<AuthOutcome, 'authenticated'>, ServerDenialCode>;
 
 /**
  * Сотрудник, пришедший этим запросом, или отказ.

@@ -7,9 +7,17 @@
  * у водителя два языка и свои тексты, у сотрудника пока один и свои, — а устройство
  * у них одно (решение Руслана 12-09-2026, issue #112).
  *
- * Лежит в `shared/`, потому что читают его обе стороны: сервер кладёт текст в ответ,
- * а клиент берёт отсюда единственный отказ, про который сервер сказать не может, —
- * «до ручки не дошло».
+ * **Что здесь лежит, а что нет.** Словарь покрывает отказы двери веба: кто вошёл
+ * и что ему открыто. Отказы доменных правил — «приглашать можно только роль ниже своей»,
+ * «в программе не состоит» — остаются при своих правилах, в своих ручках: они про предмет
+ * разговора, а не про доступ в приложение, и собрать их в одном месте значит собрать
+ * в одном месте половину логики приложения. Поэтому один `403` говорит кодом, а соседний
+ * строкой, и это не недоделка. Дверь Mini App водителя — тоже своя
+ * (`server/utils/telegramAuth.ts`), и текст у неё водительский.
+ *
+ * Лежит словарь в `shared/`, потому что читают его обе стороны: сервер кладёт текст
+ * в ответ, а клиент берёт отсюда единственный отказ, про который сервер сказать
+ * не может, — «до ручки не дошло».
  */
 
 /**
@@ -66,8 +74,12 @@ export type WebLanguage = 'ru';
 /** Язык по умолчанию: второго пока нет, и спрашивать его пока не у кого. */
 export const WEB_LANGUAGE: WebLanguage = 'ru';
 
+type DenialTexts<Code extends DenialCode> = Readonly<
+  Record<Code, Readonly<Record<WebLanguage, string>>>
+>;
+
 /**
- * Текст на каждый отказ.
+ * Текст на каждый отказ сервера.
  *
  * Полнота проверяется типом, а не вниманием: отказ, добавленный без текста, не собирается.
  *
@@ -75,7 +87,7 @@ export const WEB_LANGUAGE: WebLanguage = 'ru';
  * хоть что-то. Там, где не может — как с выключенной учёткой, — сказать об этом
  * обязательно: иначе он набирает верный пароль и не понимает, почему тот не пускает.
  */
-const DENIAL_TEXTS: Readonly<Record<DenialCode, Readonly<Record<WebLanguage, string>>>> = {
+const SERVER_DENIAL_TEXTS: DenialTexts<ServerDenialCode> = {
   no_credentials: {
     ru: 'Войдите, чтобы продолжить.',
   },
@@ -109,10 +121,52 @@ const DENIAL_TEXTS: Readonly<Record<DenialCode, Readonly<Record<WebLanguage, str
     // из-за чужих попыток с его адреса, нужно знать, что дело во времени, а не в пароле.
     ru: 'Слишком много неудачных попыток. Вход снова примут через {minutes} мин.',
   },
+};
+
+/**
+ * Весь словарь: то, что говорит сервер, плюс одно слово клиента.
+ *
+ * Двумя таблицами, а не одной: сказать `request_failed` сервер не может — это ответ
+ * на отсутствие ответа, — и проверка пришедшего по сети кода обязана его не принимать
+ * (`isServerDenialCode`). Разделение по таблицам повторяет разделение по типам, и сверять
+ * код со списком исключений не приходится.
+ */
+const DENIAL_TEXTS: DenialTexts<DenialCode> = {
+  ...SERVER_DENIAL_TEXTS,
   request_failed: {
     ru: 'Приложение не ответило. Проверьте связь и попробуйте снова.',
   },
 };
+
+/**
+ * Имена подстановок в тексте отказа: `never` — подстановок нет.
+ *
+ * Запись нужна каждому коду, и это проверяется типом: `DenialValueArgs` индексирует эту
+ * таблицу кодом, и код без записи индексом не становится. Без таблицы «через {minutes} мин»
+ * доезжает до глаз сотрудника фигурными скобками — `denyAccess('throttled')` без подстановки
+ * собирался бы молча.
+ */
+type DenialValueNames = {
+  no_credentials: never;
+  invalid_session: never;
+  sessions_revoked: never;
+  unknown_employee: never;
+  disabled: never;
+  role_not_allowed: never;
+  invalid_credentials: never;
+  /** Срок паузы — единственная подстановка во всём словаре. */
+  throttled: 'minutes';
+  request_failed: never;
+};
+
+/**
+ * Подстановки как часть вызова: отказу без них передать нечего, отказу с ними —
+ * обязательно, и имена в наборе те самые. Пропущенное или переименованное имя ломает
+ * сборку.
+ */
+export type DenialValueArgs<Code extends DenialCode> = [DenialValueNames[Code]] extends [never]
+  ? []
+  : [values: Readonly<Record<DenialValueNames[Code], string>>];
 
 /** Подстановки по именам в фигурных скобках — как в словаре бота. */
 const render = (template: string, values: Readonly<Record<string, string>>): string =>
@@ -128,12 +182,18 @@ const render = (template: string, values: Readonly<Record<string, string>>): str
  * ни в одном. Язык передаётся явно, хотя он пока один: вопрос «чей это язык» должен
  * стоять в коде до того, как у админки появится второй.
  */
-export const denialText = (
-  code: DenialCode,
+export const denialText = <Code extends DenialCode>(
+  code: Code,
   language: WebLanguage,
-  values: Readonly<Record<string, string>> = {},
-): string => render(DENIAL_TEXTS[code][language], values);
+  ...values: DenialValueArgs<Code>
+): string => render(DENIAL_TEXTS[code][language], values[0] ?? {});
 
-/** Наш ли это код: в ответе он приходит строкой, а пришедшему по сети верить нельзя. */
-export const isDenialCode = (value: unknown): value is DenialCode =>
-  typeof value === 'string' && Object.hasOwn(DENIAL_TEXTS, value);
+/**
+ * Наш ли это код отказа сервера: в ответе он приходит строкой, а пришедшему по сети
+ * верить нельзя.
+ *
+ * `request_failed` здесь не проходит намеренно — сервер его не шлёт, это слово клиента
+ * о том, что ответа не было вовсе.
+ */
+export const isServerDenialCode = (value: unknown): value is ServerDenialCode =>
+  typeof value === 'string' && Object.hasOwn(SERVER_DENIAL_TEXTS, value);
