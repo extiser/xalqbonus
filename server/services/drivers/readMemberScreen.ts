@@ -46,7 +46,9 @@ export const readMemberScreen = async (driver: LinkedDriver): Promise<MiniAppSta
     // Обещание первых пяти поездок — тому, у кого в журнале нет ни одной. Не по факту
     // сегодняшней регистрации: перенесённый из старой базы приходит сюда с тысячей
     // поездок за спиной, и обещать ему бонус за первые пять — враньё (issue #101).
-    promise: hasTrips ? null : plainText('linked_new', driver.language, { name: driver.name }),
+    //
+    // Без обращения по имени: имя стоит строкой выше, в шапке под балансом.
+    promise: hasTrips ? null : plainText('welcome_bonus_promise', driver.language),
     texts: memberScreenTexts(driver.language),
   };
 };

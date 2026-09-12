@@ -38,6 +38,7 @@ export type TextKey =
   | 'contact_not_own'
   | 'linked'
   | 'linked_new'
+  | 'welcome_bonus_promise'
   | 'balance_title'
   | 'data_updated'
   | 'history_empty'
@@ -130,14 +131,22 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Добро пожаловать, {name}! Ваш баланс: {points}.',
     uz: 'Xush kelibsiz, {name}! Hisobingiz: {points}.',
   },
-  /**
-   * Обещание бонуса за первые поездки. Показывается на экране участника тому, у кого
-   * в журнале нет ни одной поездки, — а не по факту сегодняшней регистрации: перенесённому
-   * из старой базы с тысячей поездок за спиной обещать первые пять незачем (issue #101).
-   */
   linked_new: {
     ru: 'Добро пожаловать, {name}! Спасибо, что выбрали Xalq Taxi. Завершите первые 5 поездок и получите 300 баллов — их можно обменять на подарки в наших офисах.',
     uz: "Xush kelibsiz, {name}! Xalq Taxi'ni tanlaganingiz uchun rahmat. Birinchi 5 ta safarni yakunlang va 300 ball oling — ularni ofislarimizdagi sovg'alarga almashtirish mumkin.",
+  },
+  /**
+   * Обещание бонуса за первые поездки на экране участника — тому, у кого в журнале нет
+   * ни одной поездки.
+   *
+   * Своим текстом, а не `linked_new`: там обещание идёт следом за приветствием, потому что
+   * это единственное сообщение на экране после привязки. Здесь имя водителя уже стоит
+   * в шапке под балансом, и второе «Добро пожаловать, {name}!» подряд — это имя, прочитанное
+   * дважды. Подстановок у ключа нет вовсе: обещание ни к кому не обращается.
+   */
+  welcome_bonus_promise: {
+    ru: 'Завершите первые 5 поездок и получите 300 баллов — их можно обменять на подарки в наших офисах.',
+    uz: "Birinchi 5 ta safarni yakunlang va 300 ball oling — ularni ofislarimizdagi sovg'alarga almashtirish mumkin.",
   },
   balance_title: {
     ru: 'Ваш баланс',
