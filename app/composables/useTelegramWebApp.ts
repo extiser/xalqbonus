@@ -10,7 +10,18 @@
  * нужно оно нам или нет.
  */
 
-const SDK_URL = 'https://telegram.org/js/telegram-web-app.js';
+/**
+ * Адрес скрипта. Ставит его в `<head>` та страница, которой он нужен, — `app/pages/app.vue`
+ * через `useHead`, — а не этот модуль и не `nuxt.config.ts`.
+ *
+ * Момент исполнения здесь решает всё. Telegram передаёт подписанную строку в хеше адреса
+ * (`#tgWebAppData=…`), а Vue Router при инициализации приложения адрес нормализует и хеш
+ * раскодирует: `%3D` превращается в `=`, `%26` — в `&`, и `tgWebAppData` после этого
+ * разбирается по первому `=`, отдавая огрызок вместо подписанной строки. Другого источника
+ * у SDK нет, поэтому прочитать адрес он обязан **до** роутера — то есть тегом в `<head>`
+ * отрисованной сервером страницы, а не вставкой из `onMounted` (issue #90).
+ */
+export const TELEGRAM_SDK_URL = 'https://telegram.org/js/telegram-web-app.js';
 
 /**
  * Ответ на `requestContact`, снятый с живого прогона (`#81`, docs/miniapp.md).
@@ -50,11 +61,31 @@ declare global {
   }
 }
 
-/** Загрузка одна на страницу: второй тег скрипта дал бы второй объект и вторую личность. */
-let loading: Promise<TelegramWebApp | null> | null = null;
+/**
+ * Похожа ли строка на ту, что выписывает Telegram.
+ *
+ * Признак — наличие `hash` и `auth_date`: подпись и момент выписки есть в любой строке
+ * от Telegram, и без них она не бывает. Различать по длине или по пустоте нельзя —
+ * испорченный роутером адрес отдаёт непустой огрызок, а страница, открытая в обычном
+ * браузере с любым хешем, отдаёт что угодно.
+ *
+ * Это **не** проверка подписи и ею притворяться не должна: сверяет подпись сервер
+ * токеном бота (`server/utils/telegramInitData.ts`). Здесь решается ровно один вопрос —
+ * показать человеку «откройте через Telegram» или «не удалось загрузить данные».
+ */
+export const hasSignedInitData = (initData: string): boolean => {
+  const fields = new URLSearchParams(initData);
+
+  return (fields.get('hash') ?? '') !== '' && (fields.get('auth_date') ?? '') !== '';
+};
 
 /**
  * Объект Telegram WebApp или `null`, если его неоткуда взять.
+ *
+ * Тег скрипта здесь не заводится ни при каких условиях: второй тег — это второй объект
+ * и вторая личность, а вставленный отсюда скрипт вдобавок прочёл бы уже испорченный
+ * роутером адрес. Объект либо уже лежит в странице, потому что его положил скрипт
+ * из `<head>`, либо не появится вовсе.
  *
  * `null` — рабочий ответ, а не поломка: так выглядит страница, открытая в обычном браузере,
  * и отвечать на это исключением значило бы звать разбирать «ошибку приложения» там,
@@ -62,33 +93,11 @@ let loading: Promise<TelegramWebApp | null> | null = null;
  */
 export const loadTelegramWebApp = (): Promise<TelegramWebApp | null> => {
   // На сервере окна нет вовсе, и личность там взять неоткуда: экран водителя целиком
-  // клиентский.
-  if (!import.meta.client) {
+  // клиентский. Проверяется само окно, а не флаг сборки Nuxt: так функция остаётся
+  // проверяемой тестом вне сборки.
+  if (typeof window === 'undefined') {
     return Promise.resolve(null);
   }
 
-  if (loading) {
-    return loading;
-  }
-
-  loading = new Promise((resolve) => {
-    const existing = window.Telegram?.WebApp;
-
-    if (existing) {
-      resolve(existing);
-
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = SDK_URL;
-    script.async = true;
-    script.addEventListener('load', () => resolve(window.Telegram?.WebApp ?? null));
-    // Отказ загрузки — это отсутствующий объект, а не отдельное происшествие: экран
-    // покажет то же самое, что и в обычном браузере.
-    script.addEventListener('error', () => resolve(null));
-    document.head.append(script);
-  });
-
-  return loading;
+  return Promise.resolve(window.Telegram?.WebApp ?? null);
 };

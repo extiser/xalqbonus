@@ -7,7 +7,12 @@ import {
   type MiniAppStateResponse,
   type RegistrationScreenTexts,
 } from '#shared/types/miniapp';
-import { loadTelegramWebApp, type TelegramWebApp } from '~/composables/useTelegramWebApp';
+import {
+  hasSignedInitData,
+  loadTelegramWebApp,
+  TELEGRAM_SDK_URL,
+  type TelegramWebApp,
+} from '~/composables/useTelegramWebApp';
 
 /**
  * Экран водителя: регистрация в программе или приветствие участника.
@@ -24,7 +29,19 @@ import { loadTelegramWebApp, type TelegramWebApp } from '~/composables/useTelegr
 
 definePageMeta({ layout: 'miniapp' });
 
-useHead({ title: 'XalqBonus' });
+useHead({
+  title: 'XalqBonus',
+  /**
+   * Скрипт Telegram — тегом в `<head>` этой страницы, и только этой: веб-морда парка
+   * ходить на `telegram.org` не должна, поэтому не `nuxt.config.ts`.
+   *
+   * Ни `async`, ни `defer`: обычный блокирующий тег в отрисованной сервером странице
+   * исполняется до гидрации, то есть до того, как Vue Router тронет адрес и раскодирует
+   * хеш с подписанной строкой. Вставка того же скрипта из `onMounted` опаздывает
+   * ровно на это и получает огрызок вместо личности (issue #90).
+   */
+  script: [{ src: TELEGRAM_SDK_URL }],
+});
 
 /**
  * Два текста, которых нет в серверном словаре, — и не по недосмотру: показываются они ровно
@@ -77,9 +94,13 @@ const failWith = (message: string): void => {
 onMounted(async () => {
   webApp = await loadTelegramWebApp();
 
-  // Ни объекта Telegram, ни подписанной строки — значит страницу открыли не из мессенджера.
+  // Ни объекта Telegram, ни строки с подписью — значит страницу открыли не из мессенджера.
   // Это не поломка, и разбирать её незачем: человеку нужно сказать, где дверь.
-  if (!webApp || webApp.initData.trim() === '') {
+  //
+  // Признак — `hash` и `auth_date` в строке, а не её непустота: в обычном браузере SDK
+  // отдаёт непустой огрызок, и по пустоте человек вне Telegram получал бы сообщение
+  // о поломке вместо указания, где вход.
+  if (!webApp || !hasSignedInitData(webApp.initData)) {
     failWith(OPEN_FROM_TELEGRAM);
 
     return;
@@ -94,7 +115,11 @@ onMounted(async () => {
         headers: { [INIT_DATA_HEADER]: webApp.initData },
       }),
     );
-  } catch {
+  } catch (error) {
+    // Текст на экране прежний — причина отказа водителю ничего не чинит. Но в консоли
+    // она обязана быть: это единственное окно наружу, которое у Mini App есть, и без
+    // записи `malformed` и `hash_mismatch` снаружи выглядят одинаково (issue #90).
+    console.error('[miniapp] не удалось получить состояние экрана', error);
     failWith(LOAD_FAILED);
   }
 });
@@ -125,9 +150,10 @@ const register = async (contactData: string): Promise<void> => {
     }
 
     result.value = response;
-  } catch {
+  } catch (error) {
     // Отказ ручки — не исход привязки: сервер до правил не дошёл, и говорить человеку
-    // «подойдите в офис» не за что.
+    // «подойдите в офис» не за что. В консоль пишется то, что случилось на самом деле.
+    console.error('[miniapp] не удалось отправить номер на привязку', error);
     failWith(LOAD_FAILED);
   } finally {
     sending.value = false;
