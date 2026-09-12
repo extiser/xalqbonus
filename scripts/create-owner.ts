@@ -11,8 +11,10 @@ import { createOwner } from '#server/services/employees/createOwner';
  * владельца ролей нет (docs/decisions.md → «Учётка сотрудника и роли»). Отсюда начинается
  * вся цепочка: владелец приглашает админов, админы — менеджеров.
  *
- * Запуск — целью `make employee-owner`, внутри app-контейнера: строка подключения с именем
- * `postgres` живёт там же, где тесты и перенос.
+ * Запуск — целью `make employee-owner` на локальном стенде и `make prod-employee-owner`
+ * на боевой машине, в обоих случаях внутри app-контейнера: строка подключения с именем
+ * `postgres` живёт там же, где тесты и перенос. На проде исполняется не этот файл, а его
+ * бандл `.output/create-owner.mjs`: исходников и tsx в боевом образе нет (docker/Dockerfile).
  *
  * Идемпотентен: повторный прогон на существующем телефоне второй учётки не создаёт и пароль
  * не меняет. Цель выката, молча переустанавливающая пароль владельца, — это способ потерять
@@ -25,7 +27,8 @@ const [phoneRaw, fullName, password] = process.argv.slice(2);
 
 if (!phoneRaw || !fullName || !password) {
   log.error(
-    'использование: make employee-owner phone=+998XXXXXXXXX name="Имя Фамилия" password=<пароль>',
+    'использование: make employee-owner (локально) или make prod-employee-owner (на машине) ' +
+      'phone=+998XXXXXXXXX name="Имя Фамилия" password=<пароль>',
   );
   process.exit(1);
 }

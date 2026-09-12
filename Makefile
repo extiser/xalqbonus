@@ -8,7 +8,7 @@ COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
 
 .PHONY: help up up-d down restart logs ps shell psql migrate migrate-create generate typecheck test test-db \
         db-restore db-schema invariants license-collisions legacy-vs-api import-legacy \
-        employee-owner \
+        employee-owner prod-employee-owner \
         import-legacy-dump \
         sync-orders sync-registry sync-state \
         prod-up prod-down prod-restart prod-logs prod-ps prod-shell prod-psql prod-migrate \
@@ -91,11 +91,25 @@ invariants: ## Прогнать запросы инвариантов журна
 # Идемпотентна: повторный прогон на существующем телефоне второй учётки не создаёт и пароль
 # не меняет. Пароль приходит аргументом и остаётся в истории команд — на боевой машине его
 # стоит сменить из приложения после первого входа.
-employee-owner: ## Завести владельца. make employee-owner phone=+998XXXXXXXXX name="Имя Фамилия" password=<пароль>
+# Локальная цель — под прогон сценариев доступа на локальной базе. Владелец боевой машины
+# заводится `prod-employee-owner` ниже: стеки разные, базы разные, и цель, ходящая
+# в локальный стек, на машине либо не найдёт контейнеров, либо заведёт владельца не в ту базу.
+employee-owner: ## Завести владельца локально. make employee-owner phone=+998XXXXXXXXX name="Имя Фамилия" password=<пароль>
 	@test -n "$(phone)" || { echo 'укажите телефон: make employee-owner phone=+998XXXXXXXXX name="Имя Фамилия" password=<пароль>'; exit 1; }
 	@test -n "$(name)" || { echo 'укажите имя: make employee-owner phone=$(phone) name="Имя Фамилия" password=<пароль>'; exit 1; }
 	@test -n "$(password)" || { echo 'укажите пароль: make employee-owner phone=$(phone) name="$(name)" password=<пароль>'; exit 1; }
 	$(COMPOSE) exec -T app npx tsx scripts/create-owner.ts "$(phone)" "$(name)" "$(password)"
+
+# Тот же сценарий на боевой машине — первый шаг дня выката, до снятия auth_basic
+# (docker/DEPLOY-MANUAL.md → «Порядок первого выката с входом»).
+#
+# Зовётся собранный бандл, а не `npx tsx scripts/...`: в боевом образе нет ни исходников,
+# ни tsx — dev-зависимости вычищены, а `scripts/` в него не копируется (docker/Dockerfile).
+prod-employee-owner: ## Завести владельца на проде. make prod-employee-owner phone=+998XXXXXXXXX name="Имя Фамилия" password=<пароль>
+	@test -n "$(phone)" || { echo 'укажите телефон: make prod-employee-owner phone=+998XXXXXXXXX name="Имя Фамилия" password=<пароль>'; exit 1; }
+	@test -n "$(name)" || { echo 'укажите имя: make prod-employee-owner phone=$(phone) name="Имя Фамилия" password=<пароль>'; exit 1; }
+	@test -n "$(password)" || { echo 'укажите пароль: make prod-employee-owner phone=$(phone) name="$(name)" password=<пароль>'; exit 1; }
+	$(COMPOSE_PROD) exec -T app node .output/create-owner.mjs "$(phone)" "$(name)" "$(password)"
 
 # Считает по выгрузке реестра из _reference/fleet-api/dumps/ — в репозитории её нет.
 license-collisions: ## Счётчик коллизий номеров ВУ до и после нормализации
