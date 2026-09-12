@@ -112,4 +112,5 @@ export const memberScreenTexts = (language: Language): MemberScreenTexts => ({
   historyEmpty: plainText('history_empty', language),
   historyFailed: plainText('history_failed', language),
   showMore: plainText('button_show_more', language),
+  refresh: plainText('button_refresh', language),
 });
