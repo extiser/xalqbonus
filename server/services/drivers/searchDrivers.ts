@@ -39,6 +39,7 @@ export const searchDrivers = async (
     licenseCanonical: criteria.licenseCanonical,
     phoneDigits: criteria.phoneDigits,
     nameTerms: criteria.nameTerms,
+    callsignTerm: criteria.callsignTerm,
     limit,
     offset,
   };
@@ -65,6 +66,7 @@ export const searchDrivers = async (
         licenseNumberRaw: row.licenseNumberRaw,
         licenseNumberCanonical: row.licenseNumberCanonical,
         phones: row.phones,
+        callsigns: row.callsigns,
         workStatuses: row.workStatuses,
         profilesCount: row.profilesCount,
         isMember: row.isMember,
