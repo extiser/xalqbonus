@@ -1,5 +1,6 @@
 import type { H3Event } from 'h3';
 
+import type { EmployeeRole } from '#server/generated/prisma/enums';
 import {
   authenticateEmployee,
   type AuthenticatedEmployee,
@@ -63,6 +64,34 @@ export const requireEmployee = async (event: H3Event): Promise<AuthenticatedEmpl
     statusMessage: 'Unauthorized',
     message: 'войдите заново',
   });
+};
+
+/**
+ * Тот же сотрудник, но ещё и с правом на эту ручку.
+ *
+ * Роль сверяется со списком разрешённых, а не с рангом «не ниже такой-то»: ранги
+ * у нас отвечают на вопрос «кого можно пригласить», и переиспользовать их как лестницу
+ * доступа значит объявить, что права ролей вложены друг в друга. Сегодня это так, завтра
+ * появится роль, которой открыто своё и закрыто чужое, и лестница начнёт врать молча.
+ *
+ * Разметка страниц эту же проверку дублирует — ради того, чтобы человек не видел пунктов,
+ * которые ему откажут, — но решает она, и только она.
+ */
+export const requireEmployeeRole = async (
+  event: H3Event,
+  allowedRoles: readonly EmployeeRole[],
+): Promise<AuthenticatedEmployee> => {
+  const employee = await requireEmployee(event);
+
+  if (!allowedRoles.includes(employee.role)) {
+    throw createError({
+      statusCode: 403,
+      statusMessage: 'Forbidden',
+      message: 'этот раздел вашей роли не открыт',
+    });
+  }
+
+  return employee;
 };
 
 /**

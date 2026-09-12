@@ -1,4 +1,5 @@
 import { readDriverCard } from '#server/services/drivers/readDriverCard';
+import { requireEmployee } from '#server/utils/employeeAuth';
 import { readUuid } from '#server/utils/query';
 import type { DriverCardResponse } from '#shared/types/driver';
 
@@ -9,6 +10,8 @@ import type { DriverCardResponse } from '#shared/types/driver';
 // Подпись статуса — латиницей: она уезжает в строку состояния HTTP, где русскому тексту
 // не место. Объяснение по-русски идёт телом ответа.
 export default defineEventHandler(async (event): Promise<DriverCardResponse> => {
+  await requireEmployee(event);
+
   const personId = readUuid(getRouterParam(event, 'personId'));
 
   if (!personId) {

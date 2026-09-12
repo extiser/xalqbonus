@@ -23,8 +23,9 @@ import { checkInitData } from '#server/utils/telegramInitData';
  * определяется ролью, а не дверью»).
  *
  * Учётка поднимается из базы на **каждом** запросе, и это не расточительность, а замена
- * таблицы сессий: `disabled_at` выбрасывает человека немедленно, а `password_changed_at`
- * позже времени выпуска cookie гасит все выданные cookie разом. Роль тоже читается
+ * таблицы сессий: `disabled_at` выбрасывает человека немедленно, а `sessions_valid_from`
+ * позже времени выпуска cookie гасит все выданные cookie разом — её двигают и выход
+ * из веба, и смена пароля. Роль тоже читается
  * из базы: та, что лежит в cookie, — подсказка для лога, а не основание для доступа
  * (docs/principles.md → «Доверие к входным данным»).
  *
@@ -38,6 +39,7 @@ export type AuthenticatedEmployee = {
   employeeId: string;
   role: EmployeeRole;
   fullName: string;
+  phoneE164: string;
 };
 
 export type AuthOutcome =
@@ -50,8 +52,8 @@ export type AuthOutcome =
   | 'unknown_employee'
   /** Учётка выключена. */
   | 'disabled'
-  /** Пароль сменили после выпуска cookie — это и есть «выйти на всех устройствах». */
-  | 'password_changed';
+  /** Сессии погашены после выпуска cookie — выходом из веба или сменой пароля. */
+  | 'sessions_revoked';
 
 export type AuthResult =
   | { outcome: 'authenticated'; employee: AuthenticatedEmployee }
@@ -69,6 +71,7 @@ const asAuthenticated = (employee: EmployeeRow): AuthenticatedEmployee => ({
   employeeId: employee.id,
   role: employee.role,
   fullName: employee.fullName,
+  phoneE164: employee.phoneE164,
 });
 
 /** Дверь Mini App: личность приходит подписанной, сессии за ней нет. */
@@ -128,18 +131,22 @@ const authenticateByCookie = async (cookieValue: string, now: Date): Promise<Aut
     return { outcome: 'disabled' };
   }
 
-  // Секундами, потому что временем выпуска в cookie лежат секунды: сравнение
-  // миллисекундной отметки базы с округлённой вниз секундой выбрасывало бы человека
-  // из веба сразу после того, как он сам же задал пароль.
-  const passwordChangedAtSeconds =
-    employee.passwordChangedAt === null
+  // Годность решает одна отметка, а не перечисление событий, которые её двигают: выход
+  // и смена пароля пишут `sessions_valid_from`, а проверка сверяется только с ней. Проверяй
+  // она два поля сразу, третий способ погасить сессии дописали бы в одно и забыли про другое.
+  //
+  // Секундами, потому что временем выпуска в cookie лежат секунды: сравнение миллисекундной
+  // отметки базы с округлённой вниз секундой выбрасывало бы человека из веба сразу после
+  // того, как он сам же задал пароль.
+  const sessionsValidFromSeconds =
+    employee.sessionsValidFrom === null
       ? null
-      : Math.floor(employee.passwordChangedAt.getTime() / 1000);
+      : Math.floor(employee.sessionsValidFrom.getTime() / 1000);
 
-  if (passwordChangedAtSeconds !== null && passwordChangedAtSeconds > session.issuedAtSeconds) {
-    log.info('cookie погашен сменой пароля', { employeeId: employee.id });
+  if (sessionsValidFromSeconds !== null && sessionsValidFromSeconds > session.issuedAtSeconds) {
+    log.info('cookie погашен', { employeeId: employee.id });
 
-    return { outcome: 'password_changed' };
+    return { outcome: 'sessions_revoked' };
   }
 
   return { outcome: 'authenticated', employee: asAuthenticated(employee) };

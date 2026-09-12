@@ -2,13 +2,16 @@ import {
   DEFAULT_HISTORY_LIMIT,
   readDriverHistory,
 } from '#server/services/drivers/readDriverHistory';
+import { requireEmployee } from '#server/utils/employeeAuth';
 import { readPositiveInteger, readUuid } from '#server/utils/query';
 import type { DriverHistoryResponse } from '#shared/types/driver';
 
 // История операций по счёту водителя, страницей. Отдельной ручкой от карточки намеренно:
 // карточка читается один раз, а история листается, и пересчитывать сверку с журналом
 // на каждом перелистывании незачем.
-export default defineEventHandler((event): Promise<DriverHistoryResponse> => {
+export default defineEventHandler(async (event): Promise<DriverHistoryResponse> => {
+  await requireEmployee(event);
+
   const personId = readUuid(getRouterParam(event, 'personId'));
 
   if (!personId) {

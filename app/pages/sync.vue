@@ -15,6 +15,12 @@ import { toLoadState } from '~/utils/loadState';
  * перелистывании журнала.
  */
 
+definePageMeta({
+  // Менеджеру этот экран не открыт. Решают ручки, а не эта строка: она лишь уводит
+  // на его работу вместо четырёх отказов подряд (`app/middleware/sync-access.ts`).
+  middleware: 'sync-access',
+});
+
 useHead({ title: 'Синхронизация — XalqBonus' });
 
 /** Сколько строк журнала и пропущенного на странице. */

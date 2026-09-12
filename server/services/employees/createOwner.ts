@@ -68,14 +68,17 @@ export const createOwner = async (request: CreateOwnerRequest): Promise<CreateOw
     return { outcome: 'already_exists', employeeId: existing.id, phoneE164 };
   }
 
+  const createdAt = request.now ?? new Date();
+
   const employee = await insertEmployee({
     role: 'owner',
     fullName,
     phoneE164,
     passwordHash: await hashPassword(request.password),
-    // Отметка ставится сразу: пароль задан сейчас, и cookie, выпущенные до этого момента,
-    // существовать не могут — учётки до этого момента не было вовсе.
-    passwordChangedAt: request.now ?? new Date(),
+    // Обе отметки ставятся сразу: пароль задан сейчас, и cookie, выпущенные до этого
+    // момента, существовать не могут — учётки до этого момента не было вовсе.
+    passwordChangedAt: createdAt,
+    sessionsValidFrom: createdAt,
     telegramUserId: null,
   });
 
