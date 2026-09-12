@@ -1,29 +1,42 @@
+import {
+  denialText,
+  isServerDenialCode,
+  WEB_LANGUAGE,
+  type ServerDenialCode,
+} from '#shared/denials';
+
 /**
- * Отказ ручки, приведённый к тому, что показывают человеку.
+ * Отказ ручки, приведённый к тому, по чему решают и что показывают человеку.
  *
- * Текст берётся серверный, а не собирается заново по кодам: разводить отказы — работа
- * сервера, и он уже развёл их так, как надо показать. Своя таблица кодов на клиенте
- * разошлась бы с серверной на первой же правке, и человек увидел бы «неверный пароль»
- * там, где сервер сказал «слишком много попыток, подождите».
+ * Решают по коду: сравнение сообщений ломается от правки запятой, а код — это то, что
+ * ручка сказала про случившееся (`shared/denials.ts`). Своей таблицы кодов у клиента нет
+ * и здесь: код и текст к нему лежат в общем словаре, и разойтись им негде.
  *
- * Запасной текст нужен на случай, когда до ручки не дошло вовсе: упавший прокси отвечает
- * своей страницей, и разбирать в ней нечего.
+ * Показывается текст из ответа: его собрал сервер по тому же словарю и подставил в него
+ * то, чего клиент не знает, — минуты паузы, например. Словарь читается ровно для одного
+ * отказа: когда ответа не было вовсе. Упавший прокси отвечает своей страницей, и разбирать
+ * в ней нечего.
  */
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null;
 
-/** Код ответа отказавшей ручки. `null`, если ответа не было вовсе. */
-export const failureStatus = (error: unknown): number | null => {
-  const failure = asRecord(error);
-  const statusCode = failure?.statusCode;
+/** Тело ответа отказавшей ручки. `null`, если ответа не было вовсе. */
+const failureBody = (error: unknown): Record<string, unknown> | null =>
+  asRecord(asRecord(error)?.data);
 
-  return typeof statusCode === 'number' ? statusCode : null;
+/** Код отказа. `null`, если ответа не было или код в нём не наш. */
+export const failureDenial = (error: unknown): ServerDenialCode | null => {
+  const code = asRecord(failureBody(error)?.data)?.code;
+
+  return isServerDenialCode(code) ? code : null;
 };
 
-export const failureMessage = (error: unknown, fallback: string): string => {
-  const body = asRecord(asRecord(error)?.data);
-  const message = body?.message;
+/** Что показать человеку. */
+export const failureText = (error: unknown): string => {
+  const message = failureBody(error)?.message;
 
-  return typeof message === 'string' && message.trim() !== '' ? message : fallback;
+  return typeof message === 'string' && message.trim() !== ''
+    ? message
+    : denialText('request_failed', WEB_LANGUAGE);
 };

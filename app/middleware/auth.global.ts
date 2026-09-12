@@ -1,5 +1,5 @@
 import { useAccessNotice, useCurrentEmployee } from '~/composables/useCurrentEmployee';
-import { failureMessage, failureStatus } from '~/utils/requestError';
+import { failureDenial, failureText } from '~/utils/requestError';
 import type { EmployeeMeResponse } from '#shared/types/employee';
 
 /**
@@ -39,11 +39,16 @@ export default defineNuxtRouteMiddleware(async (to) => {
 
     return;
   } catch (error) {
-    // `403` — «представились, но доступа нет»: учётку выключили, и вход этого не починит.
-    // Показать при этом всё равно нужно форму входа, а не пустой экран, — но с объяснением,
-    // иначе человек будет набирать верный пароль и не понимать, что происходит.
-    if (failureStatus(error) === 403) {
-      useAccessNotice().value = failureMessage(error, 'доступ закрыт');
+    const denial = failureDenial(error);
+
+    // Объяснение нужно каждому отказу, кроме «не представился»: тому, кто просто не вошёл,
+    // форма входа и есть ответ, а выключенная учётка и погашенная сессия без объяснения
+    // превращаются в верный пароль, который почему-то не пускает.
+    //
+    // Решение принимается по коду, а не по номеру ответа: под `401` исходов несколько,
+    // и сказать человеку они должны разное (`shared/denials.ts`).
+    if (denial !== null && denial !== 'no_credentials') {
+      useAccessNotice().value = failureText(error);
     }
 
     return navigateTo({ path: LOGIN_PATH, query: { next: to.fullPath } });
