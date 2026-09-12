@@ -2,7 +2,7 @@
 import { ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { useAccessNotice, useCurrentEmployee } from '~/composables/useCurrentEmployee';
-import { failureMessage } from '~/utils/requestError';
+import { failureText } from '~/utils/requestError';
 import type { EmployeeLoginResponse } from '#shared/types/employee';
 
 /**
@@ -15,6 +15,10 @@ import type { EmployeeLoginResponse } from '#shared/types/employee';
  * Отказы показываются ровно так, как их развёл сервер, своего разбора причин здесь нет:
  * единый текст на неверный телефон и неверный пароль — не небрежность, а условие. Форма,
  * отвечающая «такого телефона нет», становится способом узнать, кто заведён в системе.
+ *
+ * Своих текстов отказа здесь тоже нет ни одного, включая запасной: они живут в словаре
+ * (`shared/denials.ts`), иначе «войти не вышло» этого экрана однажды разойдётся с тем,
+ * что про то же самое говорит соседний.
  */
 
 definePageMeta({
@@ -70,7 +74,7 @@ const submit = async (): Promise<void> => {
 
     await navigateTo(destination());
   } catch (failure) {
-    error.value = failureMessage(failure, 'войти не вышло: приложение не ответило');
+    error.value = failureText(failure);
   } finally {
     submitting.value = false;
   }

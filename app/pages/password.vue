@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useAccessNotice, useCurrentEmployee } from '~/composables/useCurrentEmployee';
-import { failureMessage } from '~/utils/requestError';
+import { failureText } from '~/utils/requestError';
 import type { EmployeePasswordResponse } from '#shared/types/employee';
 
 /**
@@ -53,7 +53,7 @@ const submit = async (): Promise<void> => {
 
     await navigateTo('/login');
   } catch (failure) {
-    error.value = failureMessage(failure, 'сменить пароль не вышло: приложение не ответило');
+    error.value = failureText(failure);
   } finally {
     submitting.value = false;
   }
