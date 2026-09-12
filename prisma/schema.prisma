@@ -467,8 +467,11 @@ model Employee {
   phoneE164         String?      @unique @map("phone_e164")
   /// `argon2id`. Пуст у того, кто в веб не ходит.
   passwordHash      String?      @map("password_hash")
-  /// Время последней смены пароля. Cookie, выпущенный раньше, недействителен.
+  /// Время последней смены пароля. Доступ им не решается — только отметкой годности ниже.
   passwordChangedAt DateTime?    @map("password_changed_at") @db.Timestamptz(6)
+  /// Отметка годности выданных cookie: выпущенный раньше неё недействителен. Двигают её
+  /// оба события, гасящие сессии, — выход из веба и смена пароля, — а проверяется она одна.
+  sessionsValidFrom DateTime?    @map("sessions_valid_from") @db.Timestamptz(6)
   /// Вторая дверь — Mini App. Заполняется принятием приглашения, руками не вводится
   /// нигде: опечатка в числе отдала бы приложение постороннему.
   telegramUserId    BigInt?      @unique @map("telegram_user_id")

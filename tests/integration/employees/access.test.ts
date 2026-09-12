@@ -10,6 +10,7 @@ import {
 import { loginByPassword } from '#server/services/employees/loginByPassword';
 import { hashPassword, verifyPassword } from '#server/services/employees/password';
 import { setPassword } from '#server/services/employees/setPassword';
+import { signOut } from '#server/services/employees/signOut';
 import { signEmployeeSession } from '#server/utils/employeeSession';
 import { disconnectDatabase } from '../support/database';
 import {
@@ -21,8 +22,8 @@ import {
 import { disconnectQueues } from '../support/queues';
 
 /**
- * Вход сотрудника и проверка доступа: пароль, выключенная учётка, погашенные сменой пароля
- * cookie, пауза при подборе.
+ * Вход сотрудника и проверка доступа: пароль, выключенная учётка, погашенные выходом
+ * и сменой пароля cookie, пауза при подборе.
  *
  * Секрет подписи берётся тот же, что у приложения: тест проверяет ровно тот путь, которым
  * ходит рабочий код, а не свою копию подписи.
@@ -167,7 +168,7 @@ describe('доступ сотрудника', () => {
     await setPassword({ employeeId: employee.employeeId, password: PASSWORD });
 
     expect((await authenticateEmployee({ cookieValue, initData: null })).outcome).toBe(
-      'password_changed',
+      'sessions_revoked',
     );
 
     // Cookie, выпущенный после смены, работает: гасятся выданные раньше, а не все навсегда.
@@ -178,12 +179,56 @@ describe('доступ сотрудника', () => {
     );
   });
 
+  it('выход гасит cookie, сохранённый до него', async () => {
+    const employee = await createTestEmployee({ role: 'admin' });
+    const issuedAt = new Date(Date.now() - 60_000);
+
+    // Ровно то значение, которое сохранил бы себе укравший его: выход обязан обесценить
+    // саму строку, а не только убрать её из браузера.
+    const savedCookie = sessionCookieFor(employee.employeeId, issuedAt);
+
+    expect((await authenticateEmployee({ cookieValue: savedCookie, initData: null })).outcome).toBe(
+      'authenticated',
+    );
+
+    await signOut({ employeeId: employee.employeeId });
+
+    expect((await authenticateEmployee({ cookieValue: savedCookie, initData: null })).outcome).toBe(
+      'sessions_revoked',
+    );
+
+    // Пароль выходом не трогается: гасится годность сессий, и только она.
+    const afterSignOut = await readTestEmployee(employee.employeeId);
+
+    expect(afterSignOut?.passwordChangedAt).toBeNull();
+    expect(afterSignOut?.sessionsValidFrom).not.toBeNull();
+
+    // Следующий вход выдаёт годный cookie: выход гасит выданное, а не закрывает учётку.
+    expect(
+      (
+        await authenticateEmployee({
+          cookieValue: sessionCookieFor(employee.employeeId, new Date(Date.now() + 1_000)),
+          initData: null,
+        })
+      ).outcome,
+    ).toBe('authenticated');
+  });
+
   it('испорченная подпись и просроченный cookie доступа не дают', async () => {
     const employee = await createTestEmployee({ role: 'admin' });
     const cookieValue = sessionCookieFor(employee.employeeId, new Date());
 
-    // Меняется последний знак подписи: полезная часть остаётся прежней.
-    const tampered = `${cookieValue.slice(0, -1)}${cookieValue.at(-1) === 'A' ? 'B' : 'A'}`;
+    // Меняется знак в середине подписи: полезная часть остаётся прежней.
+    //
+    // В середине, а не последний, и это не придирка: подпись сверяется байтами, а последний
+    // знак base64url несёт четыре значащих бита из шести — правка двух остальных даёт ту же
+    // строку байтов, и тест падал примерно раз в пять прогонов, ничего при этом не находя.
+    const signatureStart = cookieValue.lastIndexOf('.') + 1;
+    const tamperedAt = signatureStart + Math.floor((cookieValue.length - signatureStart) / 2);
+    const tampered =
+      cookieValue.slice(0, tamperedAt) +
+      (cookieValue[tamperedAt] === 'A' ? 'B' : 'A') +
+      cookieValue.slice(tamperedAt + 1);
 
     expect((await authenticateEmployee({ cookieValue: tampered, initData: null })).outcome).toBe(
       'invalid_credentials',

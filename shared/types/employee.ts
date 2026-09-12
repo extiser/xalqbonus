@@ -16,10 +16,25 @@ export type EmployeeIdentity = {
   employeeId: string;
   role: EmployeeRole;
   fullName: string;
+  /** Канонический вид, тот же, которым входят. */
+  phoneE164: string;
 };
 
 export type EmployeeLoginResponse = {
   employee: EmployeeIdentity;
+};
+
+/**
+ * Кто пришёл этим запросом. Роль здесь — из базы, а не из cookie: выключенная учётка
+ * обязана выпадать немедленно, а не после истечения cookie.
+ */
+export type EmployeeMeResponse = {
+  employee: EmployeeIdentity;
+};
+
+export type EmployeeLogoutResponse = {
+  /** Сессии погашены на сервере: сохранённый до выхода cookie больше не работает. */
+  signedOut: true;
 };
 
 export type EmployeeInviteRequestBody = {

@@ -59,6 +59,7 @@ export type CreateTestEmployeeInput = {
   phoneE164?: string;
   passwordHash?: string | null;
   passwordChangedAt?: Date | null;
+  sessionsValidFrom?: Date | null;
   telegramUserId?: bigint | null;
   disabledAt?: Date | null;
 };
@@ -73,6 +74,9 @@ export const createTestEmployee = async (
       phoneE164: input.phoneE164 ?? nextTestPhone(),
       passwordHash: input.passwordHash ?? null,
       passwordChangedAt: input.passwordChangedAt ?? null,
+      // По умолчанию — вместе со сменой пароля: так выглядит настоящая строка, потому что
+      // обе отметки двигает одна и та же запись.
+      sessionsValidFrom: input.sessionsValidFrom ?? input.passwordChangedAt ?? null,
       telegramUserId:
         input.telegramUserId === undefined ? nextTestTelegramUserId() : input.telegramUserId,
       disabledAt: input.disabledAt ?? null,

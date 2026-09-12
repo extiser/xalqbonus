@@ -147,6 +147,7 @@ export const acceptInvite = async (request: AcceptInviteRequest): Promise<Accept
           // некому и нечем — канала, по которому пароль передают, у нас нет.
           passwordHash: null,
           passwordChangedAt: null,
+          sessionsValidFrom: null,
           telegramUserId: request.telegramUserId,
         },
         transaction,

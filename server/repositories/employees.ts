@@ -25,6 +25,8 @@ export type EmployeeRow = {
   /** `argon2id`. Пуст у того, кто в веб не ходит. */
   passwordHash: string | null;
   passwordChangedAt: Date | null;
+  /** Cookie, выпущенный раньше этой отметки, недействителен. Пуста, пока сессии не гасили. */
+  sessionsValidFrom: Date | null;
   telegramUserId: bigint | null;
   disabledAt: Date | null;
 };
@@ -41,6 +43,7 @@ const EMPLOYEE_COLUMNS = Prisma.sql`
   "phone_e164"          AS "phoneE164",
   "password_hash"       AS "passwordHash",
   "password_changed_at" AS "passwordChangedAt",
+  "sessions_valid_from" AS "sessionsValidFrom",
   "telegram_user_id"    AS "telegramUserId",
   "disabled_at"         AS "disabledAt"
 `;
@@ -113,6 +116,8 @@ export type InsertEmployeeInput = {
   phoneE164: string;
   passwordHash: string | null;
   passwordChangedAt: Date | null;
+  /** Cookie, выпущенный раньше этой отметки, недействителен. Пуста, пока сессии не гасили. */
+  sessionsValidFrom: Date | null;
   telegramUserId: bigint | null;
 };
 
@@ -122,7 +127,8 @@ export const insertEmployee = async (
 ): Promise<EmployeeRow> => {
   const rows = await client.$queryRaw<EmployeeRow[]>`
     INSERT INTO xb.employees (
-      "role", "full_name", "phone_e164", "password_hash", "password_changed_at", "telegram_user_id"
+      "role", "full_name", "phone_e164", "password_hash", "password_changed_at",
+      "sessions_valid_from", "telegram_user_id"
     )
     VALUES (
       ${input.role}::xb.employee_role,
@@ -130,6 +136,7 @@ export const insertEmployee = async (
       ${input.phoneE164},
       ${input.passwordHash},
       ${input.passwordChangedAt},
+      ${input.sessionsValidFrom},
       ${input.telegramUserId}
     )
     RETURNING ${EMPLOYEE_COLUMNS}
@@ -145,11 +152,11 @@ export const insertEmployee = async (
 };
 
 /**
- * Записывает новый пароль и двигает отметку его смены.
+ * Записывает новый пароль, двигает отметку его смены и отметку годности cookie.
  *
- * Отметка двигается той же записью, а не отдельной: именно по ней гасятся все выданные
- * cookie, и пароль, сменившийся без сдвига отметки, оставил бы прежние сессии живыми
- * (docs/decisions.md → «Сессия веба живёт в подписанном cookie»).
+ * Обе отметки двигаются той же записью, а не отдельной: пароль, сменившийся без сдвига
+ * годности, оставил бы прежние сессии живыми (docs/decisions.md → «Сессия веба живёт
+ * в подписанном cookie»).
  */
 export const updateEmployeePassword = async (
   employeeId: string,
@@ -161,6 +168,27 @@ export const updateEmployeePassword = async (
     UPDATE xb.employees
        SET "password_hash"       = ${passwordHash},
            "password_changed_at" = ${changedAt},
+           "sessions_valid_from" = ${changedAt},
+           "updated_at"          = now()
+     WHERE "id" = ${employeeId}::uuid
+  `;
+};
+
+/**
+ * Двигает отметку годности, не трогая пароль, — это и есть выход из веба.
+ *
+ * Гасятся при этом все выданные cookie, а не один: таблицы сессий нет, и различить
+ * устройства нечем. Решение осознанное — учёток десяток, а список активных сессий
+ * отклонён вместе с таблицей (docs/decisions.md → «Сессия веба живёт в подписанном cookie»).
+ */
+export const revokeEmployeeSessions = async (
+  employeeId: string,
+  revokedAt: Date,
+  client: Executor = db,
+): Promise<void> => {
+  await client.$executeRaw`
+    UPDATE xb.employees
+       SET "sessions_valid_from" = ${revokedAt},
            "updated_at"          = now()
      WHERE "id" = ${employeeId}::uuid
   `;

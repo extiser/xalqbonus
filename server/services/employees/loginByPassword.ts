@@ -135,7 +135,12 @@ export const loginByPassword = async (request: LoginRequest): Promise<LoginResul
       role: employee.role,
       issuedAtSeconds: Math.floor(now.getTime() / 1000),
     },
-    employee: { employeeId: employee.id, role: employee.role, fullName: employee.fullName },
+    employee: {
+      employeeId: employee.id,
+      role: employee.role,
+      fullName: employee.fullName,
+      phoneE164: employee.phoneE164,
+    },
     maxAgeSeconds: SESSION_MAX_AGE_SECONDS,
   };
 };
