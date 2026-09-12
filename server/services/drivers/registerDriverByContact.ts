@@ -1,5 +1,6 @@
 import { consola } from 'consola';
 
+import { FleetCredentialsMissingError } from '#server/adapters/fleet/client';
 import { db } from '#server/db';
 import type { Language, LinkAttemptOutcome } from '#server/generated/prisma/enums';
 import { findPersonSettings } from '#server/repositories/drivers';
@@ -35,7 +36,7 @@ import { describeDatabaseFailure, UNIQUE_VIOLATION } from '#server/utils/postgre
  *
  * Автоматика строится на одном признаке — подтверждённом телефоне из Telegram. Всё
  * остальное, что водитель может ввести руками, секретом от коллег не является: машину
- * видно каждый день, права он показывает. Поэтому исходов одиннадцать, и каждый из них
+ * видно каждый день, права он показывает. Поэтому исходов двенадцать, и каждый из них
  * пишется в журнал попыток — включая удачный.
  *
  * Чего здесь нет и не будет:
@@ -271,23 +272,32 @@ export const registerDriverByContact = async (
       // Отказ внешнего сервиса не является решением о водителе: отправлять человека в офис
       // из-за чужого таймаута значит создавать поход, который не был нужен.
       //
-      // Водителю оба отказа показываются одинаково — сказать ему «у нас упала база» нечего,
-      // делать с этим ему нечего. А вот в логе это два разных происшествия: отказ парка
-      // проходит сам, отказ нашей базы значит, что не работает вовсе ничего и никакая
-      // регистрация сейчас не пройдёт.
+      // Водителю все эти отказы показываются одинаково — «сейчас не получилось проверить,
+      // попробуйте позже»: сказать ему, чья именно сторона отказала, нечего, и делать
+      // с этим ему нечего. А журналу разница нужна, и ровно одна: их сторона или наша.
+      // Пока оба случая писались исходом `park_api_unavailable`, пять попыток прогона
+      // 12-09-2026 легли отказом парка, в который не ушло ни одного запроса (issue #95).
+      const outcome =
+        error instanceof ParkLookupFailedError ? 'park_api_unavailable' : 'internal_failure';
+
+      // Способ падения разводится только в логе — исход у наших поломок один. Незаполненное
+      // окружение стоит своей строкой, потому что чинится оно не тем и не там, где отказ
+      // базы: одно дописывается в `.env`, второе поднимается вместе с Postgres.
       log.error(
         error instanceof ParkLookupFailedError
           ? 'Fleet API не ответил на поиск по телефону — исход «попробуйте позже»'
-          : 'точечный прогон упал не на стороне парка — отказала наша база, исход «попробуйте позже»',
+          : error instanceof FleetCredentialsMissingError
+            ? 'реквизиты Fleet API не заполнены — запрос в парк не уходил, исход «попробуйте позже»'
+            : 'точечный прогон упал на нашей стороне — исход «попробуйте позже»',
         {
           chatId: request.telegramChatId.toString(),
           error: error instanceof Error ? error.message : String(error),
         },
       );
 
-      await recordAttempt(request, phone, 'park_api_unavailable');
+      await recordAttempt(request, phone, outcome);
 
-      return { outcome: 'park_api_unavailable' };
+      return { outcome };
     }
 
     profiles = await findActiveProfilesByPhone(phoneE164);
