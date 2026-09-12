@@ -85,8 +85,6 @@ export type RegistrationResult =
   | {
       outcome: 'linked';
       driver: LinkedDriver;
-      /** Участие открыто этой привязкой. У перенесённых из старой базы — `false`. */
-      isNewMember: boolean;
     }
   | { outcome: Exclude<LinkAttemptOutcome, 'linked'> };
 
@@ -434,8 +432,5 @@ export const registerDriverByContact = async (
       // по-русски — язык участника после этой привязки не изменился.
       language: settings?.language ?? request.language,
     },
-    // Приветственный текст с обещанием бонуса — только новому участнику. Перенесённому
-    // из старой базы показывается его баланс: обещать ему первые пять поездок незачем.
-    isNewMember: !settings,
   };
 };

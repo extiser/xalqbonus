@@ -363,3 +363,31 @@ export const countSyncRuns = async (): Promise<number> => {
 
   return rows[0]?.total ?? 0;
 };
+
+/**
+ * Когда закончился последний успешный прогон этого вида. `null` — успешных не было ни разу.
+ *
+ * Только `succeeded`: время упавшей попытки в роли «данные обновлены» — это ровно то
+ * враньё, от которого экран водителя и заводится (issue #101). Прогон, который ещё идёт,
+ * сюда тоже не попадает — у него нет времени окончания, а обещать свежесть по началу
+ * работы значит обещать её раньше, чем она появилась.
+ *
+ * Порядок — по началу прогона, а не по окончанию: под него стоит индекс
+ * `(kind, started_at DESC)`, и просмотр останавливается на первой подходящей строке,
+ * тогда как сортировка по `finished_at` перебрала бы все прогоны этого вида за всю жизнь
+ * журнала — а их набегает по одному каждые несколько минут. Прогоны одного вида идут
+ * друг за другом, и начавшийся последним успешный он же и закончил последним.
+ */
+export const findLastSuccessfulRunFinishedAt = async (kind: SyncKind): Promise<Date | null> => {
+  const rows = await db.$queryRaw<{ finishedAt: Date | null }[]>`
+    SELECT "finished_at" AS "finishedAt"
+      FROM xb.sync_runs
+     WHERE "kind" = ${kind}::xb.sync_kind
+       AND "status" = 'succeeded'::xb.sync_status
+       AND "finished_at" IS NOT NULL
+     ORDER BY "started_at" DESC
+     LIMIT 1
+  `;
+
+  return rows[0]?.finishedAt ?? null;
+};
