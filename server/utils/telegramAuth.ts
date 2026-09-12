@@ -53,11 +53,22 @@ export const requireTelegramUser = (event: H3Event): InitDataUser => {
     // Сама строка в лог не попадает ни целиком, ни частями: `initData` — действующий
     // пропуск, годный сутки, и в логе он становится ключом ко входу под чужим именем.
     // Пишется исход и, у просроченной, возраст строки в секундах.
-    log.info(
-      check.outcome === 'expired'
-        ? `отказ ${check.outcome}: строке ${check.ageSeconds} с`
-        : `отказ ${check.outcome}`,
-    );
+    //
+    // Уровни разведены, потому что исходы значат разное. `missing`, `malformed`,
+    // `expired` и `no_user` — житейское: страницу открыли не из мессенджера, приложение
+    // провисело открытым дольше суток, окно оказалось не личным чатом. А `hash_mismatch`
+    // — это строка, подписанная не тем, кем должна: либо попытка войти подделанной,
+    // либо разошедшийся токен бота. В общем потоке `info` такое теряется, а найти его
+    // надо с первого взгляда.
+    if (check.outcome === 'hash_mismatch') {
+      log.warn(`отказ ${check.outcome}`);
+    } else {
+      log.info(
+        check.outcome === 'expired'
+          ? `отказ ${check.outcome}: строке ${check.ageSeconds} с`
+          : `отказ ${check.outcome}`,
+      );
+    }
 
     throw createError({
       statusCode: 401,
