@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import {
   INIT_DATA_HEADER,
   type Language,
@@ -88,6 +88,19 @@ let initData = '';
 /** Перечитывание экрана кнопкой в пути: второе нажатие не отправляет тот же запрос дважды. */
 const refreshing = ref(false);
 
+/** Последнее обновление по кнопке не удалось. Снимается следующим удачным. */
+const refreshFailed = ref(false);
+
+/**
+ * Сообщение об отказе обновления — тем же текстом, которым отвечает неудавшаяся история.
+ *
+ * Своего текста у отказа нет намеренно: по смыслу это то же самое — данные не прочитались,
+ * попробуйте ещё раз, — а два текста про одно и то же однажды разойдутся.
+ */
+const refreshFailedNote = computed(() =>
+  refreshFailed.value ? (member.value?.texts.historyFailed ?? null) : null,
+);
+
 /**
  * История участника. Своим запросом, а не полем экрана: экран читается один раз, а история
  * листается кнопкой, и пересобирать ради каждой страницы весь экран незачем.
@@ -141,8 +154,12 @@ const loadState = async (): Promise<void> => {
  * Отдельно от `loadState`, потому что отказ здесь значит другое. При первой загрузке
  * показывать нечего, и отказ — это весь экран; при обновлении на экране уже стоит
  * прочитанный баланс, и увести его в красный текст значило бы стереть верные данные
- * в ответ на просьбу их обновить. Отметка свежести при этом остаётся прежней — она
- * и честна: ничего не обновилось.
+ * в ответ на просьбу их обновить. Баланс, имя и отметка свежести поэтому остаются
+ * прежними — они верные, и отметка честна: ничего не обновилось.
+ *
+ * Сказать об отказе при этом обязательно. Молчащая кнопка, которая покрутилась и погасла,
+ * от неработающей неотличима, и следующим шагом человек идёт в меню Telegram к «Обновить
+ * страницу» — ровно туда, откуда эта правка его уводит (issue #105).
  */
 const refresh = async (): Promise<void> => {
   if (refreshing.value) {
@@ -153,8 +170,10 @@ const refresh = async (): Promise<void> => {
 
   try {
     applyState(await fetchState());
+    refreshFailed.value = false;
   } catch (error) {
     console.error('[miniapp] не удалось перечитать экран участника', error);
+    refreshFailed.value = true;
   } finally {
     refreshing.value = false;
   }
@@ -266,6 +285,7 @@ const share = (): void => {
       :promise="member.promise"
       :refresh-label="member.texts.refresh"
       :refreshing="refreshing"
+      :refresh-failed-note="refreshFailedNote"
       @refresh="refresh"
     />
 
