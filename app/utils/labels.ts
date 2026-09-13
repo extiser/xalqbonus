@@ -1,9 +1,11 @@
+import type { StockMovementEntry } from '#shared/types/catalog';
 import type {
   DriverMembership,
   DriverOperation,
   DriverOperationCounterparty,
   DriverTelegramLink,
 } from '#shared/types/driver';
+import type { EmployeeAccount } from '#shared/types/employee';
 import type { SyncRunRow, SyncSkipRow } from '#shared/types/sync';
 
 /**
@@ -160,3 +162,30 @@ const SOURCE_LABELS: Readonly<Record<string, string>> = {
 };
 
 export const sourceLabel = (source: string): string => foreignLabel(SOURCE_LABELS, source);
+
+/**
+ * Подписи словарей каталога.
+ *
+ * Наши перечисления описаны полным `Record`: вид движения, добавленный миграцией, обязан
+ * уронить проверку типов здесь, а не показаться на экране латинским словом.
+ */
+
+const STOCK_MOVEMENT_KIND_LABELS: Record<StockMovementEntry['kind'], string> = {
+  incoming: 'приход',
+  adjustment: 'правка руками',
+  order_reserve: 'резерв под заказ',
+  order_issue: 'выдача заказа',
+  order_release: 'снятие резерва',
+};
+
+export const stockMovementKindLabel = (kind: StockMovementEntry['kind']): string =>
+  STOCK_MOVEMENT_KIND_LABELS[kind];
+
+const EMPLOYEE_ROLE_LABELS: Record<EmployeeAccount['role'], string> = {
+  owner: 'владелец',
+  admin: 'админ',
+  manager: 'менеджер',
+};
+
+export const employeeRoleLabel = (role: EmployeeAccount['role']): string =>
+  EMPLOYEE_ROLE_LABELS[role];

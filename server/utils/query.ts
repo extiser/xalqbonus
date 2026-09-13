@@ -1,3 +1,7 @@
+// `createError` и `getRouterParam` берутся из `h3` явно, а не автоимпортом: файл читает
+// и воркер, у которого автоимпортов Nitro нет вовсе.
+import { createError, getRouterParam, type H3Event } from 'h3';
+
 /**
  * Разбор чисел из строки запроса.
  *
@@ -29,3 +33,28 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const readUuid = (value: unknown): string | null =>
   typeof value === 'string' && UUID.test(value) ? value : null;
+
+/**
+ * Идентификатор из пути запроса или отказ `400`.
+ *
+ * Отдельной функцией, потому что ручек с идентификатором в пути стало одиннадцать, и одна
+ * и та же четвёрка строк — прочитать параметр, проверить на uuid, собрать `createError` —
+ * в каждой из них расходилась бы формулировкой.
+ *
+ * Отказом доступа это не является и кода отказа не несёт: запрос пришёл с испорченной
+ * ссылкой, и проверяется здесь то, что в нём прислали, а не то, кого пускать
+ * (`shared/denials.ts` → граница словаря).
+ */
+export const requireUuidParam = (event: H3Event, name: string): string => {
+  const value = readUuid(getRouterParam(event, name));
+
+  if (!value) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Bad Request',
+      message: `параметр ${name} не похож на uuid`,
+    });
+  }
+
+  return value;
+};

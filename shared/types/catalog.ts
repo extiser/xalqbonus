@@ -1,0 +1,205 @@
+/**
+ * Контракт ручек каталога: офисы, товары, остатки и журнал движений.
+ *
+ * Типы лежат в `shared/`, потому что у них два потребителя — обработчик и разметка,
+ * и второе описание тех же полей разошлось бы с первым на ближайшей правке.
+ *
+ * Времена уезжают строками ISO-8601, а не `Date`: через JSON `Date` всё равно проходит
+ * строкой, и тип, обещающий `Date` там, где приедет строка, врёт разметке.
+ *
+ * Незаполненное поле — `null`, а не пустая строка. Пустая строка в ответе означала бы,
+ * что телефон офиса записан пустым, а не что его не записывали.
+ */
+
+import type { EmployeeRole, StockMovementKind } from '../../server/generated/prisma/enums';
+
+// ---------------------------------------------------------------------------
+// Офисы
+// ---------------------------------------------------------------------------
+
+/** Офис целиком: полей мало, и укороченного вида для списка ему не нужно. */
+export type Office = {
+  officeId: string;
+  name: string;
+  address: string;
+  /** Ссылка на карту. Адресом в старой базе была именно она, и подменять адрес ею нельзя. */
+  mapUrl: string | null;
+  workHours: string | null;
+  phoneE164: string | null;
+  /** Имя или ссылка на Telegram офиса — как записал парк. */
+  telegram: string | null;
+  /** Заполнено — офис в архиве: заказов не принимает, из истории не исчезает. */
+  archivedAt: string | null;
+};
+
+export type OfficeListResponse = {
+  offices: Office[];
+};
+
+/**
+ * Тело заведения и правки офиса. Необязательные поля приходят строками и пустыми:
+ * форма отдаёт то, что в ней набрано, а «пусто значит не задано» решает сервис —
+ * одинаково для заведения и для правки.
+ */
+export type OfficeRequestBody = {
+  name: string;
+  address: string;
+  mapUrl?: string;
+  workHours?: string;
+  phoneE164?: string;
+  telegram?: string;
+};
+
+export type OfficeResponse = {
+  office: Office;
+};
+
+/** Сотрудник, закреплённый за офисом. Телефона здесь нет: для привязки он не нужен. */
+export type OfficeEmployee = {
+  employeeId: string;
+  fullName: string;
+  role: EmployeeRole;
+};
+
+export type OfficeCardResponse = {
+  office: Office;
+  employees: OfficeEmployee[];
+};
+
+/**
+ * Привязка сотрудников к офису — набором целиком, а не по одному.
+ *
+ * `PUT`, потому что это и есть замена набора: добавление и снятие в одном экране правят
+ * один список, и два действия («привязать», «снять») означали бы две ручки, из которых
+ * вторую однажды забудут позвать.
+ */
+export type OfficeEmployeesRequestBody = {
+  employeeIds: string[];
+};
+
+export type OfficeEmployeesResponse = {
+  employees: OfficeEmployee[];
+};
+
+// ---------------------------------------------------------------------------
+// Товары
+// ---------------------------------------------------------------------------
+
+export type Product = {
+  productId: string;
+  name: string;
+  description: string | null;
+  /**
+   * Относительный путь файла на томе — `products/<uuid>.<расширение>`. Адрес картинки
+   * разметка собирает сама: `/uploads/` плюс этот путь плюс `?v=<updatedAt>`.
+   */
+  photoPath: string | null;
+  pricePoints: number;
+  /** Розничная цена в сумах. */
+  priceRetail: number;
+  /** Себестоимость в сумах. */
+  priceCost: number;
+  archivedAt: string | null;
+  /**
+   * Время последней правки. Нужно разметке: имя файла фото меняется вместе с расширением,
+   * а не с содержимым, и без этой отметки перезалитая картинка осталась бы в кэше браузера.
+   */
+  updatedAt: string;
+};
+
+export type ProductListResponse = {
+  products: Product[];
+};
+
+export type ProductRequestBody = {
+  name: string;
+  description?: string;
+  pricePoints: number;
+  priceRetail: number;
+  priceCost: number;
+};
+
+export type ProductResponse = {
+  product: Product;
+};
+
+// ---------------------------------------------------------------------------
+// Остатки
+// ---------------------------------------------------------------------------
+
+/**
+ * Строка таблицы остатков офиса: товар и два его числа.
+ *
+ * Товар без движений в этом офисе тоже здесь, с нулями: приход в офис, где товара ещё
+ * не было, — штатный случай, и выбирать товар для прихода надо из каталога, а не из того,
+ * что уже лежит.
+ */
+export type OfficeStockRow = {
+  productId: string;
+  name: string;
+  pricePoints: number;
+  archivedAt: string | null;
+  /** Свободный остаток: лежит в офисе и никем не занят. */
+  onHand: number;
+  /** Занято висящими заказами. Правка его не трогает: он принадлежит оплаченным заказам. */
+  reserved: number;
+};
+
+export type OfficeStockResponse = {
+  officeId: string;
+  rows: OfficeStockRow[];
+};
+
+/** Приход: сколько пришло и зачем. Заметка необязательна — накладная говорит сама. */
+export type StockReceiveRequestBody = {
+  quantity: number;
+  note?: string;
+};
+
+/**
+ * Правка: **новое значение**, а не дельта.
+ *
+ * Считает дельту сервер, под той же блокировкой, в которой пишет движение: посчитанная
+ * в браузере дельта опирается на остаток, показанный секунду назад, и заказ, оформленный
+ * в этот промежуток, она бы затёрла.
+ *
+ * Заметка обязательна: правка без объяснения через месяц неотличима от ошибки кода.
+ */
+export type StockAdjustRequestBody = {
+  onHand: number;
+  note: string;
+};
+
+/** Остаток пары после операции — тем же ответом, чтобы страница не спрашивала повторно. */
+export type StockOperationResponse = {
+  productId: string;
+  onHand: number;
+  reserved: number;
+};
+
+/** Строка журнала движений офиса. */
+export type StockMovementEntry = {
+  /**
+   * Идентификатор строки журнала. Строкой: в базе это bigint, а JSON целых такой ширины
+   * не знает.
+   */
+  movementId: string;
+  kind: StockMovementKind;
+  productId: string;
+  productName: string;
+  deltaOnHand: number;
+  deltaReserved: number;
+  /** Номер заказа, которым вызвано движение. Пуст у прихода и правки. */
+  orderNumber: number | null;
+  /** Кто сделал. Пуст у движения, сделанного водителем из Mini App или воркером просрочки. */
+  employeeName: string | null;
+  note: string | null;
+  createdAt: string;
+};
+
+export type StockMovementsResponse = {
+  movements: StockMovementEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+};

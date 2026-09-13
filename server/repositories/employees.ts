@@ -193,3 +193,50 @@ export const revokeEmployeeSessions = async (
      WHERE "id" = ${employeeId}::uuid
   `;
 };
+
+export type EmployeeAccountRow = {
+  id: string;
+  fullName: string;
+  role: EmployeeRole;
+  disabledAt: Date | null;
+};
+
+/**
+ * Учётки для выбора: кого закрепить за офисом.
+ *
+ * Колонки только те, что нужны выбору, — ни телефона, ни признаков входа: расширять этот
+ * список «на всякий случай» значит отдавать разметке то, чего она не спрашивала.
+ *
+ * Выключенные учётки в ответе есть: сотрудник, которому закрыли доступ на время, за офисом
+ * остаётся закреплённым, и прятать его из списка значило бы терять состав офиса при первом
+ * же выключении.
+ */
+export const listEmployeeAccounts = async (
+  client: Executor = db,
+): Promise<EmployeeAccountRow[]> =>
+  client.$queryRaw<EmployeeAccountRow[]>`
+    SELECT "id",
+           "full_name"   AS "fullName",
+           "role",
+           "disabled_at" AS "disabledAt"
+      FROM xb.employees
+     ORDER BY "full_name"
+  `;
+
+/**
+ * Учётки по списку идентификаторов. Нужна проверке состава офиса: закрепить можно
+ * за существующей учёткой, и «столько же строк, сколько спросили» — единственное,
+ * что об этом говорит.
+ */
+export const findEmployeesByIds = async (
+  employeeIds: string[],
+  client: Executor = db,
+): Promise<EmployeeAccountRow[]> =>
+  client.$queryRaw<EmployeeAccountRow[]>`
+    SELECT "id",
+           "full_name"   AS "fullName",
+           "role",
+           "disabled_at" AS "disabledAt"
+      FROM xb.employees
+     WHERE "id" = ANY(${employeeIds}::uuid[])
+  `;
