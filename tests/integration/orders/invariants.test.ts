@@ -93,7 +93,7 @@ describe('инварианты остатков', () => {
       actor: 'mini_app',
     });
 
-    await issueOrder({ code: issued.code, officeId, employeeId });
+    await issueOrder({ orderId: issued.orderId, employeeId });
     await cancelOrder({ orderId: cancelled.orderId, reason: 'employee', employeeId });
 
     for (const query of queries) {

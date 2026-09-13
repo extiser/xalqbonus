@@ -1,5 +1,5 @@
 import { db } from '#server/db';
-import type { Prisma } from '#server/generated/prisma/client';
+import { Prisma } from '#server/generated/prisma/client';
 import type { OrderCancelReason, OrderStatus } from '#server/generated/prisma/enums';
 
 /**
@@ -142,16 +142,19 @@ export const listOrderItems = async (
   `;
 
 /**
- * Висящий заказ по коду **и офису**, под блокировку.
+ * Висящий заказ по идентификатору, под блокировку.
  *
- * Офис входит в условие, а не проверяется после: сотрудник чужого офиса не должен узнать,
- * что такой код вообще существует. «Заказ оформлен в другом офисе» — это подтверждение
- * кода тому, кто стоит не там.
+ * `status = 'pending'` стоит в условии, а не проверяется после: две выдачи, пришедшие разом,
+ * выстраиваются в очередь на строке, и вторая после ожидания перечитывает условие на новой
+ * версии строки — заказ уже `issued`, и строки ей не достаётся.
+ *
+ * По идентификатору, а не по коду: код висящего заказа освобождается выдачей и может
+ * достаться новому заказу того же офиса, и выдача по коду, прочитанному секундой раньше,
+ * выдала бы чужой заказ.
  */
-export const lockPendingOrderByCode = async (
+export const lockPendingOrderById = async (
   client: Prisma.TransactionClient,
-  code: string,
-  officeId: string,
+  orderId: string,
 ): Promise<OrderRow | null> => {
   const rows = await client.$queryRaw<OrderRow[]>`
     SELECT "id",
@@ -165,8 +168,7 @@ export const lockPendingOrderByCode = async (
            "spend_transfer_id"  AS "spendTransferId",
            "refund_transfer_id" AS "refundTransferId"
       FROM xb.orders
-     WHERE "code" = ${code}
-       AND "office_id" = ${officeId}::uuid
+     WHERE "id" = ${orderId}::uuid
        AND "status" = 'pending'
        FOR UPDATE
   `;
@@ -320,6 +322,138 @@ export const listOrderLines = async (
      WHERE item."order_id" = ANY(${orderIds}::uuid[])
      ORDER BY product."name"
   `;
+
+export type OfficeOrderRow = {
+  id: string;
+  number: number;
+  status: OrderStatus;
+  code: string;
+  officeId: string;
+  officeName: string;
+  totalPoints: number;
+  createdAt: Date;
+  expiresAt: Date;
+  issuedAt: Date | null;
+  cancelledAt: Date | null;
+  cancelReason: OrderCancelReason | null;
+  /** Из профиля парка. Пусто, если у человека профиля нет или поле в реестре не заполнено. */
+  firstName: string | null;
+  lastName: string | null;
+  callsign: string | null;
+};
+
+/**
+ * Заказ глазами сотрудника: сам заказ, офис и водитель с позывным.
+ *
+ * Профилей у человека бывает несколько, и берётся тот же, по которому его называет бот:
+ * работающий, а из них свежайший (`findDisplayProfile`). Своего правила выбора профиля здесь
+ * нет — два правила однажды назвали бы одного водителя двумя именами.
+ */
+const OFFICE_ORDER_SELECT = Prisma.sql`
+  SELECT "order"."id",
+         "order"."number",
+         "order"."status",
+         "order"."code",
+         "order"."office_id"     AS "officeId",
+         office."name"           AS "officeName",
+         "order"."total_points"  AS "totalPoints",
+         "order"."created_at"    AS "createdAt",
+         "order"."expires_at"    AS "expiresAt",
+         "order"."issued_at"     AS "issuedAt",
+         "order"."cancelled_at"  AS "cancelledAt",
+         "order"."cancel_reason" AS "cancelReason",
+         profile."first_name"    AS "firstName",
+         profile."last_name"     AS "lastName",
+         profile."callsign"
+    FROM xb.orders AS "order"
+    JOIN xb.offices AS office ON office."id" = "order"."office_id"
+    LEFT JOIN LATERAL (
+      SELECT candidate."first_name",
+             candidate."last_name",
+             candidate."callsign"
+        FROM xb.park_profiles AS candidate
+       WHERE candidate."person_id" = "order"."person_id"
+       ORDER BY (candidate."work_status" = 'working') DESC, candidate."api_updated_at" DESC
+       LIMIT 1
+    ) AS profile ON true
+`;
+
+export type OfficeOrdersFilter = {
+  officeId: string;
+  /** Пусто — все статусы. */
+  status: OrderStatus | null;
+};
+
+const officeOrdersCondition = (filter: OfficeOrdersFilter): Prisma.Sql => Prisma.sql`
+  "order"."office_id" = ${filter.officeId}::uuid
+  AND (${filter.status}::xb.order_status IS NULL OR "order"."status" = ${filter.status}::xb.order_status)
+`;
+
+/**
+ * Заказы офиса страницей: висящие первыми, дальше свежие вперёд.
+ *
+ * Офис входит в условие всегда: заказы без офиса отсюда не читаются, и «чей это офис»
+ * решает вызывающий до запроса, а не фильтр после него.
+ */
+export const listOfficeOrders = async (
+  filter: OfficeOrdersFilter & { limit: number; offset: number },
+  client: Prisma.TransactionClient = db,
+): Promise<OfficeOrderRow[]> =>
+  client.$queryRaw<OfficeOrderRow[]>`
+    ${OFFICE_ORDER_SELECT}
+     WHERE ${officeOrdersCondition(filter)}
+     ORDER BY ("order"."status" <> 'pending'), "order"."created_at" DESC
+     LIMIT ${filter.limit}
+    OFFSET ${filter.offset}
+  `;
+
+export const countOfficeOrders = async (
+  filter: OfficeOrdersFilter,
+  client: Prisma.TransactionClient = db,
+): Promise<number> => {
+  const rows = await client.$queryRaw<{ total: number }[]>`
+    SELECT count(*)::int AS "total"
+      FROM xb.orders AS "order"
+     WHERE ${officeOrdersCondition(filter)}
+  `;
+
+  return rows[0]?.total ?? 0;
+};
+
+/** Один заказ по идентификатору — без блокировки: это чтение для экрана и для проверки офиса. */
+export const findOfficeOrder = async (
+  orderId: string,
+  client: Prisma.TransactionClient = db,
+): Promise<OfficeOrderRow | null> => {
+  const rows = await client.$queryRaw<OfficeOrderRow[]>`
+    ${OFFICE_ORDER_SELECT}
+     WHERE "order"."id" = ${orderId}::uuid
+  `;
+
+  return rows[0] ?? null;
+};
+
+/**
+ * Висящий заказ по коду **и офису** — без блокировки.
+ *
+ * Офис входит в условие, а не проверяется после: код не должен подтверждать существование
+ * заказа тому, кто стоит не в том офисе. «Заказ оформлен в другом офисе» — это подтверждение
+ * кода тому, кто стоит не там.
+ */
+export const findPendingOfficeOrderByCode = async (
+  officeId: string,
+  code: string,
+  client: Prisma.TransactionClient = db,
+): Promise<OfficeOrderRow | null> => {
+  const rows = await client.$queryRaw<OfficeOrderRow[]>`
+    ${OFFICE_ORDER_SELECT}
+     WHERE "order"."code" = ${code}
+       AND "order"."office_id" = ${officeId}::uuid
+       AND "order"."status" = 'pending'
+  `;
+
+  return rows[0] ?? null;
+};
 
 /**
  * Висящие заказы с истёкшим сроком — вход воркера просрочки.

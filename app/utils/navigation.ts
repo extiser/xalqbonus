@@ -1,4 +1,4 @@
-import { ALL_EMPLOYEE_ROLES, CATALOG_ROLES, SYNC_ROLES } from '#shared/access';
+import { ALL_EMPLOYEE_ROLES, CATALOG_ROLES, ORDER_ROLES, SYNC_ROLES } from '#shared/access';
 import type { EmployeeIdentity } from '#shared/types/employee';
 
 /**
@@ -19,6 +19,7 @@ export type NavigationItem = {
 
 const SERVICE_NAVIGATION: NavigationItem[] = [
   { title: 'Водители', path: '/drivers', roles: ALL_EMPLOYEE_ROLES },
+  { title: 'Заказы', path: '/orders', roles: ORDER_ROLES },
   { title: 'Офисы', path: '/offices', roles: CATALOG_ROLES },
   // Раздел называется «Каталог», а адрес — по сущности, которой он управляет: страница
   // и ручка под ней читаются одним словом (`/products` ↔ `/api/products`), как у водителей.

@@ -6,6 +6,7 @@ import type {
   DriverTelegramLink,
 } from '#shared/types/driver';
 import type { EmployeeAccount } from '#shared/types/employee';
+import type { OfficeOrder } from '#shared/types/orders';
 import type { SyncRunRow, SyncSkipRow } from '#shared/types/sync';
 
 /**
@@ -180,6 +181,40 @@ const STOCK_MOVEMENT_KIND_LABELS: Record<StockMovementEntry['kind'], string> = {
 
 export const stockMovementKindLabel = (kind: StockMovementEntry['kind']): string =>
   STOCK_MOVEMENT_KIND_LABELS[kind];
+
+/**
+ * Подписи заказов офиса. Полным `Record` — по той же причине, что у видов движения:
+ * новый статус или причина обязаны уронить проверку типов здесь.
+ */
+
+const ORDER_STATUS_LABELS: Record<OfficeOrder['status'], string> = {
+  pending: 'ждёт выдачи',
+  issued: 'выдан',
+  cancelled: 'отменён',
+};
+
+export const orderStatusLabel = (status: OfficeOrder['status']): string =>
+  ORDER_STATUS_LABELS[status];
+
+/** Висящий — предупреждение: его ждут у стойки. Выданный — порядок, отменённый — прошлое. */
+const ORDER_STATUS_TONES: Record<OfficeOrder['status'], 'ok' | 'warn' | 'muted'> = {
+  pending: 'warn',
+  issued: 'ok',
+  cancelled: 'muted',
+};
+
+export const orderStatusTone = (status: OfficeOrder['status']): 'ok' | 'warn' | 'muted' =>
+  ORDER_STATUS_TONES[status];
+
+const ORDER_CANCEL_REASON_LABELS: Record<NonNullable<OfficeOrder['cancelReason']>, string> = {
+  driver: 'отменил водитель',
+  employee: 'отменил сотрудник',
+  expired: 'не забрали за сутки',
+};
+
+export const orderCancelReasonLabel = (
+  reason: NonNullable<OfficeOrder['cancelReason']>,
+): string => ORDER_CANCEL_REASON_LABELS[reason];
 
 const EMPLOYEE_ROLE_LABELS: Record<EmployeeAccount['role'], string> = {
   owner: 'владелец',

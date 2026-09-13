@@ -29,3 +29,21 @@ export const SYNC_ROLES: readonly EmployeeRole[] = ['owner', 'admin'];
  * прихода — основание остатка, и править её должен тот же, кто отвечает за товар (issue #120).
  */
 export const CATALOG_ROLES: readonly EmployeeRole[] = ['owner', 'admin'];
+
+/**
+ * Заказы офиса — выдача по коду и отмена — всем ролям: это и есть работа менеджера у стойки
+ * (issue #122).
+ *
+ * В каком именно офисе человек работает, решает не этот список, а `ANY_OFFICE_ROLES` ниже:
+ * роль открывает раздел, офис — заказы в нём.
+ */
+export const ORDER_ROLES: readonly EmployeeRole[] = ALL_EMPLOYEE_ROLES;
+
+/**
+ * Роли, которым открыт любой офис парка.
+ *
+ * Остальные работают только в офисах, к которым привязаны через `employee_offices`. Правило
+ * одно на Mini App и веб и решается сервером (`server/services/offices/employeeOffices.ts`):
+ * менеджер, набравший в адресе чужой офис, получает `role_not_allowed`, а не его заказы.
+ */
+export const ANY_OFFICE_ROLES: readonly EmployeeRole[] = ['owner', 'admin'];

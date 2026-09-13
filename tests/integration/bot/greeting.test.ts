@@ -123,7 +123,7 @@ describe('ответ бота на входящее сообщение', () => {
     expect(bot.sent.some((message) => message.text === greeting)).toBe(false);
   });
 
-  it('контакт после принятого приглашения — уже просто сообщение, и отвечает приветствием', async () => {
+  it('контакт после принятого приглашения — уже просто сообщение, и отвечает приветствием сотрудника', async () => {
     const bot = createBotDouble();
     const owner = await createTestEmployee({ role: 'owner' });
     const token = await insertInviteFor(owner.employeeId);
@@ -141,7 +141,23 @@ describe('ответ бота на входящее сообщение', () => {
       privateMessageUpdate(telegramUserId, ownContact(telegramUserId, nextTestPhone())),
     );
 
-    expect(bot.sent.at(-1)?.text).toBe(text('start_greeting', 'ru'));
+    // Учётка уже заведена, и приветствие — сотрудника: водительское звало бы его в экран,
+    // которого у него нет (T25).
+    expect(bot.sent.at(-1)?.text).toBe(text('employee_greeting', 'ru'));
+  });
+
+  it('сотрудник получает своё приветствие, а не водительское', async () => {
+    const bot = createBotDouble();
+    const { telegramUserId } = await createTestEmployee({ role: 'manager' });
+
+    if (telegramUserId === null) {
+      throw new Error('фикстура сотрудника завелась без Telegram');
+    }
+
+    await bot.handleUpdate(privateMessageUpdate(telegramUserId, { text: CHAT_TEXT }));
+
+    // Кнопка запуска та же: какой экран показать, приложение решает само (T25).
+    expect(bot.sent.map((message) => message.text)).toEqual([text('employee_greeting', 'ru')]);
   });
 
   it('текст, фото, стикер, голосовое и пересланное дают одно и то же приветствие', async () => {

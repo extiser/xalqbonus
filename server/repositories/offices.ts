@@ -67,6 +67,26 @@ export const listActiveOffices = async (client: Executor = db): Promise<OfficeRo
      ORDER BY "name"
   `;
 
+/**
+ * Офисы, к которым привязан сотрудник, — в том же порядке, что общий список: архивные
+ * последними. Архивные не отбрасываются: висящий заказ закрытого офиса всё ещё надо выдать
+ * или отменить.
+ */
+export const listEmployeeOffices = async (
+  employeeId: string,
+  client: Executor = db,
+): Promise<OfficeRow[]> =>
+  client.$queryRaw<OfficeRow[]>`
+    SELECT ${OFFICE_COLUMNS}
+      FROM xb.offices
+     WHERE "id" IN (
+             SELECT "office_id"
+               FROM xb.employee_offices
+              WHERE "employee_id" = ${employeeId}::uuid
+           )
+     ORDER BY ("archived_at" IS NOT NULL), "name"
+  `;
+
 export const findOffice = async (
   officeId: string,
   client: Executor = db,

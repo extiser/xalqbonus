@@ -27,6 +27,7 @@ import type { OfficeContact } from '../../shared/types/miniapp';
  */
 export type TextKey =
   | 'start_greeting'
+  | 'employee_greeting'
   | 'button_open_app'
   | 'select_language'
   | 'button_language_ru'
@@ -135,6 +136,16 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   start_greeting: {
     ru: 'Xalq Taxi — бонусная программа для водителей: за поездки начисляются баллы, а обменять их на подарки можно в офисах парка. Регистрация и баланс живут в приложении.',
     uz: "Xalq Taxi — haydovchilar uchun bonus dasturi: safarlar uchun ball hisoblanadi, ularni park ofislarida sovg'alarga almashtirish mumkin. Ro'yxatdan o'tish va hisob ilovada.",
+  },
+  /**
+   * Приветствие сотруднику парка — на то же любое сообщение и с той же кнопкой запуска.
+   *
+   * Своим текстом, потому что водительский зовёт регистрироваться и копить баллы, а у сотрудника
+   * в приложении своя работа (T25). Про кнопку не говорит по той же причине, что и водительское.
+   */
+  employee_greeting: {
+    ru: 'Xalq Taxi — рабочее место сотрудника парка. Выдача заказов водителям по коду и отмена заказов — в приложении.',
+    uz: "Xalq Taxi — park xodimining ish joyi. Haydovchilarga buyurtmalarni kod bo'yicha berish va buyurtmalarni bekor qilish — ilovada.",
   },
   button_open_app: {
     ru: '🎁 Открыть приложение',

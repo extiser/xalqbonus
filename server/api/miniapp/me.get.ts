@@ -1,11 +1,15 @@
 import { readLinkedDriver } from '#server/services/drivers/readLinkedDriver';
 import { readMemberScreen } from '#server/services/drivers/readMemberScreen';
 import { registrationScreenTexts } from '#server/services/drivers/registrationScreen';
+import { readEmployeeScreen } from '#server/services/employees/readEmployeeScreen';
 import { preferredLanguage } from '#server/utils/language';
 import { requireTelegramUser } from '#server/utils/telegramAuth';
 import type { MiniAppStateResponse } from '#shared/types/miniapp';
 
-// Что показать открывшему приложение: экран участника или экран регистрации.
+// Что показать открывшему приложение: экран сотрудника, экран участника или экран регистрации.
+//
+// Сотрудник ищется первым — по `employees.telegram_user_id` из той же проверенной `initData`, —
+// и водительские ветки не проходит вовсе (issue #122, T25).
 //
 // Участник узнаётся по активной строке в `telegram_links`, и номер у него не спрашивается
 // ни разу — ни в первый раз после переноса из старой базы, ни потом. Ровно то же делал
@@ -18,6 +22,12 @@ import type { MiniAppStateResponse } from '#shared/types/miniapp';
 
 export default defineEventHandler(async (event): Promise<MiniAppStateResponse> => {
   const user = requireTelegramUser(event);
+  const employeeScreen = await readEmployeeScreen(user.id);
+
+  if (employeeScreen) {
+    return employeeScreen;
+  }
+
   const driver = await readLinkedDriver(user.id);
 
   // Состав экрана, а не готовое приветствие одной строкой: баланс на экране участника

@@ -15,10 +15,12 @@
 // перечисление, оно меняется нашей же миграцией. Импорт только типов — в сборку
 // не попадает ни байта.
 import type {
+  EmployeeRole,
   Language,
   LinkAttemptOutcome,
   OrderStatus,
 } from '../../server/generated/prisma/enums';
+import type { EmployeeOffice } from './orders';
 
 // Разметке язык нужен так же, как обработчику: на нём стоит переключатель экрана
 // регистрации. Пробрасывается отсюда, чтобы страница не лазила в каталог Prisma
@@ -307,8 +309,37 @@ export type MemberOrderDenialCode =
 /** Что лежит в `data` отказавшей ручки заказа. */
 export type MemberOrderDenialPayload = { code: MemberOrderDenialCode };
 
+/**
+ * Экран сотрудника: выдача заказов по коду в его офисах.
+ *
+ * Сотрудник узнаётся по `employees.telegram_user_id` раньше водителя, и водительские ветки
+ * он не проходит вовсе: одна роль на Telegram держится кодом с обеих сторон
+ * (docs/decisions.md → «Доступ определяется ролью, а не дверью»).
+ *
+ * Тексты экрана на клиенте и по-русски, как у всех служебных экранов (docs/frontend.md → «Язык»):
+ * словарь водителя здесь не читается. Отказы ручек приходят кодом и текстом с сервера.
+ */
+export type MiniAppEmployeeScreen = {
+  screen: 'employee';
+  fullName: string;
+  role: EmployeeRole;
+  /** Пусто — менеджер ни к одному офису не привязан, и экран говорит об этом словами. */
+  offices: EmployeeOffice[];
+};
+
+/**
+ * Сотрудник, чья учётка выключена. Водительский экран ему не показывается и в этом случае:
+ * роль у Telegram одна, и выключенная учётка её не меняет. Текст — из словаря двери веба.
+ */
+export type MiniAppEmployeeDeniedScreen = {
+  screen: 'employee_denied';
+  message: string;
+};
+
 export type MiniAppStateResponse =
   | MiniAppMemberScreen
+  | MiniAppEmployeeScreen
+  | MiniAppEmployeeDeniedScreen
   | {
       screen: 'registration';
       /** Предвыбор по `language_code` из `initData`. Переключается на экране. */
