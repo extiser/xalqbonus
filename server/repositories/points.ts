@@ -408,6 +408,8 @@ export type AccountOperationRow = {
   tripEndedAt: Date | null;
   tripPrice: string | null;
   legacyOrderId: number | null;
+  /** Номер нашего заказа за баллы — у списания и возврата. */
+  orderNumber: number | null;
   actor: string | null;
   note: string | null;
 };
@@ -460,6 +462,7 @@ export const listAccountOperations = async (
            trip."ended_at"            AS "tripEndedAt",
            trip."price"::text         AS "tripPrice",
            transfer."legacy_order_id" AS "legacyOrderId",
+           "order"."number"           AS "orderNumber",
            transfer."actor",
            transfer."note"
       FROM xb.point_entries AS entry
@@ -481,6 +484,7 @@ export const listAccountOperations = async (
          LIMIT 1
       ) AS counterparty_name ON TRUE
       LEFT JOIN xb.trips AS trip ON trip."order_id" = transfer."trip_order_id"
+      LEFT JOIN xb.orders AS "order" ON "order"."id" = transfer."order_id"
      WHERE entry."account_id" = ${accountId}::uuid
      ORDER BY transfer."occurred_at" DESC, entry."id" DESC
      LIMIT ${limit} OFFSET ${offset}
@@ -511,6 +515,11 @@ export type OwnOperationRow = {
   reason: PointReason;
   occurredAt: Date;
   delta: bigint;
+  /**
+   * Номер заказа за баллы — у списания и возврата. Водитель называет его на стойке,
+   * и строка истории без него не отвечает на вопрос «за какой это заказ».
+   */
+  orderNumber: number | null;
 };
 
 /** Последняя показанная строка: с неё продолжается следующая страница. */
@@ -544,9 +553,11 @@ export const listAccountOperationsForOwner = async (
     SELECT entry."id"::text        AS "entryId",
            transfer."reason",
            transfer."occurred_at"  AS "occurredAt",
-           entry."delta"
+           entry."delta",
+           "order"."number"        AS "orderNumber"
       FROM xb.point_entries AS entry
       JOIN xb.point_transfers AS transfer ON transfer."id" = entry."transfer_id"
+      LEFT JOIN xb.orders AS "order" ON "order"."id" = transfer."order_id"
      WHERE entry."account_id" = ${accountId}::uuid
        AND (
              ${cursor?.occurredAt ?? null}::timestamptz IS NULL

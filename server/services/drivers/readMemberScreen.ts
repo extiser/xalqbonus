@@ -3,6 +3,7 @@ import { hasTripOperations } from '#server/repositories/points';
 import { findLastSuccessfulRunFinishedAt } from '#server/repositories/syncRuns';
 import { memberScreenTexts } from '#server/services/drivers/memberScreen';
 import type { LinkedDriver } from '#server/services/drivers/readLinkedDriver';
+import { memberOrderTexts } from '#server/services/orders/memberOrderScreen';
 import { formatClockTime } from '#server/utils/parkTime';
 import type { MiniAppStateResponse } from '#shared/types/miniapp';
 
@@ -50,5 +51,6 @@ export const readMemberScreen = async (driver: LinkedDriver): Promise<MiniAppSta
     // Без обращения по имени: имя стоит строкой выше, в шапке под балансом.
     promise: hasTrips ? null : plainText('welcome_bonus_promise', driver.language),
     texts: memberScreenTexts(driver.language),
+    orderTexts: memberOrderTexts(driver.language),
   };
 };

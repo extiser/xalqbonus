@@ -14,7 +14,11 @@
 // Словарь берётся у Prisma, а не переписывается здесь строковым объединением: это наше
 // перечисление, оно меняется нашей же миграцией. Импорт только типов — в сборку
 // не попадает ни байта.
-import type { Language, LinkAttemptOutcome } from '../../server/generated/prisma/enums';
+import type {
+  Language,
+  LinkAttemptOutcome,
+  OrderStatus,
+} from '../../server/generated/prisma/enums';
 
 // Разметке язык нужен так же, как обработчику: на нём стоит переключатель экрана
 // регистрации. Пробрасывается отсюда, чтобы страница не лазила в каталог Prisma
@@ -77,9 +81,12 @@ export type MemberScreenTexts = {
 /**
  * Одна строка истории, какой её видит водитель: когда, за что и на сколько.
  *
- * Ни второй стороны перевода, ни ключа идемпотентности, ни номера заказа: это состав
+ * Ни второй стороны перевода, ни ключа идемпотентности, ни номера заказа такси: это состав
  * для сотрудника, разбирающего спор, а не для водителя (issue #101). Номер заказа такси
  * водителю ни о чём не говорит, а разбор конкретной поездки идёт через офис.
+ *
+ * Номер **нашего** заказа за баллы — другое дело: его водитель видел на экране и называл
+ * на стойке. У списания и возврата он стоит в подписи причины (issue #121).
  *
  * Тексты — готовыми строками на языке водителя. День и время считает сервер, в зоне парка:
  * телефон в поездке бывает в чужой зоне, а спор у стойки идёт про ташкентские сутки.
@@ -143,7 +150,162 @@ export type MiniAppMemberScreen = {
    */
   promise: string | null;
   texts: MemberScreenTexts;
+  /**
+   * Тексты витрины и заказа. Приезжают с экраном участника, а не с каждой ручкой витрины:
+   * экраны переключаются без перезагрузки, и язык у них тот же, что у экрана участника.
+   */
+  orderTexts: MemberOrderTexts;
 };
+
+/** Тексты витрины, оформления и заказов на языке участника. */
+export type MemberOrderTexts = {
+  exchangePoints: string;
+  myOrders: string;
+  /** Кнопка «назад» на экране — только у клиента без системной кнопки Telegram. */
+  back: string;
+  /** Ответа не было вовсе: сказать, что случилось, сервер не мог. */
+  requestFailed: string;
+  officesTitle: string;
+  officesEmpty: string;
+  officesFailed: string;
+  openMap: string;
+  showcaseEmpty: string;
+  showcaseFailed: string;
+  noPhoto: string;
+  /** Единица штук — «шт.». Число стоит рядом цифрами, без склонения. */
+  pieces: string;
+  /** Единица баллов — «баллов». */
+  points: string;
+  inStock: string;
+  cartTotal: string;
+  balanceAfter: string;
+  checkout: string;
+  checkoutNothingSelected: string;
+  checkoutOverBalance: string;
+  confirmTitle: string;
+  confirmNote: string;
+  placeOrder: string;
+  editOrder: string;
+  codeTitle: string;
+  cancelOrder: string;
+  cancelQuestion: string;
+  cancelYes: string;
+  cancelNo: string;
+  ordersTitle: string;
+  ordersEmpty: string;
+  ordersFailed: string;
+};
+
+/**
+ * Офис, каким его видит водитель: куда ехать и когда там открыто.
+ *
+ * Архивного признака нет: архивный офис водителю не показывается вовсе.
+ */
+export type MemberOffice = {
+  officeId: string;
+  name: string;
+  address: string;
+  workHours: string | null;
+  phone: string | null;
+  telegram: string | null;
+  /** Ссылка на карту. Открывается наружу. */
+  mapUrl: string | null;
+};
+
+export type MiniAppOfficesResponse = {
+  offices: MemberOffice[];
+};
+
+/**
+ * Товар витрины.
+ *
+ * Сумм и себестоимости здесь нет и быть не может: водителю цена — в баллах, а цена в сумах
+ * — это разговор парка с поставщиком.
+ */
+export type ShowcaseProduct = {
+  productId: string;
+  name: string;
+  description: string | null;
+  photoPath: string | null;
+  /** Версия адреса фото — см. `ProductPhoto`. */
+  updatedAt: string;
+  pricePoints: number;
+  /** Сколько можно взять сейчас: свободный остаток этого офиса, всегда больше нуля. */
+  available: number;
+};
+
+export type MiniAppShowcaseResponse = {
+  office: MemberOffice;
+  /**
+   * Баланс числом. Экран считает по нему остаток после списания и гасит кнопку, но решает
+   * всё равно сервер: между показом и оформлением баланс может измениться.
+   */
+  balancePoints: number;
+  products: ShowcaseProduct[];
+};
+
+export type MemberOrderLine = {
+  productId: string;
+  name: string;
+  quantity: number;
+  /** Цена на момент заказа, а не текущая цена каталога. */
+  unitPoints: number;
+};
+
+/**
+ * Заказ, каким его видит водитель.
+ *
+ * Код и срок есть только у висящего: у выданного и отменённого код освобождён и может
+ * принадлежать чужому заказу — показывать его незачем.
+ */
+export type MemberOrder = {
+  orderId: string;
+  number: number;
+  /** «Заказ № 1042». */
+  title: string;
+  status: OrderStatus;
+  officeName: string;
+  officeAddress: string;
+  totalPoints: number;
+  lines: MemberOrderLine[];
+  code: string | null;
+  /** «Заберите до 15.09.2026 14:32». Только у висящего. */
+  expiresNote: string | null;
+  /** «Ждёт выдачи», «Выдан 14.09.2026 14:32», «Отменён …». */
+  statusText: string;
+  /** Причина отмены словами. Только у отменённого. */
+  reasonText: string | null;
+};
+
+export type MiniAppOrdersResponse = {
+  orders: MemberOrder[];
+};
+
+export type MiniAppOrderResponse = {
+  order: MemberOrder;
+};
+
+export type MiniAppPlaceOrderRequestBody = {
+  officeId: string;
+  items: { productId: string; quantity: number }[];
+};
+
+/**
+ * Отказ оформления и отмены — кодом.
+ *
+ * Код решает, что делает экран, текст к нему приходит в `message` на языке водителя.
+ * Коды не придуманы в ручке: каждый — это доменная ошибка ядра заказа или журнала баллов.
+ */
+export type MemberOrderDenialCode =
+  | 'office_unavailable'
+  | 'product_unavailable'
+  | 'insufficient_stock'
+  | 'insufficient_points'
+  | 'order_not_found'
+  | 'order_not_pending';
+
+/** Что лежит в `data` отказавшей ручки заказа. */
+export type MemberOrderDenialPayload = { code: MemberOrderDenialCode };
 
 export type MiniAppStateResponse =
   | MiniAppMemberScreen

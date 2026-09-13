@@ -11,12 +11,14 @@
  *
  * `primary` — главное действие экрана, одно на экран. `secondary` — действие, которое
  * экран предлагает, но не требует: «Показать ещё» зелёной заливкой во всю ширину звало бы
- * нажать себя сильнее, чем поделиться номером, ради которого экран и открыт.
+ * нажать себя сильнее, чем поделиться номером, ради которого экран и открыт. `danger` —
+ * необратимое для водителя действие, подтверждение отмены заказа: зелёная кнопка звала бы
+ * нажать её как главное действие экрана.
  *
  * Значением свойства, а не классами снаружи: вид кнопки виден из её собственного файла
  * и не зависит от места вызова (docs/frontend.md → «Компонент владеет своим визуалом»).
  */
-type ButtonVariant = 'primary' | 'secondary';
+type ButtonVariant = 'primary' | 'secondary' | 'danger';
 
 withDefaults(
   defineProps<{
@@ -35,6 +37,8 @@ const VARIANT_CLASSES: Record<ButtonVariant, string> = {
     'bg-emerald-600 text-white hover:bg-emerald-500 focus-visible:outline-emerald-700 disabled:bg-slate-300',
   secondary:
     'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 focus-visible:outline-slate-400 disabled:text-slate-400',
+  danger:
+    'bg-red-600 text-white hover:bg-red-500 focus-visible:outline-red-700 disabled:bg-slate-300',
 };
 </script>
 

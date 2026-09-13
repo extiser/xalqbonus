@@ -58,6 +58,11 @@ const direction = computed(() =>
   <article class="border-t border-slate-200 py-3 first:border-t-0 first:pt-0">
     <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
       <AtomsStatusBadge tone="muted" :label="pointReasonLabel(operation.reason)" />
+      <!-- Номер текстом, без ссылки: экрана заказа в вебе ещё нет, ссылка появится вместе
+           с ним (issue #122). Списание и возврат одного заказа читаются парой по номеру. -->
+      <span v-if="operation.orderNumber !== null" class="text-sm text-slate-500">
+        заказ № {{ operation.orderNumber }}
+      </span>
       <!-- Массовая раздача помечена своей меткой: три тысячи начислений одной кампании
            не должны читаться как три тысячи независимых решений оператора. -->
       <AtomsStatusBadge

@@ -55,6 +55,18 @@ export const listOffices = async (client: Executor = db): Promise<OfficeRow[]> =
      ORDER BY ("archived_at" IS NOT NULL), "name"
   `;
 
+/**
+ * Работающие офисы — для водителя. Архивный офис заказов не принимает, и показывать его
+ * в списке, откуда выбирают, куда ехать, значит звать в закрытую дверь.
+ */
+export const listActiveOffices = async (client: Executor = db): Promise<OfficeRow[]> =>
+  client.$queryRaw<OfficeRow[]>`
+    SELECT ${OFFICE_COLUMNS}
+      FROM xb.offices
+     WHERE "archived_at" IS NULL
+     ORDER BY "name"
+  `;
+
 export const findOffice = async (
   officeId: string,
   client: Executor = db,

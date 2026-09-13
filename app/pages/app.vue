@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
   INIT_DATA_HEADER,
   type Language,
+  type MemberOrder,
   type MiniAppMemberScreen,
   type MiniAppRegisterResponse,
   type MiniAppStateResponse,
   type RegistrationScreenTexts,
 } from '#shared/types/miniapp';
 import { useMemberHistory } from '~/composables/useMemberHistory';
+import { useMemberOrders } from '~/composables/useMemberOrders';
 import {
   hasSignedInitData,
   loadTelegramWebApp,
@@ -106,6 +108,126 @@ const refreshFailedNote = computed(() =>
  * листается кнопкой, и пересобирать ради каждой страницы весь экран незачем.
  */
 const memberHistory = useMemberHistory(() => initData);
+
+/**
+ * Обмен баллов: офисы, витрина, оформление и заказы. Запасной текст отказа — из текстов
+ * экрана участника: к моменту первого запроса витрины они уже загружены.
+ */
+const memberOrders = useMemberOrders(
+  () => initData,
+  () => member.value?.orderTexts.requestFailed ?? LOAD_FAILED,
+);
+
+/**
+ * Экраны участника.
+ *
+ * Переключаются внутри страницы, а не адресами: адрес Mini App несёт в хеше подписанную
+ * строку, и роутер при переходе портит её (issue #90, #105). Шапки с навигацией нет —
+ * «назад» делает системная кнопка Telegram (`layouts/miniapp.vue`).
+ */
+type MemberScreenName = 'home' | 'offices' | 'showcase' | 'confirm' | 'order' | 'orders';
+
+/** Путь по экранам. Последний — показанный; «назад» снимает его. */
+const screens = ref<MemberScreenName[]>(['home']);
+const currentScreen = computed<MemberScreenName>(() => screens.value.at(-1) ?? 'home');
+
+/** Заказ, открытый на экране заказа: только что оформленный или выбранный из списка. */
+const currentOrder = ref<MemberOrder | null>(null);
+
+/**
+ * Есть ли у клиента системная кнопка «назад». Нет — экран рисует свою: без неё с витрины
+ * не вернуться иначе как перезапуском приложения.
+ */
+const systemBack = ref(false);
+
+const openScreen = (screen: MemberScreenName): void => {
+  screens.value = [...screens.value, screen];
+};
+
+const goBack = (): void => {
+  if (screens.value.length <= 1) {
+    return;
+  }
+
+  screens.value = screens.value.slice(0, -1);
+
+  // Экран, на который вернулись, мог устареть: заказ отменили, баллы списались.
+  if (currentScreen.value === 'home') {
+    void refresh();
+  } else if (currentScreen.value === 'orders') {
+    void memberOrders.loadOrders();
+  }
+};
+
+watch(currentScreen, (screen) => {
+  // Новый экран открывается с начала, а не с той высоты, на которой листали прошлый.
+  window.scrollTo(0, 0);
+
+  if (screen === 'home') {
+    webApp?.BackButton?.hide();
+  } else {
+    webApp?.BackButton?.show();
+  }
+});
+
+const openExchange = (): void => {
+  openScreen('offices');
+  void memberOrders.loadOffices();
+};
+
+const openOrders = (): void => {
+  openScreen('orders');
+  void memberOrders.loadOrders();
+};
+
+const selectOffice = (officeId: string): void => {
+  openScreen('showcase');
+  void memberOrders.openShowcase(officeId);
+};
+
+const changeQuantity = (productId: string, step: number): void => {
+  memberOrders.setQuantity(productId, (memberOrders.quantities.value[productId] ?? 0) + step);
+};
+
+const openConfirm = (): void => {
+  memberOrders.resetPlaceError();
+  openScreen('confirm');
+};
+
+const placeOrder = async (): Promise<void> => {
+  const order = await memberOrders.place();
+
+  if (!order) {
+    return;
+  }
+
+  currentOrder.value = order;
+  // Назад с экрана оформленного заказа — на экран участника, а не в витрину: корзина пуста,
+  // а подтверждать тот же заказ второй раз незачем.
+  screens.value = ['home', 'order'];
+  void refresh();
+};
+
+const openOrder = (order: MemberOrder): void => {
+  currentOrder.value = order;
+  memberOrders.resetCancelError();
+  openScreen('order');
+};
+
+const cancelCurrentOrder = async (): Promise<void> => {
+  const order = currentOrder.value;
+
+  if (!order) {
+    return;
+  }
+
+  const cancelled = await memberOrders.cancel(order.orderId);
+
+  if (cancelled) {
+    currentOrder.value = cancelled;
+    void refresh();
+  }
+};
 
 /**
  * Показывает то, что ответил сервер.
@@ -219,7 +341,16 @@ onMounted(async () => {
   webApp?.ready();
   webApp?.expand();
 
+  if (webApp?.BackButton) {
+    webApp.BackButton.onClick(goBack);
+    systemBack.value = true;
+  }
+
   await loadState();
+});
+
+onBeforeUnmount(() => {
+  webApp?.BackButton?.offClick(goBack);
 });
 
 /** Отправляет подписанную строку контакта на сервер и показывает исход. */
@@ -296,27 +427,87 @@ const share = (): void => {
   </p>
 
   <div v-else-if="stage === 'member' && member" class="flex flex-col gap-2">
-    <OrganismsMemberSummary
-      :balance-title="member.texts.balanceTitle"
-      :balance="member.balance"
-      :name="member.name"
-      :updated-note="member.updatedNote"
-      :promise="member.promise"
-      :refresh-label="member.texts.refresh"
-      :refreshing="refreshing"
-      :refresh-failed-note="refreshFailedNote"
-      @refresh="refresh"
+    <template v-if="currentScreen === 'home'">
+      <OrganismsMemberSummary
+        :balance-title="member.texts.balanceTitle"
+        :balance="member.balance"
+        :name="member.name"
+        :updated-note="member.updatedNote"
+        :promise="member.promise"
+        :refresh-label="member.texts.refresh"
+        :refreshing="refreshing"
+        :refresh-failed-note="refreshFailedNote"
+        :exchange-label="member.orderTexts.exchangePoints"
+        :orders-label="member.orderTexts.myOrders"
+        @refresh="refresh"
+        @exchange="openExchange"
+        @orders="openOrders"
+      />
+
+      <OrganismsMemberHistory
+        :state="memberHistory.state.value"
+        :operations="memberHistory.operations.value"
+        :has-more="memberHistory.nextCursor.value !== null"
+        :loading-more="memberHistory.loadingMore.value"
+        :more-failed="memberHistory.moreFailed.value"
+        :texts="member.texts"
+        @more="memberHistory.loadMore()"
+      />
+    </template>
+
+    <OrganismsMemberOfficePicker
+      v-else-if="currentScreen === 'offices'"
+      :state="memberOrders.officesState.value"
+      :offices="memberOrders.offices.value"
+      :texts="member.orderTexts"
+      @select="selectOffice"
     />
 
-    <OrganismsMemberHistory
-      :state="memberHistory.state.value"
-      :operations="memberHistory.operations.value"
-      :has-more="memberHistory.nextCursor.value !== null"
-      :loading-more="memberHistory.loadingMore.value"
-      :more-failed="memberHistory.moreFailed.value"
-      :texts="member.texts"
-      @more="memberHistory.loadMore()"
+    <OrganismsOfficeShowcase
+      v-else-if="currentScreen === 'showcase'"
+      :state="memberOrders.showcaseState.value"
+      :showcase="memberOrders.showcase.value"
+      :error-message="memberOrders.showcaseError.value"
+      :quantities="memberOrders.quantities.value"
+      :total="memberOrders.cartTotal.value"
+      :texts="member.orderTexts"
+      @increment="changeQuantity($event, 1)"
+      @decrement="changeQuantity($event, -1)"
+      @checkout="openConfirm"
     />
+
+    <OrganismsOrderConfirmation
+      v-else-if="currentScreen === 'confirm' && memberOrders.showcase.value"
+      :office="memberOrders.showcase.value.office"
+      :lines="memberOrders.cartLines.value"
+      :total="memberOrders.cartTotal.value"
+      :placing="memberOrders.placing.value"
+      :error-message="memberOrders.placeError.value"
+      :texts="member.orderTexts"
+      @place="placeOrder"
+      @edit="goBack"
+    />
+
+    <OrganismsMemberOrderCard
+      v-else-if="currentScreen === 'order' && currentOrder"
+      :order="currentOrder"
+      :cancelling="memberOrders.cancelling.value"
+      :cancel-error="memberOrders.cancelError.value"
+      :texts="member.orderTexts"
+      @cancel="cancelCurrentOrder"
+    />
+
+    <OrganismsMemberOrderList
+      v-else-if="currentScreen === 'orders'"
+      :state="memberOrders.ordersState.value"
+      :orders="memberOrders.orders.value"
+      :texts="member.orderTexts"
+      @open="openOrder"
+    />
+
+    <div v-if="currentScreen !== 'home' && !systemBack" class="pt-4">
+      <AtomsMiniAppButton variant="secondary" :label="member.orderTexts.back" @click="goBack" />
+    </div>
   </div>
 
   <OrganismsDriverRegistration

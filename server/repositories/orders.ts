@@ -244,6 +244,83 @@ export const markOrderCancelled = async (
      WHERE "id" = ${input.orderId}::uuid AND "status" = 'pending'
   `;
 
+export type PersonOrderRow = {
+  id: string;
+  number: number;
+  status: OrderStatus;
+  code: string;
+  totalPoints: number;
+  expiresAt: Date;
+  issuedAt: Date | null;
+  cancelledAt: Date | null;
+  cancelReason: OrderCancelReason | null;
+  officeName: string;
+  officeAddress: string;
+};
+
+export type ListPersonOrdersInput = {
+  personId: string;
+  /** Один заказ этого человека. Пусто — все его заказы. */
+  orderId: string | null;
+  limit: number;
+};
+
+/**
+ * Заказы человека: висящие первыми, дальше свежие вперёд.
+ *
+ * Человек входит в условие всегда, в том числе при поиске одного заказа: чужой заказ
+ * отсюда не читается ни при каком идентификаторе, и «свой ли это заказ» отвечает сам
+ * запрос, а не сравнение после него.
+ */
+export const listPersonOrders = async (
+  input: ListPersonOrdersInput,
+  client: Prisma.TransactionClient = db,
+): Promise<PersonOrderRow[]> =>
+  client.$queryRaw<PersonOrderRow[]>`
+    SELECT "order"."id",
+           "order"."number",
+           "order"."status",
+           "order"."code",
+           "order"."total_points"  AS "totalPoints",
+           "order"."expires_at"    AS "expiresAt",
+           "order"."issued_at"     AS "issuedAt",
+           "order"."cancelled_at"  AS "cancelledAt",
+           "order"."cancel_reason" AS "cancelReason",
+           office."name"           AS "officeName",
+           office."address"        AS "officeAddress"
+      FROM xb.orders AS "order"
+      JOIN xb.offices AS office ON office."id" = "order"."office_id"
+     WHERE "order"."person_id" = ${input.personId}::uuid
+       AND (${input.orderId}::uuid IS NULL OR "order"."id" = ${input.orderId}::uuid)
+     ORDER BY ("order"."status" <> 'pending'), "order"."created_at" DESC
+     LIMIT ${input.limit}
+  `;
+
+export type OrderLineRow = {
+  orderId: string;
+  productId: string;
+  name: string;
+  quantity: number;
+  unitPoints: number;
+};
+
+/** Позиции нескольких заказов с названиями товаров — одним запросом на весь список. */
+export const listOrderLines = async (
+  orderIds: string[],
+  client: Prisma.TransactionClient = db,
+): Promise<OrderLineRow[]> =>
+  client.$queryRaw<OrderLineRow[]>`
+    SELECT item."order_id"    AS "orderId",
+           item."product_id"  AS "productId",
+           product."name",
+           item."quantity",
+           item."unit_points" AS "unitPoints"
+      FROM xb.order_items AS item
+      JOIN xb.products AS product ON product."id" = item."product_id"
+     WHERE item."order_id" = ANY(${orderIds}::uuid[])
+     ORDER BY product."name"
+  `;
+
 /**
  * Висящие заказы с истёкшим сроком — вход воркера просрочки.
  *

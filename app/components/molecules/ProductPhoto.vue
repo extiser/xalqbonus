@@ -12,7 +12,7 @@ import { computed } from 'vue';
  * Пустое место подписано словом, а не оставлено пустым: «фото не загрузили» и «картинка
  * не открылась» для смотрящего означают разное.
  */
-type PhotoSize = 'thumb' | 'large';
+type PhotoSize = 'thumb' | 'large' | 'tile';
 
 const props = withDefaults(
   defineProps<{
@@ -21,8 +21,13 @@ const props = withDefaults(
     updatedAt: string;
     name: string;
     size?: PhotoSize;
+    /**
+     * Подпись пустого места. Служебные экраны говорят по-русски, а витрина водителя —
+     * на его языке, и слово приходит из словаря.
+     */
+    emptyLabel?: string;
   }>(),
-  { size: 'thumb' },
+  { size: 'thumb', emptyLabel: 'без фото' },
 );
 
 const source = computed(() =>
@@ -34,6 +39,8 @@ const source = computed(() =>
 const SIZE_CLASSES: Record<PhotoSize, string> = {
   thumb: 'h-12 w-12',
   large: 'h-40 w-40',
+  /** Плитка витрины: квадрат во всю ширину колонки сетки. */
+  tile: 'aspect-square w-full',
 };
 </script>
 
@@ -50,6 +57,6 @@ const SIZE_CLASSES: Record<PhotoSize, string> = {
     class="flex items-center justify-center rounded-md border border-dashed border-slate-300 bg-slate-50 text-center text-xs text-slate-400"
     :class="SIZE_CLASSES[size]"
   >
-    без фото
+    {{ emptyLabel }}
   </span>
 </template>

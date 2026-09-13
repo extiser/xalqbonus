@@ -1,6 +1,5 @@
-import { readLinkedDriver } from '#server/services/drivers/readLinkedDriver';
 import { readMemberHistory } from '#server/services/drivers/readMemberHistory';
-import { requireTelegramUser } from '#server/utils/telegramAuth';
+import { requireMember } from '#server/utils/miniAppMember';
 import type { MiniAppHistoryResponse } from '#shared/types/miniapp';
 
 /**
@@ -16,19 +15,9 @@ import type { MiniAppHistoryResponse } from '#shared/types/miniapp';
  * и несёт вторую сторону перевода с именем, автора правки и номера заказов.
  */
 export default defineEventHandler(async (event): Promise<MiniAppHistoryResponse> => {
-  const user = requireTelegramUser(event);
-  const driver = await readLinkedDriver(user.id);
-
-  // Подпись годная, а участия нет: у этого человека нет ни счёта, ни истории, и отвечать
-  // ему пустой страницей значило бы сказать «операций нет» там, где верно «вы не в
-  // программе». Экран регистрации эту ручку не зовёт вовсе.
-  if (!driver) {
-    throw createError({
-      statusCode: 403,
-      statusMessage: 'Forbidden',
-      message: 'в программе не состоит',
-    });
-  }
+  // Подпись годная, а участия нет — отказ, а не пустая страница: пустая сказала бы
+  // «операций нет» там, где верно «вы не в программе».
+  const driver = await requireMember(event);
 
   const cursor = getQuery(event).cursor;
 
