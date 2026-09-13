@@ -3,6 +3,12 @@ import { ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { useAccessNotice, useCurrentEmployee } from '~/composables/useCurrentEmployee';
 import { failureText } from '~/utils/requestError';
+import {
+  denialText,
+  isServerDenialCode,
+  WEB_LANGUAGE,
+  type ServerDenialCode,
+} from '#shared/denials';
 import type { EmployeeLoginResponse } from '#shared/types/employee';
 
 /**
@@ -31,7 +37,57 @@ useHead({ title: 'Вход — XalqBonus' });
 
 const route = useRoute();
 const currentEmployee = useCurrentEmployee();
-const notice = useAccessNotice();
+
+/**
+ * Отказы, которые форма принимает адресом.
+ *
+ * Перечислением, а не всем списком кодов сервера, и не приведением типа: подстановки идут
+ * в `denialText` вслед за кодом, а из адреса подставлять нечего — `throttled` с его
+ * минутами доехал бы «через {minutes} мин» до глаз сотрудника. Через дверь веба он и не
+ * приходит: `/api/auth/me` отвечает исходами проверки доступа, а `throttled`
+ * и `invalid_credentials` — ответы ручки входа, и там их видно без всякого адреса.
+ *
+ * `no_credentials` тоже не здесь: тому, кто просто не вошёл, форма входа и есть ответ.
+ */
+const ADDRESS_DENIALS = {
+  invalid_session: true,
+  sessions_revoked: true,
+  unknown_employee: true,
+  disabled: true,
+  role_not_allowed: true,
+} as const satisfies Partial<Record<ServerDenialCode, true>>;
+
+type AddressDenialCode = keyof typeof ADDRESS_DENIALS;
+
+/**
+ * Наш ли это код и ждёт ли его форма: параметр в адресе пишет кто угодно, ровно как `next`.
+ *
+ * Худшее, что делает подделанная ссылка, — показывает настоящий текст словаря человеку,
+ * к которому он не относится. Ни чужой строки, ни разметки через адрес не занести:
+ * показывается не то, что пришло, а то, что нашлось по коду. Код, которого форма не ждёт,
+ * молча игнорируется — чистая форма входа лучше объяснения не о том.
+ */
+const isAddressDenialCode = (value: unknown): value is AddressDenialCode =>
+  isServerDenialCode(value) && Object.hasOwn(ADDRESS_DENIALS, value);
+
+/**
+ * Почему человек оказался на входе, когда сам он туда не просился.
+ *
+ * Источника два. Адрес — для завёрнутых общей проверкой маршрута: он переживает и `302`
+ * холодной загрузки, и переход внутри приложения. Состояние — для смены пароля: там
+ * объяснение рождается здесь же, на клиенте, и доезжает памятью.
+ *
+ * Читаются оба один раз, при открытии формы, и состояние сразу гасится: дальше человек
+ * нажимает «Войти», и ответ на это нажатие — единственное, что стоит ему показывать.
+ */
+const accessNotice = useAccessNotice();
+const deniedCode = route.query.denied;
+
+const notice = ref<string | null>(
+  isAddressDenialCode(deniedCode) ? denialText(deniedCode, WEB_LANGUAGE) : accessNotice.value,
+);
+
+accessNotice.value = null;
 
 const phone = ref('');
 const password = ref('');
