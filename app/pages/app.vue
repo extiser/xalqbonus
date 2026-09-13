@@ -4,6 +4,7 @@ import {
   INIT_DATA_HEADER,
   type Language,
   type MemberOrder,
+  type MiniAppEmployeeScreen,
   type MiniAppMemberScreen,
   type MiniAppRegisterResponse,
   type MiniAppStateResponse,
@@ -11,6 +12,7 @@ import {
 } from '#shared/types/miniapp';
 import { useMemberHistory } from '~/composables/useMemberHistory';
 import { useMemberOrders } from '~/composables/useMemberOrders';
+import { useOfficeOrderDesk } from '~/composables/useOfficeOrderDesk';
 import {
   hasSignedInitData,
   loadTelegramWebApp,
@@ -20,7 +22,8 @@ import {
 } from '~/composables/useTelegramWebApp';
 
 /**
- * Экран водителя: регистрация в программе или приветствие участника.
+ * Экран водителя: регистрация в программе или приветствие участника. Или экран сотрудника —
+ * выдача заказов по коду, если приложение открыл сотрудник парка (issue #122).
  *
  * Личность приходит от Telegram подписанной строкой и уезжает на сервер заголовком
  * с каждым запросом. Своего входа и своей сессии здесь нет и не будет: они означали бы
@@ -63,7 +66,7 @@ const LOAD_FAILED =
   "Ma'lumotlarni yuklab bo'lmadi. Qaytadan urinib ko'ring. / Не удалось загрузить данные. Попробуйте ещё раз.";
 
 /** Что показываем прямо сейчас. Загрузка и отказ различаются намеренно: они значат разное. */
-type Stage = 'loading' | 'error' | 'member' | 'registration';
+type Stage = 'loading' | 'error' | 'member' | 'registration' | 'employee';
 
 const stage = ref<Stage>('loading');
 const errorMessage = ref('');
@@ -119,6 +122,77 @@ const memberOrders = useMemberOrders(
 );
 
 /**
+ * Экран сотрудника: его офисы, выбранный офис и стойка выдачи.
+ *
+ * Своего пути по экранам у него нет: выбор офиса, стойка и карточка заказа выводятся
+ * из состояния — выбран ли офис, открыт ли заказ, — и «назад» снимает ровно последнее из них.
+ */
+const employee = ref<MiniAppEmployeeScreen | null>(null);
+const employeeOfficeId = ref<string | null>(null);
+const employeeCode = ref('');
+
+const officeDesk = useOfficeOrderDesk(() => ({ [INIT_DATA_HEADER]: initData }));
+
+const employeeOffice = computed(
+  () => employee.value?.offices.find((office) => office.officeId === employeeOfficeId.value) ?? null,
+);
+
+/** Есть ли куда вернуться: из карточки — к полю кода, от поля кода — к выбору из нескольких офисов. */
+const employeeCanGoBack = computed(
+  () =>
+    officeDesk.current.value !== null ||
+    (employeeOffice.value !== null && (employee.value?.offices.length ?? 0) > 1),
+);
+
+const selectEmployeeOffice = (officeId: string): void => {
+  employeeOfficeId.value = officeId;
+  employeeCode.value = '';
+  officeDesk.reset();
+  void officeDesk.loadPending(officeId);
+};
+
+const employeeBack = (): void => {
+  if (officeDesk.current.value) {
+    officeDesk.close();
+
+    return;
+  }
+
+  if ((employee.value?.offices.length ?? 0) > 1) {
+    employeeOfficeId.value = null;
+  }
+};
+
+const searchOrderCode = (code: string): void => {
+  if (employeeOfficeId.value) {
+    void officeDesk.findByCode(employeeOfficeId.value, code);
+  }
+};
+
+/**
+ * Выдача и отмена у стойки. После любого исхода список висящих перечитывается: и после
+ * выдачи, и после отказа «уже выдан» прежний список врёт. Поле кода пустеет только после
+ * удачи — следующий водитель уже называет свой.
+ */
+const finishEmployeeAction = async (done: boolean): Promise<void> => {
+  if (done) {
+    employeeCode.value = '';
+  }
+
+  if (employeeOfficeId.value) {
+    await officeDesk.loadPending(employeeOfficeId.value);
+  }
+};
+
+const issueEmployeeOrder = async (): Promise<void> => {
+  await finishEmployeeAction((await officeDesk.issue()) !== null);
+};
+
+const cancelEmployeeOrder = async (): Promise<void> => {
+  await finishEmployeeAction((await officeDesk.cancel()) !== null);
+};
+
+/**
  * Экраны участника.
  *
  * Переключаются внутри страницы, а не адресами: адрес Mini App несёт в хеше подписанную
@@ -145,6 +219,12 @@ const openScreen = (screen: MemberScreenName): void => {
 };
 
 const goBack = (): void => {
+  if (stage.value === 'employee') {
+    employeeBack();
+
+    return;
+  }
+
   if (screens.value.length <= 1) {
     return;
   }
@@ -167,6 +247,20 @@ watch(currentScreen, (screen) => {
     webApp?.BackButton?.hide();
   } else {
     webApp?.BackButton?.show();
+  }
+});
+
+watch(employeeCanGoBack, (canGoBack) => {
+  if (stage.value !== 'employee') {
+    return;
+  }
+
+  window.scrollTo(0, 0);
+
+  if (canGoBack) {
+    webApp?.BackButton?.show();
+  } else {
+    webApp?.BackButton?.hide();
   }
 });
 
@@ -239,6 +333,26 @@ const applyState = (state: MiniAppStateResponse): void => {
   if (state.screen === 'member') {
     member.value = state;
     stage.value = 'member';
+
+    return;
+  }
+
+  if (state.screen === 'employee') {
+    employee.value = state;
+    stage.value = 'employee';
+
+    // Один офис — выбирать нечего, стойка открывается сразу.
+    const [onlyOffice] = state.offices;
+
+    if (state.offices.length === 1 && onlyOffice) {
+      selectEmployeeOffice(onlyOffice.officeId);
+    }
+
+    return;
+  }
+
+  if (state.screen === 'employee_denied') {
+    failWith(state.message);
 
     return;
   }
@@ -425,6 +539,46 @@ const share = (): void => {
   <p v-else-if="stage === 'error'" class="py-10 text-center text-base leading-relaxed text-red-700">
     {{ errorMessage }}
   </p>
+
+  <div v-else-if="stage === 'employee' && employee" class="flex flex-col gap-6">
+    <OrganismsEmployeeOfficePicker
+      v-if="!employeeOffice"
+      :full-name="employee.fullName"
+      :offices="employee.offices"
+      @select="selectEmployeeOffice"
+    />
+
+    <OrganismsEmployeeOrderCard
+      v-else-if="officeDesk.current.value"
+      :order="officeDesk.current.value"
+      :acting="officeDesk.acting.value"
+      :error="officeDesk.actionError.value"
+      @issue="issueEmployeeOrder"
+      @cancel="cancelEmployeeOrder"
+      @close="officeDesk.close()"
+    />
+
+    <template v-else>
+      <OrganismsEmployeeCodeEntry
+        v-model="employeeCode"
+        :office-name="employeeOffice.name"
+        :searching="officeDesk.searching.value"
+        :error="officeDesk.searchError.value"
+        :notice="officeDesk.notice.value"
+        @complete="searchOrderCode"
+      />
+
+      <OrganismsEmployeePendingOrders
+        :state="officeDesk.pendingState.value"
+        :orders="officeDesk.pendingOrders.value"
+        @open="officeDesk.open($event)"
+      />
+    </template>
+
+    <div v-if="employeeCanGoBack && !systemBack">
+      <AtomsMiniAppButton variant="secondary" label="Назад" @click="employeeBack" />
+    </div>
+  </div>
 
   <div v-else-if="stage === 'member' && member" class="flex flex-col gap-2">
     <template v-if="currentScreen === 'home'">

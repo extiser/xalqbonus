@@ -5,6 +5,7 @@ import { readMiniAppUrl } from '#server/bot/config';
 import { sendScreen } from '#server/bot/screen';
 import { text } from '#server/bot/texts';
 import type { Language } from '#server/generated/prisma/enums';
+import { isEmployeeTelegram } from '#server/services/employees/isEmployeeTelegram';
 import { preferredLanguage } from '#server/utils/language';
 
 /**
@@ -31,6 +32,10 @@ import { preferredLanguage } from '#server/utils/language';
  * Язык берётся из настроек Telegram, а не выбором на экране: выбор живёт в приложении
  * и оттуда же уезжает в `person_settings`. Приветствие — единственное, что человек
  * успевает прочитать до него.
+ *
+ * **Сотрудник получает своё приветствие** с той же кнопкой: какой экран показать, приложение
+ * решает само по той же личности (T25, issue #122). Узнаётся он по `employees.telegram_user_id`
+ * отправителя — той же проверкой, что стоит в правиле «одна роль на Telegram».
  */
 
 const log = consola.withTag('bot:greeting');
@@ -77,7 +82,10 @@ export const registerGreetingHandlers = (bot: Bot): void => {
 
     // Через `sendScreen`, как и всё остальное: в чате живёт один экран бота, и десяток
     // сообщений подряд обязан оставить одно приветствие, а не десять (server/bot/screen.ts).
-    await sendScreen(context, chatId, text('start_greeting', language), {
+    const employee =
+      context.from !== undefined && (await isEmployeeTelegram(BigInt(context.from.id)));
+
+    await sendScreen(context, chatId, text(employee ? 'employee_greeting' : 'start_greeting', language), {
       reply_markup: keyboard,
     });
   });
