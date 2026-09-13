@@ -1,6 +1,6 @@
 import { consola } from 'consola';
 import { db } from '#server/db';
-import { writeStockMovement } from '#server/repositories/stock';
+import { findStockRow, writeStockMovement, type StockRow } from '#server/repositories/stock';
 import {
   InvalidReceiveQuantityError,
   UnknownStockTargetError,
@@ -18,6 +18,10 @@ import { FOREIGN_KEY_VIOLATION, isConstraintViolation } from '#server/utils/post
  *
  * Движение и правка кэша — одной транзакцией, как у любой операции с остатком. Прямой
  * `UPDATE office_stock` запрещён так же, как прямое изменение баланса.
+ *
+ * Остаток после операции возвращается прочитанным **в той же транзакции**, а не вторым
+ * запросом после неё: между коммитом и вторым чтением успевает оформиться заказ, и ответ
+ * назвал бы числа, которых приход не делал.
  */
 
 const log = consola.withTag('stock:receive');
@@ -32,13 +36,15 @@ export type ReceiveStockInput = {
   note?: string | null;
 };
 
-export const receiveStock = async (input: ReceiveStockInput): Promise<void> => {
+export const receiveStock = async (input: ReceiveStockInput): Promise<StockRow> => {
   if (!Number.isInteger(input.quantity) || input.quantity <= 0) {
     throw new InvalidReceiveQuantityError(input.quantity);
   }
 
+  let stock: StockRow;
+
   try {
-    await db.$transaction(async (transaction) => {
+    stock = await db.$transaction(async (transaction) => {
       await writeStockMovement(transaction, {
         officeId: input.officeId,
         productId: input.productId,
@@ -48,6 +54,18 @@ export const receiveStock = async (input: ReceiveStockInput): Promise<void> => {
         employeeId: input.employeeId,
         note: input.note ?? null,
       });
+
+      const row = await findStockRow(input.officeId, input.productId, transaction);
+
+      // Строку только что завело движение: её отсутствие означало бы, что кэш остатка правит
+      // кто-то мимо `writeStockMovement`.
+      if (!row) {
+        throw new Error(
+          `остаток товара ${input.productId} в офисе ${input.officeId} не появился после прихода`,
+        );
+      }
+
+      return row;
     });
   } catch (error) {
     if (isConstraintViolation(error, FOREIGN_KEY_VIOLATION)) {
@@ -62,4 +80,6 @@ export const receiveStock = async (input: ReceiveStockInput): Promise<void> => {
     productId: input.productId,
     quantity: input.quantity,
   });
+
+  return stock;
 };

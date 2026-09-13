@@ -4,6 +4,7 @@ import { placeOrder } from '#server/services/orders/placeOrder';
 import { adjustStock } from '#server/services/stock/adjustStock';
 import {
   EmptyAdjustmentError,
+  InvalidStockTargetError,
   MissingAdjustmentNoteError,
   StockWouldGoNegativeError,
   UnknownStockTargetError,
@@ -96,6 +97,68 @@ describe('остатки офиса', () => {
     expect(await readStock(officeId, productId)).toEqual({ onHand: 2, reserved: 3 });
     // Отбитая правка не оставила за собой движения: транзакция откатилась целиком.
     expect(await listStockMovements(officeId, productId)).toHaveLength(2);
+  });
+
+  it('правка новым значением считает дельту от остатка в базе', async () => {
+    const { employeeId } = await createTestEmployee({ role: 'manager' });
+    const officeId = await createTestOffice();
+    const productId = await createTestProduct({ pricePoints: 10 });
+
+    await receiveStock({ officeId, productId, quantity: 5, employeeId });
+
+    // Так говорит форма веба: сотрудник пересчитал полку и видит на ней шесть штук.
+    // Дельту считает сервис — под той же блокировкой, в которой пишет движение.
+    await adjustStock({ officeId, productId, targetOnHand: 6, employeeId, note: 'пересчёт' });
+
+    expect(await readStock(officeId, productId)).toEqual({ onHand: 6, reserved: 0 });
+    expect(await listStockMovements(officeId, productId)).toEqual([
+      { kind: 'incoming', productId, deltaOnHand: 5, deltaReserved: 0, orderId: null },
+      { kind: 'adjustment', productId, deltaOnHand: 1, deltaReserved: 0, orderId: null },
+    ]);
+
+    // Правка в меньшую сторону — тем же путём, и дельта уходит отрицательной.
+    await adjustStock({ officeId, productId, targetOnHand: 2, employeeId, note: 'бой' });
+
+    expect(await readStock(officeId, productId)).toEqual({ onHand: 2, reserved: 0 });
+
+    // Ноль остаётся отказом и здесь: правка на то же число — запись в журнал, которая
+    // ни на один вопрос не отвечает.
+    await expect(
+      adjustStock({ officeId, productId, targetOnHand: 2, employeeId, note: 'пересчёт' }),
+    ).rejects.toBeInstanceOf(EmptyAdjustmentError);
+
+    // Дробное и отрицательное значение до целочисленной колонки не доезжают.
+    await expect(
+      adjustStock({ officeId, productId, targetOnHand: 2.5, employeeId, note: 'пересчёт' }),
+    ).rejects.toBeInstanceOf(InvalidStockTargetError);
+    await expect(
+      adjustStock({ officeId, productId, targetOnHand: -1, employeeId, note: 'пересчёт' }),
+    ).rejects.toBeInstanceOf(InvalidStockTargetError);
+
+    expect(await listStockMovements(officeId, productId)).toHaveLength(3);
+  });
+
+  it('правка новым значением заводит строку остатка с нуля', async () => {
+    const { employeeId } = await createTestEmployee({ role: 'manager' });
+    const officeId = await createTestOffice();
+    const productId = await createTestProduct({ pricePoints: 10 });
+
+    // Строки остатка нет вовсе: движений по паре не было ни одного. Остаток при этом —
+    // ноль, и правка обязана считать дельту от него, а не отказать.
+    expect(await readStock(officeId, productId)).toBeNull();
+
+    await adjustStock({
+      officeId,
+      productId,
+      targetOnHand: 4,
+      employeeId,
+      note: 'нашлось на полке',
+    });
+
+    expect(await readStock(officeId, productId)).toEqual({ onHand: 4, reserved: 0 });
+    expect(await listStockMovements(officeId, productId)).toEqual([
+      { kind: 'adjustment', productId, deltaOnHand: 4, deltaReserved: 0, orderId: null },
+    ]);
   });
 
   it('приход на несуществующий товар — доменная ошибка, а не отказ базы', async () => {

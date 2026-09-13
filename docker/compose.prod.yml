@@ -15,6 +15,11 @@ services:
     restart: unless-stopped
     env_file:
       - ../.env
+    volumes:
+      # Фото товаров. Том живёт отдельно от дерева выката: дерево целиком уходит в контекст
+      # сборки образа, и картинки ездили бы в docker build каждым выкатом. Копию тома снимает
+      # `docker/scripts/pg-backup.sh daily` рядом с дампом базы.
+      - uploads:/data/uploads
     ports:
       # Только на петлевом адресе, и это не вкусовщина: docker пишет правила в iptables мимо
       # ufw, и порт, опубликованный на всех адресах, фаервол машины не закроет — база на этой
@@ -114,3 +119,4 @@ networks:
 volumes:
   postgres_data:
   redis_data:
+  uploads:

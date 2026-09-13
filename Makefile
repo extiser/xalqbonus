@@ -6,7 +6,7 @@ COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
 
 .DEFAULT_GOAL := help
 
-.PHONY: help up up-d down restart logs ps shell psql migrate migrate-create generate typecheck test test-db \
+.PHONY: help up up-d down restart logs ps shell psql migrate migrate-create migrate-diff generate typecheck test test-db \
         db-restore db-schema invariants license-collisions legacy-vs-api import-legacy \
         employee-owner prod-employee-owner \
         import-legacy-dump \
@@ -177,6 +177,13 @@ sync-registry: ## Разовый прогон синхронизации про�
 # Что синхронизация думает о себе: отметки и последние прогоны со счётчиками.
 sync-state: ## Показать отметки синхронизации и последние прогоны
 	$(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -q' < scripts/sync-state.sql
+
+# Расхождение модели с боевой структурой. Молчит, когда схема и база сходятся; печатает
+# разницу, когда нет. Нужна там, где колонку правят миграцией руками или наоборот — модель
+# догоняет базу: `String?` на колонке `NOT NULL` не ловится ни типами, ни тестами, и жил он
+# так две задачи (issue #120).
+migrate-diff: ## Показать расхождение schema.prisma с локальной БД
+	$(COMPOSE) exec -T app npx prisma migrate diff --from-schema prisma/schema.prisma --to-config-datasource --exit-code
 
 typecheck: ## Проверить типы (nuxt typecheck)
 	npm run typecheck

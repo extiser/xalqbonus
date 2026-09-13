@@ -64,3 +64,22 @@ export type EmployeePasswordResponse = {
   /** Смена пароля гасит все выданные cookie, включая тот, которым её и делали. */
   passwordChanged: true;
 };
+
+/**
+ * Учётка в списке выбора: кого можно закрепить за офисом.
+ *
+ * Экраном учёток это не является и не становится — ни телефона, ни признаков входа здесь
+ * нет, править отсюда нечего. Список нужен ровно для того, чтобы привязка к офису выбиралась
+ * из заведённых людей, а не набиралась идентификатором руками (issue #120).
+ */
+export type EmployeeAccount = {
+  employeeId: string;
+  fullName: string;
+  role: EmployeeRole;
+  /** Учётка выключена. Закрепить её за офисом можно, но в списке это видно. */
+  disabled: boolean;
+};
+
+export type EmployeeAccountsResponse = {
+  employees: EmployeeAccount[];
+};
