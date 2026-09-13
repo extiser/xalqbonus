@@ -63,33 +63,29 @@ export const buildWelcomeIdempotencyKey = (personId: string): IdempotencyKey =>
   buildKey('welcome', personId);
 
 /**
- * Возврат баллов при отмене заказа товара: `order_refund:<order_id>`.
+ * Возврат баллов при отмене заказа товара: `order_refund:<orders.id>`.
  *
- * Здесь `order_id` — заказ товара за баллы, а не заказ такси. Каталога товаров ещё нет
- * (этап 6), поэтому единственный существующий идентификатор такого заказа — номер записи
- * старой базы, он же `point_transfers.legacy_order_id`.
+ * Здесь «заказ» — заказ товара за баллы, наша собственная сущность, а не заказ такси
+ * из Fleet API (docs/points.md).
+ *
+ * Ключ строится от `orders.id`, а не от сквозного номера `orders.number`: uuid рождается
+ * при вставке заказа и живёт с ним, тогда как номер — для людей, «№ 1042» на стойке
+ * и в истории водителя. Отмена водителем, сотрудником и просрочкой даёт один и тот же
+ * ключ, поэтому повторная отмена не возвращает баллы дважды, кто бы её ни позвал.
  */
-export const buildOrderRefundIdempotencyKey = (orderId: number): IdempotencyKey => {
-  if (!Number.isInteger(orderId)) {
-    throw new Error(`ключ идемпотентности order_refund: идентификатор заказа не целый (${orderId})`);
-  }
-
-  return buildKey('order_refund', String(orderId));
-};
+export const buildOrderRefundIdempotencyKey = (orderId: string): IdempotencyKey =>
+  buildKey('order_refund', orderId);
 
 /**
- * Списание баллов при заказе товара: `order_spend:<order_id>`.
+ * Списание баллов при заказе товара: `order_spend:<orders.id>`.
  *
- * Заказ товара, как и у возврата. Каталога ещё нет; ядру этот ключ нужен, чтобы
- * опустошить счёт в сценарии нехватки баллов тем же путём, каким это будет делать обмен.
+ * Заказ товара, как и у возврата. Баллы списываются в момент оформления, а не выдачи,
+ * одной транзакцией с резервом остатка (docs/decisions.md → «Каталог: заказ — это касса,
+ * остаток живёт по офисам»), поэтому ключ известен раньше самой строки заказа:
+ * идентификатор выдаётся оформлением до вставки.
  */
-export const buildOrderSpendIdempotencyKey = (orderId: number): IdempotencyKey => {
-  if (!Number.isInteger(orderId)) {
-    throw new Error(`ключ идемпотентности order_spend: идентификатор заказа не целый (${orderId})`);
-  }
-
-  return buildKey('order_spend', String(orderId));
-};
+export const buildOrderSpendIdempotencyKey = (orderId: string): IdempotencyKey =>
+  buildKey('order_spend', orderId);
 
 /**
  * Ручная правка: `manual:<uuid>`.

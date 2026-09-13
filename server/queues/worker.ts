@@ -6,6 +6,7 @@ import {
   createNotificationsWorker,
   getNotificationsQueue,
 } from '#server/queues/notifications';
+import { applyOrdersSchedule, createOrdersQueue, createOrdersWorker } from '#server/queues/orders';
 import { applySyncSchedule, createSyncQueue, createSyncWorker } from '#server/queues/sync';
 import { failAbandonedRuns } from '#server/repositories/syncRuns';
 import { readSyncConfig } from '#server/services/sync/config';
@@ -81,6 +82,22 @@ notificationsWorker.on('error', (error: Error) => {
   log.warn('очередь уведомлений сообщила об ошибке', { error: error.message });
 });
 
+// Просрочка заказов — третья очередь. Своя по той же причине, по которой своя у уведомлений:
+// прогон синхронизации идёт до получаса, и просрочка, вставшая за ним, держала бы резерв
+// товара и списанные баллы всё это время (server/queues/orders.ts).
+const ordersQueue = createOrdersQueue();
+const ordersWorker = createOrdersWorker();
+
+ordersWorker.on('failed', (job, error) => {
+  // Заказы отменяются по одному, каждый своей транзакцией, поэтому упавший прогон — это
+  // не потерянные заказы: следующий через пять минут возьмёт их снова.
+  log.error('прогон просрочки упал', { kind: job?.data.kind, error: error.message });
+});
+
+ordersWorker.on('error', (error: Error) => {
+  log.warn('очередь заказов сообщила об ошибке', { error: error.message });
+});
+
 // Прошлый процесс мог уйти по SIGKILL, не закрыв свою строку прогона: `syncWorker.close()`
 // на SIGTERM дожидается прогона, а `docker stop` по таймауту и убийство по памяти такой
 // возможности не дают. Подбираем брошенное — иначе журнал прогонов копит вечно бегущие строки.
@@ -96,6 +113,7 @@ if (abandoned > 0) {
 }
 
 await applySyncSchedule(syncQueue, config);
+await applyOrdersSchedule(ordersQueue);
 
 log.info('воркер запущен', {
   liveEnabled: config.liveEnabled,
@@ -114,6 +132,10 @@ const shutdown = async (signal: string): Promise<void> => {
   // синхронизация оставила бы строку `sync_runs` навсегда в состоянии `running`.
   await syncWorker.close();
   await syncQueue.close();
+  // Просрочка дожидается текущего прогона: он отменяет заказы по одному, и оборванный
+  // посередине оставит остальные следующему прогону — а не полузакрытый заказ.
+  await ordersWorker.close();
+  await ordersQueue.close();
   // Воркер уведомлений дожидается отправок, которые уже в руках: оборванная на середине
   // отправка — это сообщение, про которое неизвестно, ушло оно или нет.
   await notificationsWorker.close();

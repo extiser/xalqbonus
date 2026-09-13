@@ -1,3 +1,4 @@
+import type { Prisma } from '#server/generated/prisma/client';
 import type { PointReason } from '#server/generated/prisma/enums';
 import { writeTransfer, type TransferContext, type TransferRow } from '#server/repositories/points';
 import {
@@ -34,6 +35,19 @@ export type TransferPointsInput = {
   /** Время самой операции, а не время записи: у начисления за поездку это её завершение. */
   occurredAt: Date;
   context?: TransferContext;
+  /**
+   * Транзакция вызывающего, когда перевод — часть большей операции.
+   *
+   * Оформление и отмена заказа пишут заказ, резерв остатка и перевод одной транзакцией:
+   * списание, не откатившееся вместе с заказом, — это снятые у водителя баллы без товара
+   * (server/services/orders/). Пусто — перевод открывает транзакцию сам, как делают
+   * начисление за поездку и приветственный бонус.
+   *
+   * Сам примитив от этого не меняется: проверки, перевод отказа базы в доменную ошибку
+   * и разбор занятого ключа одни и те же на обоих путях. Подставляется так же, как
+   * у `ensureDriverAccount`.
+   */
+  client?: Prisma.TransactionClient;
 };
 
 export type TransferPointsResult = {
@@ -94,6 +108,7 @@ export const transferPoints = async (
       toAccountId: input.toAccountId,
       occurredAt: input.occurredAt,
       context: input.context ?? {},
+      client: input.client,
     });
   } catch (error) {
     if (isConstraintViolation(error, CHECK_VIOLATION, 'accounts_driver_balance_check')) {

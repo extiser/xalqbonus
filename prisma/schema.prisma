@@ -202,6 +202,48 @@ enum MatchMethod {
   @@schema("xb")
 }
 
+/// Почему остаток офиса изменился. Словарь наш, и каждый вид жёстко связан со знаками
+/// движения — соответствие проверяется `stock_movements_kind_signs_check` в миграции,
+/// чтобы неверная запись не прошла вовсе.
+enum StockMovementKind {
+  /// Приход в офис. Центрального склада нет: товар оформляется сразу в офис
+  /// (docs/decisions.md → «Каталог: заказ — это касса, остаток живёт по офисам»).
+  incoming
+  /// Правка остатка руками — пересчёт, бой, недостача. Автор и заметка обязательны:
+  /// правка без объяснения через месяц неотличима от ошибки кода.
+  adjustment
+  /// Оформление заказа: товар ушёл из свободного остатка в резерв.
+  order_reserve
+  /// Выдача заказа: резерв снят, товар ушёл из офиса.
+  order_issue
+  /// Отмена заказа: резерв снят, товар вернулся в свободный остаток.
+  order_release
+
+  @@map("stock_movement_kind")
+  @@schema("xb")
+}
+
+/// Состояние заказа за баллы. Висящий — `pending`, и только он занимает резерв и код.
+enum OrderStatus {
+  pending
+  issued
+  cancelled
+
+  @@map("order_status")
+  @@schema("xb")
+}
+
+/// Кто отменил заказ. Отмена водителем и сотрудником — один сервис с разной причиной,
+/// просрочку ставит воркер.
+enum OrderCancelReason {
+  driver
+  employee
+  expired
+
+  @@map("order_cancel_reason")
+  @@schema("xb")
+}
+
 /// Что стало при переносе с `chat_id` записи старой базы.
 enum LegacyTelegramStatus {
   linked
@@ -234,6 +276,7 @@ model Person {
   // частичным уникальным индексом, а частичный индекс Prisma выразить не умеет.
   accounts      Account[]
   legacyRecords LegacyDriverMap[]
+  orders        Order[]
 
   @@map("persons")
   @@schema("xb")
@@ -481,10 +524,14 @@ model Employee {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  invitesIssued  EmployeeInvite[] @relation("invite_invited_by")
-  acceptedInvite EmployeeInvite?  @relation("invite_employee")
-  pointTransfers PointTransfer[]
-  telegramLinks  TelegramLink[]
+  invitesIssued   EmployeeInvite[] @relation("invite_invited_by")
+  acceptedInvite  EmployeeInvite?  @relation("invite_employee")
+  pointTransfers  PointTransfer[]
+  telegramLinks   TelegramLink[]
+  offices         EmployeeOffice[]
+  ordersIssued    Order[]          @relation("order_issued_by")
+  ordersCancelled Order[]          @relation("order_cancelled_by")
+  stockMovements  StockMovement[]
 
   @@map("employees")
   @@schema("xb")
@@ -570,6 +617,15 @@ model PointTransfer {
   // Контекст операции — явными полями, а не jsonb: колонка с разнородным содержимым
   // не проверяется ни типом, ни запросом.
   tripOrderId     String? @map("trip_order_id")
+  /// Заказ товара за баллы — наша собственная сущность, а не заказ такси из Fleet API.
+  /// Рядом с `trip_order_id` намеренно: одно слово, разные вещи, и путать их в журнале
+  /// нельзя (docs/points.md).
+  ///
+  /// Внешний ключ отложенный (`DEFERRABLE INITIALLY DEFERRED`): ссылки кольцевые —
+  /// заказ помнит свой перевод списания, перевод помнит свой заказ, а ключ
+  /// идемпотентности строится от `orders.id`. Внутри одной транзакции сначала пишется
+  /// перевод, потом заказ, и проверка ссылки приходится на фиксацию.
+  orderId         String? @map("order_id") @db.Uuid
   legacyOrderId   Int?    @map("legacy_order_id")
   /// Путь, которым пришла операция. Заполняется в том числе автоматикой, у которой учётки
   /// нет вовсе (`legacy_import`), — поэтому остаётся строкой и смысла не меняет.
@@ -584,6 +640,12 @@ model PointTransfer {
   toAccount     Account      @relation("transfer_to_account", fields: [toAccountId], references: [id])
   actorEmployee Employee?    @relation(fields: [actorEmployeeId], references: [id])
   entries       PointEntry[]
+  order         Order?       @relation("transfer_order", fields: [orderId], references: [id])
+
+  // Обратные концы ссылок заказа на свои переводы. Связей между этими двумя таблицами
+  // три, и Prisma требует имя каждой: списание, возврат и контекстная колонка выше.
+  spentOnOrder  Order? @relation("order_spend_transfer")
+  refundedOrder Order? @relation("order_refund_transfer")
 
   @@index([reason, occurredAt])
   @@map("point_transfers")
@@ -917,5 +979,249 @@ model LegacyDriverMap {
   @@index([personId])
   @@index([profileId])
   @@map("legacy_driver_map")
+  @@schema("xb")
+}
+
+// ---------------------------------------------------------------------------
+// Каталог, офисы и заказ за баллы
+// ---------------------------------------------------------------------------
+
+/// Офис парка: место, где водитель получает товар.
+///
+/// Не удаляется никогда — на него ссылаются заказы, а история выдач обязана помнить,
+/// где именно человек забрал товар. Закрытый офис помечается `archived_at`: водителю
+/// он не показывается и заказов не принимает.
+///
+/// `address` — текст для человека, его берут сообщения водителю. `map_url` — ссылка
+/// на карту: в старой базе адресом была именно она, и подставить её в сообщение вместо
+/// адреса нельзя (docs/decisions.md → «Каталог: заказ — это касса, остаток живёт
+/// по офисам»).
+model Office {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String
+  address    String
+  mapUrl     String?   @map("map_url")
+  workHours  String?   @map("work_hours")
+  phoneE164  String?   @map("phone_e164")
+  telegram   String?
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  employees EmployeeOffice[]
+  stock     OfficeStock[]
+  movements StockMovement[]
+  orders    Order[]
+
+  @@map("offices")
+  @@schema("xb")
+}
+
+/// За какими офисами закреплён сотрудник. Связь многие-ко-многим, отложенная в `#84`
+/// до появления таблицы офисов: связи под несуществующую таблицу не бывает
+/// (docs/decisions.md → «Учётка сотрудника и роли»).
+///
+/// Своего `id` у строки нет: пара и есть её личность, и второй такой пары не существует.
+model EmployeeOffice {
+  employeeId String   @map("employee_id") @db.Uuid
+  officeId   String   @map("office_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+  office   Office   @relation(fields: [officeId], references: [id])
+
+  @@id([employeeId, officeId])
+  @@index([officeId])
+  @@map("employee_offices")
+  @@schema("xb")
+}
+
+/// Товар каталога.
+///
+/// Не удаляется, а архивируется: на него ссылаются позиции заказов, и позиция обязана
+/// помнить, что именно было заказано.
+///
+/// Три цены рядом не дублируют друг друга: `price_points` — чем платит водитель,
+/// `price_retail` и `price_cost` — сумы, по ним считается стоимость балла для отчёта
+/// парку. `price_points` строго положителен, розница и себестоимость неотрицательны —
+/// проверками в миграции.
+///
+/// Имя одно: названия каталога — бренды и «тряпка для кузова», парк пишет их сам,
+/// и узбекская колонка впрок не закладывается (docs/decisions.md).
+model Product {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  description String?
+  /// Относительный путь на именованном томе приложения. Файл кладёт веб — здесь только
+  /// колонка (docs/decisions.md → «Фото товара — файл на именованном томе приложения»).
+  photoPath   String?   @map("photo_path")
+  pricePoints Int       @map("price_points")
+  /// Розничная цена в сумах.
+  priceRetail Int       @map("price_retail")
+  /// Себестоимость в сумах.
+  priceCost   Int       @map("price_cost")
+  archivedAt  DateTime? @map("archived_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  stock      OfficeStock[]
+  movements  StockMovement[]
+  orderItems OrderItem[]
+
+  @@map("products")
+  @@schema("xb")
+}
+
+/// Остаток товара в офисе. Это **кэш**, ровно в том же смысле, в каком `accounts.balance`
+/// кэш журнала баллов: истина — `stock_movements`, а равенство проверяется запросами
+/// из scripts/invariants.sql.
+///
+/// Прямой `UPDATE` этой таблицы запрещён везде, кроме операций, пишущих движение
+/// в той же транзакции, — так же, как прямое изменение баланса.
+///
+/// Оба поля неотрицательны проверкой в миграции: минус в остатке — это ошибка кода,
+/// и база обязана её остановить, а не записать.
+model OfficeStock {
+  officeId  String   @map("office_id") @db.Uuid
+  productId String   @map("product_id") @db.Uuid
+  /// Свободный остаток: то, что лежит в офисе и ещё никем не занято.
+  onHand    Int      @default(0) @map("on_hand")
+  /// Занято висящими заказами. Равно сумме позиций `pending`-заказов этого офиса —
+  /// третий запрос остатков в scripts/invariants.sql.
+  reserved  Int      @default(0)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  office  Office  @relation(fields: [officeId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  @@id([officeId, productId])
+  @@index([productId])
+  @@map("office_stock")
+  @@schema("xb")
+}
+
+/// Журнал движения остатков: каждая строка отвечает на вопрос «почему остаток такой».
+///
+/// Знаки задаются видом движения и проверяются в базе
+/// (`stock_movements_kind_signs_check`): `incoming` — плюс к свободному остатку,
+/// `adjustment` — правка в любую сторону с автором и заметкой, `order_reserve` —
+/// из свободного в резерв, `order_issue` — резерв ушёл из офиса, `order_release` —
+/// резерв вернулся в свободный остаток. Три последних обязаны нести заказ.
+model StockMovement {
+  /// Журнальная таблица, на которую никто не ссылается, — bigint identity вместо uuid.
+  id            BigInt            @id @default(autoincrement())
+  officeId      String            @map("office_id") @db.Uuid
+  productId     String            @map("product_id") @db.Uuid
+  kind          StockMovementKind
+  deltaOnHand   Int               @default(0) @map("delta_on_hand")
+  deltaReserved Int               @default(0) @map("delta_reserved")
+  /// Заказ, которым вызвано движение. Пуст у прихода и правки, обязателен у трёх
+  /// видов заказа.
+  orderId       String?           @map("order_id") @db.Uuid
+  /// Сотрудник, оформивший приход, правку или выдачу. Пуст у движения, которое сделал
+  /// водитель из Mini App или воркер просрочки.
+  employeeId    String?           @map("employee_id") @db.Uuid
+  note          String?
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  office   Office    @relation(fields: [officeId], references: [id])
+  product  Product   @relation(fields: [productId], references: [id])
+  order    Order?    @relation(fields: [orderId], references: [id])
+  employee Employee? @relation(fields: [employeeId], references: [id])
+
+  @@index([officeId, productId, id])
+  @@index([orderId])
+  @@map("stock_movements")
+  @@schema("xb")
+}
+
+/// Заказ товара за баллы.
+///
+/// Заказ — это касса: баллы списываются в момент оформления, а не выдачи, одной
+/// транзакцией вместе с резервом остатка. Выдача переводов не делает вовсе, отмена
+/// возвращает баллы целиком (docs/decisions.md → «Каталог: заказ — это касса, остаток
+/// живёт по офисам»).
+///
+/// Согласованность статуса с полями держится проверками в миграции: у `issued` заполнены
+/// время и сотрудник выдачи, у `cancelled` — время, причина и перевод возврата, автор
+/// отмены есть только у причины `employee`.
+model Order {
+  id       String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// Сквозной номер для людей: «№ 1042» в истории водителя и на стойке. Для ключей
+  /// идемпотентности не годится — они строятся от `id`, который рождается при вставке
+  /// и живёт с заказом (docs/points.md).
+  number   Int    @unique @default(autoincrement())
+  personId String @map("person_id") @db.Uuid
+  /// Один заказ — один офис: остатки по офисам разные, и водитель выбирает офис
+  /// до витрины.
+  officeId String @map("office_id") @db.Uuid
+
+  status OrderStatus
+  /// Пять цифр, которые водитель называет на стойке. Уникальны среди `pending`
+  /// частичным индексом: выданные и отменённые коды освобождаются.
+  code   String
+
+  /// Сумма заказа на момент оформления. Ровно столько списано и ровно столько
+  /// возвращается при отмене.
+  totalPoints Int      @map("total_points")
+  /// Когда заказ перестаёт висеть. Автоотмена — сутки (docs/decisions.md).
+  expiresAt   DateTime @map("expires_at") @db.Timestamptz(6)
+
+  issuedAt           DateTime? @map("issued_at") @db.Timestamptz(6)
+  issuedByEmployeeId String?   @map("issued_by_employee_id") @db.Uuid
+
+  cancelledAt           DateTime?          @map("cancelled_at") @db.Timestamptz(6)
+  cancelReason          OrderCancelReason? @map("cancel_reason")
+  /// Сотрудник, отменивший заказ. Пуст у отмены водителем и у просрочки — там человека
+  /// не было.
+  cancelledByEmployeeId String?            @map("cancelled_by_employee_id") @db.Uuid
+
+  /// Перевод списания. Заполнен всегда: заказа без погашения баллов не бывает.
+  spendTransferId  String  @unique @map("spend_transfer_id") @db.Uuid
+  /// Перевод возврата. Появляется вместе со статусом `cancelled`.
+  refundTransferId String? @unique @map("refund_transfer_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  person              Person         @relation(fields: [personId], references: [id])
+  office              Office         @relation(fields: [officeId], references: [id])
+  issuedByEmployee    Employee?      @relation("order_issued_by", fields: [issuedByEmployeeId], references: [id])
+  cancelledByEmployee Employee?      @relation("order_cancelled_by", fields: [cancelledByEmployeeId], references: [id])
+  spendTransfer       PointTransfer  @relation("order_spend_transfer", fields: [spendTransferId], references: [id])
+  refundTransfer      PointTransfer? @relation("order_refund_transfer", fields: [refundTransferId], references: [id])
+
+  items     OrderItem[]
+  movements StockMovement[]
+  /// Переводы, помнящие этот заказ контекстной колонкой. Те же списание и возврат,
+  /// с другой стороны ссылки.
+  transfers PointTransfer[] @relation("transfer_order")
+
+  @@index([personId, createdAt])
+  @@index([officeId, status])
+  @@map("orders")
+  @@schema("xb")
+}
+
+/// Позиция заказа. Помнит цену на момент оформления: цена товара меняется, а заказ
+/// обязан помнить, за сколько был оформлен (docs/decisions.md).
+model OrderItem {
+  /// Журнальная таблица, на которую никто не ссылается, — bigint identity вместо uuid.
+  id         BigInt @id @default(autoincrement())
+  orderId    String @map("order_id") @db.Uuid
+  productId  String @map("product_id") @db.Uuid
+  quantity   Int
+  unitPoints Int    @map("unit_points")
+
+  order   Order   @relation(fields: [orderId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  /// Один товар — одна строка в заказе: две строки на один товар означали бы два
+  /// разных количества одного и того же.
+  @@unique([orderId, productId])
+  @@index([productId])
+  @@map("order_items")
   @@schema("xb")
 }

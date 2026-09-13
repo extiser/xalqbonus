@@ -36,6 +36,16 @@ export type TransferRow = {
 /** Контекст операции — явными полями, а не jsonb: разнородная колонка не проверяется ничем. */
 export type TransferContext = {
   tripOrderId?: string | null;
+  /**
+   * Заказ товара за баллы — `orders.id`. Рядом с `tripOrderId` и путать их нельзя:
+   * у поездки это заказ такси из Fleet API, здесь — наша собственная сущность
+   * (docs/points.md).
+   *
+   * Внешний ключ на `orders` отложенный, поэтому перевод списания пишется раньше самого
+   * заказа: ключ идемпотентности строится от `orders.id`, а заказ обязан сослаться
+   * на перевод колонкой `spend_transfer_id`.
+   */
+  orderId?: string | null;
   legacyOrderId?: number | null;
   actor?: string | null;
   note?: string | null;
@@ -49,6 +59,18 @@ export type WriteTransferInput = {
   toAccountId: string;
   occurredAt: Date;
   context: TransferContext;
+  /**
+   * Транзакция вызывающего, когда перевод — часть большей операции.
+   *
+   * Подставляется там, где перевод обязан откатиться вместе со всем остальным: оформление
+   * заказа пишет заказ, позиции, резерв остатка и списание баллов одной транзакцией, и
+   * частичный результат означал бы либо зарезервированный товар без списания, либо списание
+   * без заказа. Своя транзакция сюда не годится: это другое соединение, оно не видит
+   * незафиксированных строк вызывающего и ждёт его же блокировок.
+   *
+   * Пусто — перевод сам себе операция и открывает транзакцию сам.
+   */
+  client?: Prisma.TransactionClient;
 };
 
 export type WriteTransferResult = {
@@ -164,11 +186,15 @@ const selectTransferByIdempotencyKey = async (
 /**
  * Записывает перевод целиком: строка `point_transfers`, две строки `point_entries`
  * и два обновления кэша баланса — в одной транзакции. Половины перевода не бывает.
+ *
+ * Транзакция либо своя, либо вызывающего (`input.client`) — см. поле в описании входа.
+ * Записей это не меняет ничем: порядок блокировок, ограничение на ключ и инкремент
+ * на стороне базы у обоих путей одни и те же.
  */
 export const writeTransfer = async (input: WriteTransferInput): Promise<WriteTransferResult> => {
   const amountLiteral = asBigintLiteral(input.amount);
 
-  return db.$transaction(async (transaction) => {
+  const write = async (transaction: Prisma.TransactionClient): Promise<WriteTransferResult> => {
     // Счета блокируются по возрастанию идентификатора, независимо от того, кто из них
     // источник: два встречных перевода между одной парой счетов иначе встают в дедлок.
     // `ORDER BY` здесь не косметика — узел блокировки стоит над сортировкой, и порядок
@@ -187,7 +213,7 @@ export const writeTransfer = async (input: WriteTransferInput): Promise<WriteTra
       INSERT INTO xb.point_transfers (
         "reason", "idempotency_key", "amount",
         "from_account_id", "to_account_id", "occurred_at",
-        "trip_order_id", "legacy_order_id", "actor", "note"
+        "trip_order_id", "order_id", "legacy_order_id", "actor", "note"
       )
       VALUES (
         ${input.reason}::xb.point_reason,
@@ -197,6 +223,7 @@ export const writeTransfer = async (input: WriteTransferInput): Promise<WriteTra
         ${input.toAccountId}::uuid,
         ${input.occurredAt},
         ${input.context.tripOrderId ?? null},
+        ${input.context.orderId ?? null}::uuid,
         ${input.context.legacyOrderId ?? null},
         ${input.context.actor ?? null},
         ${input.context.note ?? null}
@@ -251,7 +278,9 @@ export const writeTransfer = async (input: WriteTransferInput): Promise<WriteTra
     }
 
     return { transfer, applied: true };
-  });
+  };
+
+  return input.client ? write(input.client) : db.$transaction(write);
 };
 
 export type BalanceTotals = {
