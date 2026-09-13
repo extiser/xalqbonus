@@ -30,10 +30,7 @@ const emit = defineEmits<{ upload: [file: File] }>();
 const chosen = ref<File | null>(null);
 const sizeNotice = ref<string | null>(null);
 
-const choose = (event: Event): void => {
-  const input = event.target;
-  const file = input instanceof HTMLInputElement ? (input.files?.[0] ?? null) : null;
-
+const choose = (file: File | null): void => {
   if (file && file.size > MAX_PHOTO_BYTES) {
     // Файл не принимается, и сказано об этом здесь же, не дожидаясь запроса: отправлять
     // пять мегабайт, чтобы узнать, что их не примут, — это ожидание впустую на мобильной
@@ -68,13 +65,7 @@ const submit = (): void => {
       <form class="min-w-64 flex-1 space-y-3" @submit.prevent="submit">
         <label class="block">
           <span class="mb-1 block text-sm font-medium text-slate-700">Новый файл</span>
-          <input
-            type="file"
-            :accept="PHOTO_ACCEPT"
-            required
-            class="w-full cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-3 file:py-1 file:text-sm file:text-slate-700 focus-visible:border-slate-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
-            @change="choose"
-          />
+          <AtomsFileInput :accept="PHOTO_ACCEPT" required @change="choose" />
           <span class="mt-1 block text-sm text-slate-500">
             JPEG, PNG или WebP, до {{ MAX_PHOTO_MB }} МБ. Прежнее фото заменится.
           </span>

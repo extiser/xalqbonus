@@ -4,6 +4,7 @@ import { employeeRoleLabel } from '~/utils/labels';
 import type { OfficeEmployee } from '#shared/types/catalog';
 import type { EmployeeAccount } from '#shared/types/employee';
 import type { LoadState } from '~/types/loadState';
+import type { SelectOption } from '~/types/selectOption';
 
 /**
  * Кто закреплён за офисом.
@@ -35,6 +36,19 @@ const attachedIds = computed(() => new Set(props.employees.map((employee) => emp
 /** В выборе только незакреплённые: закреплённый второй раз не добавляется. */
 const candidates = computed(() =>
   (props.accounts ?? []).filter((account) => !attachedIds.value.has(account.employeeId)),
+);
+
+/**
+ * Подписи вариантов собирает экран, а не поле: «доступ закрыт» рядом с именем — то, что
+ * должен знать закрепляющий, и поле про это ничего не знает.
+ */
+const candidateOptions = computed<SelectOption[]>(() =>
+  candidates.value.map((account) => ({
+    value: account.employeeId,
+    label: `${account.fullName} · ${employeeRoleLabel(account.role)}${
+      account.disabled ? ' · доступ закрыт' : ''
+    }`,
+  })),
 );
 
 const add = (): void => {
@@ -100,21 +114,9 @@ const remove = (employeeId: string): void => {
         <div v-else class="flex flex-wrap items-end gap-3">
           <label class="block min-w-56 flex-1">
             <span class="mb-1 block text-sm font-medium text-slate-700">Добавить сотрудника</span>
-            <select
-              v-model="chosen"
-              class="w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 transition-colors focus-visible:border-slate-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
-            >
+            <AtomsSelectInput v-model="chosen" :options="candidateOptions">
               <option value="">Выберите учётку</option>
-              <option
-                v-for="account in candidates"
-                :key="account.employeeId"
-                :value="account.employeeId"
-              >
-                {{ account.fullName }} · {{ employeeRoleLabel(account.role) }}{{
-                  account.disabled ? ' · доступ закрыт' : ''
-                }}
-              </option>
-            </select>
+            </AtomsSelectInput>
           </label>
           <AtomsActionButton
             label="Закрепить"
