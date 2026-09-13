@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { ensureDriverAccount } from '#server/services/points/ensureDriverAccount';
@@ -114,8 +116,8 @@ describe('параллельная запись в журнал', () => {
       return transferPoints({
         reason: towardsRedemption ? 'order_spend' : 'order_refund',
         idempotencyKey: towardsRedemption
-          ? buildOrderSpendIdempotencyKey(900000 + index)
-          : buildOrderRefundIdempotencyKey(900000 + index),
+          ? buildOrderSpendIdempotencyKey(randomUUID())
+          : buildOrderRefundIdempotencyKey(randomUUID()),
         amount: 1,
         fromAccountId: towardsRedemption ? driverAccount.id : redemptionAccount.id,
         toAccountId: towardsRedemption ? redemptionAccount.id : driverAccount.id,

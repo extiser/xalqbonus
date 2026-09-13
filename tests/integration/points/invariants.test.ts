@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -86,27 +87,28 @@ describe('инварианты журнала', () => {
     await awardTripPoints(tripOrderIds);
 
     const driverAccount = await ensureDriverAccount(participant.personId);
-    const legacyOrderId = 555001;
+    // Идентификатор заказа случайный, и контекстную колонку перевод не несёт: проверяются
+    // инварианты журнала, а не заказ, — он со своими инвариантами лежит
+    // в tests/integration/orders/.
+    const orderId = randomUUID();
 
     // Списание и возврат — чтобы в журнале оказались переводы в обе стороны.
     await transferPoints({
       reason: 'order_spend',
-      idempotencyKey: buildOrderSpendIdempotencyKey(legacyOrderId),
+      idempotencyKey: buildOrderSpendIdempotencyKey(orderId),
       amount: 2,
       fromAccountId: driverAccount.id,
       toAccountId: redemptionAccountId,
       occurredAt: completedAt,
-      context: { legacyOrderId },
     });
 
     await transferPoints({
       reason: 'order_refund',
-      idempotencyKey: buildOrderRefundIdempotencyKey(legacyOrderId),
+      idempotencyKey: buildOrderRefundIdempotencyKey(orderId),
       amount: 2,
       fromAccountId: redemptionAccountId,
       toAccountId: driverAccount.id,
       occurredAt: completedAt,
-      context: { legacyOrderId },
     });
 
     for (const query of queries) {

@@ -1,5 +1,5 @@
--- Инварианты базы: четыре запроса журнала баллов из docs/points.md и один запрос
--- о пересечении ролей.
+-- Инварианты базы: четыре запроса журнала баллов из docs/points.md, три запроса остатков
+-- по офисам и один запрос о пересечении ролей.
 --
 -- Каждый запрос возвращает ПУСТОЙ результат, когда всё хорошо. Непустой — повод
 -- разбираться, а не чинить автоматически.
@@ -16,8 +16,9 @@
 -- tests/integration/points/invariants.test.ts: он берёт запросы отсюда, а не держит
 -- их вторую копию у себя. Копия инварианта разошлась бы с оригиналом на первой правке.
 -- Ими размечены ровно четыре инварианта журнала: пятый появляется правкой docs/points.md,
--- а не молча. Проверка пересечения ролей журналу баллов не принадлежит и размечена своей
--- парой `-- cross-role:begin` / `-- cross-role:end` — её берёт тест сотрудников.
+-- а не молча. Проверки, журналу баллов не принадлежащие, размечены своими парами: остатки
+-- по офисам — `-- stock:begin N` / `-- stock:end`, пересечение ролей —
+-- `-- cross-role:begin` / `-- cross-role:end`. Их берут тесты заказов и сотрудников.
 --
 -- На переходный период, пока жив старый бот, расхождение по второму инварианту
 -- ожидаемо: старый бот продолжает править балансы в `public` мимо нашего журнала.
@@ -88,7 +89,78 @@ WHERE type = 'driver' AND balance < 0
 ;
 SELECT :ROW_COUNT > 0 AS violated_fourth \gset
 
-\warn '=== 5. Пересечение ролей: сотрудник с активной водительской привязкой ==='
+\warn '=== 5. Остаток офиса расходится с журналом движения: свободный остаток ==='
+-- stock:begin 1
+-- Тот же смысл, что у второго инварианта баллов: `office_stock` — кэш, истина —
+-- `stock_movements`. Расхождение означает, что кто-то правит остаток мимо движения.
+SELECT
+    stock.office_id,
+    stock.product_id,
+    stock.on_hand                        AS cached_on_hand,
+    COALESCE(SUM(movement.delta_on_hand), 0) AS journal_on_hand,
+    stock.on_hand - COALESCE(SUM(movement.delta_on_hand), 0) AS difference
+FROM xb.office_stock AS stock
+LEFT JOIN xb.stock_movements AS movement
+       ON movement.office_id = stock.office_id
+      AND movement.product_id = stock.product_id
+GROUP BY stock.office_id, stock.product_id, stock.on_hand
+HAVING stock.on_hand <> COALESCE(SUM(movement.delta_on_hand), 0)
+-- stock:end
+;
+SELECT :ROW_COUNT > 0 AS violated_stock_on_hand \gset
+
+\warn '=== 6. Остаток офиса расходится с журналом движения: резерв ==='
+-- stock:begin 2
+-- Резерв считается по тому же журналу и теми же строками: у резерва своя колонка дельты,
+-- потому что одно движение меняет свободный остаток и резерв одновременно.
+SELECT
+    stock.office_id,
+    stock.product_id,
+    stock.reserved                            AS cached_reserved,
+    COALESCE(SUM(movement.delta_reserved), 0) AS journal_reserved,
+    stock.reserved - COALESCE(SUM(movement.delta_reserved), 0) AS difference
+FROM xb.office_stock AS stock
+LEFT JOIN xb.stock_movements AS movement
+       ON movement.office_id = stock.office_id
+      AND movement.product_id = stock.product_id
+GROUP BY stock.office_id, stock.product_id, stock.reserved
+HAVING stock.reserved <> COALESCE(SUM(movement.delta_reserved), 0)
+-- stock:end
+;
+SELECT :ROW_COUNT > 0 AS violated_stock_reserved \gset
+
+\warn '=== 7. Резерв не равен сумме позиций висящих заказов ==='
+-- stock:begin 3
+-- Третий запрос проверяет не кэш против журнала, а смысл самого резерва: занято ровно
+-- столько, сколько ждут висящие заказы этого офиса. Ловит резерв, не снятый при выдаче
+-- или отмене, — то есть товар, заблокированный навсегда.
+--
+-- Считается двусторонне: в результат попадают и пары с ненулевым резервом без заказов,
+-- и пары с заказами без резерва. Односторонний запрос пропустил бы ровно ту половину,
+-- в которой резерв забыли снять.
+SELECT
+    COALESCE(stock.office_id, pending.office_id)   AS office_id,
+    COALESCE(stock.product_id, pending.product_id) AS product_id,
+    COALESCE(stock.reserved, 0)                    AS cached_reserved,
+    COALESCE(pending.quantity, 0)                  AS pending_quantity
+FROM xb.office_stock AS stock
+FULL JOIN (
+    SELECT "order".office_id,
+           item.product_id,
+           SUM(item.quantity) AS quantity
+    FROM xb.orders AS "order"
+    JOIN xb.order_items AS item ON item.order_id = "order".id
+    WHERE "order".status = 'pending'
+    GROUP BY "order".office_id, item.product_id
+) AS pending
+  ON pending.office_id = stock.office_id
+ AND pending.product_id = stock.product_id
+WHERE COALESCE(stock.reserved, 0) <> COALESCE(pending.quantity, 0)
+-- stock:end
+;
+SELECT :ROW_COUNT > 0 AS violated_stock_pending \gset
+
+\warn '=== 8. Пересечение ролей: сотрудник с активной водительской привязкой ==='
 -- cross-role:begin
 -- Водителем и сотрудником одновременно быть нельзя. Правило держится кодом — проверкой
 -- с обеих сторон, при принятии приглашения и при привязке водителя, — потому что таблицы
@@ -131,6 +203,9 @@ SELECT (
  OR :'violated_second'::boolean
  OR :'violated_third'::boolean
  OR :'violated_fourth'::boolean
+ OR :'violated_stock_on_hand'::boolean
+ OR :'violated_stock_reserved'::boolean
+ OR :'violated_stock_pending'::boolean
  OR :'violated_fifth'::boolean
 ) AS any_violated \gset
 
@@ -139,5 +214,5 @@ DO $$ BEGIN
     RAISE EXCEPTION 'инварианты нарушены — разбирать по выводу выше';
 END $$;
 \else
-\warn 'Инварианты сходятся: журнал баллов и разделение ролей.'
+\warn 'Инварианты сходятся: журнал баллов, остатки по офисам и разделение ролей.'
 \endif

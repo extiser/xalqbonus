@@ -1,0 +1,266 @@
+import { db } from '#server/db';
+import type { Prisma } from '#server/generated/prisma/client';
+import type { OrderCancelReason, OrderStatus } from '#server/generated/prisma/enums';
+
+/**
+ * Заказы за баллы и их позиции.
+ *
+ * Все операции над висящим заказом берут его строку `FOR UPDATE` и проверяют статус
+ * под блокировкой. Это и есть защита от двойного тапа: две выдачи одного кода, пришедшие
+ * разом, выстраиваются в очередь, и вторая видит уже `issued`. Проверка «а не выдан ли
+ * он?» без блокировки ломается ровно в этом месте (docs/principles.md →
+ * «Идемпотентность вместо аккуратности»).
+ *
+ * Схема в сыром SQL указывается явно — `xb.orders`, а не `orders`: `?schema=xb` в строке
+ * подключения понимает Prisma, а не `pg` (docs/decisions.md → «В сыром SQL схема
+ * указывается явно»).
+ */
+
+export type OrderRow = {
+  id: string;
+  /** Сквозной номер для людей. Ключи идемпотентности строятся от `id`, а не от него. */
+  number: number;
+  personId: string;
+  officeId: string;
+  status: OrderStatus;
+  code: string;
+  totalPoints: number;
+  expiresAt: Date;
+  spendTransferId: string;
+  refundTransferId: string | null;
+};
+
+export type InsertOrderInput = {
+  /**
+   * Идентификатор заказа, выданный вызывающим, а не базой.
+   *
+   * Единственное место в проекте, где uuid приходит из приложения, и причина та же, что
+   * у отложенного внешнего ключа: ключ идемпотентности списания строится от `orders.id`,
+   * а перевод записывается раньше заказа — заказ обязан сослаться на него колонкой
+   * `spend_transfer_id`. Значит идентификатор должен быть известен до вставки.
+   */
+  id: string;
+  personId: string;
+  officeId: string;
+  code: string;
+  totalPoints: number;
+  spendTransferId: string;
+  /** Сколько часов заказ висит. Срок считает база, чтобы время было одним на все заказы. */
+  expiresInHours: number;
+};
+
+/**
+ * Вставляет заказ в статусе `pending`.
+ *
+ * `null` означает ровно одно: код уже занят другим висящим заказом. Отказ гасится
+ * `ON CONFLICT … DO NOTHING` по частичному уникальному индексу, а не ловится исключением,
+ * потому что отбитая вставка отравляет транзакцию целиком — и попытка с новым кодом
+ * требовала бы переоткрыть её вместе с уже взятыми блокировками остатка.
+ */
+export const insertOrder = async (
+  client: Prisma.TransactionClient,
+  input: InsertOrderInput,
+): Promise<OrderRow | null> => {
+  const rows = await client.$queryRaw<OrderRow[]>`
+    INSERT INTO xb.orders (
+      "id", "person_id", "office_id", "status", "code",
+      "total_points", "expires_at", "spend_transfer_id"
+    )
+    VALUES (
+      ${input.id}::uuid,
+      ${input.personId}::uuid,
+      ${input.officeId}::uuid,
+      'pending'::xb.order_status,
+      ${input.code},
+      ${input.totalPoints},
+      now() + make_interval(hours => ${input.expiresInHours}),
+      ${input.spendTransferId}::uuid
+    )
+    ON CONFLICT ("code") WHERE "status" = 'pending' DO NOTHING
+    RETURNING "id",
+              "number",
+              "person_id"          AS "personId",
+              "office_id"          AS "officeId",
+              "status",
+              "code",
+              "total_points"       AS "totalPoints",
+              "expires_at"         AS "expiresAt",
+              "spend_transfer_id"  AS "spendTransferId",
+              "refund_transfer_id" AS "refundTransferId"
+  `;
+
+  return rows[0] ?? null;
+};
+
+export type OrderItemInput = {
+  productId: string;
+  quantity: number;
+  /** Цена товара на момент заказа. Дальше она живёт своей жизнью от цены каталога. */
+  unitPoints: number;
+};
+
+/** Позиции заказа, одним запросом: `unnest` разворачивает три массива в строки. */
+export const insertOrderItems = async (
+  client: Prisma.TransactionClient,
+  orderId: string,
+  items: OrderItemInput[],
+): Promise<void> => {
+  await client.$executeRaw`
+    INSERT INTO xb.order_items ("order_id", "product_id", "quantity", "unit_points")
+    SELECT ${orderId}::uuid, "productId", "quantity", "unitPoints"
+      FROM unnest(
+             ${items.map((item) => item.productId)}::uuid[],
+             ${items.map((item) => item.quantity)}::int[],
+             ${items.map((item) => item.unitPoints)}::int[]
+           ) AS item("productId", "quantity", "unitPoints")
+  `;
+};
+
+export type OrderItemRow = {
+  productId: string;
+  quantity: number;
+  unitPoints: number;
+};
+
+/**
+ * Позиции заказа в порядке `product_id`.
+ *
+ * Порядок не для показа, а для блокировок: выдача и отмена берут по этим товарам строки
+ * остатка, и брать их надо в том же порядке, в котором их берёт оформление.
+ */
+export const listOrderItems = async (
+  client: Prisma.TransactionClient,
+  orderId: string,
+): Promise<OrderItemRow[]> =>
+  client.$queryRaw<OrderItemRow[]>`
+    SELECT "product_id"  AS "productId",
+           "quantity",
+           "unit_points" AS "unitPoints"
+      FROM xb.order_items
+     WHERE "order_id" = ${orderId}::uuid
+     ORDER BY "product_id"
+  `;
+
+/**
+ * Висящий заказ по коду **и офису**, под блокировку.
+ *
+ * Офис входит в условие, а не проверяется после: сотрудник чужого офиса не должен узнать,
+ * что такой код вообще существует. «Заказ оформлен в другом офисе» — это подтверждение
+ * кода тому, кто стоит не там.
+ */
+export const lockPendingOrderByCode = async (
+  client: Prisma.TransactionClient,
+  code: string,
+  officeId: string,
+): Promise<OrderRow | null> => {
+  const rows = await client.$queryRaw<OrderRow[]>`
+    SELECT "id",
+           "number",
+           "person_id"          AS "personId",
+           "office_id"          AS "officeId",
+           "status",
+           "code",
+           "total_points"       AS "totalPoints",
+           "expires_at"         AS "expiresAt",
+           "spend_transfer_id"  AS "spendTransferId",
+           "refund_transfer_id" AS "refundTransferId"
+      FROM xb.orders
+     WHERE "code" = ${code}
+       AND "office_id" = ${officeId}::uuid
+       AND "status" = 'pending'
+       FOR UPDATE
+  `;
+
+  return rows[0] ?? null;
+};
+
+/** Заказ по идентификатору, под блокировку. Статус проверяет вызывающий — уже под ней. */
+export const lockOrderById = async (
+  client: Prisma.TransactionClient,
+  orderId: string,
+): Promise<OrderRow | null> => {
+  const rows = await client.$queryRaw<OrderRow[]>`
+    SELECT "id",
+           "number",
+           "person_id"          AS "personId",
+           "office_id"          AS "officeId",
+           "status",
+           "code",
+           "total_points"       AS "totalPoints",
+           "expires_at"         AS "expiresAt",
+           "spend_transfer_id"  AS "spendTransferId",
+           "refund_transfer_id" AS "refundTransferId"
+      FROM xb.orders
+     WHERE "id" = ${orderId}::uuid
+       FOR UPDATE
+  `;
+
+  return rows[0] ?? null;
+};
+
+/**
+ * Переводит заказ в `issued`.
+ *
+ * `status = 'pending'` остаётся в условии, хотя статус уже проверен под блокировкой:
+ * условие стоит рядом с записью и не зависит от того, что вызывающий сделал до него.
+ * Возвращается число изменённых строк — ноль означает, что заказ перестал быть висящим.
+ */
+export const markOrderIssued = async (
+  client: Prisma.TransactionClient,
+  orderId: string,
+  employeeId: string,
+  issuedAt: Date,
+): Promise<number> =>
+  client.$executeRaw`
+    UPDATE xb.orders
+       SET "status" = 'issued'::xb.order_status,
+           "issued_at" = ${issuedAt},
+           "issued_by_employee_id" = ${employeeId}::uuid,
+           "updated_at" = now()
+     WHERE "id" = ${orderId}::uuid AND "status" = 'pending'
+  `;
+
+export type MarkOrderCancelledInput = {
+  orderId: string;
+  reason: OrderCancelReason;
+  /** Только у причины `employee`: у отмены водителем и у просрочки человека не было. */
+  employeeId: string | null;
+  refundTransferId: string;
+  cancelledAt: Date;
+};
+
+export const markOrderCancelled = async (
+  client: Prisma.TransactionClient,
+  input: MarkOrderCancelledInput,
+): Promise<number> =>
+  client.$executeRaw`
+    UPDATE xb.orders
+       SET "status" = 'cancelled'::xb.order_status,
+           "cancelled_at" = ${input.cancelledAt},
+           "cancel_reason" = ${input.reason}::xb.order_cancel_reason,
+           "cancelled_by_employee_id" = ${input.employeeId}::uuid,
+           "refund_transfer_id" = ${input.refundTransferId}::uuid,
+           "updated_at" = now()
+     WHERE "id" = ${input.orderId}::uuid AND "status" = 'pending'
+  `;
+
+/**
+ * Висящие заказы с истёкшим сроком — вход воркера просрочки.
+ *
+ * Возвращаются только идентификаторы и номера: каждый заказ отменяется своей транзакцией,
+ * и прочитанное здесь состояние к моменту отмены уже неактуально — оно перечитывается
+ * под блокировкой.
+ *
+ * Срок сравнивается с `now()` базы, а не с временем приложения: заказ и его срок пишет
+ * база, и сверять их надо её часами.
+ */
+export const listExpiredPendingOrders = async (
+  limit: number,
+): Promise<{ id: string; number: number }[]> =>
+  db.$queryRaw<{ id: string; number: number }[]>`
+    SELECT "id", "number"
+      FROM xb.orders
+     WHERE "status" = 'pending' AND "expires_at" < now()
+     ORDER BY "expires_at"
+     LIMIT ${limit}
+  `;

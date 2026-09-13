@@ -20,6 +20,10 @@ if (process.env.NODE_ENV === 'production') {
 /** Люди, заведённые этим файлом тестов. Уборка идёт по ним и только по ним. */
 const createdPersonIds = new Set<string>();
 
+/** Офисы и товары, заведённые тестами каталога. Уборка — по ним же. */
+const createdOfficeIds = new Set<string>();
+const createdProductIds = new Set<string>();
+
 /**
  * Идентификаторы записей старой базы для фикстур переноса.
  *
@@ -172,6 +176,163 @@ export const setTripStatus = async (
   await db.trip.update({ where: { orderId: tripOrderId }, data: { status, endedAt } });
 };
 
+
+/**
+ * Офис. `archived` заводит закрытый: такой не показывается водителю и заказов не принимает.
+ */
+export const createTestOffice = async ({ archived = false }: { archived?: boolean } = {}): Promise<
+  string
+> => {
+  const rows = await db.$queryRaw<{ id: string }[]>`
+    INSERT INTO xb.offices ("name", "address", "archived_at")
+    VALUES (
+      'Тестовый офис',
+      'Ташкент, тестовый адрес',
+      ${archived ? new Date() : null}::timestamptz
+    )
+    RETURNING "id"
+  `;
+
+  const officeId = rows[0]?.id as string;
+  createdOfficeIds.add(officeId);
+
+  return officeId;
+};
+
+export type CreateTestProductInput = {
+  pricePoints: number;
+  archived?: boolean;
+};
+
+/** Товар каталога. Сумовые цены тестам безразличны и ставятся любыми неотрицательными. */
+export const createTestProduct = async ({
+  pricePoints,
+  archived = false,
+}: CreateTestProductInput): Promise<string> => {
+  const rows = await db.$queryRaw<{ id: string }[]>`
+    INSERT INTO xb.products ("name", "price_points", "price_retail", "price_cost", "archived_at")
+    VALUES (
+      'Тестовый товар',
+      ${pricePoints},
+      ${pricePoints * 1000},
+      ${pricePoints * 800},
+      ${archived ? new Date() : null}::timestamptz
+    )
+    RETURNING "id"
+  `;
+
+  const productId = rows[0]?.id as string;
+  createdProductIds.add(productId);
+
+  return productId;
+};
+
+export type StockSnapshot = {
+  onHand: number;
+  reserved: number;
+};
+
+/**
+ * Остаток пары «офис + товар». Строки нет — значит движений по ней не было ни одного,
+ * и это не то же самое, что нули: тест, ожидающий ноль, обязан различать.
+ */
+export const readStock = async (
+  officeId: string,
+  productId: string,
+): Promise<StockSnapshot | null> => {
+  const rows = await db.$queryRaw<StockSnapshot[]>`
+    SELECT "on_hand" AS "onHand", "reserved"
+      FROM xb.office_stock
+     WHERE "office_id" = ${officeId}::uuid AND "product_id" = ${productId}::uuid
+  `;
+
+  return rows[0] ?? null;
+};
+
+export type OrderSnapshot = {
+  id: string;
+  number: number;
+  status: string;
+  code: string;
+  totalPoints: number;
+  issuedAt: Date | null;
+  issuedByEmployeeId: string | null;
+  cancelledAt: Date | null;
+  cancelReason: string | null;
+  cancelledByEmployeeId: string | null;
+  spendTransferId: string;
+  refundTransferId: string | null;
+};
+
+export const readOrder = async (orderId: string): Promise<OrderSnapshot | null> => {
+  const rows = await db.$queryRaw<OrderSnapshot[]>`
+    SELECT "id",
+           "number",
+           "status"::text                 AS "status",
+           "code",
+           "total_points"                 AS "totalPoints",
+           "issued_at"                    AS "issuedAt",
+           "issued_by_employee_id"        AS "issuedByEmployeeId",
+           "cancelled_at"                 AS "cancelledAt",
+           "cancel_reason"::text          AS "cancelReason",
+           "cancelled_by_employee_id"     AS "cancelledByEmployeeId",
+           "spend_transfer_id"            AS "spendTransferId",
+           "refund_transfer_id"           AS "refundTransferId"
+      FROM xb.orders
+     WHERE "id" = ${orderId}::uuid
+  `;
+
+  return rows[0] ?? null;
+};
+
+/** Сколько заказов у человека. Ноль — то, что проверяют сценарии отката оформления. */
+export const countOrdersByPerson = async (personId: string): Promise<number> => {
+  const rows = await db.$queryRaw<{ total: number }[]>`
+    SELECT count(*)::int AS "total" FROM xb.orders WHERE "person_id" = ${personId}::uuid
+  `;
+
+  return rows[0]?.total ?? 0;
+};
+
+export type StockMovementSnapshot = {
+  kind: string;
+  productId: string;
+  deltaOnHand: number;
+  deltaReserved: number;
+  orderId: string | null;
+};
+
+/** Журнал движения по паре «офис + товар», по порядку. */
+export const listStockMovements = async (
+  officeId: string,
+  productId: string,
+): Promise<StockMovementSnapshot[]> =>
+  db.$queryRaw<StockMovementSnapshot[]>`
+    SELECT "kind"::text      AS "kind",
+           "product_id"      AS "productId",
+           "delta_on_hand"   AS "deltaOnHand",
+           "delta_reserved"  AS "deltaReserved",
+           "order_id"        AS "orderId"
+      FROM xb.stock_movements
+     WHERE "office_id" = ${officeId}::uuid AND "product_id" = ${productId}::uuid
+     ORDER BY "id"
+  `;
+
+/**
+ * Отправляет срок заказа в прошлое — так выглядит заказ, который водитель оформил
+ * и не забрал.
+ *
+ * Ждать сутки тест не может, а подменять системное время процесса значило бы проверять
+ * не то, что делает воркер: срок сравнивается с `now()` базы.
+ */
+export const expireTestOrder = async (orderId: string): Promise<void> => {
+  await db.$executeRaw`
+    UPDATE xb.orders
+       SET "expires_at" = now() - make_interval(hours => 1)
+     WHERE "id" = ${orderId}::uuid
+  `;
+};
+
 export const readAccountBalance = async (personId: string): Promise<bigint> => {
   const rows = await db.$queryRaw<{ balance: bigint }[]>`
     SELECT "balance" FROM xb.accounts WHERE "type" = 'driver' AND "person_id" = ${personId}::uuid
@@ -196,6 +357,37 @@ export const countTransfersByKey = async (idempotencyKey: string): Promise<numbe
   return Number(rows[0]?.total ?? 0n);
 };
 
+/** Сколько переводов этой причины прошло по счёту человека. */
+export const countTransfersByReason = async (
+  personId: string,
+  reason: string,
+): Promise<number> => {
+  const rows = await db.$queryRaw<{ total: number }[]>`
+    SELECT count(*)::int AS "total"
+      FROM xb.point_transfers AS transfer
+      JOIN xb.accounts AS account
+        ON account."id" IN (transfer."from_account_id", transfer."to_account_id")
+     WHERE account."type" = 'driver'
+       AND account."person_id" = ${personId}::uuid
+       AND transfer."reason" = ${reason}::xb.point_reason
+  `;
+
+  return rows[0]?.total ?? 0;
+};
+
+/** Перевод с его контекстом: заказ, причина, сумма. */
+export const readTransfer = async (
+  transferId: string,
+): Promise<{ reason: string; amount: bigint; orderId: string | null } | null> => {
+  const rows = await db.$queryRaw<{ reason: string; amount: bigint; orderId: string | null }[]>`
+    SELECT "reason"::text AS "reason", "amount", "order_id" AS "orderId"
+      FROM xb.point_transfers
+     WHERE "id" = ${transferId}::uuid
+  `;
+
+  return rows[0] ?? null;
+};
+
 /**
  * Убирает за тестом: людей, их профили, поездки, счета и связанные переводы.
  *
@@ -207,11 +399,55 @@ export const cleanupTestData = async (): Promise<void> => {
   const personIds = [...createdPersonIds];
   createdPersonIds.clear();
 
-  if (personIds.length === 0) {
+  const officeIds = [...createdOfficeIds];
+  const productIds = [...createdProductIds];
+  createdOfficeIds.clear();
+  createdProductIds.clear();
+
+  // Тест, ничего не заводивший, не открывает транзакцию и не пересчитывает системные счета.
+  if (personIds.length === 0 && officeIds.length === 0 && productIds.length === 0) {
     return;
   }
 
   await db.$transaction(async (transaction) => {
+    // Каталог уходит первым, и порядок внутри него не переставляется.
+    //
+    // `stock_movements` — до заказов: внешний ключ движения на заказ стоит на `SET NULL`,
+    // и удаление заказа первым обнулило бы `order_id` у движения `order_reserve`, нарушив
+    // `stock_movements_kind_signs_check`. Отказ пришёл бы не там, где ошибка.
+    //
+    // Заказы — до переводов: `orders.spend_transfer_id` стоит на `RESTRICT`, а
+    // `refund_transfer_id` — на `SET NULL`, который сломал бы проверку согласованности
+    // статуса у отменённого заказа.
+    await transaction.$executeRaw`
+      DELETE FROM xb.stock_movements
+       WHERE "office_id" = ANY(${officeIds}::uuid[])
+          OR "product_id" = ANY(${productIds}::uuid[])
+    `;
+    await transaction.$executeRaw`
+      DELETE FROM xb.order_items
+       WHERE "order_id" IN (
+             SELECT "id" FROM xb.orders
+              WHERE "person_id" = ANY(${personIds}::uuid[])
+                 OR "office_id" = ANY(${officeIds}::uuid[])
+       )
+    `;
+    await transaction.$executeRaw`
+      DELETE FROM xb.orders
+       WHERE "person_id" = ANY(${personIds}::uuid[])
+          OR "office_id" = ANY(${officeIds}::uuid[])
+    `;
+    await transaction.$executeRaw`
+      DELETE FROM xb.office_stock
+       WHERE "office_id" = ANY(${officeIds}::uuid[])
+          OR "product_id" = ANY(${productIds}::uuid[])
+    `;
+    await transaction.$executeRaw`
+      DELETE FROM xb.products WHERE "id" = ANY(${productIds}::uuid[])
+    `;
+    await transaction.$executeRaw`
+      DELETE FROM xb.offices WHERE "id" = ANY(${officeIds}::uuid[])
+    `;
     await transaction.$executeRaw`
       DELETE FROM xb.point_entries
        WHERE "transfer_id" IN (
@@ -457,6 +693,27 @@ export const runRawQuery = <Row>(sql: string): Promise<Row[]> => db.$queryRawUns
  * Это единственное место во всём репозитории, кроме уборки выше, где `accounts.balance`
  * меняется не сервисом журнала, и оба — фикстуры тестов, а не рабочий код.
  */
+/**
+ * Ломает кэш остатка мимо журнала движения — то, что обязаны поймать запросы остатков.
+ *
+ * Второе из двух мест во всём репозитории, где `office_stock` правится не вместе
+ * с движением, и оба — фикстуры тестов. Проверка инварианта, которая не умеет падать,
+ * не проверяет ничего.
+ */
+export const breakStockCacheForTest = async (
+  officeId: string,
+  productId: string,
+  deltaOnHand: number,
+  deltaReserved = 0,
+): Promise<void> => {
+  await db.$executeRaw`
+    UPDATE xb.office_stock
+       SET "on_hand"  = "on_hand"  + ${deltaOnHand},
+           "reserved" = "reserved" + ${deltaReserved}
+     WHERE "office_id" = ${officeId}::uuid AND "product_id" = ${productId}::uuid
+  `;
+};
+
 export const breakBalanceCacheForTest = async (personId: string, delta: number): Promise<void> => {
   await db.$executeRawUnsafe(
     'UPDATE xb.accounts SET "balance" = "balance" + $2 WHERE "type" = \'driver\' AND "person_id" = $1::uuid',

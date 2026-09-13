@@ -73,11 +73,16 @@ describe('примитив перевода', () => {
   });
 
   it('повторная отмена заказа возвращает баллы один раз', async () => {
-    // Каталога товаров ещё нет, поэтому возврат проверяется на самом примитиве: списание
-    // и возврат — обычные переводы, отличающиеся причиной, ключом и парой счетов.
+    // Проверяется сам примитив: списание и возврат — обычные переводы, отличающиеся
+    // причиной, ключом и парой счетов. Настоящий заказ с позициями и остатком проходит
+    // через сервисы и проверяется в tests/integration/orders/.
+    //
+    // Идентификатор заказа здесь случайный, и контекстную колонку `orderId` перевод
+    // не несёт намеренно: внешний ключ на `orders` отложенный, и ссылка на несуществующий
+    // заказ отбилась бы при фиксации транзакции.
     const person = await createTestPerson({ inProgram: true });
     const driverAccount = await ensureDriverAccount(person.personId);
-    const legacyOrderId = 424242;
+    const orderId = randomUUID();
     const occurredAt = new Date('2026-08-21T09:00:00.000Z');
 
     await transferPoints({
@@ -91,17 +96,16 @@ describe('примитив перевода', () => {
 
     await transferPoints({
       reason: 'order_spend',
-      idempotencyKey: buildOrderSpendIdempotencyKey(legacyOrderId),
+      idempotencyKey: buildOrderSpendIdempotencyKey(orderId),
       amount: 5,
       fromAccountId: driverAccount.id,
       toAccountId: redemptionAccountId,
       occurredAt,
-      context: { legacyOrderId },
     });
 
     expect(await readAccountBalance(person.personId)).toBe(0n);
 
-    const refundKey = buildOrderRefundIdempotencyKey(legacyOrderId);
+    const refundKey = buildOrderRefundIdempotencyKey(orderId);
     const refundInput = {
       reason: 'order_refund',
       idempotencyKey: refundKey,
@@ -109,7 +113,6 @@ describe('примитив перевода', () => {
       fromAccountId: redemptionAccountId,
       toAccountId: driverAccount.id,
       occurredAt,
-      context: { legacyOrderId },
     } as const;
 
     const first = await transferPoints({ ...refundInput });
@@ -131,7 +134,7 @@ describe('примитив перевода', () => {
       await expect(
         transferPoints({
           reason: 'order_spend',
-          idempotencyKey: buildOrderSpendIdempotencyKey(777001),
+          idempotencyKey: buildOrderSpendIdempotencyKey(randomUUID()),
           amount: 10,
           fromAccountId: driverAccount.id,
           toAccountId: redemptionAccountId,
