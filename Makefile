@@ -11,7 +11,7 @@ COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
         employee-owner prod-employee-owner \
         import-legacy-dump \
         sync-orders sync-registry sync-state \
-        prod-up prod-down prod-restart prod-logs prod-ps prod-shell prod-psql prod-migrate \
+        prod-up prod-down prod-restart prod-logs prod-ps prod-shell prod-psql prod-invariants prod-migrate \
         prod-deploy prod-rollback \
         proxy-up proxy-down proxy-ps proxy-logs proxy-validate proxy-reload
 
@@ -235,6 +235,11 @@ prod-shell: ## Shell внутри app-контейнера (prod)
 
 prod-psql: ## Войти в psql prod-БД
 	$(COMPOSE_PROD) exec postgres sh -c 'PGPASSWORD="$$POSTGRES_PASSWORD" psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
+
+# То же, что `invariants`, но по базе prod-стека — на стенде и на боевой машине. Запускается
+# на самой машине, руками: CLI на серверы не ходит (CLAUDE.md → «Важные ограничения»).
+prod-invariants: ## Прогнать запросы инвариантов по prod-БД (ненулевой код при расхождении)
+	$(COMPOSE_PROD) exec -T postgres sh -c 'PGPASSWORD="$$POSTGRES_PASSWORD" psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -q' < scripts/invariants.sql
 
 prod-migrate: ## Применить миграции к prod-БД
 	$(COMPOSE_PROD) exec app ./node_modules/.bin/prisma migrate deploy
