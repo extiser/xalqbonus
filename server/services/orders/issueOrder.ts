@@ -2,7 +2,7 @@ import { consola } from 'consola';
 import { db } from '#server/db';
 import {
   listOrderItems,
-  lockPendingOrderByCode,
+  lockPendingOrderById,
   markOrderIssued,
 } from '#server/repositories/orders';
 import { lockStockRows, writeStockMovement } from '#server/repositories/stock';
@@ -15,22 +15,23 @@ import { OrderNotFoundError } from '#server/services/orders/errors';
  * вещи: статус заказа и остаток офиса, с которого снимается резерв
  * (docs/decisions.md → «Каталог: заказ — это касса, остаток живёт по офисам»).
  *
- * Заказ ищется по коду **и офису** среди висящих. Чужой офис — «не нашли», а не «заказ
- * в другом офисе»: код не должен подтверждать существование заказа тому, кто стоит не там.
+ * Заказ берётся **по идентификатору**, а не по коду. Код — то, чем заказ находят у стойки;
+ * выдают то, что нашли и показали. Код висящего заказа освобождается выдачей и может
+ * достаться новому заказу того же офиса, и выдача по коду, прочитанному секундой раньше,
+ * выдала бы в закоммиченной транзакции чужой заказ — порчу данных, а не отказ.
  *
- * Двойной тап штатен. Второе нажатие не находит висящего заказа — код выданного освободился
- * из частичного индекса — и получает `OrderNotFoundError`, не сделав ни одной записи.
- * Две выдачи, пришедшие разом, разводит блокировка строки заказа: вторая ждёт первую
- * и видит уже `issued`.
+ * Открыт ли офис заказа сотруднику, проверяет вызывающий (`issueOfficeOrder`): сервис
+ * принимает решение уже проверенным, как `cancelOrder`.
+ *
+ * Двойной тап штатен. Второе нажатие не находит висящего заказа и получает
+ * `OrderNotFoundError`, не сделав ни одной записи. Две выдачи, пришедшие разом, разводит
+ * блокировка строки заказа: вторая ждёт первую и видит уже `issued`.
  */
 
 const log = consola.withTag('orders:issue');
 
 export type IssueOrderInput = {
-  /** Пять цифр, названных водителем у стойки. */
-  code: string;
-  /** Офис, в котором стоит сотрудник. Приходит из его привязки, а не из запроса. */
-  officeId: string;
+  orderId: string;
   employeeId: string;
 };
 
@@ -44,10 +45,10 @@ export type IssuedOrder = {
 
 export const issueOrder = async (input: IssueOrderInput): Promise<IssuedOrder> =>
   db.$transaction(async (transaction) => {
-    const order = await lockPendingOrderByCode(transaction, input.code, input.officeId);
+    const order = await lockPendingOrderById(transaction, input.orderId);
 
     if (!order) {
-      throw new OrderNotFoundError(input.code);
+      throw new OrderNotFoundError(input.orderId);
     }
 
     const items = await listOrderItems(transaction, order.id);

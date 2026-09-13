@@ -8,9 +8,9 @@
  *
  * Повторный вызов операции ошибкой **не является** сам по себе: двойной тап — штатный
  * случай, и вызывающий решает, показывать отказ или промолчать, потому что дело уже сделано.
- * Вторая отмена видит `OrderNotPendingError`, вторая выдача — `OrderNotFoundError`: код
- * выданного заказа уходит из частичного индекса, и висящего заказа с ним больше нет.
- * Ни та, ни другая не делают ни одной записи.
+ * Вторая отмена видит `OrderNotPendingError`, вторая выдача — `OrderNotFoundError`: заказ
+ * берётся под блокировку только висящим, а выданный уже не висит. Ни та, ни другая не делают
+ * ни одной записи.
  */
 export abstract class OrdersError extends Error {
   protected constructor(message: string) {
@@ -114,10 +114,14 @@ export class CancelAuthorMismatchError extends OrdersError {
   }
 }
 
-/** Заказа с таким кодом в этом офисе среди висящих нет. */
+/**
+ * Висящего заказа нет: по коду среди висящих этого офиса не нашёлся (`findOfficeOrderByCode`)
+ * или по идентификатору уже не висит (`issueOrder`).
+ */
 export class OrderNotFoundError extends OrdersError {
-  constructor(public readonly code: string) {
-    super(`висящего заказа с кодом ${code} в этом офисе нет`);
+  /** Код или идентификатор заказа — то, по чему искали. */
+  constructor(public readonly reference: string) {
+    super(`висящего заказа ${reference} нет`);
   }
 }
 

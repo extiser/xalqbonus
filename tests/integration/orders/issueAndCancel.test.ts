@@ -75,8 +75,7 @@ describe('выдача и отмена заказа', () => {
     const balanceBefore = await readAccountBalance(scenario.personId);
 
     const issued = await issueOrder({
-      code: scenario.order.code,
-      officeId: scenario.officeId,
+      orderId: scenario.order.orderId,
       employeeId: scenario.employeeId,
     });
 
@@ -109,16 +108,14 @@ describe('выдача и отмена заказа', () => {
     const scenario = await placeScenario();
 
     await issueOrder({
-      code: scenario.order.code,
-      officeId: scenario.officeId,
+      orderId: scenario.order.orderId,
       employeeId: scenario.employeeId,
     });
 
-    // Код выданного заказа ушёл из частичного индекса: висящего заказа с ним больше нет.
+    // Выданный заказ больше не висит, и под блокировку второй выдаче его не достаётся.
     await expect(
       issueOrder({
-        code: scenario.order.code,
-        officeId: scenario.officeId,
+        orderId: scenario.order.orderId,
         employeeId: scenario.employeeId,
       }),
     ).rejects.toBeInstanceOf(OrderNotFoundError);
@@ -128,22 +125,6 @@ describe('выдача и отмена заказа', () => {
       reserved: 0,
     });
     expect(await listStockMovements(scenario.officeId, scenario.productId)).toHaveLength(3);
-  });
-
-  it('сотрудник чужого офиса кода не подтверждает', async () => {
-    const scenario = await placeScenario();
-    const otherOffice = await createTestOffice();
-
-    await expect(
-      issueOrder({
-        code: scenario.order.code,
-        officeId: otherOffice,
-        employeeId: scenario.employeeId,
-      }),
-    ).rejects.toBeInstanceOf(OrderNotFoundError);
-
-    // Заказ как висел, так и висит: чужой офис ничего о нём не узнал и ничего не сделал.
-    expect((await readOrder(scenario.order.orderId))?.status).toBe('pending');
   });
 
   it('отмена возвращает и баллы, и остаток', async () => {
@@ -198,8 +179,7 @@ describe('выдача и отмена заказа', () => {
     const scenario = await placeScenario();
 
     await issueOrder({
-      code: scenario.order.code,
-      officeId: scenario.officeId,
+      orderId: scenario.order.orderId,
       employeeId: scenario.employeeId,
     });
 

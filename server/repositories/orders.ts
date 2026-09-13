@@ -142,16 +142,19 @@ export const listOrderItems = async (
   `;
 
 /**
- * Висящий заказ по коду **и офису**, под блокировку.
+ * Висящий заказ по идентификатору, под блокировку.
  *
- * Офис входит в условие, а не проверяется после: сотрудник чужого офиса не должен узнать,
- * что такой код вообще существует. «Заказ оформлен в другом офисе» — это подтверждение
- * кода тому, кто стоит не там.
+ * `status = 'pending'` стоит в условии, а не проверяется после: две выдачи, пришедшие разом,
+ * выстраиваются в очередь на строке, и вторая после ожидания перечитывает условие на новой
+ * версии строки — заказ уже `issued`, и строки ей не достаётся.
+ *
+ * По идентификатору, а не по коду: код висящего заказа освобождается выдачей и может
+ * достаться новому заказу того же офиса, и выдача по коду, прочитанному секундой раньше,
+ * выдала бы чужой заказ.
  */
-export const lockPendingOrderByCode = async (
+export const lockPendingOrderById = async (
   client: Prisma.TransactionClient,
-  code: string,
-  officeId: string,
+  orderId: string,
 ): Promise<OrderRow | null> => {
   const rows = await client.$queryRaw<OrderRow[]>`
     SELECT "id",
@@ -165,8 +168,7 @@ export const lockPendingOrderByCode = async (
            "spend_transfer_id"  AS "spendTransferId",
            "refund_transfer_id" AS "refundTransferId"
       FROM xb.orders
-     WHERE "code" = ${code}
-       AND "office_id" = ${officeId}::uuid
+     WHERE "id" = ${orderId}::uuid
        AND "status" = 'pending'
        FOR UPDATE
   `;
@@ -434,8 +436,9 @@ export const findOfficeOrder = async (
 /**
  * Висящий заказ по коду **и офису** — без блокировки.
  *
- * Офис в условии по той же причине, что у `lockPendingOrderByCode`: код не должен
- * подтверждать существование заказа тому, кто стоит не в том офисе.
+ * Офис входит в условие, а не проверяется после: код не должен подтверждать существование
+ * заказа тому, кто стоит не в том офисе. «Заказ оформлен в другом офисе» — это подтверждение
+ * кода тому, кто стоит не там.
  */
 export const findPendingOfficeOrderByCode = async (
   officeId: string,

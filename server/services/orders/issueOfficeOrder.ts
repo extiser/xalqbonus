@@ -1,5 +1,3 @@
-import { consola } from 'consola';
-
 import { findOfficeOrder } from '#server/repositories/orders';
 import { requireOpenOffice, type OfficeWorker } from '#server/services/offices/employeeOffices';
 import {
@@ -20,12 +18,10 @@ import type { OfficeOrder } from '#shared/types/orders';
  *
  * **Двойное нажатие «Выдать» второй операции не делает — это гарантирует `issueOrder`.**
  * Второй запрос либо сразу видит `issued`, либо, если пришёл вровень с первым, получает
- * от `issueOrder` «висящего заказа с таким кодом нет»: код выданного освободился. В обоих
- * случаях статус перечитывается, и ответ — «заказ уже выдан», а не «код не найден»: человек
- * нажал кнопку под заказом и должен узнать, что стало с этим заказом.
+ * от `issueOrder` `OrderNotFoundError` — заказ уже не висит. Тогда статус перечитывается,
+ * и ответ — «заказ уже выдан»: человек нажал кнопку под заказом и должен узнать, что стало
+ * с этим заказом.
  */
-
-const log = consola.withTag('orders:issue-office');
 
 export const issueOfficeOrder = async (
   worker: OfficeWorker,
@@ -44,23 +40,7 @@ export const issueOfficeOrder = async (
   }
 
   try {
-    const issued = await issueOrder({
-      code: order.code,
-      officeId: order.officeId,
-      employeeId: worker.employeeId,
-    });
-
-    // `issueOrder` ищет по коду, а код между чтением выше и выдачей мог освободиться и достаться
-    // новому заказу того же офиса. Окно — миллисекунды, совпадение кода — одно на сто тысяч,
-    // но выдача не того заказа молчать не должна.
-    if (issued.orderId !== order.id) {
-      log.error('по коду выдан другой заказ', {
-        requestedOrderId: order.id,
-        issuedOrderId: issued.orderId,
-      });
-
-      throw new Error(`вместо заказа ${order.id} по коду выдан заказ ${issued.orderId}`);
-    }
+    await issueOrder({ orderId: order.id, employeeId: worker.employeeId });
   } catch (error) {
     if (!(error instanceof OrderNotFoundError)) {
       throw error;

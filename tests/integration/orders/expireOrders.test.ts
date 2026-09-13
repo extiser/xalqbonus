@@ -61,7 +61,7 @@ describe('просрочка заказов', () => {
       actor: 'mini_app',
     });
 
-    await issueOrder({ code: issued.code, officeId, employeeId });
+    await issueOrder({ orderId: issued.orderId, employeeId });
 
     await expireTestOrder(overdue.orderId);
     // Срок выданного тоже в прошлом: просрочка обязана смотреть на статус, а не только
