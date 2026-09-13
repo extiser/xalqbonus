@@ -43,6 +43,16 @@ export type TelegramWebApp = {
   ready: () => void;
   expand: () => void;
   /**
+   * Системная кнопка «назад» в шапке Telegram. С Bot API 6.1 — у клиентов постарше её нет,
+   * и экран тогда рисует свою.
+   */
+  BackButton?: {
+    show: () => void;
+    hide: () => void;
+    onClick: (callback: () => void) => void;
+    offClick: (callback: () => void) => void;
+  };
+  /**
    * Запрос номера телефона. Доступен с Bot API 6.9 — на клиентах постарше поля нет вовсе,
    * поэтому необязательный.
    *

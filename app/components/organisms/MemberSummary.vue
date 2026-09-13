@@ -34,9 +34,12 @@ defineProps<{
    * и погасла, а на экране всё прежнее — и это неотличимо от неработающей кнопки.
    */
   refreshFailedNote: string | null;
+  /** «Обменять баллы» — вход в витрину, рядом с балансом: баллы копят, чтобы их обменять. */
+  exchangeLabel: string;
+  ordersLabel: string;
 }>();
 
-defineEmits<{ refresh: [] }>();
+defineEmits<{ refresh: []; exchange: []; orders: [] }>();
 </script>
 
 <template>
@@ -83,6 +86,11 @@ defineEmits<{ refresh: [] }>();
         и отметка уже прочитаны и верны, и стирать их в ответ на просьбу обновить нельзя.
       -->
       <p v-if="refreshFailedNote" class="text-sm text-red-700">{{ refreshFailedNote }}</p>
+    </div>
+
+    <div class="flex flex-col gap-2">
+      <AtomsMiniAppButton :label="exchangeLabel" @click="$emit('exchange')" />
+      <AtomsMiniAppButton variant="secondary" :label="ordersLabel" @click="$emit('orders')" />
     </div>
 
     <p

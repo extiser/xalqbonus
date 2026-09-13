@@ -32,11 +32,19 @@ export const failureDenial = (error: unknown): ServerDenialCode | null => {
   return isServerDenialCode(code) ? code : null;
 };
 
-/** Что показать человеку. */
-export const failureText = (error: unknown): string => {
+/**
+ * Текст, который прислал сервер. `null` — ответа не было или текста в нём нет.
+ *
+ * Отдельно от `failureText`, потому что запасной текст у дверей разный: у веба он из словаря
+ * отказов на языке админки, у водителя — из водительского словаря на его языке, и приходит
+ * с экраном участника.
+ */
+export const failureMessage = (error: unknown): string | null => {
   const message = failureBody(error)?.message;
 
-  return typeof message === 'string' && message.trim() !== ''
-    ? message
-    : denialText('request_failed', WEB_LANGUAGE);
+  return typeof message === 'string' && message.trim() !== '' ? message : null;
 };
+
+/** Что показать человеку. */
+export const failureText = (error: unknown): string =>
+  failureMessage(error) ?? denialText('request_failed', WEB_LANGUAGE);

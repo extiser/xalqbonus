@@ -101,7 +101,15 @@ export const describeOperation = (
     day,
     dayLabel: dayLabel(day, formatDayKey(now), previousDayKey(now), language, row.occurredAt),
     time: formatClockTime(row.occurredAt),
-    reason: reasonText(row.reason, row.delta, language),
+    // Списание и возврат несут номер заказа: отменённый заказ в истории — две строки,
+    // и читаются они парой только по номеру. Журнал при этом не переписывается.
+    reason:
+      row.orderNumber === null
+        ? reasonText(row.reason, row.delta, language)
+        : plainText('history_order_reason', language, {
+            reason: reasonText(row.reason, row.delta, language),
+            number: String(row.orderNumber),
+          }),
     delta: Number(row.delta),
   };
 };

@@ -57,6 +57,52 @@ export type TextKey =
   | 'reason_raffle'
   | 'reason_expire'
   | 'reason_correction'
+  | 'history_order_reason'
+  | 'button_exchange_points'
+  | 'button_my_orders'
+  | 'button_back'
+  | 'request_failed'
+  | 'offices_title'
+  | 'offices_empty'
+  | 'offices_failed'
+  | 'office_open_map'
+  | 'showcase_empty'
+  | 'showcase_failed'
+  | 'product_no_photo'
+  | 'unit_pieces'
+  | 'unit_points'
+  | 'showcase_in_stock'
+  | 'cart_total'
+  | 'cart_balance_after'
+  | 'button_checkout'
+  | 'checkout_nothing_selected'
+  | 'checkout_over_balance'
+  | 'confirm_title'
+  | 'confirm_note'
+  | 'button_place_order'
+  | 'button_edit_order'
+  | 'order_title'
+  | 'order_code_title'
+  | 'order_expires'
+  | 'order_status_pending'
+  | 'order_status_issued'
+  | 'order_status_cancelled'
+  | 'order_cancel_reason_driver'
+  | 'order_cancel_reason_employee'
+  | 'order_cancel_reason_expired'
+  | 'button_cancel_order'
+  | 'cancel_order_question'
+  | 'button_cancel_order_yes'
+  | 'button_cancel_order_no'
+  | 'orders_title'
+  | 'orders_empty'
+  | 'orders_failed'
+  | 'order_denied_office_unavailable'
+  | 'order_denied_product_unavailable'
+  | 'order_denied_insufficient_stock'
+  | 'order_denied_insufficient_points'
+  | 'order_denied_not_found'
+  | 'order_denied_not_pending'
   | 'not_in_registry'
   | 'not_in_park'
   | 'profile_fired'
@@ -249,6 +295,208 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   reason_correction: {
     ru: 'Корректировка',
     uz: 'Tuzatish',
+  },
+  /**
+   * Списание и возврат по заказу — причина и номер, без лишних слов. Номер тот же, что
+   * водитель видел на экране заказа, и отменённый заказ читается в истории парой строк.
+   */
+  history_order_reason: {
+    ru: '{reason} · № {number}',
+    uz: '{reason} · № {number}',
+  },
+
+  // Витрина и заказ в Mini App (issue #121). Числа на экране стоят цифрами, а единицы —
+  // «шт.» и «баллов» — отдельными ключами: склонять число в коде значит писать правило
+  // русского языка, которого у узбекского нет.
+  button_exchange_points: {
+    ru: 'Обменять баллы',
+    uz: 'Ballarni almashtirish',
+  },
+  button_my_orders: {
+    ru: 'Мои заказы',
+    uz: 'Buyurtmalarim',
+  },
+  /** Возврат на прошлый экран, когда у клиента нет системной кнопки «назад». */
+  button_back: {
+    ru: 'Назад',
+    uz: 'Orqaga',
+  },
+  /** Запрос не дошёл до ответа: сервер сказать ничего не мог, говорит экран. */
+  request_failed: {
+    ru: 'Приложение не ответило. Проверьте связь и попробуйте ещё раз.',
+    uz: "Ilova javob bermadi. Aloqani tekshirib, qaytadan urinib ko'ring.",
+  },
+  offices_title: {
+    ru: 'Выберите офис',
+    uz: 'Ofisni tanlang',
+  },
+  offices_empty: {
+    ru: 'Офисы, где можно обменять баллы, пока не открыты.',
+    uz: "Ballarni almashtirish mumkin bo'lgan ofislar hozircha ochilmagan.",
+  },
+  offices_failed: {
+    ru: 'Не удалось загрузить офисы. Попробуйте ещё раз.',
+    uz: "Ofislarni yuklab bo'lmadi. Qaytadan urinib ko'ring.",
+  },
+  office_open_map: {
+    ru: 'На карте',
+    uz: 'Xaritada',
+  },
+  /** Пустая витрина говорит словами, а не показывает пустую сетку. */
+  showcase_empty: {
+    ru: 'В этом офисе пока нечего взять.',
+    uz: "Bu ofisda hozircha olish mumkin bo'lgan mahsulot yo'q.",
+  },
+  showcase_failed: {
+    ru: 'Не удалось загрузить товары. Попробуйте ещё раз.',
+    uz: "Mahsulotlarni yuklab bo'lmadi. Qaytadan urinib ko'ring.",
+  },
+  product_no_photo: {
+    ru: 'без фото',
+    uz: 'rasmsiz',
+  },
+  unit_pieces: {
+    ru: 'шт.',
+    uz: 'dona',
+  },
+  unit_points: {
+    ru: 'баллов',
+    uz: 'ball',
+  },
+  showcase_in_stock: {
+    ru: 'В наличии',
+    uz: 'Mavjud',
+  },
+  cart_total: {
+    ru: 'Сумма',
+    uz: 'Jami',
+  },
+  cart_balance_after: {
+    ru: 'Останется на балансе',
+    uz: 'Hisobda qoladi',
+  },
+  button_checkout: {
+    ru: 'Оформить',
+    uz: 'Rasmiylashtirish',
+  },
+  checkout_nothing_selected: {
+    ru: 'Выберите товар, чтобы оформить заказ.',
+    uz: 'Buyurtma berish uchun mahsulot tanlang.',
+  },
+  checkout_over_balance: {
+    ru: 'Сумма больше вашего баланса — уберите что-нибудь из заказа.',
+    uz: "Jami summa hisobingizdan ko'p — buyurtmadan biror narsani olib tashlang.",
+  },
+  confirm_title: {
+    ru: 'Проверьте заказ',
+    uz: 'Buyurtmani tekshiring',
+  },
+  /** Оговорка перед оформлением: заказ у нас касса, баллы уходят сразу, а не на стойке. */
+  confirm_note: {
+    ru: 'Баллы спишутся сейчас. Они вернутся, если отменить заказ или не забрать его в течение суток.',
+    uz: 'Ballar hozir yechiladi. Buyurtmani bekor qilsangiz yoki bir kun ichida olmasangiz, ular qaytariladi.',
+  },
+  button_place_order: {
+    ru: 'Оформить заказ',
+    uz: 'Buyurtma berish',
+  },
+  button_edit_order: {
+    ru: 'Изменить',
+    uz: "O'zgartirish",
+  },
+  order_title: {
+    ru: 'Заказ № {number}',
+    uz: 'Buyurtma № {number}',
+  },
+  order_code_title: {
+    ru: 'Код для выдачи — назовите его в офисе',
+    uz: 'Olish kodi — uni ofisda ayting',
+  },
+  order_expires: {
+    ru: 'Заберите до {moment}',
+    uz: '{moment} gacha olib keting',
+  },
+  order_status_pending: {
+    ru: 'Ждёт выдачи',
+    uz: 'Berilishini kutmoqda',
+  },
+  order_status_issued: {
+    ru: 'Выдан {moment}',
+    uz: '{moment} da berildi',
+  },
+  order_status_cancelled: {
+    ru: 'Отменён {moment}',
+    uz: '{moment} da bekor qilindi',
+  },
+  order_cancel_reason_driver: {
+    ru: 'Вы отменили заказ',
+    uz: 'Buyurtmani siz bekor qildingiz',
+  },
+  order_cancel_reason_employee: {
+    ru: 'Отменил сотрудник офиса',
+    uz: 'Ofis xodimi bekor qildi',
+  },
+  order_cancel_reason_expired: {
+    ru: 'Не забрали за сутки',
+    uz: 'Bir kun ichida olinmadi',
+  },
+  button_cancel_order: {
+    ru: 'Отменить заказ',
+    uz: 'Buyurtmani bekor qilish',
+  },
+  cancel_order_question: {
+    ru: 'Отменить заказ? Баллы вернутся на баланс.',
+    uz: 'Buyurtma bekor qilinsinmi? Ballar hisobingizga qaytadi.',
+  },
+  button_cancel_order_yes: {
+    ru: 'Да, отменить',
+    uz: 'Ha, bekor qilish',
+  },
+  button_cancel_order_no: {
+    ru: 'Не отменять',
+    uz: 'Bekor qilmaslik',
+  },
+  orders_title: {
+    ru: 'Мои заказы',
+    uz: 'Buyurtmalarim',
+  },
+  orders_empty: {
+    ru: 'Заказов пока нет.',
+    uz: "Hozircha buyurtmalar yo'q.",
+  },
+  orders_failed: {
+    ru: 'Не удалось загрузить заказы. Попробуйте ещё раз.',
+    uz: "Buyurtmalarni yuklab bo'lmadi. Qaytadan urinib ko'ring.",
+  },
+
+  // Отказы оформления и отмены. Разведены по причинам: экран обязан сказать, чего именно
+  // не хватило, — баллов, товара на полке или открытого офиса, — потому что и действие
+  // у водителя в каждом случае своё.
+  order_denied_office_unavailable: {
+    ru: 'Этот офис сейчас не принимает заказы. Выберите другой офис.',
+    uz: 'Bu ofis hozir buyurtma qabul qilmaydi. Boshqa ofisni tanlang.',
+  },
+  order_denied_product_unavailable: {
+    ru: 'Один из товаров больше нельзя заказать. Вернитесь к витрине и соберите заказ заново.',
+    uz: "Mahsulotlardan birini endi buyurtma qilib bo'lmaydi. Vitrinaga qaytib, buyurtmani qaytadan yig'ing.",
+  },
+  /** Кто-то успел забрать товар, пока водитель листал витрину: называем, чего и сколько. */
+  order_denied_insufficient_stock: {
+    ru: '«{product}» осталось меньше, чем в заказе: доступно {available}. Измените количество.',
+    uz: "«{product}» buyurtmadagidan kam qoldi: mavjud {available}. Miqdorni o'zgartiring.",
+  },
+  order_denied_insufficient_points: {
+    ru: 'На балансе не хватает баллов на этот заказ.',
+    uz: 'Bu buyurtma uchun hisobingizda ball yetarli emas.',
+  },
+  /** Чужой заказ и несуществующий — один отказ: подтверждать чужой номер незачем. */
+  order_denied_not_found: {
+    ru: 'Такого заказа нет.',
+    uz: "Bunday buyurtma yo'q.",
+  },
+  order_denied_not_pending: {
+    ru: 'Этот заказ уже выдан или отменён.',
+    uz: 'Bu buyurtma allaqachon berilgan yoki bekor qilingan.',
   },
   not_in_registry: {
     ru: 'Не получилось привязать номер автоматически — в данных таксопарка чего-то не хватает. Это чинится только в офисе: подойдите в любой офис Xalq Taxi с водительским удостоверением.',

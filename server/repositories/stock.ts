@@ -185,6 +185,44 @@ export const listOfficeStock = async (
      ORDER BY (product."archived_at" IS NOT NULL), product."name"
   `;
 
+export type ShowcaseRow = {
+  productId: string;
+  name: string;
+  description: string | null;
+  photoPath: string | null;
+  pricePoints: number;
+  updatedAt: Date;
+  /** Свободный остаток офиса. */
+  available: number;
+};
+
+/**
+ * Витрина офиса: работающие товары, которые можно взять сейчас.
+ *
+ * `JOIN`, а не `LEFT JOIN`, как у таблицы остатков: витрина обещает то, что лежит
+ * на полке, и товар без строки остатка или с нулём в ней водителю не показывается.
+ * Резерв сюда не входит — занятое висящими заказами уже не свободно.
+ */
+export const listOfficeShowcase = async (
+  officeId: string,
+  client: Prisma.TransactionClient = db,
+): Promise<ShowcaseRow[]> =>
+  client.$queryRaw<ShowcaseRow[]>`
+    SELECT product."id"           AS "productId",
+           product."name",
+           product."description",
+           product."photo_path"   AS "photoPath",
+           product."price_points" AS "pricePoints",
+           product."updated_at"   AS "updatedAt",
+           stock."on_hand"        AS "available"
+      FROM xb.office_stock AS stock
+      JOIN xb.products AS product ON product."id" = stock."product_id"
+     WHERE stock."office_id" = ${officeId}::uuid
+       AND stock."on_hand" > 0
+       AND product."archived_at" IS NULL
+     ORDER BY product."name"
+  `;
+
 export type StockMovementListRow = {
   id: bigint;
   kind: StockMovementKind;

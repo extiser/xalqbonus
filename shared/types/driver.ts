@@ -243,6 +243,8 @@ export type DriverOperation = {
   trip: DriverOperationTrip | null;
   /** Заказ товара из старой базы — у перенесённых операций. */
   legacyOrderId: number | null;
+  /** Номер заказа за баллы — у списания и возврата. Пуст у всех остальных операций. */
+  orderNumber: number | null;
   actor: string | null;
   note: string | null;
 };
