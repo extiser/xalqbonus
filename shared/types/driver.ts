@@ -91,7 +91,8 @@ export type DriverTelegramLink = {
   closedAt: string | null;
   closeReason: LinkCloseReason | null;
   confirmedBy: LinkConfirmedBy;
-  operatorRef: string | null;
+  /** Имя сотрудника, подтвердившего привязку. Пусто, если подтверждал не человек. */
+  operatorName: string | null;
 };
 
 /**

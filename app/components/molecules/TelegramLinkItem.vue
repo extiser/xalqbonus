@@ -33,7 +33,7 @@ defineProps<{
           · причина: {{ linkCloseReasonLabel(link.closeReason) }}
         </template>
       </template>
-      <template v-if="link.operatorRef"> · оператор: {{ link.operatorRef }}</template>
+      <template v-if="link.operatorName"> · оператор: {{ link.operatorName }}</template>
     </p>
   </article>
 </template>
