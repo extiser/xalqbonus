@@ -3,11 +3,10 @@ import { failureText } from '~/utils/requestError';
 import type { EmployeePasswordResponse } from '#shared/types/employee';
 
 /**
- * Пароль для входа в веб — из Mini App сотрудника (issue #130).
+ * Пароль для входа в веб — из Mini App сотрудника, у которого пароля ещё нет (issue #130).
  *
- * Ручка та же, что у страницы `/password` в вебе: задать и сменить — одно действие, и отдельного
- * «задать» у неё нет. Разница только в двери: здесь человека подтверждает заголовок с `initData`,
- * а cookie веба в приложении нет вовсе.
+ * Ручка та же, что у страницы `/password` в вебе. Разница только в двери: здесь человека
+ * подтверждает заголовок с `initData`, а cookie веба в приложении нет вовсе.
  *
  * Поэтому и конец другой. Веб после смены уводит на форму входа — его собственный cookie погашен.
  * Здесь гасить нечего: экран остаётся экраном сотрудника и говорит, что пароль сохранён.
@@ -20,17 +19,17 @@ export const useEmployeePassword = (readHeaders: () => Record<string, string>) =
   const submitting = ref(false);
   const error = ref<string | null>(null);
 
-  /** Пароль сохранён этим экраном. Снимается следующей отправкой и повторным открытием пункта. */
+  /** Пароль сохранён этим экраном. Снимается повторным открытием пункта. */
   const saved = ref(false);
 
-  const submit = async (): Promise<void> => {
+  /** Отправляет пароль. `true` — сохранён: признак экрана сотрудника приводит в соответствие страница. */
+  const submit = async (): Promise<boolean> => {
     if (submitting.value) {
-      return;
+      return false;
     }
 
     submitting.value = true;
     error.value = null;
-    saved.value = false;
 
     try {
       await $fetch<EmployeePasswordResponse>('/api/employees/me/password', {
@@ -41,8 +40,12 @@ export const useEmployeePassword = (readHeaders: () => Record<string, string>) =
 
       password.value = '';
       saved.value = true;
+
+      return true;
     } catch (failure) {
       error.value = failureText(failure);
+
+      return false;
     } finally {
       submitting.value = false;
     }

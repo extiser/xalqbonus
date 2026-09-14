@@ -161,6 +161,17 @@ const openEmployeePassword = (): void => {
 };
 
 /**
+ * Пароль сохранён — пункт с экрана уходит. Признак ставится в уже прочитанном экране, а не
+ * перечитыванием `/api/miniapp/me`: экран читается один раз при открытии, и второй запрос
+ * ради одного признака незачем. Иначе кнопка висела бы до перезахода и звала повторить сделанное.
+ */
+const saveEmployeePassword = async (): Promise<void> => {
+  if ((await employeePassword.submit()) && employee.value) {
+    employee.value.passwordSet = true;
+  }
+};
+
+/**
  * Есть ли куда вернуться: из пункта пароля — туда, откуда открыли; из карточки — к полю кода;
  * от поля кода — к выбору из нескольких офисов.
  */
@@ -586,7 +597,8 @@ const share = (): void => {
       :submitting="employeePassword.submitting.value"
       :error="employeePassword.error.value"
       :saved="employeePassword.saved.value"
-      @submit="employeePassword.submit()"
+      @submit="saveEmployeePassword"
+      @done="employeeBack"
     />
 
     <template v-else-if="!employeeOffice">
@@ -597,6 +609,7 @@ const share = (): void => {
       />
 
       <AtomsMiniAppButton
+        v-if="!employee.passwordSet"
         variant="secondary"
         :label="EMPLOYEE_PASSWORD_LABEL"
         @click="openEmployeePassword"
@@ -630,6 +643,7 @@ const share = (): void => {
       />
 
       <AtomsMiniAppButton
+        v-if="!employee.passwordSet"
         variant="secondary"
         :label="EMPLOYEE_PASSWORD_LABEL"
         @click="openEmployeePassword"

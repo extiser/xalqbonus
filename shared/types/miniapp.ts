@@ -323,6 +323,11 @@ export type MiniAppEmployeeScreen = {
   screen: 'employee';
   fullName: string;
   role: EmployeeRole;
+  /**
+   * Пароль для веба задан. Пока нет — экран показывает пункт «Пароль для входа с компьютера»;
+   * задан — пункта нет: смена пароля живёт в вебе, на `/password` (issue #130).
+   */
+  passwordSet: boolean;
   /** Пусто — менеджер ни к одному офису не привязан, и экран говорит об этом словами. */
   offices: EmployeeOffice[];
 };
