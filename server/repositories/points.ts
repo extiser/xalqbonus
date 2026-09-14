@@ -1,6 +1,6 @@
 import { db } from '#server/db';
 import type { Prisma } from '#server/generated/prisma/client';
-import type { AccountType, PointReason } from '#server/generated/prisma/enums';
+import type { AccountType, EmployeeRole, PointReason } from '#server/generated/prisma/enums';
 
 /**
  * Доступ к счетам и журналу баллов. Единственный слой, которому разрешено знать Prisma
@@ -420,6 +420,8 @@ export type AccountOperationRow = {
   actor: string | null;
   /** Имя сотрудника, заведшего операцию. Пусто у автоматики и у удалённой учётки. */
   actorEmployeeName: string | null;
+  /** Роль того же сотрудника — чтобы правку офиса было видно без списка сотрудников. */
+  actorEmployeeRole: EmployeeRole | null;
   note: string | null;
 };
 
@@ -474,6 +476,7 @@ export const listAccountOperations = async (
            "order"."number"           AS "orderNumber",
            transfer."actor",
            actor_employee."full_name" AS "actorEmployeeName",
+           actor_employee."role"      AS "actorEmployeeRole",
            transfer."note"
       FROM xb.point_entries AS entry
       JOIN xb.point_transfers AS transfer ON transfer."id" = entry."transfer_id"

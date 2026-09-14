@@ -17,6 +17,7 @@
 // не попадает ни байта.
 import type {
   AccountType,
+  EmployeeRole,
   Language,
   LinkCloseReason,
   LinkConfirmedBy,
@@ -249,6 +250,8 @@ export type DriverOperation = {
   actor: string | null;
   /** Сотрудник, заведший операцию, — у ручной правки. Пусто у автоматики. */
   actorEmployeeName: string | null;
+  /** Роль того же сотрудника: правил ли это офис или владелец сам. */
+  actorEmployeeRole: EmployeeRole | null;
   note: string | null;
 };
 

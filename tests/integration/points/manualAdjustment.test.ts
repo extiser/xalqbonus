@@ -1,6 +1,7 @@
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
 import { db } from '#server/db';
+import { readDriverHistory } from '#server/services/drivers/readDriverHistory';
 import { adjustPointsManually } from '#server/services/points/adjustPointsManually';
 import {
   DriverAccountMissingError,
@@ -73,6 +74,40 @@ describe('ручная правка баллов', () => {
     expect(debitTransfer.amount).toBe(7n);
     expect(debitTransfer.toAccountId).toBe(creditTransfer.fromAccountId);
     expect(debitTransfer.fromAccountId).toBe(creditTransfer.toAccountId);
+  });
+
+  it('менеджер правит в обе стороны, и история называет его имя и роль у обеих строк', async () => {
+    const person = await createTestPerson({ inProgram: true });
+    await grantPoints(person.personId, 5);
+    const { employeeId } = await createTestEmployee({ role: 'manager' });
+
+    const credit = await adjustPointsManually({
+      personId: person.personId,
+      amount: 2,
+      note: 'водитель пришёл разбираться',
+      employeeId,
+    });
+    const debit = await adjustPointsManually({
+      personId: person.personId,
+      amount: -3,
+      note: 'ошибочное начисление',
+      employeeId,
+    });
+
+    const history = await readDriverHistory({ personId: person.personId, limit: 25, offset: 0 });
+    const manualRows = history.operations.filter((operation) =>
+      [credit.transferId, debit.transferId].includes(operation.transferId),
+    );
+
+    expect(manualRows).toHaveLength(2);
+
+    for (const row of manualRows) {
+      expect(row.reason).toBe('manual');
+      expect(row.actorEmployeeName).toBe('Тестовый Сотрудник');
+      expect(row.actorEmployeeRole).toBe('manager');
+    }
+
+    expect(await readAccountBalance(person.personId)).toBe(4n);
   });
 
   it('две одинаковые правки подряд — две операции, а не повтор', async () => {

@@ -64,6 +64,7 @@ const toOperation = (row: AccountOperationRow): DriverOperation => ({
   orderNumber: row.orderNumber,
   actor: row.actor,
   actorEmployeeName: row.actorEmployeeName,
+  actorEmployeeRole: row.actorEmployeeRole,
   note: row.note,
 });
 
