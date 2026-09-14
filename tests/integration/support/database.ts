@@ -615,6 +615,26 @@ export const insertRunningSyncRun = async (kind: string, startedAt: Date): Promi
   return rows[0]?.id as string;
 };
 
+/** Заводит завершившийся успехом прогон — тот, по которому экран участника ставит отметку. */
+export const insertSucceededSyncRun = async (
+  kind: string,
+  startedAt: Date,
+  finishedAt: Date,
+): Promise<string> => {
+  const rows = await db.$queryRaw<{ id: string }[]>`
+    INSERT INTO xb.sync_runs ("kind", "status", "started_at", "finished_at")
+    VALUES (
+      ${kind}::xb.sync_kind,
+      'succeeded'::xb.sync_status,
+      ${startedAt.toISOString()}::timestamptz,
+      ${finishedAt.toISOString()}::timestamptz
+    )
+    RETURNING "id"
+  `;
+
+  return rows[0]?.id as string;
+};
+
 export type SyncRunRow = {
   id: string;
   kind: string;

@@ -41,7 +41,9 @@ export type TextKey =
   | 'linked_new'
   | 'welcome_bonus_promise'
   | 'balance_title'
-  | 'data_updated'
+  | 'trips_counted_today'
+  | 'trips_counted_yesterday'
+  | 'trips_counted_date'
   | 'history_empty'
   | 'history_failed'
   | 'button_show_more'
@@ -211,15 +213,30 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     uz: 'Hisobingiz',
   },
   /**
-   * Время последнего успешного прогона заказов.
+   * До какого момента учтены поездки — время последнего успешного прогона заказов.
    *
    * Стоит под балансом, потому что поездки приезжают прогоном, а не в момент завершения
    * заказа: водитель, закрывший заказ минуту назад, своей поездки не увидит — и эта строка
    * объясняет почему, до того как он придёт с вопросом в офис.
+   *
+   * Называет поездки, а не «данные»: начисления сотрудником и списания пишутся в момент
+   * операции и в отметку не входят. «Данные обновлены в 19:26» под записью «сегодня 10:39»
+   * читалась как «баланс пересчитан раньше операции, которая уже в списке» (issue #133).
+   *
+   * Тремя ключами, а не словом, подставленным в один: место дня во фразе на двух языках
+   * разное, и склеенная подстановкой узбекская фраза читалась бы переводом.
    */
-  data_updated: {
-    ru: 'Данные обновлены в {time}',
-    uz: "Ma'lumotlar {time} da yangilandi",
+  trips_counted_today: {
+    ru: 'Поездки учтены до {time}',
+    uz: 'Safarlar soat {time} gacha hisobga olingan',
+  },
+  trips_counted_yesterday: {
+    ru: 'Поездки учтены до {time} вчера',
+    uz: 'Safarlar kecha soat {time} gacha hisobga olingan',
+  },
+  trips_counted_date: {
+    ru: 'Поездки учтены до {time} {date}',
+    uz: 'Safarlar {date} soat {time} gacha hisobga olingan',
   },
   /**
    * Пустая история. Подписывается всегда: у нового участника операций нет ни одной,

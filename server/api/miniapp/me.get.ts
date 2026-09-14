@@ -33,7 +33,7 @@ export default defineEventHandler(async (event): Promise<MiniAppStateResponse> =
   // Состав экрана, а не готовое приветствие одной строкой: баланс на экране участника
   // стоит крупно и отдельно от имени, а истории он собирает свою ручка (issue #101).
   if (driver) {
-    return readMemberScreen(driver);
+    return readMemberScreen(driver, new Date());
   }
 
   return {

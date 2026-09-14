@@ -1,14 +1,21 @@
+import type { Language } from '#server/generated/prisma/enums';
 import { formatPoints, plainText } from '#server/bot/texts';
 import { hasTripOperations } from '#server/repositories/points';
 import { findLastSuccessfulRunFinishedAt } from '#server/repositories/syncRuns';
 import { memberScreenTexts } from '#server/services/drivers/memberScreen';
 import type { LinkedDriver } from '#server/services/drivers/readLinkedDriver';
 import { memberOrderTexts } from '#server/services/orders/memberOrderScreen';
-import { formatClockTime } from '#server/utils/parkTime';
-import type { MiniAppStateResponse } from '#shared/types/miniapp';
+import {
+  DAY_MS,
+  formatClockTime,
+  formatDayKey,
+  formatDayMonth,
+  previousDayKey,
+} from '#server/utils/parkTime';
+import type { MiniAppStateResponse, TripsNote } from '#shared/types/miniapp';
 
 /**
- * Экран участника: баланс, имя, отметка свежести данных и обещание бонуса новичку.
+ * Экран участника: баланс, имя, отметка учтённых поездок и обещание бонуса новичку.
  *
  * Истории здесь нет — она приезжает своей ручкой и листается: страница экрана читается
  * один раз, а история догружается кнопкой, и пересобирать ради этого весь экран незачем.
@@ -19,7 +26,7 @@ import type { MiniAppStateResponse } from '#shared/types/miniapp';
  */
 
 /**
- * Вид прогона, задающий отметку «данные обновлены».
+ * Вид прогона, задающий отметку «поездки учтены до».
  *
  * Только `orders`. Добор пропущенного окна (`orders_catchup`) в отметку не входит
  * намеренно: он закрывает дыру в прошлом, а водителю строка обещает, что система дошла
@@ -27,7 +34,38 @@ import type { MiniAppStateResponse } from '#shared/types/miniapp';
  */
 const FRESHNESS_KIND = 'orders';
 
-export const readMemberScreen = async (driver: LinkedDriver): Promise<MiniAppStateResponse> => {
+/**
+ * Отметка поездок: время прогона и, когда он не сегодняшний, его день.
+ *
+ * День подписывается всегда, когда он не сегодня: «19:26» двухдневной давности без даты
+ * читается как сегодняшнее время, и строка два дня говорила водителю неправду (issue #133).
+ *
+ * Предупреждение — по прошедшим суткам, а не по календарю: прогон вчера в 19:26, увиденный
+ * сегодня в 10:43, отстаёт на пятнадцать часов и в порядке, а вчерашний в 09:00, увиденный
+ * в 10:43, — уже нет.
+ */
+const tripsNote = (syncedAt: Date, language: Language, now: Date): TripsNote => {
+  const time = formatClockTime(syncedAt);
+  const day = formatDayKey(syncedAt);
+
+  const text =
+    day === formatDayKey(now)
+      ? plainText('trips_counted_today', language, { time })
+      : day === previousDayKey(now)
+        ? plainText('trips_counted_yesterday', language, { time })
+        : plainText('trips_counted_date', language, { time, date: formatDayMonth(syncedAt) });
+
+  return { text, stale: now.getTime() - syncedAt.getTime() > DAY_MS };
+};
+
+/**
+ * «Сейчас» приходит параметром: от него зависит подпись дня и предупреждение, и тест
+ * задаёт его явно, а не ждёт нужного часа.
+ */
+export const readMemberScreen = async (
+  driver: LinkedDriver,
+  now: Date,
+): Promise<MiniAppStateResponse> => {
   const [hasTrips, syncedAt] = await Promise.all([
     hasTripOperations(driver.personId),
     findLastSuccessfulRunFinishedAt(FRESHNESS_KIND),
@@ -40,10 +78,7 @@ export const readMemberScreen = async (driver: LinkedDriver): Promise<MiniAppSta
     balance: formatPoints(driver.points),
     // Успешных прогонов не было ни одного — строки нет вовсе. Подписать её «неизвестно»
     // значило бы занять место на экране сообщением, которое водителю нечего делать.
-    updatedNote:
-      syncedAt === null
-        ? null
-        : plainText('data_updated', driver.language, { time: formatClockTime(syncedAt) }),
+    tripsNote: syncedAt === null ? null : tripsNote(syncedAt, driver.language, now),
     // Обещание первых пяти поездок — тому, у кого в журнале нет ни одной. Не по факту
     // сегодняшней регистрации: перенесённый из старой базы приходит сюда с тысячей
     // поездок за спиной, и обещать ему бонус за первые пять — враньё (issue #101).
