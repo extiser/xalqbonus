@@ -31,6 +31,8 @@ export const readEmployeeScreen = async (
     screen: 'employee',
     fullName: employee.fullName,
     role: employee.role,
+    // Только признак: хеш из сервиса наружу не уходит ни в каком виде (issue #130).
+    passwordSet: employee.passwordHash !== null,
     offices: await readEmployeeOffices({ employeeId: employee.id, role: employee.role }),
   };
 };

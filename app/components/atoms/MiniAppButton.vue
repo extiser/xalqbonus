@@ -26,8 +26,10 @@ withDefaults(
     variant?: ButtonVariant;
     /** Пока запрос в пути. Ожиданием ответа Telegram кнопка не гасится — см. страницу `/app`. */
     disabled?: boolean;
+    /** `submit` — кнопка отправляет свою форму, и форма уходит ещё и по Enter с клавиатуры телефона. */
+    type?: 'button' | 'submit';
   }>(),
-  { variant: 'primary' },
+  { variant: 'primary', type: 'button' },
 );
 
 defineEmits<{ click: [] }>();
@@ -44,7 +46,7 @@ const VARIANT_CLASSES: Record<ButtonVariant, string> = {
 
 <template>
   <button
-    type="button"
+    :type="type"
     :disabled="disabled"
     class="w-full rounded-2xl px-5 py-4 text-base font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
     :class="VARIANT_CLASSES[variant]"
