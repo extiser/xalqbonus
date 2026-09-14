@@ -44,7 +44,6 @@ const PASSWORD_HINT = 'Не короче десяти символов.';
         autocomplete="new-password"
         :hint="PASSWORD_HINT"
         :error="error"
-        required
       />
 
       <AtomsMiniAppButton

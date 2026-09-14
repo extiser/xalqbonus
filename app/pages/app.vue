@@ -147,6 +147,12 @@ const employeeOffice = computed(
  */
 const employeePasswordOpen = ref(false);
 
+/**
+ * Название пункта — одно на обе кнопки. Его же дословно цитирует бот после принятия приглашения
+ * (`invite_accepted` в `server/bot/texts.ts`): меняется здесь — меняется и там.
+ */
+const EMPLOYEE_PASSWORD_LABEL = 'Пароль для входа с компьютера';
+
 const employeePassword = useEmployeePassword(() => ({ [INIT_DATA_HEADER]: initData }));
 
 const openEmployeePassword = (): void => {
@@ -592,7 +598,7 @@ const share = (): void => {
 
       <AtomsMiniAppButton
         variant="secondary"
-        label="Пароль для входа с компьютера"
+        :label="EMPLOYEE_PASSWORD_LABEL"
         @click="openEmployeePassword"
       />
     </template>
@@ -625,7 +631,7 @@ const share = (): void => {
 
       <AtomsMiniAppButton
         variant="secondary"
-        label="Пароль для входа с компьютера"
+        :label="EMPLOYEE_PASSWORD_LABEL"
         @click="openEmployeePassword"
       />
     </template>
