@@ -661,7 +661,7 @@ const share = (): void => {
         :balance-title="member.texts.balanceTitle"
         :balance="member.balance"
         :name="member.name"
-        :updated-note="member.updatedNote"
+        :trips-note="member.tripsNote"
         :promise="member.promise"
         :refresh-label="member.texts.refresh"
         :refreshing="refreshing"
