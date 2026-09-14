@@ -255,6 +255,35 @@ enum LegacyTelegramStatus {
   @@schema("xb")
 }
 
+/// Состояние рассылки. Путь один и в одну сторону: черновик → идёт → остановлена или
+/// завершена. Остановленная не возобновляется — она копируется в новый черновик.
+enum MailingStatus {
+  draft
+  running
+  stopped
+  finished
+
+  @@map("mailing_status")
+  @@schema("xb")
+}
+
+/// Чем кончилась рассылка для одного адресата.
+enum MailingRecipientOutcome {
+  /// Ещё не отправлено: очередь не дошла или рассылку остановили раньше.
+  pending
+  sent
+  /// Человек выключил уведомления — рассылка уважает это так же, как начисление.
+  skipped_disabled
+  /// Писать некуда: Telegram сказал, что канал умер, или активной привязки к моменту
+  /// отправки не осталось. Привязка при этом не закрывается — только исход.
+  invalid_chat
+  /// Telegram отклонил запрос или отказы сети не кончились за все попытки.
+  failed
+
+  @@map("mailing_recipient_outcome")
+  @@schema("xb")
+}
+
 // ---------------------------------------------------------------------------
 // Люди и учётки
 // ---------------------------------------------------------------------------
@@ -277,6 +306,7 @@ model Person {
   accounts      Account[]
   legacyRecords LegacyDriverMap[]
   orders        Order[]
+  mailings      MailingRecipient[]
 
   @@map("persons")
   @@schema("xb")
@@ -536,6 +566,7 @@ model Employee {
   ordersIssued    Order[]          @relation("order_issued_by")
   ordersCancelled Order[]          @relation("order_cancelled_by")
   stockMovements  StockMovement[]
+  mailings        Mailing[]
 
   @@map("employees")
   @@schema("xb")
@@ -1227,5 +1258,65 @@ model OrderItem {
   @@unique([orderId, productId])
   @@index([productId])
   @@map("order_items")
+  @@schema("xb")
+}
+
+// ---------------------------------------------------------------------------
+// Рассылки
+// ---------------------------------------------------------------------------
+
+/// Рассылка участникам программы в Telegram.
+///
+/// Согласованность статуса с отметками времени держится проверкой в миграции: у черновика
+/// нет ни запуска, ни конца, у идущей есть запуск и нет конца, у остановленной
+/// и завершённой есть оба.
+model Mailing {
+  id               String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// Служебный заголовок — для списка на экране. Водителю не уходит.
+  title            String
+  textRu           String        @map("text_ru")
+  /// Пусто — узбекоязычные участники получают русский текст.
+  textUz           String?       @map("text_uz")
+  /// Относительный путь на томе приложения. Файл кладёт веб — здесь только колонка.
+  photoPath        String?       @map("photo_path")
+  /// Фильтр «ездил за последние N дней». Пусто — все участники с активной привязкой.
+  activeWithinDays Int?          @map("active_within_days")
+  status           MailingStatus
+  createdById      String        @map("created_by_id") @db.Uuid
+  startedAt        DateTime?     @map("started_at") @db.Timestamptz(6)
+  /// Когда рассылка кончилась — остановкой или тем, что адресаты кончились.
+  finishedAt       DateTime?     @map("finished_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  createdBy  Employee           @relation(fields: [createdById], references: [id])
+  recipients MailingRecipient[]
+
+  @@index([createdAt(sort: Desc)])
+  @@map("mailings")
+  @@schema("xb")
+}
+
+/// Снимок адресатов на момент запуска.
+///
+/// Пара «рассылка + человек» — первичный ключ, и это защита от двойной отправки: повтор
+/// снимка второй строки не заводит, а отправка пишет исход условием «ещё `pending`».
+/// Водитель, вступивший в программу во время рассылки, в снимок не попадает.
+model MailingRecipient {
+  mailingId String                  @map("mailing_id") @db.Uuid
+  personId  String                  @map("person_id") @db.Uuid
+  outcome   MailingRecipientOutcome
+  /// Когда исход стал известен. Пусто у `pending`.
+  outcomeAt DateTime?               @map("outcome_at") @db.Timestamptz(6)
+
+  mailing Mailing @relation(fields: [mailingId], references: [id])
+  person  Person  @relation(fields: [personId], references: [id])
+
+  @@id([mailingId, personId])
+  /// Счётчики исходов по рассылке и выборка ещё не отправленных.
+  @@index([mailingId, outcome])
+  @@index([personId])
+  @@map("mailing_recipients")
   @@schema("xb")
 }

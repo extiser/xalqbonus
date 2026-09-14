@@ -1,4 +1,5 @@
 import { closeQueueConnection } from '#server/queues/connection';
+import { closeMailingQueue } from '#server/queues/mailing';
 import { closeNotificationsQueue } from '#server/queues/notifications';
 
 /**
@@ -10,5 +11,6 @@ import { closeNotificationsQueue } from '#server/queues/notifications';
  */
 export const disconnectQueues = async (): Promise<void> => {
   await closeNotificationsQueue();
+  await closeMailingQueue();
   await closeQueueConnection();
 };

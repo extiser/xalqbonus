@@ -727,9 +727,10 @@ export const officeContacts = (language: Language): OfficeContact[] =>
  * Экранирование для `parse_mode: HTML`.
  *
  * Имя водителя приходит из чужой системы и подставляется в разметку: угловая скобка
- * в имени иначе ломает сообщение целиком, и водитель не получает ничего.
+ * в имени иначе ломает сообщение целиком, и водитель не получает ничего. Тем же экранируется
+ * текст рассылки — его набирает сотрудник, и «<3» в нём ломало бы сообщение так же.
  */
-const escapeHtml = (value: string): string =>
+export const escapeHtml = (value: string): string =>
   value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 /**

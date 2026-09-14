@@ -1,6 +1,7 @@
 import {
   ALL_EMPLOYEE_ROLES,
   CATALOG_ROLES,
+  MAILING_ROLES,
   ORDER_ROLES,
   STAFF_ROLES,
   SYNC_ROLES,
@@ -30,6 +31,7 @@ const SERVICE_NAVIGATION: NavigationItem[] = [
   // Раздел называется «Каталог», а адрес — по сущности, которой он управляет: страница
   // и ручка под ней читаются одним словом (`/products` ↔ `/api/products`), как у водителей.
   { title: 'Каталог', path: '/products', roles: CATALOG_ROLES },
+  { title: 'Рассылки', path: '/mailings', roles: MAILING_ROLES },
   { title: 'Сотрудники', path: '/employees', roles: STAFF_ROLES },
   { title: 'Синхронизация', path: '/sync', roles: SYNC_ROLES },
 ];

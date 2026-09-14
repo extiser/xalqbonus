@@ -1,28 +1,32 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { MAX_PHOTO_BYTES, MAX_PHOTO_MB, PHOTO_ACCEPT } from '#shared/photo';
-import type { Product } from '#shared/types/catalog';
 
 /**
- * Фото товара: то, что лежит, и выбор нового файла.
+ * Фото на томе приложения: то, что лежит, и выбор нового файла. Одна форма на товар
+ * и рассылку — у обоих фото устроено одинаково (issue #120, #136).
  *
  * **Ограничение живёт свойством поля, а не ответом сервера.** `accept` отсекает лишние типы
  * в самом диалоге выбора, подпись под полем называет формат и потолок сразу, а размер
- * проверяется при выборе — до отправки. Это ровно тот случай, что описан в `docs/frontend.md`
- * → «Обязательное поле — свойство поля»: ограничение поля останавливает человека рядом
- * с полем, а ответ сервера остаётся ответом неполному запросу из чужого клиента.
- *
- * Поэтому текст про формат и размер написан здесь — единственное место, где текст
- * ограничения живёт в компоненте, и по той же причине, по которой `required` показывает
- * браузер. Числа при этом не выписаны строкой: они приходят из `shared/photo.ts`, откуда
- * их читает и сервер.
+ * проверяется при выборе — до отправки (`docs/frontend.md` → «Обязательное поле — свойство
+ * поля»). Числа не выписаны строкой: они приходят из `shared/photo.ts`, откуда их читает
+ * и сервер.
  */
-defineProps<{
-  product: Product;
-  uploading: boolean;
-  /** Что ответил сервер на последнюю попытку. */
-  error: string | null;
-}>();
+withDefaults(
+  defineProps<{
+    photoPath: string | null;
+    /** Время последней правки владельца фото — версия адреса картинки. */
+    updatedAt: string;
+    /** Подпись картинки для тех, кто её не видит. */
+    name: string;
+    uploading: boolean;
+    /** Что ответил сервер на последнюю попытку. */
+    error: string | null;
+    /** Что ещё сказать под полем — например, что фото делает текст подписью. */
+    note?: string | null;
+  }>(),
+  { note: null },
+);
 
 const emit = defineEmits<{ upload: [file: File] }>();
 
@@ -32,9 +36,8 @@ const sizeNotice = ref<string | null>(null);
 
 const choose = (file: File | null): void => {
   if (file && file.size > MAX_PHOTO_BYTES) {
-    // Файл не принимается, и сказано об этом здесь же, не дожидаясь запроса: отправлять
-    // пять мегабайт, чтобы узнать, что их не примут, — это ожидание впустую на мобильной
-    // сети в офисе.
+    // Отправлять пять мегабайт, чтобы узнать, что их не примут, — ожидание впустую
+    // на мобильной сети в офисе.
     chosen.value = null;
     sizeNotice.value = `Файл больше ${MAX_PHOTO_MB} МБ. Выберите другой или уменьшите этот.`;
 
@@ -56,9 +59,9 @@ const submit = (): void => {
   <MoleculesSectionPanel title="Фото">
     <div class="flex flex-wrap items-start gap-6">
       <MoleculesProductPhoto
-        :photo-path="product.photoPath"
-        :updated-at="product.updatedAt"
-        :name="product.name"
+        :photo-path="photoPath"
+        :updated-at="updatedAt"
+        :name="name"
         size="large"
       />
 
@@ -69,6 +72,7 @@ const submit = (): void => {
           <span class="mt-1 block text-sm text-slate-500">
             JPEG, PNG или WebP, до {{ MAX_PHOTO_MB }} МБ. Прежнее фото заменится.
           </span>
+          <span v-if="note" class="mt-1 block text-sm text-slate-500">{{ note }}</span>
         </label>
 
         <p v-if="sizeNotice" class="text-sm text-red-700">{{ sizeNotice }}</p>

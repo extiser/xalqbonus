@@ -1,6 +1,7 @@
 import { consola } from 'consola';
 import { writeFileSync } from 'node:fs';
 import { closeQueueConnection, getQueueConnection } from '#server/queues/connection';
+import { closeMailingQueue, createMailingWorker, getMailingQueue } from '#server/queues/mailing';
 import {
   closeNotificationsQueue,
   createNotificationsWorker,
@@ -82,6 +83,28 @@ notificationsWorker.on('error', (error: Error) => {
   log.warn('очередь уведомлений сообщила об ошибке', { error: error.message });
 });
 
+// Рассылки — своя очередь и свой воркер, отдельно от уведомлений: рассылка на четыре тысячи
+// человек в общей очереди задержала бы уведомление о начислении на минуты
+// (server/queues/mailing.ts).
+const mailingQueue = getMailingQueue();
+const mailingWorker = createMailingWorker(mailingQueue);
+
+mailingWorker.on('completed', (job, outcome) => {
+  log.debug('задание рассылки выполнено', { mailingId: job.data.mailingId, outcome });
+});
+
+mailingWorker.on('failed', (job, error) => {
+  log.error('сообщение рассылки не отправлено', {
+    mailingId: job?.data.mailingId,
+    attempts: job?.attemptsMade,
+    error: error.message,
+  });
+});
+
+mailingWorker.on('error', (error: Error) => {
+  log.warn('очередь рассылок сообщила об ошибке', { error: error.message });
+});
+
 // Просрочка заказов — третья очередь. Своя по той же причине, по которой своя у уведомлений:
 // прогон синхронизации идёт до получаса, и просрочка, вставшая за ним, держала бы резерв
 // товара и списанные баллы всё это время (server/queues/orders.ts).
@@ -140,6 +163,10 @@ const shutdown = async (signal: string): Promise<void> => {
   // отправка — это сообщение, про которое неизвестно, ушло оно или нет.
   await notificationsWorker.close();
   await closeNotificationsQueue();
+  // Рассылка — по той же причине, что уведомления. Недоставленные адресаты остаются
+  // `pending` с заданиями в Redis, и новый процесс продолжит с них.
+  await mailingWorker.close();
+  await closeMailingQueue();
   await closeQueueConnection();
   process.exit(0);
 };

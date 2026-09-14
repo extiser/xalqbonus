@@ -1,0 +1,86 @@
+import { consola } from 'consola';
+import { db } from '#server/db';
+import { enqueueMailingRecipients } from '#server/queues/mailing';
+import {
+  findMailing,
+  finishMailingIfDone,
+  insertMailingRecipients,
+  listPendingRecipientIds,
+  markMailingRunning,
+} from '#server/repositories/mailings';
+import {
+  MailingAudienceEmptyError,
+  MailingStatusMismatchError,
+  UnknownMailingError,
+} from '#server/services/mailings/errors';
+import { assertMailingTexts } from '#server/services/mailings/fields';
+import { readMailing } from '#server/services/mailings/readMailing';
+import type { Mailing } from '#shared/types/mailing';
+
+/**
+ * Запуск рассылки: снимок адресатов и задания в очередь.
+ *
+ * Смена статуса и снимок — одна транзакция. Рассылка в статусе «идёт» без снимка означала бы
+ * рассылку, которой некому уходить и которую нельзя ни запустить заново, ни честно посчитать.
+ * Пустой снимок откатывает и статус: рассылка «никому» — ошибка фильтра, а не отправка.
+ *
+ * Задания ставятся после фиксации, а не внутри: Redis в транзакцию базы не входит, и задание,
+ * поставленное до фиксации, воркер мог бы взять раньше, чем появится строка снимка.
+ * Упавшая постановка оставляет адресатов `pending` — и повтор запуска её доделывает:
+ * для идущей рассылки он ставит задания ждущим снова, а `jobId` из пары
+ * «рассылка + человек» и условие «ещё `pending`» при записи исхода не дают отправить дважды.
+ */
+const log = consola.withTag('mailings:launch');
+
+export const launchMailing = async (mailingId: string): Promise<Mailing> => {
+  const current = await findMailing(mailingId);
+
+  if (!current) {
+    throw new UnknownMailingError(mailingId);
+  }
+
+  if (current.status === 'draft') {
+    assertMailingTexts(current, current.photoPath !== null);
+
+    const snapshot = await db.$transaction(async (transaction) => {
+      const running = await markMailingRunning(mailingId, transaction);
+
+      if (!running) {
+        return null;
+      }
+
+      const recipients = await insertMailingRecipients(
+        mailingId,
+        running.activeWithinDays,
+        transaction,
+      );
+
+      if (recipients === 0) {
+        throw new MailingAudienceEmptyError(mailingId);
+      }
+
+      return recipients;
+    });
+
+    // Запустили между чтением и транзакцией — вторым нажатием или вторым сотрудником.
+    // Снимок уже снят тем запуском; этот доставит задания так же, как повтор ниже.
+    if (snapshot !== null) {
+      log.info('рассылка запущена, снимок снят', { mailingId, recipients: snapshot });
+    }
+  } else if (current.status !== 'running') {
+    throw new MailingStatusMismatchError(mailingId, current.status, 'draft');
+  }
+
+  const pending = await listPendingRecipientIds(mailingId);
+
+  await enqueueMailingRecipients(mailingId, pending);
+
+  // Снимок из одних выключивших уведомления: ждать нечего, рассылка кончилась сразу.
+  if (pending.length === 0) {
+    await finishMailingIfDone(mailingId);
+  }
+
+  log.info('задания рассылки поставлены', { mailingId, jobs: pending.length });
+
+  return readMailing(mailingId);
+};

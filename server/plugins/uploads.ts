@@ -1,5 +1,6 @@
 import { consola } from 'consola';
 import { readUploadsDir } from '#server/adapters/uploads/config';
+import { ensureMailingPhotoDir } from '#server/adapters/uploads/mailingPhotos';
 import { ensureUploadsWritable } from '#server/adapters/uploads/productPhotos';
 
 /**
@@ -28,6 +29,7 @@ export default defineNitroPlugin(() => {
 
   try {
     ensureUploadsWritable();
+    ensureMailingPhotoDir();
   } catch (error) {
     log.error('том с файлами недоступен: приложение не поднимается', {
       dir,
