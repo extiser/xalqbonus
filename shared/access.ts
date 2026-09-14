@@ -56,3 +56,13 @@ export const ANY_OFFICE_ROLES: readonly EmployeeRole[] = ['owner', 'admin'];
  * а правило «роль строго ниже своей» (`server/services/employees/roles.ts`).
  */
 export const STAFF_ROLES: readonly EmployeeRole[] = ['owner', 'admin'];
+
+/**
+ * Ручное начисление и списание баллов водителю — владельцу и админу (issue #131).
+ *
+ * Менеджер карточку водителя видит, а форму — нет: ручное движение баллов — операция
+ * над деньгами парка, и стойке её не дают. Список один на обе двери: ручка пишется от роли,
+ * и тот же список откроет эту же операцию в Mini App сотрудника, когда придёт её экран
+ * (docs/decisions.md → «Доступ определяется ролью, а не дверью»).
+ */
+export const POINTS_ADJUST_ROLES: readonly EmployeeRole[] = ['owner', 'admin'];

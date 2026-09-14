@@ -33,6 +33,18 @@ export const failureDenial = (error: unknown): ServerDenialCode | null => {
 };
 
 /**
+ * Поле формы, к которому ручка отнесла отказ. `null` — отказ не про поле или ответа не было.
+ *
+ * Строкой без проверки по списку: какие поля у формы, знает форма, и значение, которого
+ * у неё нет, просто не встанет ни к одному полю.
+ */
+export const failureField = (error: unknown): string | null => {
+  const field = asRecord(failureBody(error)?.data)?.field;
+
+  return typeof field === 'string' ? field : null;
+};
+
+/**
  * Текст, который прислал сервер. `null` — ответа не было или текста в нём нет.
  *
  * Отдельно от `failureText`, потому что запасной текст у дверей разный: у веба он из словаря

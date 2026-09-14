@@ -47,7 +47,13 @@ export type TransferContext = {
    */
   orderId?: string | null;
   legacyOrderId?: number | null;
+  /** Путь, которым пришла операция: `operator`, `mini_app`, `legacy_import`. */
   actor?: string | null;
+  /**
+   * Сотрудник, когда операцию завёл человек. Рядом с `actor`, а не вместо него: автоматика
+   * учётки не имеет (docs/decisions.md → «След сотрудника в журналах — ссылка, а не строка»).
+   */
+  actorEmployeeId?: string | null;
   note?: string | null;
 };
 
@@ -213,7 +219,7 @@ export const writeTransfer = async (input: WriteTransferInput): Promise<WriteTra
       INSERT INTO xb.point_transfers (
         "reason", "idempotency_key", "amount",
         "from_account_id", "to_account_id", "occurred_at",
-        "trip_order_id", "order_id", "legacy_order_id", "actor", "note"
+        "trip_order_id", "order_id", "legacy_order_id", "actor", "actor_employee_id", "note"
       )
       VALUES (
         ${input.reason}::xb.point_reason,
@@ -226,6 +232,7 @@ export const writeTransfer = async (input: WriteTransferInput): Promise<WriteTra
         ${input.context.orderId ?? null}::uuid,
         ${input.context.legacyOrderId ?? null},
         ${input.context.actor ?? null},
+        ${input.context.actorEmployeeId ?? null}::uuid,
         ${input.context.note ?? null}
       )
       ON CONFLICT ("idempotency_key") DO NOTHING
@@ -411,6 +418,8 @@ export type AccountOperationRow = {
   /** Номер нашего заказа за баллы — у списания и возврата. */
   orderNumber: number | null;
   actor: string | null;
+  /** Имя сотрудника, заведшего операцию. Пусто у автоматики и у удалённой учётки. */
+  actorEmployeeName: string | null;
   note: string | null;
 };
 
@@ -464,6 +473,7 @@ export const listAccountOperations = async (
            transfer."legacy_order_id" AS "legacyOrderId",
            "order"."number"           AS "orderNumber",
            transfer."actor",
+           actor_employee."full_name" AS "actorEmployeeName",
            transfer."note"
       FROM xb.point_entries AS entry
       JOIN xb.point_transfers AS transfer ON transfer."id" = entry."transfer_id"
@@ -485,6 +495,7 @@ export const listAccountOperations = async (
       ) AS counterparty_name ON TRUE
       LEFT JOIN xb.trips AS trip ON trip."order_id" = transfer."trip_order_id"
       LEFT JOIN xb.orders AS "order" ON "order"."id" = transfer."order_id"
+      LEFT JOIN xb.employees AS actor_employee ON actor_employee."id" = transfer."actor_employee_id"
      WHERE entry."account_id" = ${accountId}::uuid
      ORDER BY transfer."occurred_at" DESC, entry."id" DESC
      LIMIT ${limit} OFFSET ${offset}

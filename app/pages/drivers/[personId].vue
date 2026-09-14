@@ -1,8 +1,16 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useRoute } from 'vue-router';
+import { useCurrentEmployee } from '~/composables/useCurrentEmployee';
 import { DISPLAY_TIME_ZONE_LABEL } from '~/utils/format';
 import { toLoadState } from '~/utils/loadState';
+import { failureField, failureText } from '~/utils/requestError';
+import { POINTS_ADJUST_ROLES } from '#shared/access';
+import type {
+  ManualPointsField,
+  ManualPointsRequestBody,
+  ManualPointsResponse,
+} from '#shared/types/driver';
 
 /**
  * Карточка водителя: после неё на вопрос «откуда у водителя столько баллов» отвечают
@@ -26,9 +34,14 @@ const {
   data: card,
   status: cardStatus,
   error: cardError,
+  refresh: refreshCard,
 } = await useFetch(() => `/api/drivers/${personId.value}`);
 
-const { data: history, status: historyStatus } = await useFetch(
+const {
+  data: history,
+  status: historyStatus,
+  refresh: refreshHistory,
+} = await useFetch(
   () => `/api/drivers/${personId.value}/history`,
   { query: { limit: HISTORY_LIMIT, offset: historyOffset } },
 );
@@ -52,6 +65,52 @@ const fullName = computed(() => {
 });
 
 useHead({ title: () => `${fullName.value} — XalqBonus` });
+
+const employee = useCurrentEmployee();
+
+/**
+ * Форму правки видит владелец и админ, и только у человека со счётом. Проверка дублирует
+ * серверную и ничего не решает: менеджеру, набравшему запрос руками, откажет ручка.
+ */
+const canAdjust = computed(
+  () =>
+    employee.value !== null &&
+    POINTS_ADJUST_ROLES.includes(employee.value.role) &&
+    card.value?.balance !== null &&
+    card.value?.balance !== undefined,
+);
+
+const adjusting = ref(false);
+const adjustError = ref<string | null>(null);
+const adjustErrorField = ref<ManualPointsField | null>(null);
+const adjustmentsApplied = ref(0);
+
+/**
+ * Правка, затем перечитывание карточки и истории: баланс и сверка живут в одной ручке,
+ * строка операции — в другой, и обновить одну без другой значит показать новый баланс
+ * рядом со старым журналом.
+ */
+const adjustPoints = async (body: ManualPointsRequestBody): Promise<void> => {
+  adjusting.value = true;
+  adjustError.value = null;
+  adjustErrorField.value = null;
+
+  try {
+    await $fetch<ManualPointsResponse>(`/api/drivers/${personId.value}/points`, {
+      method: 'POST',
+      body,
+    });
+    adjustmentsApplied.value += 1;
+    historyOffset.value = 0;
+    await Promise.all([refreshCard(), refreshHistory()]);
+  } catch (error) {
+    const field = failureField(error);
+    adjustError.value = failureText(error);
+    adjustErrorField.value = field === 'amount' || field === 'note' ? field : null;
+  } finally {
+    adjusting.value = false;
+  }
+};
 </script>
 
 <template>
@@ -92,6 +151,14 @@ useHead({ title: () => `${fullName.value} — XalqBonus` });
     <template v-else>
       <OrganismsDriverIdentity :card="card" />
       <OrganismsDriverBalance :card="card" />
+      <OrganismsDriverPointsAdjustment
+        v-if="canAdjust"
+        :saving="adjusting"
+        :error="adjustError"
+        :error-field="adjustErrorField"
+        :applied-count="adjustmentsApplied"
+        @submit="adjustPoints"
+      />
       <OrganismsDriverMembership :card="card" />
       <OrganismsDriverParkProfiles :card="card" />
       <OrganismsDriverOperations

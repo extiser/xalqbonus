@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Числовое поле формы: подпись, ввод и подсказка под ним.
+ * Числовое поле формы: подпись, ввод и отказ или подсказка под ним.
  *
  * Устроено как `FormField` и по той же причине обнимает поле элементом `<label>`,
  * а не связывается с ним через `id`: придуманные идентификаторы обязаны быть уникальными
@@ -9,14 +9,17 @@
 withDefaults(
   defineProps<{
     label: string;
-    min?: number;
+    /** `null` — нижней границы нет. */
+    min?: number | null;
     max?: number;
     placeholder?: string;
     required?: boolean;
+    /** Что не так с этим полем. `null` — всё в порядке. */
+    error?: string | null;
     /** Правило ввода, а не отказ: «строго больше нуля», «в сумах». */
     hint?: string | null;
   }>(),
-  { min: 0, max: undefined, placeholder: undefined, required: false, hint: null },
+  { min: 0, max: undefined, placeholder: undefined, required: false, error: null, hint: null },
 );
 
 const model = defineModel<string>({ required: true });
@@ -32,6 +35,7 @@ const model = defineModel<string>({ required: true });
       :placeholder="placeholder"
       :required="required"
     />
-    <span v-if="hint" class="mt-1 block text-sm text-slate-500">{{ hint }}</span>
+    <span v-if="error" class="mt-1 block text-sm text-red-700">{{ error }}</span>
+    <span v-else-if="hint" class="mt-1 block text-sm text-slate-500">{{ hint }}</span>
   </label>
 </template>

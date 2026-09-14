@@ -112,9 +112,10 @@ const direction = computed(() =>
         <dt class="shrink-0 text-slate-500">Заказ товара</dt>
         <dd class="font-mono text-slate-700 tabular-nums">{{ operation.legacyOrderId }}</dd>
       </div>
-      <div v-if="operation.actor" class="flex gap-2">
+      <!-- Человек, когда он был, иначе путь операции: автоматика учётки не имеет. -->
+      <div v-if="operation.actorEmployeeName || operation.actor" class="flex gap-2">
         <dt class="shrink-0 text-slate-500">Кто</dt>
-        <dd class="text-slate-700">{{ operation.actor }}</dd>
+        <dd class="text-slate-700">{{ operation.actorEmployeeName ?? operation.actor }}</dd>
       </div>
     </dl>
 
