@@ -14,6 +14,7 @@ import { useEmployeePassword } from '~/composables/useEmployeePassword';
 import { useMemberHistory } from '~/composables/useMemberHistory';
 import { useMemberOrders } from '~/composables/useMemberOrders';
 import { useOfficeOrderDesk } from '~/composables/useOfficeOrderDesk';
+import { failureDenial, failureText } from '~/utils/requestError';
 import {
   hasSignedInitData,
   loadTelegramWebApp,
@@ -53,8 +54,8 @@ useHead({
 });
 
 /**
- * Два текста, которых нет в серверном словаре, — и не по недосмотру: показываются они ровно
- * тогда, когда сервер не ответил или его не спрашивали вовсе. Спросить у него перевод
+ * Три текста, которых нет в серверном словаре, — и не по недосмотру: показываются они ровно
+ * тогда, когда сервер не ответил, отказал или его не спрашивали вовсе. Спросить у него перевод
  * в этот момент не у кого.
  *
  * На двух языках сразу, как экран выбора языка в боте: чей это человек, мы здесь ещё
@@ -65,12 +66,20 @@ const OPEN_FROM_TELEGRAM =
   'Ilovani Telegram orqali oching. / Откройте приложение через Telegram.';
 const LOAD_FAILED =
   "Ma'lumotlarni yuklab bo'lmadi. Qaytadan urinib ko'ring. / Не удалось загрузить данные. Попробуйте ещё раз.";
+/** Кнопка заглушки: перечитать экран. Заглушку видят и водитель, и сотрудник. */
+const RETRY_LABEL = 'Yangilash / Обновить';
 
 /** Что показываем прямо сейчас. Загрузка и отказ различаются намеренно: они значат разное. */
 type Stage = 'loading' | 'error' | 'member' | 'registration' | 'employee';
 
 const stage = ref<Stage>('loading');
 const errorMessage = ref('');
+
+/**
+ * На заглушке есть «Обновить». Нет её ровно в одном случае — приложение открыто не из Telegram:
+ * подписанной строки не появится, сколько ни повторяй (issue #132).
+ */
+const retryable = ref(true);
 
 /** Экран участника: баланс, имя, отметка свежести и обещание бонуса новичку. */
 const member = ref<MiniAppMemberScreen | null>(null);
@@ -132,7 +141,12 @@ const employee = ref<MiniAppEmployeeScreen | null>(null);
 const employeeOfficeId = ref<string | null>(null);
 const employeeCode = ref('');
 
-const officeDesk = useOfficeOrderDesk(() => ({ [INIT_DATA_HEADER]: initData }));
+// Отказ отдаётся странице обёрткой, а не самой функцией: `reportDoorDenial` объявлена ниже,
+// рядом с `failWith`, и к моменту первого запроса уже существует.
+const officeDesk = useOfficeOrderDesk(
+  () => ({ [INIT_DATA_HEADER]: initData }),
+  (error) => reportDoorDenial(error),
+);
 
 const employeeOffice = computed(
   () => employee.value?.offices.find((office) => office.officeId === employeeOfficeId.value) ?? null,
@@ -153,7 +167,10 @@ const employeePasswordOpen = ref(false);
  */
 const EMPLOYEE_PASSWORD_LABEL = 'Пароль для входа с компьютера';
 
-const employeePassword = useEmployeePassword(() => ({ [INIT_DATA_HEADER]: initData }));
+const employeePassword = useEmployeePassword(
+  () => ({ [INIT_DATA_HEADER]: initData }),
+  (error) => reportDoorDenial(error),
+);
 
 const openEmployeePassword = (): void => {
   employeePassword.reset();
@@ -412,9 +429,65 @@ const applyState = (state: MiniAppStateResponse): void => {
   stage.value = 'registration';
 };
 
-const failWith = (message: string): void => {
+/**
+ * Снимает всё, что человек успел сделать на экране: выбранный офис, набранный код, открытый
+ * заказ, пункт пароля, путь по экранам участника.
+ *
+ * Заглушка — это текст и больше ничего, и прежнее состояние под ней не хранится: «Обновить»
+ * возвращает экран с начала, каким его показывает первое открытие, а не стойку с кодом,
+ * набранным до того, как доступ закрыли.
+ */
+const resetScreenWork = (): void => {
+  employeeOfficeId.value = null;
+  employeeCode.value = '';
+  officeDesk.reset();
+  employeePasswordOpen.value = false;
+  employeePassword.reset();
+  screens.value = ['home'];
+  currentOrder.value = null;
+};
+
+/**
+ * Заглушка вместо экрана. `retryable: false` — только для приложения, открытого не из Telegram.
+ */
+const failWith = (message: string, options: { retryable: boolean } = { retryable: true }): void => {
+  resetScreenWork();
+  webApp?.BackButton?.hide();
   errorMessage.value = message;
+  retryable.value = options.retryable;
   stage.value = 'error';
+};
+
+/**
+ * Отказ двери посреди работы — одно решение на все ручки открытого приложения.
+ *
+ * Сотрудника выключили, пока приложение было открыто: отказ строкой под полем кода, рядом
+ * с набранным кодом и списком «Ждут выдачи», читался как «заказ не найден» (прогон на стенде
+ * 14-09-2026, issue #132). Поэтому отказ двери заменяет экран той же заглушкой, что при
+ * холодном открытии (`employee_denied`), с текстом от сервера.
+ *
+ * Отказ двери от доменного отличает словарь: `failureDenial` возвращает код только для
+ * отказов из `shared/denials.ts`. Остальные — «заказ не найден», «пароль короче» — остаются
+ * строкой у поля: композабл получает `false` и показывает их сам.
+ */
+const reportDoorDenial = (error: unknown): boolean => {
+  if (failureDenial(error) === null) {
+    return false;
+  }
+
+  failWith(failureText(error));
+
+  return true;
+};
+
+/**
+ * «Обновить» на заглушке: тот же запрос, что при первом открытии. Вернулся доступ — рабочий
+ * экран на месте, без закрытия приложения; не вернулся — снова заглушка с новым ответом.
+ */
+const retry = async (): Promise<void> => {
+  stage.value = 'loading';
+
+  await loadState();
 };
 
 /** Запрос состояния экрана. Один на первую загрузку и на кнопку обновления: спрашивается то же. */
@@ -495,7 +568,7 @@ onMounted(async () => {
   // отдаёт непустой огрызок, и по пустоте человек вне Telegram получал бы сообщение
   // о поломке вместо указания, где вход.
   if (!hasSignedInitData(initData)) {
-    failWith(OPEN_FROM_TELEGRAM);
+    failWith(OPEN_FROM_TELEGRAM, { retryable: false });
 
     return;
   }
@@ -586,9 +659,10 @@ const share = (): void => {
 <template>
   <p v-if="stage === 'loading'" class="py-10 text-center text-base text-slate-500">…</p>
 
-  <p v-else-if="stage === 'error'" class="py-10 text-center text-base leading-relaxed text-red-700">
-    {{ errorMessage }}
-  </p>
+  <div v-else-if="stage === 'error'" class="flex flex-col gap-6 py-10">
+    <p class="text-center text-base leading-relaxed text-red-700">{{ errorMessage }}</p>
+    <AtomsMiniAppButton v-if="retryable" :label="RETRY_LABEL" @click="retry" />
+  </div>
 
   <div v-else-if="stage === 'employee' && employee" class="flex flex-col gap-6">
     <OrganismsEmployeePasswordForm

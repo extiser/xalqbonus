@@ -13,8 +13,14 @@ import type { EmployeePasswordResponse } from '#shared/types/employee';
  *
  * Текст отказа — тот, что прислала ручка (`failureText`): правило длины живёт при ней,
  * и второй текст про то же на экране разошёлся бы с веб-страницей.
+ *
+ * Отказ сначала отдаётся странице через `reportDenial` — как у стойки (`useOfficeOrderDesk`):
+ * отказ двери заменяет экран целиком, и решает это страница, а не композабл.
  */
-export const useEmployeePassword = (readHeaders: () => Record<string, string>) => {
+export const useEmployeePassword = (
+  readHeaders: () => Record<string, string>,
+  reportDenial: (error: unknown) => boolean = () => false,
+) => {
   const password = ref('');
   const submitting = ref(false);
   const error = ref<string | null>(null);
@@ -43,6 +49,10 @@ export const useEmployeePassword = (readHeaders: () => Record<string, string>) =
 
       return true;
     } catch (failure) {
+      if (reportDenial(failure)) {
+        return false;
+      }
+
       error.value = failureText(failure);
 
       return false;
