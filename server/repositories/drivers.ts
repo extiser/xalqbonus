@@ -324,7 +324,7 @@ export type TelegramLinkRow = {
   closedAt: Date | null;
   closeReason: LinkCloseReason | null;
   confirmedBy: LinkConfirmedBy;
-  operatorRef: string | null;
+  operatorName: string | null;
 };
 
 /**
@@ -335,19 +335,24 @@ export type TelegramLinkRow = {
  * через год (docs/drivers.md).
  *
  * `chat_id` уходит текстом: в базе он `bigint`, а таких чисел JSON не знает.
+ *
+ * Сотрудник подтягивается по ссылке, а не читается строкой: колонку-строку `#84` заменил
+ * учёткой ровно затем, чтобы «кто подтвердил» называл человека. Соединение левое —
+ * у автопривязки и перенесённых строк сотрудника нет, и терять из-за этого строку нельзя.
  */
 export const listPersonTelegramLinks = async (personId: string): Promise<TelegramLinkRow[]> =>
   db.$queryRaw<TelegramLinkRow[]>`
-    SELECT "telegram_chat_id"::text AS "telegramChatId",
-           "telegram_user_id"::text AS "telegramUserId",
-           "linked_at"    AS "linkedAt",
-           "closed_at"    AS "closedAt",
-           "close_reason" AS "closeReason",
-           "confirmed_by" AS "confirmedBy",
-           "operator_ref" AS "operatorRef"
-      FROM xb.telegram_links
-     WHERE "person_id" = ${personId}::uuid
-     ORDER BY "closed_at" ASC NULLS FIRST, "linked_at" DESC
+    SELECT link."telegram_chat_id"::text AS "telegramChatId",
+           link."telegram_user_id"::text AS "telegramUserId",
+           link."linked_at"    AS "linkedAt",
+           link."closed_at"    AS "closedAt",
+           link."close_reason" AS "closeReason",
+           link."confirmed_by" AS "confirmedBy",
+           operator."full_name" AS "operatorName"
+      FROM xb.telegram_links AS link
+      LEFT JOIN xb.employees AS operator ON operator."id" = link."operator_employee_id"
+     WHERE link."person_id" = ${personId}::uuid
+     ORDER BY link."closed_at" ASC NULLS FIRST, link."linked_at" DESC
   `;
 
 export type PersonSettingsRow = {

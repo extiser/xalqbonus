@@ -137,6 +137,34 @@ export const linkTestDriver = async (
   createdLinkIds.add(link.id);
 };
 
+export type CreateClosedTestLinkInput = {
+  personId: string;
+  telegramChatId: bigint;
+  linkedAt: Date;
+  closedAt: Date;
+  operatorEmployeeId: string;
+};
+
+/**
+ * Привязка, подтверждённая сотрудником и потом им же закрытая, — так выглядит строка
+ * после перепривязки в офисе.
+ */
+export const createClosedTestLink = async (input: CreateClosedTestLinkInput): Promise<void> => {
+  const link = await db.telegramLink.create({
+    data: {
+      personId: input.personId,
+      telegramChatId: input.telegramChatId,
+      linkedAt: input.linkedAt,
+      closedAt: input.closedAt,
+      closeReason: 'operator',
+      confirmedBy: 'operator',
+      operatorEmployeeId: input.operatorEmployeeId,
+    },
+  });
+
+  createdLinkIds.add(link.id);
+};
+
 /** Активный телефон профиля парка — по нему идёт автопривязка и проверка пересечения. */
 export const setTestProfilePhone = async (profileId: string, phoneE164: string): Promise<void> => {
   const phone = await db.profilePhone.create({
