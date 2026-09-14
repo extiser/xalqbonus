@@ -1,19 +1,31 @@
 import type { EmployeeRole } from '#server/generated/prisma/enums';
 
 /**
- * Порядок ролей и правило приглашения.
+ * Порядок ролей и единственное правило власти над чужой учёткой — «строго ниже своей».
  *
- * Приглашать можно роль **строго ниже своей**: `owner` — `admin` и `manager`, `admin` —
- * `manager`, `manager` — никого (docs/decisions.md → «Учётка сотрудника и роли»).
+ * Правило одно на все действия с чужой учёткой: приглашение, отзыв приглашения, выключение
+ * и включение, сброс пароля. `owner` — над `admin` и `manager`, `admin` — над `manager`,
+ * `manager` — ни над кем (docs/decisions.md → «Учётка сотрудника и роли», issue #132).
+ *
+ * Записано одним предикатом, а через него — каждое действие: три места, сравнивающие ранги
+ * самостоятельно, разойдутся на первой новой роли.
  *
  * Правило записано сравнением рангов, а не таблицей пар: с таблицей новая роль между
  * существующими требует дописать строки во все стороны, и забытая клетка становится
  * тихим расширением прав. С рангами она требует одного числа.
  *
- * «Строго ниже» отвечает сразу на два вопроса, которые иначе пришлось бы разбирать
- * отдельно: `owner` приглашением не заводится (выше него ранга нет), и админ не заводит
- * второго админа, то есть не расширяет круг равных себе.
+ * «Строго ниже» отвечает сразу на вопросы, которые иначе пришлось бы разбирать отдельными
+ * проверками: `owner` приглашением не заводится и никем не выключается (выше него ранга нет),
+ * себя не выключить и себе не сбросить (свой ранг не ниже своего), а админ не заводит
+ * и не выключает другого админа — не расширяет круг равных себе и не устраивает с ним гонку
+ * «кто кого первым».
  */
+
+/** Кто действует: то, что о нём знает проверка доступа. */
+export type EmployeeActor = {
+  employeeId: string;
+  role: EmployeeRole;
+};
 
 const ROLE_RANK: Readonly<Record<EmployeeRole, number>> = {
   owner: 3,
@@ -21,8 +33,17 @@ const ROLE_RANK: Readonly<Record<EmployeeRole, number>> = {
   manager: 1,
 };
 
+/** Роль `otherRole` строго ниже роли `actorRole`. Единственное сравнение рангов в проекте. */
+export const outranks = (actorRole: EmployeeRole, otherRole: EmployeeRole): boolean =>
+  ROLE_RANK[actorRole] > ROLE_RANK[otherRole];
+
+/** Можно ли выпустить или отозвать приглашение на эту роль. */
 export const canInviteRole = (actorRole: EmployeeRole, invitedRole: EmployeeRole): boolean =>
-  ROLE_RANK[actorRole] > ROLE_RANK[invitedRole];
+  outranks(actorRole, invitedRole);
+
+/** Можно ли выключить, включить учётку или сбросить ей пароль. */
+export const canManageEmployee = (actorRole: EmployeeRole, employeeRole: EmployeeRole): boolean =>
+  outranks(actorRole, employeeRole);
 
 /** Кого эта роль может пригласить. Для ответа ручки и для подсказки в интерфейсе. */
 export const invitableRoles = (actorRole: EmployeeRole): EmployeeRole[] =>

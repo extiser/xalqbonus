@@ -143,3 +143,35 @@ export const markEmployeeInviteRevoked = async (
 
   return updated === 1;
 };
+
+export type PendingEmployeeInviteRow = {
+  id: string;
+  role: EmployeeRole;
+  /** Кто выписал — имя, а не идентификатор: экрану нужно, кого спросить про ссылку. */
+  invitedByName: string;
+  createdAt: Date;
+  expiresAt: Date;
+};
+
+/**
+ * Висящие приглашения: не приняты, не отозваны и срок не вышел. Свежие первыми.
+ *
+ * Просроченные не показываются: по ним учётку уже не завести, и отзывать их незачем.
+ */
+export const listPendingEmployeeInvites = async (
+  now: Date,
+  client: Executor = db,
+): Promise<PendingEmployeeInviteRow[]> =>
+  client.$queryRaw<PendingEmployeeInviteRow[]>`
+    SELECT invite."id",
+           invite."role",
+           inviter."full_name" AS "invitedByName",
+           invite."created_at" AS "createdAt",
+           invite."expires_at" AS "expiresAt"
+      FROM xb.employee_invites AS invite
+      JOIN xb.employees        AS inviter ON inviter."id" = invite."invited_by_id"
+     WHERE invite."accepted_at" IS NULL
+       AND invite."revoked_at" IS NULL
+       AND invite."expires_at" > ${now}
+     ORDER BY invite."created_at" DESC
+  `;

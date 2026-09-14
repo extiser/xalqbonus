@@ -17,8 +17,16 @@ import type {
  * Запросы живут здесь, а не в компонентах: экраны получают готовое свойствами и отдают
  * нажатия событиями (docs/frontend.md → «Данные в компоненты не ходят»). Тексты отказов
  * приходят с сервера, запасной — из словаря веба (`failureText`).
+ *
+ * Отказ сначала отдаётся странице через `reportDenial`: отказ двери ли это и что тогда
+ * делать с экраном, решает она, одна на все ручки. Взяла — строки у поля нет, экран уже
+ * не этот; не взяла — отказ доменный и остаётся строкой рядом с полем. Веб не передаёт
+ * ничего: там отказы двери разбирает общая проверка маршрута.
  */
-export const useOfficeOrderDesk = (readHeaders: () => Record<string, string>) => {
+export const useOfficeOrderDesk = (
+  readHeaders: () => Record<string, string>,
+  reportDenial: (error: unknown) => boolean = () => false,
+) => {
   /** Заказ, открытый карточкой: найденный по коду или выбранный из списка. */
   const current = ref<OfficeOrder | null>(null);
 
@@ -52,6 +60,10 @@ export const useOfficeOrderDesk = (readHeaders: () => Record<string, string>) =>
 
       return response.order;
     } catch (error) {
+      if (reportDenial(error)) {
+        return null;
+      }
+
       searchError.value = failureText(error);
 
       return null;
@@ -89,6 +101,10 @@ export const useOfficeOrderDesk = (readHeaders: () => Record<string, string>) =>
 
       return response.order;
     } catch (error) {
+      if (reportDenial(error)) {
+        return null;
+      }
+
       actionError.value = failureText(error);
 
       return null;
@@ -140,6 +156,10 @@ export const useOfficeOrderDesk = (readHeaders: () => Record<string, string>) =>
       pendingOrders.value = response.orders;
       pendingState.value = 'ready';
     } catch (error) {
+      if (reportDenial(error)) {
+        return;
+      }
+
       console.error('[orders] не удалось загрузить висящие заказы', error);
       pendingState.value = 'error';
     }

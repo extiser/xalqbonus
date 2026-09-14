@@ -1,15 +1,16 @@
 import { readEmployeeAccounts } from '#server/services/employees/readEmployeeAccounts';
 import { requireEmployeeRole } from '#server/utils/employeeAuth';
-import { CATALOG_ROLES } from '#shared/access';
+import { STAFF_ROLES } from '#shared/access';
 import type { EmployeeAccountsResponse } from '#shared/types/employee';
 
-// Учётки для выбора: кого закрепить за офисом. Экраном учёток это не является — ни телефона,
-// ни признаков входа в ответе нет, править отсюда нечего, а приглашения живут своей ручкой
-// (issue #120 → «Не делать»).
+// Учётки парка: экран сотрудников и выбор на странице офиса (issue #120, #132).
 //
-// Роли те же, что у офисов: закрепление сотрудника за офисом — часть работы с офисами.
+// Менеджеру отказ двери `role_not_allowed`: телефоны и состояние учёток коллег — материал
+// того, кто ими управляет, а не того, кто выдаёт заказы.
 export default defineEventHandler(async (event): Promise<EmployeeAccountsResponse> => {
-  await requireEmployeeRole(event, CATALOG_ROLES);
+  const employee = await requireEmployeeRole(event, STAFF_ROLES);
 
-  return readEmployeeAccounts();
+  return readEmployeeAccounts({
+    actor: { employeeId: employee.employeeId, role: employee.role },
+  });
 });
