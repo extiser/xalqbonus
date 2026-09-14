@@ -10,6 +10,7 @@ import {
   type MiniAppStateResponse,
   type RegistrationScreenTexts,
 } from '#shared/types/miniapp';
+import { useEmployeePassword } from '~/composables/useEmployeePassword';
 import { useMemberHistory } from '~/composables/useMemberHistory';
 import { useMemberOrders } from '~/composables/useMemberOrders';
 import { useOfficeOrderDesk } from '~/composables/useOfficeOrderDesk';
@@ -137,9 +138,29 @@ const employeeOffice = computed(
   () => employee.value?.offices.find((office) => office.officeId === employeeOfficeId.value) ?? null,
 );
 
-/** Есть ли куда вернуться: из карточки — к полю кода, от поля кода — к выбору из нескольких офисов. */
+/**
+ * Пункт «Пароль для входа с компьютера» открыт (issue #130).
+ *
+ * Открывается и с выбора офиса, и со стойки: сотрудник с единственным офисом попадает на стойку
+ * сразу и выбора офиса не видит никогда, а без офиса вовсе стойки нет. «Назад» закрывает пункт
+ * и возвращает туда, откуда его открыли, — стойка и выбранный офис под ним не сбрасываются.
+ */
+const employeePasswordOpen = ref(false);
+
+const employeePassword = useEmployeePassword(() => ({ [INIT_DATA_HEADER]: initData }));
+
+const openEmployeePassword = (): void => {
+  employeePassword.reset();
+  employeePasswordOpen.value = true;
+};
+
+/**
+ * Есть ли куда вернуться: из пункта пароля — туда, откуда открыли; из карточки — к полю кода;
+ * от поля кода — к выбору из нескольких офисов.
+ */
 const employeeCanGoBack = computed(
   () =>
+    employeePasswordOpen.value ||
     officeDesk.current.value !== null ||
     (employeeOffice.value !== null && (employee.value?.offices.length ?? 0) > 1),
 );
@@ -152,6 +173,12 @@ const selectEmployeeOffice = (officeId: string): void => {
 };
 
 const employeeBack = (): void => {
+  if (employeePasswordOpen.value) {
+    employeePasswordOpen.value = false;
+
+    return;
+  }
+
   if (officeDesk.current.value) {
     officeDesk.close();
 
@@ -248,6 +275,12 @@ watch(currentScreen, (screen) => {
   } else {
     webApp?.BackButton?.show();
   }
+});
+
+// Пункт пароля открывается с начала экрана. Отдельно от наблюдателя ниже: со стойки из нескольких
+// офисов «назад» есть и до открытия пункта, и признак возврата при открытии не меняется.
+watch(employeePasswordOpen, () => {
+  window.scrollTo(0, 0);
 });
 
 watch(employeeCanGoBack, (canGoBack) => {
@@ -541,12 +574,28 @@ const share = (): void => {
   </p>
 
   <div v-else-if="stage === 'employee' && employee" class="flex flex-col gap-6">
-    <OrganismsEmployeeOfficePicker
-      v-if="!employeeOffice"
-      :full-name="employee.fullName"
-      :offices="employee.offices"
-      @select="selectEmployeeOffice"
+    <OrganismsEmployeePasswordForm
+      v-if="employeePasswordOpen"
+      v-model="employeePassword.password.value"
+      :submitting="employeePassword.submitting.value"
+      :error="employeePassword.error.value"
+      :saved="employeePassword.saved.value"
+      @submit="employeePassword.submit()"
     />
+
+    <template v-else-if="!employeeOffice">
+      <OrganismsEmployeeOfficePicker
+        :full-name="employee.fullName"
+        :offices="employee.offices"
+        @select="selectEmployeeOffice"
+      />
+
+      <AtomsMiniAppButton
+        variant="secondary"
+        label="Пароль для входа с компьютера"
+        @click="openEmployeePassword"
+      />
+    </template>
 
     <OrganismsEmployeeOrderCard
       v-else-if="officeDesk.current.value"
@@ -572,6 +621,12 @@ const share = (): void => {
         :state="officeDesk.pendingState.value"
         :orders="officeDesk.pendingOrders.value"
         @open="officeDesk.open($event)"
+      />
+
+      <AtomsMiniAppButton
+        variant="secondary"
+        label="Пароль для входа с компьютера"
+        @click="openEmployeePassword"
       />
     </template>
 

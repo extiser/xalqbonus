@@ -598,9 +598,16 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Вас приглашают сотрудником Xalq Taxi. Нажмите кнопку ниже, чтобы подтвердить номер телефона — по нему вы будете входить в систему.',
     uz: "Sizni Xalq Taxi xodimi sifatida taklif qilishmoqda. Telefon raqamingizni tasdiqlash uchun pastdagi tugmani bosing — tizimga shu raqam orqali kirasiz.",
   },
+  /**
+   * Приглашение принято — дальше человеку нужен пароль для веба.
+   *
+   * Название пункта цитируется дословно и на узбекском тоже по-русски: экран сотрудника
+   * одноязычный (docs/frontend.md → «Язык»), и найти пункт человек должен глазами, а не переводом.
+   * Меняется название кнопки в `app/pages/app.vue` — меняется и здесь (issue #130).
+   */
   invite_accepted: {
-    ru: 'Готово, {name}: учётная запись сотрудника создана. Откройте приложение кнопкой меню и задайте себе пароль — он понадобится для входа с компьютера.',
-    uz: "Tayyor, {name}: xodim hisobi yaratildi. Menyu tugmasi orqali ilovani oching va o'zingizga parol belgilang — u kompyuterdan kirish uchun kerak bo'ladi.",
+    ru: 'Готово, {name}: учётная запись сотрудника создана. Чтобы входить с компьютера, откройте приложение кнопкой меню и задайте пароль в пункте «Пароль для входа с компьютера».',
+    uz: "Tayyor, {name}: xodim hisobi yaratildi. Kompyuterdan kirish uchun menyu tugmasi orqali ilovani oching va «Пароль для входа с компьютера» bo'limida parol belgilang.",
   },
   invite_not_found: {
     ru: 'Такого приглашения нет. Проверьте, полностью ли скопирована ссылка, или попросите выписать новую.',
