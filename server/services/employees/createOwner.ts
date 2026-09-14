@@ -1,6 +1,7 @@
 import { consola } from 'consola';
 
 import { findEmployeeByPhone, insertEmployee } from '#server/repositories/employees';
+import { findActiveLinkByTelegramOrPhone } from '#server/repositories/programMembership';
 import { isPasswordAcceptable, hashPassword } from '#server/services/employees/password';
 import { normalizePhoneE164 } from '#server/utils/phoneNumber';
 
@@ -19,6 +20,12 @@ import { normalizePhoneE164 } from '#server/utils/phoneNumber';
  * Повторный прогон на существующем телефоне второй учётки не создаёт и пароль не меняет:
  * цель выката, молча переустанавливающая пароль владельца, — это способ потерять доступ
  * на ровном месте.
+ *
+ * Правило одной роли проверяется так же, как при принятии приглашения: телефон за активной
+ * водительской привязкой — отказ `driver_link_exists`, учётка не заводится. Без этой проверки
+ * владелец и водитель на стенде 14-09-2026 оказались одним телефоном, и инвариант пересечения
+ * ролей покраснел (issue #132). Порядок тот же, что в `acceptInvite.ts`: водительская привязка
+ * до существующей учётки.
  */
 
 const log = consola.withTag('employees:owner');
@@ -31,7 +38,9 @@ export type CreateOwnerOutcome =
   | 'phone_invalid'
   | 'password_too_short'
   /** Имя пустое: учётка без имени не отличима от другой такой же в списке сотрудников. */
-  | 'name_empty';
+  | 'name_empty'
+  /** Телефон за активной водительской привязкой: водителем и сотрудником быть нельзя. */
+  | 'driver_link_exists';
 
 export type CreateOwnerRequest = {
   phoneRaw: string;
@@ -60,6 +69,18 @@ export const createOwner = async (request: CreateOwnerRequest): Promise<CreateOw
 
   if (!isPasswordAcceptable(request.password)) {
     return { outcome: 'password_too_short' };
+  }
+
+  // Telegram у владельца нет, поэтому сверяется один телефон — тем же запросом, что
+  // при принятии приглашения, чтобы понимание «водитель на этом номере» было одно.
+  const driverLink = await findActiveLinkByTelegramOrPhone(null, phoneE164);
+
+  if (driverLink) {
+    log.warn('владелец не заведён: телефон за активной водительской привязкой', {
+      personId: driverLink.personId,
+    });
+
+    return { outcome: 'driver_link_exists' };
   }
 
   const existing = await findEmployeeByPhone(phoneE164);

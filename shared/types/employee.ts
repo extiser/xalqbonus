@@ -65,21 +65,70 @@ export type EmployeePasswordResponse = {
   passwordChanged: true;
 };
 
+/** Офис, за которым закреплён сотрудник. */
+export type EmployeeAccountOffice = {
+  officeId: string;
+  name: string;
+  archived: boolean;
+};
+
 /**
- * Учётка в списке выбора: кого можно закрепить за офисом.
+ * Учётка сотрудника: строка экрана сотрудников и вариант выбора на странице офиса (issue #120,
+ * #132).
  *
- * Экраном учёток это не является и не становится — ни телефона, ни признаков входа здесь
- * нет, править отсюда нечего. Список нужен ровно для того, чтобы привязка к офису выбиралась
- * из заведённых людей, а не набиралась идентификатором руками (issue #120).
+ * Ни хеша пароля, ни Telegram-идентификатора — только признаки, по которым экран решает,
+ * что показать.
  */
 export type EmployeeAccount = {
   employeeId: string;
   fullName: string;
   role: EmployeeRole;
+  phoneE164: string;
   /** Учётка выключена. Закрепить её за офисом можно, но в списке это видно. */
   disabled: boolean;
+  /** Пароль задан. Нет — сбрасывать нечего, а сотрудник задаёт его в Mini App. */
+  passwordSet: boolean;
+  /** Закреплённые офисы из `employee_offices`. */
+  offices: EmployeeAccountOffice[];
+  /**
+   * Роль работает в любом офисе парка — решено по `ANY_OFFICE_ROLES` на сервере, чтобы
+   * список таких ролей не повторялся условием в разметке.
+   */
+  anyOffice: boolean;
+  /** Смотрящий вправе выключить, включить учётку и сбросить ей пароль. */
+  manageable: boolean;
 };
 
 export type EmployeeAccountsResponse = {
   employees: EmployeeAccount[];
+  /** Кого смотрящий вправе пригласить — роли строго ниже своей. */
+  invitableRoles: EmployeeRole[];
+};
+
+/** Висящее приглашение: ссылки в нём нет — она показывается один раз при выпуске. */
+export type EmployeePendingInvite = {
+  inviteId: string;
+  role: EmployeeRole;
+  invitedByName: string;
+  /** ISO-8601. */
+  createdAt: string;
+  /** ISO-8601. */
+  expiresAt: string;
+  /** Смотрящий вправе отозвать: роль приглашения строго ниже его роли. */
+  revocable: boolean;
+};
+
+export type EmployeeInvitesResponse = {
+  invites: EmployeePendingInvite[];
+};
+
+export type EmployeeDisabledResponse = {
+  employeeId: string;
+  disabled: boolean;
+};
+
+export type EmployeePasswordResetResponse = {
+  employeeId: string;
+  /** Пароля у учётки больше нет, выданные cookie погашены. Сам пароль не показывается никому. */
+  passwordReset: true;
 };

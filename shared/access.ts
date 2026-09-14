@@ -47,3 +47,12 @@ export const ORDER_ROLES: readonly EmployeeRole[] = ALL_EMPLOYEE_ROLES;
  * менеджер, набравший в адресе чужой офис, получает `role_not_allowed`, а не его заказы.
  */
 export const ANY_OFFICE_ROLES: readonly EmployeeRole[] = ['owner', 'admin'];
+
+/**
+ * Экран сотрудников и его ручки — учётки, приглашения, выключение, сброс пароля —
+ * владельцу и админу (issue #132).
+ *
+ * Этот список открывает раздел, а над какой учёткой можно действовать, решает не он,
+ * а правило «роль строго ниже своей» (`server/services/employees/roles.ts`).
+ */
+export const STAFF_ROLES: readonly EmployeeRole[] = ['owner', 'admin'];

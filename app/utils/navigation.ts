@@ -1,4 +1,10 @@
-import { ALL_EMPLOYEE_ROLES, CATALOG_ROLES, ORDER_ROLES, SYNC_ROLES } from '#shared/access';
+import {
+  ALL_EMPLOYEE_ROLES,
+  CATALOG_ROLES,
+  ORDER_ROLES,
+  STAFF_ROLES,
+  SYNC_ROLES,
+} from '#shared/access';
 import type { EmployeeIdentity } from '#shared/types/employee';
 
 /**
@@ -24,6 +30,7 @@ const SERVICE_NAVIGATION: NavigationItem[] = [
   // Раздел называется «Каталог», а адрес — по сущности, которой он управляет: страница
   // и ручка под ней читаются одним словом (`/products` ↔ `/api/products`), как у водителей.
   { title: 'Каталог', path: '/products', roles: CATALOG_ROLES },
+  { title: 'Сотрудники', path: '/employees', roles: STAFF_ROLES },
   { title: 'Синхронизация', path: '/sync', roles: SYNC_ROLES },
 ];
 

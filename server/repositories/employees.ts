@@ -194,6 +194,54 @@ export const revokeEmployeeSessions = async (
   `;
 };
 
+/**
+ * Выключает или включает учётку. `null` — включить.
+ *
+ * Повторное выключение время не двигает: две нажатые кнопки означают одно состояние,
+ * и время выключения остаётся тем, когда доступ закрыли на самом деле.
+ *
+ * Отметку годности сессий не трогает: `disabled_at` проверяется на каждом запросе сам.
+ */
+export const updateEmployeeDisabled = async (
+  employeeId: string,
+  disabledAt: Date | null,
+  client: Executor = db,
+): Promise<void> => {
+  await client.$executeRaw`
+    UPDATE xb.employees
+       SET "disabled_at" = CASE
+                             WHEN ${disabledAt}::timestamptz IS NULL THEN NULL
+                             ELSE COALESCE("disabled_at", ${disabledAt}::timestamptz)
+                           END,
+           "updated_at"  = now()
+     WHERE "id" = ${employeeId}::uuid
+  `;
+};
+
+/**
+ * Обнуляет пароль и гасит выданные cookie — одной записью, как и смена пароля.
+ *
+ * Только у учётки, у которой пароль есть: условие стоит в самом `UPDATE`, и нажатие
+ * на учётке без пароля не двигает отметку годности сессий. `true` — пароль был и сброшен.
+ */
+export const clearEmployeePassword = async (
+  employeeId: string,
+  clearedAt: Date,
+  client: Executor = db,
+): Promise<boolean> => {
+  const updated = await client.$executeRaw`
+    UPDATE xb.employees
+       SET "password_hash"       = NULL,
+           "password_changed_at" = ${clearedAt},
+           "sessions_valid_from" = ${clearedAt},
+           "updated_at"          = now()
+     WHERE "id" = ${employeeId}::uuid
+       AND "password_hash" IS NOT NULL
+  `;
+
+  return updated === 1;
+};
+
 export type EmployeeAccountRow = {
   id: string;
   fullName: string;
@@ -201,26 +249,56 @@ export type EmployeeAccountRow = {
   disabledAt: Date | null;
 };
 
+export type EmployeeDirectoryOfficeRow = {
+  officeId: string;
+  name: string;
+  archived: boolean;
+};
+
+export type EmployeeDirectoryRow = EmployeeAccountRow & {
+  phoneE164: string;
+  /** Признак, а не хеш: хеш из репозитория в список не уходит ни в каком виде. */
+  passwordSet: boolean;
+  /** Офисы из `employee_offices`: работающие первыми, архивные последними. */
+  offices: EmployeeDirectoryOfficeRow[];
+};
+
 /**
- * Учётки для выбора: кого закрепить за офисом.
+ * Учётки парка для экрана сотрудников и для выбора на странице офиса.
  *
- * Колонки только те, что нужны выбору, — ни телефона, ни признаков входа: расширять этот
- * список «на всякий случай» значит отдавать разметке то, чего она не спрашивала.
+ * Офисы собираются в том же запросе, а не вторым на каждую учётку: сотрудников десяток,
+ * но запрос на строку — это та цена, которая растёт незаметно.
  *
  * Выключенные учётки в ответе есть: сотрудник, которому закрыли доступ на время, за офисом
  * остаётся закреплённым, и прятать его из списка значило бы терять состав офиса при первом
  * же выключении.
  */
-export const listEmployeeAccounts = async (
+export const listEmployeeDirectory = async (
   client: Executor = db,
-): Promise<EmployeeAccountRow[]> =>
-  client.$queryRaw<EmployeeAccountRow[]>`
-    SELECT "id",
-           "full_name"   AS "fullName",
-           "role",
-           "disabled_at" AS "disabledAt"
-      FROM xb.employees
-     ORDER BY "full_name"
+): Promise<EmployeeDirectoryRow[]> =>
+  client.$queryRaw<EmployeeDirectoryRow[]>`
+    SELECT employee."id",
+           employee."full_name"               AS "fullName",
+           employee."role",
+           employee."disabled_at"             AS "disabledAt",
+           employee."phone_e164"              AS "phoneE164",
+           employee."password_hash" IS NOT NULL AS "passwordSet",
+           COALESCE(
+             (SELECT json_agg(
+                       json_build_object(
+                         'officeId', office."id",
+                         'name',     office."name",
+                         'archived', office."archived_at" IS NOT NULL
+                       )
+                       ORDER BY (office."archived_at" IS NOT NULL), office."name"
+                     )
+                FROM xb.employee_offices AS link
+                JOIN xb.offices          AS office ON office."id" = link."office_id"
+               WHERE link."employee_id" = employee."id"),
+             '[]'::json
+           )                                  AS "offices"
+      FROM xb.employees AS employee
+     ORDER BY employee."full_name"
   `;
 
 /**

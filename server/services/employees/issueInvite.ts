@@ -8,7 +8,7 @@ import {
   createInviteToken,
   hashInviteToken,
 } from '#server/services/employees/inviteToken';
-import { canInviteRole } from '#server/services/employees/roles';
+import { canInviteRole, type EmployeeActor } from '#server/services/employees/roles';
 
 /**
  * Выпуск приглашения сотрудника.
@@ -22,10 +22,7 @@ import { canInviteRole } from '#server/services/employees/roles';
  */
 
 /** Приглашающий: то, что о нём знает проверка доступа. */
-export type InviteActor = {
-  employeeId: string;
-  role: EmployeeRole;
-};
+export type InviteActor = EmployeeActor;
 
 export class RoleNotInvitableError extends Error {
   constructor(
