@@ -2,7 +2,12 @@
 import { computed } from 'vue';
 import type { DriverOperation } from '#shared/types/driver';
 import { formatDateTime, formatMomentDate, formatSignedNumber } from '~/utils/format';
-import { accountTypeLabel, pointReasonLabel, tripStatusLabel } from '~/utils/labels';
+import {
+  accountTypeLabel,
+  employeeRoleLabel,
+  pointReasonLabel,
+  tripStatusLabel,
+} from '~/utils/labels';
 
 /**
  * Одна операция журнала по счёту водителя.
@@ -112,9 +117,21 @@ const direction = computed(() =>
         <dt class="shrink-0 text-slate-500">Заказ товара</dt>
         <dd class="font-mono text-slate-700 tabular-nums">{{ operation.legacyOrderId }}</dd>
       </div>
-      <div v-if="operation.actor" class="flex gap-2">
+      <!-- Человек, когда он был, иначе путь операции: автоматика учётки не имеет. -->
+      <div v-if="operation.actorEmployeeName || operation.actor" class="flex gap-2">
         <dt class="shrink-0 text-slate-500">Кто</dt>
-        <dd class="text-slate-700">{{ operation.actor }}</dd>
+        <!-- Роль рядом с именем: владелец видит, правил ли это офис или он сам, не сверяясь
+             со списком сотрудников. Защитой от неверной правки пометка не является —
+             её замечают по сводке ручных правок (#128). -->
+        <dd class="text-slate-700">
+          <template v-if="operation.actorEmployeeName">
+            {{ operation.actorEmployeeName }}
+            <span v-if="operation.actorEmployeeRole" class="text-slate-500">
+              · {{ employeeRoleLabel(operation.actorEmployeeRole) }}
+            </span>
+          </template>
+          <template v-else>{{ operation.actor }}</template>
+        </dd>
       </div>
     </dl>
 

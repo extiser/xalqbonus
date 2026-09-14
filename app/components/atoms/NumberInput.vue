@@ -16,7 +16,8 @@
  */
 const props = withDefaults(
   defineProps<{
-    min?: number;
+    /** `null` — нижней границы нет: у ручной правки баллов знак и есть направление. */
+    min?: number | null;
     max?: number;
     placeholder?: string;
     ariaLabel?: string;
@@ -51,7 +52,7 @@ onMounted(() => {
     type="number"
     inputmode="numeric"
     step="1"
-    :min="min"
+    :min="min ?? undefined"
     :max="max"
     :placeholder="placeholder"
     :aria-label="ariaLabel"

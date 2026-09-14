@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
+import { adjustPointsManually } from '#server/services/points/adjustPointsManually';
 import { awardTripPoints } from '#server/services/points/awardTripPoints';
 import { ensureDriverAccount } from '#server/services/points/ensureDriverAccount';
 import { getSystemAccount } from '#server/services/points/getSystemAccount';
@@ -19,6 +20,7 @@ import {
   disconnectDatabase,
   runRawQuery,
 } from '../support/database';
+import { cleanupTestEmployees, createTestEmployee } from '../support/employees';
 import { disconnectQueues } from '../support/queues';
 
 /**
@@ -43,7 +45,10 @@ describe('инварианты журнала', () => {
     redemptionAccountId = (await getSystemAccount('redemption')).id;
   });
 
-  afterEach(cleanupTestData);
+  afterEach(async () => {
+    await cleanupTestData();
+    await cleanupTestEmployees();
+  });
   afterAll(async () => {
     await disconnectDatabase();
     await disconnectQueues();
@@ -109,6 +114,21 @@ describe('инварианты журнала', () => {
       fromAccountId: redemptionAccountId,
       toAccountId: driverAccount.id,
       occurredAt: completedAt,
+    });
+
+    // Ручная правка в обе стороны — сервисом, с автором: так она приходит из карточки.
+    const { employeeId } = await createTestEmployee({ role: 'owner' });
+    await adjustPointsManually({
+      personId: participant.personId,
+      amount: 4,
+      note: 'начисление в серии',
+      employeeId,
+    });
+    await adjustPointsManually({
+      personId: participant.personId,
+      amount: -5,
+      note: 'списание в серии',
+      employeeId,
     });
 
     for (const query of queries) {

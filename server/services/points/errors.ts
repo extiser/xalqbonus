@@ -43,6 +43,33 @@ export class InvalidTransferAmountError extends PointsError {
   }
 }
 
+/**
+ * Сумма ручной правки не целая или ноль. Знак здесь допустим — он задаёт направление,
+ * — и поэтому отказ свой, а не `InvalidTransferAmountError`: перевод знака не принимает.
+ */
+export class InvalidManualAmountError extends PointsError {
+  constructor(public readonly amount: number) {
+    super(`сумма ручной правки должна быть целым ненулевым числом, получено ${amount}`);
+  }
+}
+
+/** Ручная правка без заметки: через месяц её не отличить от ошибки. */
+export class MissingManualNoteError extends PointsError {
+  constructor() {
+    super('ручная правка баллов требует заметки');
+  }
+}
+
+/**
+ * У человека нет водительского счёта — в программе он не состоит. Ручная правка счёт
+ * не заводит: иначе она вводила бы человека в баллы мимо регистрации.
+ */
+export class DriverAccountMissingError extends PointsError {
+  constructor(public readonly personId: string) {
+    super(`у человека ${personId} нет водительского счёта`);
+  }
+}
+
 /** Перевод сам себе. Отбивается `point_transfers_accounts_differ_check`, проверяется и здесь. */
 export class SameAccountTransferError extends PointsError {
   constructor(public readonly accountId: string) {

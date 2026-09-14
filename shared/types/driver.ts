@@ -17,6 +17,7 @@
 // не попадает ни байта.
 import type {
   AccountType,
+  EmployeeRole,
   Language,
   LinkCloseReason,
   LinkConfirmedBy,
@@ -247,8 +248,31 @@ export type DriverOperation = {
   /** Номер заказа за баллы — у списания и возврата. Пуст у всех остальных операций. */
   orderNumber: number | null;
   actor: string | null;
+  /** Сотрудник, заведший операцию, — у ручной правки. Пусто у автоматики. */
+  actorEmployeeName: string | null;
+  /** Роль того же сотрудника: правил ли это офис или владелец сам. */
+  actorEmployeeRole: EmployeeRole | null;
   note: string | null;
 };
+
+/**
+ * Ручная правка баллов: `POST /api/drivers/:personId/points`.
+ *
+ * Знак суммы задаёт направление: плюс — с эмиссии водителю, минус — обратно.
+ */
+export type ManualPointsRequestBody = {
+  amount: number;
+  note: string;
+};
+
+export type ManualPointsResponse = {
+  transferId: string;
+  /** Баланс водителя после правки. */
+  balance: number;
+};
+
+/** Поле формы правки, к которому относится отказ ручки. */
+export type ManualPointsField = 'amount' | 'note';
 
 export type DriverHistoryResponse = {
   operations: DriverOperation[];
