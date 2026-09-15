@@ -2,14 +2,16 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useDraftAutosave } from '~/composables/useDraftAutosave';
-import { formatDateTime, formatNumber } from '~/utils/format';
+import { formatDateTime, formatNumber, pluralize } from '~/utils/format';
 import { mailingStatusLabel, mailingStatusTone } from '~/utils/labels';
 import { failureText } from '~/utils/requestError';
 import { toLoadState } from '~/utils/loadState';
 import {
   MAILING_AUDIENCE_EMPTY_TEXT,
+  MAILING_RECALL_WINDOW_HOURS,
   mailingLaunchProblems,
   mailingLaunchProblemText,
+  mailingRecallProblemText,
 } from '#shared/mailing';
 import type {
   Mailing,
@@ -25,8 +27,8 @@ import type {
  * - черновик — тексты и фото на одном экране, сохранение само, число адресатов, запуск
  *   отдельным подтверждением и удаление
  * - идёт — счётчики, которые обновляются сами, и остановка
- * - остановлена — счётчики и копия в новый черновик: остановленная не возобновляется
- * - завершена — счётчики
+ * - остановлена — счётчики, копия в новый черновик (остановленная не возобновляется) и отзыв
+ * - завершена — счётчики и отзыв
  *
  * Новая и заведённый из неё черновик — один экземпляр страницы (`key` ниже): адрес меняется
  * на адрес записи без перехода, и набранное не теряется (issue #148).
@@ -288,7 +290,7 @@ const launch = (): Promise<void> =>
 
     if (
       !window.confirm(
-        `Разослать «${fields.value.title.trim()}» — ${formatNumber(fresh.total)} адресатам?${disabledNote} Отправленное не отзывается.`,
+        `Разослать «${fields.value.title.trim()}» — ${formatNumber(fresh.total)} адресатам?${disabledNote} Отозвать отправленное можно только в течение ${MAILING_RECALL_WINDOW_HOURS} часов.`,
       )
     ) {
       return;
@@ -360,12 +362,93 @@ const copy = (): Promise<void> =>
   });
 
 /**
- * Пока рассылка идёт, счётчики перечитываются сами: четыре тысячи адресатов уходят минутами,
- * и смотреть на застывшие нули, нажимая «обновить», — не то, ради чего экран.
+ * «Сейчас» для остатка окна отзыва. Двигается раз в минуту: остаток показывается часами,
+ * и страница, пролежавшая открытой полдня, не должна обещать то, чего Telegram уже не даст.
+ */
+const NOW_TICK_MS = 60_000;
+const now = ref(Date.now());
+
+const HOUR_MS = 3_600_000;
+
+/**
+ * Что сейчас с отзывом: можно ли нажать и что написать рядом с кнопкой.
+ *
+ * Кнопка не прячется ни в одном состоянии, а гаснет с пояснением: исчезнувшая кнопка читается
+ * как поломка (issue #150). Решает ручка — экран только не предлагает заведомо отказное.
+ */
+const recallState = computed((): { available: boolean; note: string } | null => {
+  const current = mailing.value;
+
+  if (!current || (current.status !== 'stopped' && current.status !== 'finished')) {
+    return null;
+  }
+
+  const { recall, counters } = current;
+  const tally = `${formatNumber(recall.recalled)} из ${formatNumber(counters.sent)}`;
+
+  if (recall.finishedAt !== null) {
+    return { available: false, note: `Отозвано ${tally}.` };
+  }
+
+  if (recall.startedAt !== null) {
+    return { available: false, note: `Отзыв идёт: снято ${tally}.` };
+  }
+
+  if (recall.deadlineAt === null) {
+    return { available: false, note: mailingRecallProblemText('nothing_sent') };
+  }
+
+  const left = new Date(recall.deadlineAt).getTime() - now.value;
+
+  if (left <= 0) {
+    return { available: false, note: mailingRecallProblemText('window_expired') };
+  }
+
+  const hours = Math.floor(left / HOUR_MS);
+
+  return {
+    available: true,
+    note:
+      hours === 0
+        ? 'Отозвать можно ещё меньше часа.'
+        : `Отозвать можно ещё ${hours} ${pluralize(hours, 'час', 'часа', 'часов')}.`,
+  };
+});
+
+/** Отзыв. Водителю вдогонку ничего не уходит — сообщение просто исчезает из переписки. */
+const recall = (): Promise<void> =>
+  runAction(async () => {
+    const current = mailing.value;
+
+    if (!current) {
+      return;
+    }
+
+    const recipients = current.counters.sent;
+
+    if (
+      !window.confirm(
+        `Сообщение будет удалено у ${formatNumber(recipients)} ${pluralize(recipients, 'водителя', 'водителей', 'водителей')}. Отменить это нельзя.`,
+      )
+    ) {
+      return;
+    }
+
+    const recalled = await $fetch<MailingResponse>(`/api/mailings/${current.mailingId}/recall`, {
+      method: 'POST',
+    });
+
+    setMailing(recalled.mailing);
+  });
+
+/**
+ * Пока рассылка идёт или идёт её отзыв, счётчики перечитываются сами: четыре тысячи адресатов
+ * уходят минутами, и смотреть на застывшие нули, нажимая «обновить», — не то, ради чего экран.
  */
 const REFRESH_INTERVAL_MS = 5_000;
 
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
+let nowTimer: ReturnType<typeof setInterval> | null = null;
 
 const stopRefreshing = (): void => {
   if (refreshTimer !== null) {
@@ -374,13 +457,31 @@ const stopRefreshing = (): void => {
   }
 };
 
+const inProgress = computed(() => {
+  const current = mailing.value;
+
+  if (!current) {
+    return false;
+  }
+
+  return (
+    current.status === 'running' ||
+    (current.recall.startedAt !== null && current.recall.finishedAt === null)
+  );
+});
+
 onMounted(() => {
+  now.value = Date.now();
+  nowTimer = setInterval(() => {
+    now.value = Date.now();
+  }, NOW_TICK_MS);
+
   watch(
-    () => mailing.value?.status,
-    (current) => {
+    inProgress,
+    (active) => {
       stopRefreshing();
 
-      if (current === 'running') {
+      if (active) {
         refreshTimer = setInterval(() => void refresh(), REFRESH_INTERVAL_MS);
       }
     },
@@ -388,7 +489,14 @@ onMounted(() => {
   );
 });
 
-onBeforeUnmount(stopRefreshing);
+onBeforeUnmount(() => {
+  stopRefreshing();
+
+  if (nowTimer !== null) {
+    clearInterval(nowTimer);
+    nowTimer = null;
+  }
+});
 </script>
 
 <template>
@@ -481,25 +589,32 @@ onBeforeUnmount(stopRefreshing);
         :note="
           mailing.status === 'running'
             ? 'Обновляется каждые пять секунд, пока рассылка идёт.'
-            : 'Сумма исходов равна числу адресатов: считаются они одним запросом по снимку.'
+            : 'Сумма исходов равна числу адресатов: считаются они одним запросом по снимку. Отзыв исход не меняет — отозванные остаются среди отправленных.'
         "
       >
         <OrganismsMailingCounters :counters="mailing.counters" />
 
-        <div v-if="mailing.status === 'running' || mailing.status === 'stopped'" class="mt-4">
-          <AtomsActionButton
-            v-if="mailing.status === 'running'"
-            label="Остановить"
-            tone="danger"
-            :disabled="acting"
-            @click="stop"
-          />
-          <AtomsActionButton
-            v-else
-            label="Скопировать в новый черновик"
-            :disabled="acting"
-            @click="copy"
-          />
+        <div v-if="mailing.status === 'running'" class="mt-4">
+          <AtomsActionButton label="Остановить" tone="danger" :disabled="acting" @click="stop" />
+          <p v-if="actionError" class="mt-3 text-sm text-red-700">{{ actionError }}</p>
+        </div>
+
+        <div v-else-if="recallState" class="mt-4">
+          <div class="flex flex-wrap items-center gap-3">
+            <AtomsActionButton
+              v-if="mailing.status === 'stopped'"
+              label="Скопировать в новый черновик"
+              :disabled="acting"
+              @click="copy"
+            />
+            <AtomsActionButton
+              label="Отозвать"
+              tone="danger"
+              :disabled="acting || !recallState.available"
+              @click="recall"
+            />
+            <p class="text-sm text-slate-500">{{ recallState.note }}</p>
+          </div>
           <p v-if="actionError" class="mt-3 text-sm text-red-700">{{ actionError }}</p>
         </div>
       </MoleculesSectionPanel>

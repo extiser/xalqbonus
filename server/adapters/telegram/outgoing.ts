@@ -158,6 +158,28 @@ export const sendTelegramMessage = async (input: SendMessageInput): Promise<numb
   return message.message_id;
 };
 
+export type DeleteMessageInput = {
+  token: string;
+  telegramChatId: bigint;
+  messageId: number;
+};
+
+/**
+ * Удаляет сообщение бота в чате — у обеих сторон. Успех — ничего, отказ — `TelegramSendError`
+ * тем же разбором, что у отправки.
+ *
+ * `deleteMessage`, а не `deleteMessages`: пачка берёт идентификаторы одного чата, а у рассылки
+ * в каждом приватном чате ровно одно сообщение — пачка всегда была бы из одного.
+ *
+ * Сообщение старше 48 часов и уже удалённое получателем Telegram отклоняет с `400` — это
+ * `rejected`: повтор ничего не изменит.
+ */
+export const deleteTelegramMessage = async (input: DeleteMessageInput): Promise<void> => {
+  await withClassifiedFailure(() =>
+    getApi(input.token).deleteMessage(input.telegramChatId.toString(), input.messageId),
+  );
+};
+
 /**
  * Фото для отправки: уже лежащее у Telegram по `file_id` или байты с тома.
  *

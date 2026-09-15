@@ -146,6 +146,28 @@ export const mailingLaunchProblemText = (problem: MailingLaunchProblem): string 
   }
 };
 
+/**
+ * Сколько часов после отправки Telegram даёт боту удалить своё сообщение в приватном чате.
+ * Окно рассылки считается от самого раннего отправленного: разброс между первым и последним
+ * адресатом меньше десяти минут и отдельной арифметики не стоит (issue #150).
+ */
+export const MAILING_RECALL_WINDOW_HOURS = 48;
+
+/** Почему рассылку нельзя отозвать. Уже начатый отзыв — не причина: повтор нажатия ничего не делает. */
+export type MailingRecallProblem = 'not_sent_yet' | 'nothing_sent' | 'window_expired';
+
+/** Причина человеческим языком — одна фраза и для отказа ручки, и для строки у погашенной кнопки. */
+export const mailingRecallProblemText = (problem: MailingRecallProblem): string => {
+  switch (problem) {
+    case 'not_sent_yet':
+      return 'Отозвать можно только завершённую или остановленную рассылку. Идущую сначала остановите.';
+    case 'nothing_sent':
+      return 'Отзывать нечего: сообщение не дошло ни до кого.';
+    case 'window_expired':
+      return `Прошло больше ${MAILING_RECALL_WINDOW_HOURS} часов, Telegram больше не даёт удалить.`;
+  }
+};
+
 /** Адресатов ноль — фраза одна на отказ запуска и на причину у закрытой кнопки. */
 export const MAILING_AUDIENCE_EMPTY_TEXT =
   'Участников программы с привязанным Telegram сейчас нет — рассылать некому.';

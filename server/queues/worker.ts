@@ -90,11 +90,13 @@ const mailingQueue = getMailingQueue();
 const mailingWorker = createMailingWorker(mailingQueue);
 
 mailingWorker.on('completed', (job, outcome) => {
-  log.debug('задание рассылки выполнено', { mailingId: job.data.mailingId, outcome });
+  log.debug('задание рассылки выполнено', { kind: job.name, mailingId: job.data.mailingId, outcome });
 });
 
 mailingWorker.on('failed', (job, error) => {
-  log.error('сообщение рассылки не отправлено', {
+  // Отправка и отзыв — одна очередь (server/queues/mailing.ts); вид задания отличает одно от другого.
+  log.error('задание рассылки не выполнено', {
+    kind: job?.name,
     mailingId: job?.data.mailingId,
     attempts: job?.attemptsMade,
     error: error.message,

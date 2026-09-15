@@ -67,6 +67,26 @@ export const DISPLAY_TIME_ZONE_LABEL = zoneOffset
 
 export const formatNumber = (value: number): string => value.toLocaleString('ru-RU');
 
+/**
+ * Форма слова при числе: `pluralize(21, 'час', 'часа', 'часов')` — «час».
+ *
+ * Правило русского счёта: на 1 — первая форма, на 2–4 — вторая, остальное и 11–14 — третья.
+ */
+export const pluralize = (count: number, one: string, few: string, many: string): string => {
+  const lastTwo = Math.abs(count) % 100;
+  const last = lastTwo % 10;
+
+  if (lastTwo >= 11 && lastTwo <= 14) {
+    return many;
+  }
+
+  if (last === 1) {
+    return one;
+  }
+
+  return last >= 2 && last <= 4 ? few : many;
+};
+
 export const formatDateTime = (value: string | null): string => {
   if (!value) {
     return DASH;

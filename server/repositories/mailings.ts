@@ -1,6 +1,9 @@
 import { db } from '#server/db';
 import { Prisma } from '#server/generated/prisma/client';
 import type { MailingRecipientOutcome, MailingStatus } from '#server/generated/prisma/enums';
+// Относительным путём, а не через `#shared`: модуль собирается в воркер, а бандл воркера
+// знает только псевдоним `#server` (package.json → build:worker).
+import { MAILING_RECALL_WINDOW_HOURS } from '../../shared/mailing';
 
 /**
  * Рассылки и снимок их адресатов.
@@ -35,6 +38,12 @@ export type MailingRow = {
   skippedDisabled: number;
   invalidChat: number;
   failed: number;
+  recallStartedAt: Date | null;
+  recallFinishedAt: Date | null;
+  /** Сколько отправленных сообщений снято отзывом. Среди `sent`, а не рядом: исход прежний. */
+  recalled: number;
+  /** Самое раннее отправленное плюс окно Telegram. Пусто — не отправлено ничего. */
+  recallDeadlineAt: Date | null;
 };
 
 /**
@@ -58,7 +67,12 @@ const MAILING_SELECT = Prisma.sql`
          COALESCE(counters."sent", 0)             AS "sent",
          COALESCE(counters."skippedDisabled", 0)  AS "skippedDisabled",
          COALESCE(counters."invalidChat", 0)      AS "invalidChat",
-         COALESCE(counters."failed", 0)           AS "failed"
+         COALESCE(counters."failed", 0)           AS "failed",
+         mailing."recall_started_at"  AS "recallStartedAt",
+         mailing."recall_finished_at" AS "recallFinishedAt",
+         COALESCE(counters."recalled", 0)         AS "recalled",
+         counters."firstSentAt" + make_interval(hours => ${MAILING_RECALL_WINDOW_HOURS}::int)
+                                      AS "recallDeadlineAt"
     FROM xb.mailings AS mailing
     JOIN xb.employees AS author ON author."id" = mailing."created_by_id"
     LEFT JOIN LATERAL (
@@ -67,7 +81,9 @@ const MAILING_SELECT = Prisma.sql`
                 count(*) FILTER (WHERE recipient."outcome" = 'sent')::int             AS "sent",
                 count(*) FILTER (WHERE recipient."outcome" = 'skipped_disabled')::int AS "skippedDisabled",
                 count(*) FILTER (WHERE recipient."outcome" = 'invalid_chat')::int     AS "invalidChat",
-                count(*) FILTER (WHERE recipient."outcome" = 'failed')::int           AS "failed"
+                count(*) FILTER (WHERE recipient."outcome" = 'failed')::int           AS "failed",
+                count(*) FILTER (WHERE recipient."recalled_at" IS NOT NULL)::int      AS "recalled",
+                min(recipient."outcome_at") FILTER (WHERE recipient."outcome" = 'sent') AS "firstSentAt"
            FROM xb.mailing_recipients AS recipient
           WHERE recipient."mailing_id" = mailing."id"
     ) AS counters ON true
@@ -415,6 +431,161 @@ export const recordRecipientOutcome = async (
      WHERE "mailing_id" = ${mailingId}::uuid
        AND "person_id" = ${personId}::uuid
        AND "outcome" = 'pending'
+  `;
+
+  return updated > 0;
+};
+
+/**
+ * Отмечает запуск отзыва. `false` — строки нет, она не остановлена и не завершена, отзыв уже
+ * запускали, не отправлено ни одного сообщения или окно Telegram от самого раннего
+ * отправленного истекло. Какая из причин — разбирает сервис.
+ *
+ * Все условия в одном `UPDATE`: два нажатия «Отозвать» подряд обязаны дать один отзыв,
+ * и решает это база, а не проверка перед записью.
+ */
+export const markMailingRecallStarted = async (
+  mailingId: string,
+  client: Executor = db,
+): Promise<boolean> => {
+  const updated = await client.$executeRaw`
+    UPDATE xb.mailings AS mailing
+       SET "recall_started_at" = now(),
+           "updated_at"        = now()
+     WHERE mailing."id" = ${mailingId}::uuid
+       AND mailing."status" IN ('stopped', 'finished')
+       AND mailing."recall_started_at" IS NULL
+       AND (
+             SELECT min(recipient."outcome_at")
+               FROM xb.mailing_recipients AS recipient
+              WHERE recipient."mailing_id" = mailing."id"
+                AND recipient."outcome" = 'sent'
+           ) > now() - make_interval(hours => ${MAILING_RECALL_WINDOW_HOURS}::int)
+  `;
+
+  return updated > 0;
+};
+
+/**
+ * Снимает отметку запуска отзыва, если задания поставить не удалось: иначе кнопка погасла бы
+ * навсегда при отзыве, который не начинался. Только пока ни одного сообщения не снято.
+ */
+export const clearMailingRecallStarted = async (
+  mailingId: string,
+  client: Executor = db,
+): Promise<boolean> => {
+  const updated = await client.$executeRaw`
+    UPDATE xb.mailings AS mailing
+       SET "recall_started_at" = NULL,
+           "updated_at"        = now()
+     WHERE mailing."id" = ${mailingId}::uuid
+       AND mailing."recall_finished_at" IS NULL
+       AND NOT EXISTS (
+             SELECT 1 FROM xb.mailing_recipients AS recipient
+              WHERE recipient."mailing_id" = mailing."id"
+                AND recipient."recalled_at" IS NOT NULL
+           )
+  `;
+
+  return updated > 0;
+};
+
+/** Кому отзыв ставит задания: дошедшие и ещё не снятые. */
+export const listRecallableRecipientIds = async (
+  mailingId: string,
+  client: Executor = db,
+): Promise<string[]> => {
+  const rows = await client.$queryRaw<{ personId: string }[]>`
+    SELECT "person_id" AS "personId"
+      FROM xb.mailing_recipients
+     WHERE "mailing_id" = ${mailingId}::uuid
+       AND "outcome" = 'sent'
+       AND "recalled_at" IS NULL
+     ORDER BY "person_id"
+  `;
+
+  return rows.map((row) => row.personId);
+};
+
+/** Всё, что отзыву нужно про одного адресата. */
+export type MailingRecallTargetRow = {
+  recallStartedAt: Date | null;
+  outcome: MailingRecipientOutcome;
+  messageId: bigint | null;
+  recalledAt: Date | null;
+  /**
+   * Чат, куда ушло сообщение: привязка, активная в момент отправки, даже если она с тех пор
+   * закрыта. `null` — такой привязки не нашлось.
+   */
+  telegramChatId: bigint | null;
+};
+
+/**
+ * Адресат отзыва одним запросом. `null` — рассылки нет или человека нет в её снимке.
+ *
+ * Чат берётся не активный сейчас, а тот, что был активен при отправке: `message_id` имеет
+ * смысл только в своём чате, а человек за двое суток мог перепривязаться на другой Telegram.
+ */
+export const findMailingRecallTarget = async (
+  mailingId: string,
+  personId: string,
+  client: Executor = db,
+): Promise<MailingRecallTargetRow | null> => {
+  const rows = await client.$queryRaw<MailingRecallTargetRow[]>`
+    SELECT mailing."recall_started_at" AS "recallStartedAt",
+           recipient."outcome",
+           recipient."message_id"      AS "messageId",
+           recipient."recalled_at"     AS "recalledAt",
+           link."telegram_chat_id"     AS "telegramChatId"
+      FROM xb.mailings AS mailing
+      JOIN xb.mailing_recipients AS recipient
+        ON recipient."mailing_id" = mailing."id"
+       AND recipient."person_id" = ${personId}::uuid
+      LEFT JOIN LATERAL (
+           SELECT candidate."telegram_chat_id"
+             FROM xb.telegram_links AS candidate
+            WHERE candidate."person_id" = recipient."person_id"
+              AND candidate."linked_at" <= recipient."outcome_at"
+              AND (candidate."closed_at" IS NULL OR candidate."closed_at" >= recipient."outcome_at")
+            ORDER BY candidate."linked_at" DESC
+            LIMIT 1
+      ) AS link ON true
+     WHERE mailing."id" = ${mailingId}::uuid
+  `;
+
+  return rows[0] ?? null;
+};
+
+/** Отмечает снятое сообщение. `false` — уже снято раньше: повтор задания ничего не пишет. */
+export const markRecipientRecalled = async (
+  mailingId: string,
+  personId: string,
+  client: Executor = db,
+): Promise<boolean> => {
+  const updated = await client.$executeRaw`
+    UPDATE xb.mailing_recipients
+       SET "recalled_at" = now()
+     WHERE "mailing_id" = ${mailingId}::uuid
+       AND "person_id" = ${personId}::uuid
+       AND "outcome" = 'sent'
+       AND "recalled_at" IS NULL
+  `;
+
+  return updated > 0;
+};
+
+/** Отзыв прошёл всех адресатов. `false` — не запускался или уже отмечен завершённым. */
+export const markMailingRecallFinished = async (
+  mailingId: string,
+  client: Executor = db,
+): Promise<boolean> => {
+  const updated = await client.$executeRaw`
+    UPDATE xb.mailings
+       SET "recall_finished_at" = now(),
+           "updated_at"         = now()
+     WHERE "id" = ${mailingId}::uuid
+       AND "recall_started_at" IS NOT NULL
+       AND "recall_finished_at" IS NULL
   `;
 
   return updated > 0;
