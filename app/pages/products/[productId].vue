@@ -125,8 +125,10 @@ const upload = async (file: File): Promise<void> => {
         @submit="save"
       />
 
-      <OrganismsProductPhotoForm
-        :product="data.product"
+      <OrganismsPhotoForm
+        :photo-path="data.product.photoPath"
+        :updated-at="data.product.updatedAt"
+        :name="data.product.name"
         :uploading="uploading"
         :error="photoError"
         @upload="upload"

@@ -26,6 +26,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '#server': path.resolve(__dirname, './server'),
+      // Сервисы рассылок читают общие с формой ограничения из `shared/` (issue #136): без
+      // псевдонима тест сервиса не собирается, хотя приложение собирается — у Nuxt он свой.
+      '#shared': path.resolve(__dirname, './shared'),
     },
   },
 });

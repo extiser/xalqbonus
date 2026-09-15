@@ -52,6 +52,9 @@ services:
       - ..:/srv
       - /srv/node_modules
       - /srv/.nuxt
+      # Тот же том, что у приложения: фото рассылки уходит в Telegram из очереди, и читает
+      # его воркер (issue #136).
+      - uploads:/data/uploads
     environment:
       - NODE_ENV=development
     env_file:

@@ -45,6 +45,10 @@ services:
     restart: unless-stopped
     env_file:
       - ../.env
+    volumes:
+      # Тот же том, что у приложения: фото рассылки кладёт веб, а уходит оно в Telegram
+      # из очереди, и читает его воркер (issue #136).
+      - uploads:/data/uploads
     # Бандл лежит рядом с `.output/server/`, а не внутри: изнутри резолв внешних пакетов
     # упирается в нитровский огрызок @prisma/client и не доходит до полного дерева
     # (docker/Dockerfile → build:worker).

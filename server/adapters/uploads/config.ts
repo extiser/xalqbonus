@@ -25,3 +25,6 @@ export const readUploadsDir = (): string =>
 
 /** Подкаталог фото товаров внутри тома. Он же первый сегмент `products.photo_path`. */
 export const PRODUCT_PHOTO_DIR = 'products';
+
+/** Подкаталог фото рассылок внутри тома. Он же первый сегмент `mailings.photo_path`. */
+export const MAILING_PHOTO_DIR = 'mailings';

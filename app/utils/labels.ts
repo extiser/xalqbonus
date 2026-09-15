@@ -6,6 +6,7 @@ import type {
   DriverTelegramLink,
 } from '#shared/types/driver';
 import type { EmployeeAccount } from '#shared/types/employee';
+import type { Mailing } from '#shared/types/mailing';
 import type { OfficeOrder } from '#shared/types/orders';
 import type { SyncRunRow, SyncSkipRow } from '#shared/types/sync';
 
@@ -215,6 +216,31 @@ const ORDER_CANCEL_REASON_LABELS: Record<NonNullable<OfficeOrder['cancelReason']
 export const orderCancelReasonLabel = (
   reason: NonNullable<OfficeOrder['cancelReason']>,
 ): string => ORDER_CANCEL_REASON_LABELS[reason];
+
+/**
+ * Подписи рассылок. Полным `Record` — новый статус обязан уронить проверку типов здесь.
+ */
+
+const MAILING_STATUS_LABELS: Record<Mailing['status'], string> = {
+  draft: 'черновик',
+  running: 'идёт',
+  stopped: 'остановлена',
+  finished: 'завершена',
+};
+
+export const mailingStatusLabel = (status: Mailing['status']): string =>
+  MAILING_STATUS_LABELS[status];
+
+/** Идущая — предупреждение: сообщения уходят прямо сейчас. Завершённая — порядок. */
+const MAILING_STATUS_TONES: Record<Mailing['status'], 'ok' | 'warn' | 'muted'> = {
+  draft: 'muted',
+  running: 'warn',
+  stopped: 'muted',
+  finished: 'ok',
+};
+
+export const mailingStatusTone = (status: Mailing['status']): 'ok' | 'warn' | 'muted' =>
+  MAILING_STATUS_TONES[status];
 
 const EMPLOYEE_ROLE_LABELS: Record<EmployeeAccount['role'], string> = {
   owner: 'владелец',

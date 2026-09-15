@@ -1,4 +1,4 @@
-import { Api, GrammyError, HttpError } from 'grammy';
+import { Api, GrammyError, HttpError, InlineKeyboard, InputFile } from 'grammy';
 
 /**
  * Исходящие вызовы Bot API — и только они.
@@ -91,28 +91,34 @@ const classify = (error: GrammyError): TelegramSendError => {
   return new TelegramSendError('rejected', `Telegram отклонил запрос: ${error.description}`);
 };
 
+/**
+ * Кнопка под сообщением, открывающая Mini App. Подпись и адрес готовые: язык и окружение —
+ * забота вызывающего.
+ */
+export type OpenAppButton = {
+  text: string;
+  url: string;
+};
+
 export type SendMessageInput = {
   token: string;
   telegramChatId: bigint;
   text: string;
+  /** Пусто — сообщение уходит без кнопки. */
+  openAppButton?: OpenAppButton;
 };
 
+const replyMarkupFor = (button: OpenAppButton | undefined): InlineKeyboard | undefined =>
+  button === undefined ? undefined : new InlineKeyboard().webApp(button.text, button.url);
+
 /**
- * Шлёт сообщение в чат. Успех — возврат без значения, отказ — `TelegramSendError`.
- *
- * Идентификатор чата строкой: метод принимает его и числом, и строкой, а строка
- * не требует предположений о том, что id чата укладывается в безопасное целое JS
- * (server/bot/screen.ts).
- *
- * `parse_mode: HTML` — как у экранов диалога: подстановки в текст экранируются сборщиком
- * текста, и разные режимы разметки на соседних сообщениях одного бота были бы ловушкой.
+ * Вызов Bot API с разбором отказа. Один на все методы отправки: классификация отказа
+ * у `sendMessage` и `sendPhoto` обязана быть одной и той же, иначе очередь по-разному
+ * отвечала бы на один и тот же умерший чат.
  */
-export const sendTelegramMessage = async (input: SendMessageInput): Promise<void> => {
+const withClassifiedFailure = async <Result>(call: () => Promise<Result>): Promise<Result> => {
   try {
-    await getApi(input.token).sendMessage(input.telegramChatId.toString(), input.text, {
-      parse_mode: 'HTML',
-      link_preview_options: { is_disabled: true },
-    });
+    return await call();
   } catch (error) {
     if (error instanceof GrammyError) {
       throw classify(error);
@@ -125,4 +131,85 @@ export const sendTelegramMessage = async (input: SendMessageInput): Promise<void
 
     throw error;
   }
+};
+
+/**
+ * Шлёт сообщение в чат. Успех — `message_id` отправленного, отказ — `TelegramSendError`.
+ *
+ * Идентификатор сообщения отдаётся наверх, потому что удалить сообщение у получателя можно
+ * только по нему: не записанный сейчас, он теряется навсегда.
+ *
+ * Идентификатор чата строкой: метод принимает его и числом, и строкой, а строка
+ * не требует предположений о том, что id чата укладывается в безопасное целое JS
+ * (server/bot/screen.ts).
+ *
+ * `parse_mode: HTML` — как у экранов диалога: подстановки в текст экранируются сборщиком
+ * текста, и разные режимы разметки на соседних сообщениях одного бота были бы ловушкой.
+ */
+export const sendTelegramMessage = async (input: SendMessageInput): Promise<number> => {
+  const message = await withClassifiedFailure(() =>
+    getApi(input.token).sendMessage(input.telegramChatId.toString(), input.text, {
+      parse_mode: 'HTML',
+      link_preview_options: { is_disabled: true },
+      reply_markup: replyMarkupFor(input.openAppButton),
+    }),
+  );
+
+  return message.message_id;
+};
+
+/**
+ * Фото для отправки: уже лежащее у Telegram по `file_id` или байты с тома.
+ *
+ * Байты уезжают только первой отправкой: Telegram отвечает своим `file_id`, и дальше та же
+ * картинка шлётся ссылкой на него. Иначе рассылка на четыре тысячи человек выгружала бы
+ * один и тот же файл четыре тысячи раз.
+ */
+export type TelegramPhoto =
+  | { kind: 'file_id'; fileId: string }
+  | { kind: 'upload'; bytes: Buffer; fileName: string };
+
+export type SendPhotoInput = {
+  token: string;
+  telegramChatId: bigint;
+  photo: TelegramPhoto;
+  /** Подпись под фото. Потолок у неё свой, в четыре раза ниже текста сообщения. */
+  caption: string;
+  openAppButton?: OpenAppButton;
+};
+
+export type SentPhoto = {
+  /** Идентификатор сообщения — по нему сообщение удаляется у получателя. */
+  messageId: number;
+  /**
+   * `file_id` картинки самого крупного размера, который Telegram нарезал: им следующие
+   * отправки ссылаются на неё.
+   */
+  fileId: string;
+};
+
+/**
+ * Шлёт фото с подписью. Отказы разбираются так же, как у `sendTelegramMessage`.
+ */
+export const sendTelegramPhoto = async (input: SendPhotoInput): Promise<SentPhoto> => {
+  const photo =
+    input.photo.kind === 'file_id'
+      ? input.photo.fileId
+      : new InputFile(input.photo.bytes, input.photo.fileName);
+
+  const message = await withClassifiedFailure(() =>
+    getApi(input.token).sendPhoto(input.telegramChatId.toString(), photo, {
+      caption: input.caption,
+      parse_mode: 'HTML',
+      reply_markup: replyMarkupFor(input.openAppButton),
+    }),
+  );
+
+  const largest = message.photo.at(-1);
+
+  if (!largest) {
+    throw new Error('Telegram принял фото, но не вернул ни одного размера');
+  }
+
+  return { messageId: message.message_id, fileId: largest.file_id };
 };
