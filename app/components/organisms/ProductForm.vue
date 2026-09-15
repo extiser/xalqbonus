@@ -45,6 +45,13 @@ const pricePoints = defineModel<string>('pricePoints', { required: true });
 const priceRetail = defineModel<string>('priceRetail', { required: true });
 const priceCost = defineModel<string>('priceCost', { required: true });
 
+/**
+ * У опубликованного фото уходит сразу, а текст ждёт «Сохранить» — и без подписи эта разница
+ * читается как дефект. Отложить фото до кнопки значило бы вернуть временное хранилище файла,
+ * отклонённое в #148. У черновика подписи нет: там сразу сохраняется всё.
+ */
+const PUBLISHED_PHOTO_NOTE = 'Фото меняется сразу, без сохранения';
+
 const submit = (): void => {
   if (props.mode === 'published') {
     emit('submit');
@@ -97,6 +104,7 @@ const submit = (): void => {
         :name="name || 'Товар'"
         :uploading="uploading"
         :error="photoError"
+        :note="mode === 'published' ? PUBLISHED_PHOTO_NOTE : null"
         @upload="(file) => emit('upload', file)"
       />
 

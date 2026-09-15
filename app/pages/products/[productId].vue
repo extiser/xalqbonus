@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { onBeforeRouteLeave, useRoute } from 'vue-router';
 import { useDraftAutosave } from '~/composables/useDraftAutosave';
 import { failureText } from '~/utils/requestError';
 import { toLoadState } from '~/utils/loadState';
@@ -114,6 +114,75 @@ const autosave = useDraftAutosave({
   save: saveDraft,
   enabled: () => isDraft.value,
 });
+
+/**
+ * Поля в том виде, в каком их хранит сервер: края текста обрезаны, число без лишних нулей.
+ * Без этого « Тряпка» на экране и «Тряпка» в базе считались бы несохранённой правкой.
+ */
+const normalizeFields = (source: ProductFormFields): ProductFormFields => {
+  const number = (value: string): string => (value.trim() === '' ? '' : String(Number(value)));
+
+  return {
+    name: source.name.trim(),
+    description: source.description.trim(),
+    pricePoints: number(source.pricePoints),
+    priceRetail: number(source.priceRetail),
+    priceCost: number(source.priceCost),
+  };
+};
+
+/**
+ * Есть ли у опубликованного товара правки, не отправленные кнопкой «Сохранить».
+ *
+ * Сравниваются поля экрана с загруженным товаром. Фото сюда не входит: оно уходит на сервер
+ * сразу при выборе и несохранённым не бывает. У черновика несохранённого ждать некому —
+ * он сохраняет себя сам, и перехвата ухода у него нет.
+ */
+const hasUnsavedEdits = computed(
+  () =>
+    !isDraft.value &&
+    product.value !== null &&
+    JSON.stringify(normalizeFields(fields.value)) !==
+      JSON.stringify(normalizeFields(toFields(product.value))),
+);
+
+/**
+ * Уход с изменённой формы опубликованного товара спрашивает подтверждение (PR #149).
+ *
+ * До черновиков кнопка «Сохранить» стояла во всех формах; теперь соседняя форма сохраняется
+ * сама, и привычка «оно само» появится именно здесь. Поэтому переход не отменяется молча,
+ * а ждёт ответа диалога: страница держит его обещание, пока человек не нажал кнопку.
+ */
+const leaveDialogOpen = ref(false);
+let answerLeave: ((leave: boolean) => void) | null = null;
+
+onBeforeRouteLeave(() => {
+  if (!hasUnsavedEdits.value) {
+    return true;
+  }
+
+  leaveDialogOpen.value = true;
+
+  return new Promise<boolean>((resolve) => {
+    answerLeave = resolve;
+  });
+});
+
+const resolveLeave = (leave: boolean): void => {
+  leaveDialogOpen.value = false;
+  answerLeave?.(leave);
+  answerLeave = null;
+};
+
+// Закрытие вкладки и перезагрузку дождаться нельзя: там диалог браузера, и другого не бывает.
+const warnBeforeUnload = (event: BeforeUnloadEvent): void => {
+  if (hasUnsavedEdits.value) {
+    event.preventDefault();
+  }
+};
+
+onMounted(() => window.addEventListener('beforeunload', warnBeforeUnload));
+onBeforeUnmount(() => window.removeEventListener('beforeunload', warnBeforeUnload));
 
 // Переход к другой записи на той же странице — копией, историей браузера: поля подменяются
 // прочитанной записью. Свой же только что заведённый черновик сюда не попадает — он уже на руках.
@@ -287,6 +356,16 @@ const upload = async (file: File): Promise<void> => {
 
 <template>
   <div class="space-y-6">
+    <MoleculesConfirmDialog
+      :open="leaveDialogOpen"
+      title="Уйти без сохранения?"
+      message="Правки товара не сохранены и пропадут. Фото это не касается — оно уже загружено."
+      confirm-label="Уйти без сохранения"
+      cancel-label="Остаться"
+      @confirm="resolveLeave(true)"
+      @cancel="resolveLeave(false)"
+    />
+
     <div>
       <NuxtLink to="/products" class="text-sm text-slate-500 underline underline-offset-2">
         ← Весь каталог
