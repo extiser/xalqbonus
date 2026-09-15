@@ -26,21 +26,10 @@ const { data, status, refresh } = await useFetch<MailingListResponse>('/api/mail
 
 const state = computed(() => toLoadState(status.value));
 
-/** Фильтр, набранный в форме. Подсчёт адресатов идёт за ним сам — `query` реактивен. */
-const activeWithinDays = ref('');
-
-const {
-  data: audience,
-  status: audienceStatus,
-  error: audienceFailure,
-} = await useFetch<MailingAudienceResponse>('/api/mailings/audience', {
-  query: { activeWithinDays },
-});
+const { data: audience, status: audienceStatus } =
+  await useFetch<MailingAudienceResponse>('/api/mailings/audience');
 
 const audienceState = computed(() => toLoadState(audienceStatus.value));
-const audienceError = computed(() =>
-  audienceFailure.value ? failureText(audienceFailure.value) : null,
-);
 
 const saving = ref(false);
 const saveError = ref<string | null>(null);
@@ -68,7 +57,7 @@ const create = async (body: MailingRequestBody): Promise<void> => {
     <div>
       <h1 class="text-xl font-semibold text-slate-900">Рассылки</h1>
       <p class="mt-1 text-sm text-slate-500">
-        Сообщение участникам программы в Telegram с кнопкой «Открыть приложение». Черновик
+        Сообщение всем участникам программы в Telegram с кнопкой «Открыть приложение». Черновик
         правится сколько угодно; отправленное не отзывается.
       </p>
     </div>
@@ -83,9 +72,7 @@ const create = async (body: MailingRequestBody): Promise<void> => {
       :error="saveError"
       :audience-state="audienceState"
       :audience="audience ?? null"
-      :audience-error="audienceError"
       @submit="create"
-      @filter="activeWithinDays = $event"
     />
   </div>
 </template>

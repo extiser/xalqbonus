@@ -33,11 +33,6 @@ defineProps<{
           </p>
           <p v-else class="mt-1 text-sm text-slate-500">не задан — узбекоязычные получили русский</p>
         </div>
-        <p class="text-xs text-slate-500">
-          Фильтр:
-          <template v-if="mailing.activeWithinDays">ездил за последние {{ mailing.activeWithinDays }} дн.</template>
-          <template v-else>все участники программы</template>
-        </p>
       </div>
     </div>
   </MoleculesSectionPanel>

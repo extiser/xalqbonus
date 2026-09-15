@@ -1,15 +1,15 @@
 import { createError, type H3Error } from 'h3';
 
 import {
-  InvalidActiveWithinDaysError,
   MailingAudienceEmptyError,
+  MailingFieldTooLongError,
   MailingPhotoTooLargeError,
   MailingPhotoTypeNotAllowedError,
   MailingStatusMismatchError,
   MailingTextTooLongError,
   UnknownMailingError,
 } from '#server/services/mailings/errors';
-import { MAILING_ACTIVE_DAYS_MAX } from '#shared/mailing';
+import { mailingTooLongText } from '#shared/mailing';
 import { MAX_PHOTO_MB } from '#shared/photo';
 
 /**
@@ -17,8 +17,11 @@ import { MAX_PHOTO_MB } from '#shared/photo';
  *
  * Отказы — строками при своих правилах, а не кодами словаря двери: они про предмет разговора,
  * а не про доступ (docs/decisions.md → «Отказ двери веба говорит кодом, а текст живёт
- * словарём»). Собраны в одном месте, потому что ручек рассылок семь, а отказов на всех
- * один набор, и семь копий разошлись бы формулировкой.
+ * словарём»). Собраны в одном месте, потому что ручек рассылок восемь, а отказов на всех
+ * один набор, и восемь копий разошлись бы формулировкой.
+ *
+ * Фраза про перебор склейки берётся из `shared/mailing.ts`: та же стоит у закрытой кнопки
+ * запуска в форме.
  *
  * `null` — не отказ, а поломка: такое уходит пятисоткой.
  */
@@ -28,6 +31,11 @@ const STATUS_ACTION_TEXT = {
   running: 'Остановить можно только идущую рассылку.',
   stopped: 'Скопировать можно только остановленную рассылку.',
   finished: 'Действие для завершённой рассылки не предусмотрено.',
+} as const;
+
+const FIELD_TEXT = {
+  textRu: 'Текст на русском',
+  textUz: 'Текст на узбекском',
 } as const;
 
 const reject = (
@@ -46,25 +54,23 @@ export const explainMailingFailure = (error: unknown): H3Error | null => {
   }
 
   if (error instanceof MailingTextTooLongError) {
-    return reject(
-      400,
-      'Bad Request',
-      `Сообщение вместе с заголовками языков — ${error.length} знаков, а Telegram принимает ` +
-        `${error.withPhoto ? 'в подписи к фото' : 'в сообщении'} не больше ${error.limit}. ` +
-        'Сократите тексты.',
-    );
+    return reject(400, 'Bad Request', mailingTooLongText(error.length, error.limit, error.withPhoto));
   }
 
-  if (error instanceof InvalidActiveWithinDaysError) {
+  if (error instanceof MailingFieldTooLongError) {
     return reject(
       400,
       'Bad Request',
-      `Число дней — целое, от 1 до ${MAILING_ACTIVE_DAYS_MAX}. Пустое поле — все участники.`,
+      `${FIELD_TEXT[error.field]} длиннее ${error.limit} знаков — больше Telegram не принимает даже без фото.`,
     );
   }
 
   if (error instanceof MailingAudienceEmptyError) {
-    return reject(409, 'Conflict', 'По этому фильтру сейчас нет ни одного адресата — рассылать некому.');
+    return reject(
+      409,
+      'Conflict',
+      'Участников программы с привязанным Telegram сейчас нет — рассылать некому.',
+    );
   }
 
   // 415 и 413 — как у фото товара: тело понято, не принимается тип или размер.

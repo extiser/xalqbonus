@@ -22,7 +22,10 @@ import type { Mailing } from '#shared/types/mailing';
  *
  * Смена статуса и снимок — одна транзакция. Рассылка в статусе «идёт» без снимка означала бы
  * рассылку, которой некому уходить и которую нельзя ни запустить заново, ни честно посчитать.
- * Пустой снимок откатывает и статус: рассылка «никому» — ошибка фильтра, а не отправка.
+ * Пустой снимок откатывает и статус: рассылать некому, и это не отправка.
+ *
+ * Предел длины склейки проверяется здесь и только здесь: это условие запуска, а не
+ * сохранения — черновик с перебором сохраняется, а уходить не должен (issue #136).
  *
  * Задания ставятся после фиксации, а не внутри: Redis в транзакцию базы не входит, и задание,
  * поставленное до фиксации, воркер мог бы взять раньше, чем появится строка снимка.
@@ -43,17 +46,11 @@ export const launchMailing = async (mailingId: string): Promise<Mailing> => {
     assertMailingTexts(current, current.photoPath !== null);
 
     const snapshot = await db.$transaction(async (transaction) => {
-      const running = await markMailingRunning(mailingId, transaction);
-
-      if (!running) {
+      if (!(await markMailingRunning(mailingId, transaction))) {
         return null;
       }
 
-      const recipients = await insertMailingRecipients(
-        mailingId,
-        running.activeWithinDays,
-        transaction,
-      );
+      const recipients = await insertMailingRecipients(mailingId, transaction);
 
       if (recipients === 0) {
         throw new MailingAudienceEmptyError(mailingId);

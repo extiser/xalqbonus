@@ -13,7 +13,7 @@ import { readMailing } from '#server/services/mailings/readMailing';
 import type { Mailing } from '#shared/types/mailing';
 
 /**
- * Копия остановленной рассылки в новый черновик: заголовок, тексты, фильтр и фото.
+ * Копия остановленной рассылки в новый черновик: заголовок, тексты и фото.
  *
  * Снимок не копируется. Новая рассылка снимет свой при запуске, и те, кто получил сообщение
  * от остановленной, получат его снова — копия означает «разослать заново», а не «дослать».
@@ -40,7 +40,6 @@ export const copyMailing = async (mailingId: string, createdById: string): Promi
     title: source.title,
     textRu: source.textRu,
     textUz: source.textUz,
-    activeWithinDays: source.activeWithinDays,
     photoPath: null,
     createdById,
   });

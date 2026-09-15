@@ -5,7 +5,11 @@ import { formatDateTime, formatNumber } from '~/utils/format';
 import { mailingStatusLabel, mailingStatusTone } from '~/utils/labels';
 import { failureText } from '~/utils/requestError';
 import { toLoadState } from '~/utils/loadState';
-import { MAILING_CAPTION_MAX_LENGTH, MAILING_TEXT_MAX_LENGTH } from '#shared/mailing';
+import {
+  MAILING_CAPTION_MAX_LENGTH,
+  MAILING_TEXT_MAX_LENGTH,
+  mailingLengthProblem,
+} from '#shared/mailing';
 import type {
   MailingAudienceResponse,
   MailingRequestBody,
@@ -71,19 +75,19 @@ const headerNote = computed(() => {
 /** Подсказка под полем фото — числа из `shared/mailing.ts`, а не вписанные руками. */
 const photoNote = `Необязательно. С фото сообщение уходит подписью к нему — потолок ${formatNumber(MAILING_CAPTION_MAX_LENGTH)} знаков вместо ${formatNumber(MAILING_TEXT_MAX_LENGTH)}.`;
 
-const activeWithinDays = ref('');
-
-const {
-  data: audience,
-  status: audienceStatus,
-  error: audienceFailure,
-} = await useFetch<MailingAudienceResponse>('/api/mailings/audience', {
-  query: { activeWithinDays },
-});
+const { data: audience, status: audienceStatus } =
+  await useFetch<MailingAudienceResponse>('/api/mailings/audience');
 
 const audienceState = computed(() => toLoadState(audienceStatus.value));
-const audienceError = computed(() =>
-  audienceFailure.value ? failureText(audienceFailure.value) : null,
+
+/**
+ * Почему «Запустить» закрыта — той же фразой, что пришла бы отказом ручки. Считается
+ * по сохранённому черновику: запускается он, а не то, что набрано в форме.
+ */
+const launchProblem = computed(() =>
+  mailing.value
+    ? mailingLengthProblem(mailing.value.textRu, mailing.value.textUz, mailing.value.photoPath !== null)
+    : null,
 );
 
 const saving = ref(false);
@@ -159,9 +163,9 @@ const runAction = async (request: () => Promise<void>): Promise<void> => {
 };
 
 /**
- * Запуск. Число адресатов в подтверждении спрашивается заново и по сохранённому фильтру,
- * а не берётся из формы: в форме может быть набрано то, что ещё не сохранено, а запускается
- * сохранённый черновик.
+ * Запуск. Число адресатов в подтверждении спрашивается заново: страница могла пролежать
+ * открытой, а участники за это время вступали и отвязывались. Запускается сохранённый
+ * черновик, а не набранное в форме.
  */
 const launch = (): Promise<void> =>
   runAction(async () => {
@@ -171,9 +175,7 @@ const launch = (): Promise<void> =>
       return;
     }
 
-    const fresh = await $fetch<MailingAudienceResponse>('/api/mailings/audience', {
-      query: { activeWithinDays: current.activeWithinDays ?? '' },
-    });
+    const fresh = await $fetch<MailingAudienceResponse>('/api/mailings/audience');
 
     const disabledNote =
       fresh.notificationsDisabled > 0
@@ -281,9 +283,7 @@ onBeforeUnmount(stopRefreshing);
           :error="saveError"
           :audience-state="audienceState"
           :audience="audience ?? null"
-          :audience-error="audienceError"
           @submit="save"
-          @filter="activeWithinDays = $event"
         />
 
         <OrganismsPhotoForm
@@ -302,8 +302,16 @@ onBeforeUnmount(stopRefreshing);
           title="Запуск"
           note="Адресаты фиксируются в момент запуска: кто вступит в программу позже, рассылку не получит. Сообщения уходят очередью, по несколько в секунду."
         >
-          <AtomsActionButton label="Запустить рассылку" tone="primary" :disabled="acting" @click="launch" />
-          <p v-if="actionError" class="mt-3 text-sm text-red-700">{{ actionError }}</p>
+          <AtomsActionButton
+            label="Запустить рассылку"
+            tone="primary"
+            :disabled="acting || launchProblem !== null"
+            @click="launch"
+          />
+          <p v-if="launchProblem" class="mt-3 text-sm text-red-700">
+            {{ launchProblem }} Считается сохранённый черновик.
+          </p>
+          <p v-else-if="actionError" class="mt-3 text-sm text-red-700">{{ actionError }}</p>
         </MoleculesSectionPanel>
       </template>
 

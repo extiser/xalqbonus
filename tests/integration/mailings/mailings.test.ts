@@ -6,12 +6,13 @@ import {
   deleteMailingPhoto,
   resolveMailingPhotoFile,
 } from '#server/adapters/uploads/mailingPhotos';
+import { recordRecipientOutcome } from '#server/repositories/mailings';
 import { copyMailing } from '#server/services/mailings/copyMailing';
 import { createMailing } from '#server/services/mailings/createMailing';
 import { deliverMailingMessage } from '#server/services/mailings/deliverMailingMessage';
-import { recordRecipientOutcome } from '#server/repositories/mailings';
 import {
   MailingAudienceEmptyError,
+  MailingFieldTooLongError,
   MailingStatusMismatchError,
   MailingTextTooLongError,
 } from '#server/services/mailings/errors';
@@ -23,12 +24,7 @@ import { saveMailingPhoto } from '#server/services/mailings/saveMailingPhoto';
 import { stopMailing } from '#server/services/mailings/stopMailing';
 import { updateMailing } from '#server/services/mailings/updateMailing';
 import type { MailingCounters } from '#shared/types/mailing';
-import {
-  cleanupTestData,
-  createTestPerson,
-  createTestTrip,
-  disconnectDatabase,
-} from '../support/database';
+import { cleanupTestData, createTestPerson, disconnectDatabase } from '../support/database';
 import {
   cleanupTestEmployees,
   createTestEmployee,
@@ -48,44 +44,37 @@ import {
 import { disconnectQueues } from '../support/queues';
 
 /**
- * Рассылки: отбор аудитории, снимок при запуске, остановка, копия и запись исхода.
+ * Рассылки: аудитория, снимок при запуске, предел длины при запуске, остановка, копия,
+ * фото и запись исхода.
  *
  * Все запросы здесь сырые, и типы расхождения с базой не ловят (docs/infra.md → «Тесты»,
  * третье исключение). Тест гоняет их через сервисы — тем путём, которым их зовут ручки
  * и воркер. Настоящей отправки в Telegram здесь нет: проверяются ветки, которые решаются
  * до неё, — остановленная рассылка, закрытая привязка, выключенные уведомления.
+ *
+ * Фильтров у аудитории нет, и снимок берёт всех участников тестовой базы. Между тестами
+ * она пуста — уборка идёт по заведённым людям, — поэтому точные числа снимка ниже
+ * означают «ровно заведённые этим тестом».
  */
 
-const DAY_MS = 24 * 60 * 60 * 1_000;
+const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
 
-let tripSequence = 0;
-
-/** Участник с активной привязкой; с `tripDaysAgo` — ещё и с поездкой столько дней назад. */
+/** Участник программы; `linked: false` — без привязки, `inProgram: false` — вне программы. */
 const createMember = async (
-  options: { tripDaysAgo?: number; tripStatus?: string; linked?: boolean; inProgram?: boolean } = {},
+  options: { linked?: boolean; inProgram?: boolean } = {},
 ): Promise<string> => {
-  const { personId, profileId } = await createTestPerson({ inProgram: options.inProgram ?? true });
+  const { personId } = await createTestPerson({ inProgram: options.inProgram ?? true });
 
   if (options.linked ?? true) {
     await linkTestDriver(personId, nextTestTelegramUserId());
   }
 
-  if (options.tripDaysAgo !== undefined) {
-    tripSequence += 1;
-    await createTestTrip({
-      profileId,
-      tripOrderId: `test-mailing-trip-${personId}-${tripSequence}`,
-      status: options.tripStatus ?? 'complete',
-      endedAt: new Date(Date.now() - options.tripDaysAgo * DAY_MS),
-    });
-  }
-
   return personId;
 };
 
-const createDraft = async (createdById: string, activeWithinDays: number | null) => {
+const createDraft = async (createdById: string) => {
   const mailing = await createMailing(
-    { title: 'Тестовая рассылка', textRu: 'Привет', textUz: 'Salom', activeWithinDays },
+    { title: 'Тестовая рассылка', textRu: 'Привет', textUz: 'Salom' },
     createdById,
   );
 
@@ -113,37 +102,32 @@ describe('рассылки', () => {
     await disconnectQueues();
   });
 
-  it('аудитория — участники с активной привязкой, фильтр по завершённой поездке', async () => {
-    const allBefore = await readMailingAudience(null);
-    const weekBefore = await readMailingAudience(7);
+  it('аудитория — все участники программы с активной привязкой', async () => {
+    const before = await readMailingAudience();
 
-    await createMember({ tripDaysAgo: 2 });
     await createMember();
-    await createMember({ linked: false, tripDaysAgo: 2 });
-    await createMember({ inProgram: false, tripDaysAgo: 2 });
+    await createMember();
+    await createMember({ linked: false });
+    await createMember({ inProgram: false });
 
-    const disabled = await createMember({ tripDaysAgo: 1, tripStatus: 'cancelled' });
-    await setTestNotificationsEnabled(disabled, false);
+    const muted = await createMember();
+    await setTestNotificationsEnabled(muted, false);
 
-    const allAfter = await readMailingAudience(null);
-    const weekAfter = await readMailingAudience(7);
+    const after = await readMailingAudience();
 
-    // Без фильтра — три участника с привязкой: без привязки и вне программы не считаются.
-    expect(allAfter.total - allBefore.total).toBe(3);
-    expect(allAfter.notificationsDisabled - allBefore.notificationsDisabled).toBe(1);
-    // За неделю — один: отменённый заказ поездкой не считается.
-    expect(weekAfter.total - weekBefore.total).toBe(1);
-    expect(weekAfter.notificationsDisabled - weekBefore.notificationsDisabled).toBe(0);
+    // Три участника с привязкой: без привязки и вне программы не считаются.
+    expect(after.total - before.total).toBe(3);
+    expect(after.notificationsDisabled - before.notificationsDisabled).toBe(1);
   });
 
   it('запуск снимает снимок один раз: выключившие уведомления ложатся сразу исходом', async () => {
     const { employeeId } = await createTestEmployee({ role: 'owner' });
-    const enabled = await createMember({ tripDaysAgo: 1 });
-    const disabled = await createMember({ tripDaysAgo: 1 });
+    const enabled = await createMember();
+    const disabled = await createMember();
 
     await setTestNotificationsEnabled(disabled, false);
 
-    const draft = await createDraft(employeeId, 3);
+    const draft = await createDraft(employeeId);
     const launched = await launchMailing(draft.mailingId);
 
     expect(launched.status).toBe('running');
@@ -176,12 +160,10 @@ describe('рассылки', () => {
   it('пустой снимок откатывает запуск целиком', async () => {
     const { employeeId } = await createTestEmployee({ role: 'admin' });
 
-    await createMember({ tripDaysAgo: 30 });
+    // Условие теста, а не проверка: участников в тестовой базе между тестами нет.
+    expect((await readMailingAudience()).total).toBe(0);
 
-    // Условие теста, а не проверка: адресатов за сутки в базе быть не должно.
-    expect((await readMailingAudience(1)).total).toBe(0);
-
-    const draft = await createDraft(employeeId, 1);
+    const draft = await createDraft(employeeId);
 
     await expect(launchMailing(draft.mailingId)).rejects.toBeInstanceOf(MailingAudienceEmptyError);
 
@@ -194,10 +176,10 @@ describe('рассылки', () => {
 
   it('исход пишется при отправке, и рассылка завершается, когда ждущих не осталось', async () => {
     const { employeeId } = await createTestEmployee({ role: 'owner' });
-    const unlinked = await createMember({ tripDaysAgo: 1 });
-    const muted = await createMember({ tripDaysAgo: 1 });
+    const unlinked = await createMember();
+    const muted = await createMember();
 
-    const draft = await createDraft(employeeId, 2);
+    const draft = await createDraft(employeeId);
 
     await launchMailing(draft.mailingId);
 
@@ -231,58 +213,87 @@ describe('рассылки', () => {
     ).toBe('not_running');
   });
 
-  it('предел длины считает склейку с заголовками, а не каждый текст отдельно', async () => {
+  it('предел склейки — условие запуска: сохранение и фото с перебором проходят, запуск — нет', async () => {
     const { employeeId } = await createTestEmployee({ role: 'owner' });
 
-    // Заголовки и пустая строка между блоками — 30 знаков: 2033 + 2033 + 30 ровно в потолок.
-    const fits = await createDraft(employeeId, null);
-    const exact = await updateMailing(fits.mailingId, {
-      title: 'Ровно в потолок',
-      textRu: 'р'.repeat(2033),
+    // Заголовки и пустая строка между блоками — 30 знаков: 2034 + 2033 + 30 на знак длиннее
+    // потолка, а каждый текст порознь вдвое короче его. Черновик сохраняется.
+    const draft = await createDraft(employeeId);
+    const overflowing = await updateMailing(draft.mailingId, {
+      title: 'На знак длиннее',
+      textRu: 'р'.repeat(2034),
       textUz: 'o'.repeat(2033),
-      activeWithinDays: null,
     });
 
-    expect(exact.textRu).toHaveLength(2033);
+    expect(overflowing.textRu).toHaveLength(2034);
 
-    // Каждый текст порознь вдвое короче потолка, вместе — на знак длиннее.
-    const overflow = createMailing(
-      { title: 'Длиннее', textRu: 'р'.repeat(2034), textUz: 'o'.repeat(2033), activeWithinDays: null },
-      employeeId,
-    );
+    await expect(launchMailing(draft.mailingId)).rejects.toBeInstanceOf(MailingTextTooLongError);
+    await expect(launchMailing(draft.mailingId)).rejects.toMatchObject({
+      length: 4097,
+      limit: 4096,
+      withPhoto: false,
+    });
 
-    await expect(overflow).rejects.toBeInstanceOf(MailingTextTooLongError);
-    await expect(overflow).rejects.toMatchObject({ length: 4097, limit: 4096, withPhoto: false });
-
-    // С фото потолок подписи: 500 + 500 влезли в сообщение, но с заголовками это 1030 из 1024.
-    const captioned = await createDraft(employeeId, null);
-
-    await updateMailing(captioned.mailingId, {
+    // 500 + 500 влезают в сообщение; фото к ним встаёт, хотя подписью это 1030 из 1024.
+    await updateMailing(draft.mailingId, {
       title: 'Под фото',
       textRu: 'р'.repeat(500),
       textUz: 'o'.repeat(500),
-      activeWithinDays: null,
     });
 
-    await expect(
-      saveMailingPhoto({
-        mailingId: captioned.mailingId,
-        contentType: 'image/png',
-        bytes: Buffer.from([0x89, 0x50, 0x4e, 0x47]),
-      }),
-    ).rejects.toMatchObject({ length: 1030, limit: 1024, withPhoto: true });
+    const photographed = await saveMailingPhoto({
+      mailingId: draft.mailingId,
+      contentType: 'image/png',
+      bytes: PNG_BYTES,
+    });
 
-    expect((await readMailing(captioned.mailingId)).photoPath).toBeNull();
+    expect(photographed.photoPath).not.toBeNull();
+
+    await expect(launchMailing(draft.mailingId)).rejects.toMatchObject({
+      length: 1030,
+      limit: 1024,
+      withPhoto: true,
+    });
+
+    const after = await readMailing(draft.mailingId);
+
+    expect(after.status).toBe('draft');
+    expect(await countTestRecipients(draft.mailingId)).toBe(0);
+
+    await removeMailingPhoto(draft.mailingId);
+  });
+
+  it('жёсткий предел поля — 4096 на каждый текст при сохранении, от фото не зависит', async () => {
+    const { employeeId } = await createTestEmployee({ role: 'admin' });
+
+    await expect(
+      createMailing({ title: 'Роман', textRu: 'р'.repeat(4097), textUz: null }, employeeId),
+    ).rejects.toMatchObject({ field: 'textRu', limit: 4096 });
+
+    const draft = await createDraft(employeeId);
+
+    await expect(
+      updateMailing(draft.mailingId, { title: 'Роман', textRu: 'Привет', textUz: 'o'.repeat(4097) }),
+    ).rejects.toBeInstanceOf(MailingFieldTooLongError);
+
+    // Ровно потолок поля сохраняется.
+    const exact = await updateMailing(draft.mailingId, {
+      title: 'Ровно',
+      textRu: 'р'.repeat(4096),
+      textUz: null,
+    });
+
+    expect(exact.textRu).toHaveLength(4096);
   });
 
   it('фото снимается с черновика вместе с файлом, а у запущенной — нет', async () => {
     const { employeeId } = await createTestEmployee({ role: 'admin' });
-    const draft = await createDraft(employeeId, 1);
+    const draft = await createDraft(employeeId);
 
     const withPhoto = await saveMailingPhoto({
       mailingId: draft.mailingId,
       contentType: 'image/png',
-      bytes: Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+      bytes: PNG_BYTES,
     });
     const photoPath = withPhoto.photoPath ?? '';
     const file = resolveMailingPhotoFile(photoPath.split('/').pop() ?? '') ?? '';
@@ -298,12 +309,12 @@ describe('рассылки', () => {
     expect((await removeMailingPhoto(draft.mailingId)).photoPath).toBeNull();
 
     // У запущенной рассылки фото уходит адресатам и не снимается.
-    await createMember({ tripDaysAgo: 0 });
+    await createMember();
 
     const photographed = await saveMailingPhoto({
       mailingId: draft.mailingId,
       contentType: 'image/png',
-      bytes: Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+      bytes: PNG_BYTES,
     });
 
     await launchMailing(draft.mailingId);
@@ -319,11 +330,11 @@ describe('рассылки', () => {
 
   it('у исхода sent записан message_id, у прочих его нет', async () => {
     const { employeeId } = await createTestEmployee({ role: 'owner' });
-    const delivered = await createMember({ tripDaysAgo: 1 });
-    const refused = await createMember({ tripDaysAgo: 1 });
-    const bypassed = await createMember({ tripDaysAgo: 1 });
+    const delivered = await createMember();
+    const refused = await createMember();
+    const bypassed = await createMember();
 
-    const draft = await createDraft(employeeId, 2);
+    const draft = await createDraft(employeeId);
 
     await launchMailing(draft.mailingId);
 
@@ -343,10 +354,10 @@ describe('рассылки', () => {
 
   it('остановка оставляет ждущих без отправки, а копия уходит в новый черновик', async () => {
     const { employeeId } = await createTestEmployee({ role: 'admin' });
-    const first = await createMember({ tripDaysAgo: 1 });
-    const second = await createMember({ tripDaysAgo: 1 });
+    const first = await createMember();
+    const second = await createMember();
 
-    const draft = await createDraft(employeeId, 2);
+    const draft = await createDraft(employeeId);
 
     await launchMailing(draft.mailingId);
 
@@ -380,7 +391,6 @@ describe('рассылки', () => {
         title: draft.title,
         textRu: draft.textRu,
         textUz: draft.textUz,
-        activeWithinDays: 2,
         photoPath: null,
         startedAt: null,
       }),

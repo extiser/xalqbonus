@@ -3,7 +3,7 @@ import {
   MailingStatusMismatchError,
   UnknownMailingError,
 } from '#server/services/mailings/errors';
-import { assertMailingTexts, type MailingFields } from '#server/services/mailings/fields';
+import { assertMailingFieldLengths, type MailingFields } from '#server/services/mailings/fields';
 import { readMailing } from '#server/services/mailings/readMailing';
 import type { Mailing } from '#shared/types/mailing';
 
@@ -18,7 +18,8 @@ export const updateMailing = async (mailingId: string, fields: MailingFields): P
     throw new UnknownMailingError(mailingId);
   }
 
-  assertMailingTexts(fields, current.photoPath !== null);
+  // Только жёсткий предел поля: черновик с перебором склейки сохраняется, запуск его не пустит.
+  assertMailingFieldLengths(fields);
 
   // Условие «ещё черновик» стоит в самом `UPDATE`: между чтением выше и записью рассылку
   // мог запустить второй сотрудник.

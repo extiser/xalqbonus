@@ -21,7 +21,6 @@ export type MailingRow = {
   textRu: string;
   textUz: string | null;
   photoPath: string | null;
-  activeWithinDays: number | null;
   status: MailingStatus;
   createdByName: string;
   createdAt: Date;
@@ -46,7 +45,6 @@ const MAILING_SELECT = Prisma.sql`
          mailing."text_ru"            AS "textRu",
          mailing."text_uz"            AS "textUz",
          mailing."photo_path"         AS "photoPath",
-         mailing."active_within_days" AS "activeWithinDays",
          mailing."status",
          author."full_name"           AS "createdByName",
          mailing."created_at"         AS "createdAt",
@@ -96,7 +94,6 @@ export type MailingFieldsInput = {
   title: string;
   textRu: string;
   textUz: string | null;
-  activeWithinDays: number | null;
 };
 
 export type InsertMailingInput = MailingFieldsInput & {
@@ -110,15 +107,12 @@ export const insertDraftMailing = async (
   client: Executor = db,
 ): Promise<string> => {
   const rows = await client.$queryRaw<{ id: string }[]>`
-    INSERT INTO xb.mailings (
-      "title", "text_ru", "text_uz", "photo_path", "active_within_days", "status", "created_by_id"
-    )
+    INSERT INTO xb.mailings ("title", "text_ru", "text_uz", "photo_path", "status", "created_by_id")
     VALUES (
       ${input.title},
       ${input.textRu},
       ${input.textUz},
       ${input.photoPath},
-      ${input.activeWithinDays}::int,
       'draft'::xb.mailing_status,
       ${input.createdById}::uuid
     )
@@ -142,11 +136,10 @@ export const updateDraftMailing = async (
 ): Promise<boolean> => {
   const updated = await client.$executeRaw`
     UPDATE xb.mailings
-       SET "title"              = ${input.title},
-           "text_ru"            = ${input.textRu},
-           "text_uz"            = ${input.textUz},
-           "active_within_days" = ${input.activeWithinDays}::int,
-           "updated_at"         = now()
+       SET "title"      = ${input.title},
+           "text_ru"    = ${input.textRu},
+           "text_uz"    = ${input.textUz},
+           "updated_at" = now()
      WHERE "id" = ${mailingId}::uuid
        AND "status" = 'draft'
   `;
@@ -195,70 +188,48 @@ export const clearDraftMailingPhotoPath = async (
 
 /**
  * Участники программы, которых возьмёт рассылка: строка `person_settings` и активная
- * привязка Telegram. С фильтром — ещё и завершённая поездка за последние N дней на любом
- * профиле человека.
- *
- * Поездка берётся завершённая: «ездил» — это довёз, а отменённый заказ тоже несёт
- * `ended_at`. Человек через профиль, а не колонкой в поездке: у одного человека профилей
- * бывает несколько (docs/decisions.md → «Личность водителя — номер удостоверения»).
+ * привязка Telegram. Все до одного — фильтров нет: резать аудиторию не на чем, пока нет
+ * дашборда (решение Руслана 15-09-2026, issue #136).
  *
  * Один и тот же отбор нужен подсчёту на экране и снимку при запуске — поэтому он собран
  * один раз: разойдись они, экран обещал бы одно число, а в снимок ложилось бы другое.
  */
-const COMPLETED_STATUS = 'complete';
-
-const audienceSql = (activeWithinDays: number | null): Prisma.Sql => Prisma.sql`
+const AUDIENCE_SQL = Prisma.sql`
   SELECT settings."person_id",
          settings."notifications_enabled"
     FROM xb.person_settings AS settings
     JOIN xb.telegram_links AS link
       ON link."person_id" = settings."person_id"
      AND link."closed_at" IS NULL
-   WHERE ${activeWithinDays}::int IS NULL
-      OR EXISTS (
-           SELECT 1
-             FROM xb.park_profiles AS profile
-             JOIN xb.trips AS trip ON trip."profile_id" = profile."profile_id"
-            WHERE profile."person_id" = settings."person_id"
-              AND trip."status" = ${COMPLETED_STATUS}
-              AND trip."ended_at" >= now() - make_interval(days => ${activeWithinDays}::int)
-         )
 `;
 
 export type AudienceCountRow = { total: number; notificationsDisabled: number };
 
-export const countMailingAudience = async (
-  activeWithinDays: number | null,
-  client: Executor = db,
-): Promise<AudienceCountRow> => {
+export const countMailingAudience = async (client: Executor = db): Promise<AudienceCountRow> => {
   const rows = await client.$queryRaw<AudienceCountRow[]>`
     SELECT count(*)::int                                           AS "total",
            count(*) FILTER (WHERE NOT audience."notifications_enabled")::int AS "notificationsDisabled"
-      FROM (${audienceSql(activeWithinDays)}) AS audience
+      FROM (${AUDIENCE_SQL}) AS audience
   `;
 
   return rows[0] ?? { total: 0, notificationsDisabled: 0 };
 };
 
-/**
- * Черновик → идёт. Возвращает фильтр рассылки, по которому снимается снимок; `null` —
- * строки нет или она уже не черновик, и снимать нечего.
- */
+/** Черновик → идёт. `false` — строки нет или она уже не черновик, и снимать снимок нечего. */
 export const markMailingRunning = async (
   mailingId: string,
   client: Executor = db,
-): Promise<{ activeWithinDays: number | null } | null> => {
-  const rows = await client.$queryRaw<{ activeWithinDays: number | null }[]>`
+): Promise<boolean> => {
+  const updated = await client.$executeRaw`
     UPDATE xb.mailings
        SET "status"     = 'running'::xb.mailing_status,
            "started_at" = now(),
            "updated_at" = now()
      WHERE "id" = ${mailingId}::uuid
        AND "status" = 'draft'
-    RETURNING "active_within_days" AS "activeWithinDays"
   `;
 
-  return rows[0] ?? null;
+  return updated > 0;
 };
 
 /**
@@ -267,7 +238,6 @@ export const markMailingRunning = async (
  */
 export const insertMailingRecipients = async (
   mailingId: string,
-  activeWithinDays: number | null,
   client: Executor = db,
 ): Promise<number> =>
   client.$executeRaw`
@@ -279,7 +249,7 @@ export const insertMailingRecipients = async (
                 ELSE 'skipped_disabled'::xb.mailing_recipient_outcome
            END,
            CASE WHEN audience."notifications_enabled" THEN NULL ELSE now() END
-      FROM (${audienceSql(activeWithinDays)}) AS audience
+      FROM (${AUDIENCE_SQL}) AS audience
     ON CONFLICT ("mailing_id", "person_id") DO NOTHING
   `;
 

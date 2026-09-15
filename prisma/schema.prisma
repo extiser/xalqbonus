@@ -1279,8 +1279,6 @@ model Mailing {
   textUz           String?       @map("text_uz")
   /// Относительный путь на томе приложения. Файл кладёт веб — здесь только колонка.
   photoPath        String?       @map("photo_path")
-  /// Фильтр «ездил за последние N дней». Пусто — все участники с активной привязкой.
-  activeWithinDays Int?          @map("active_within_days")
   status           MailingStatus
   createdById      String        @map("created_by_id") @db.Uuid
   startedAt        DateTime?     @map("started_at") @db.Timestamptz(6)

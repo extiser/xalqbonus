@@ -24,12 +24,10 @@ export type Mailing = {
   mailingId: string;
   title: string;
   textRu: string;
-  /** Пусто — узбекоязычные участники получают русский текст. */
+  /** Пусто — уходит один русский текст, без заголовков языков. */
   textUz: string | null;
   /** Относительный путь на томе приложения. */
   photoPath: string | null;
-  /** Фильтр «ездил за последние N дней». Пусто — все участники. */
-  activeWithinDays: number | null;
   status: MailingStatus;
   createdByName: string;
   createdAt: string;
@@ -49,21 +47,16 @@ export type MailingResponse = {
   mailing: Mailing;
 };
 
-/**
- * Тело заведения и правки черновика. Узбекский текст и фильтр приходят пустыми строками:
- * форма отдаёт то, что в ней набрано, а «пусто значит не задано» решает сервис.
- */
+/** Тело заведения и правки черновика. Узбекский приходит пустой строкой, если не набран. */
 export type MailingRequestBody = {
   title: string;
   textRu: string;
   textUz?: string;
-  activeWithinDays?: string | number | null;
 };
 
-/** Сколько человек получит рассылку с этим фильтром, если запустить её сейчас. */
+/** Сколько человек получит рассылку, если запустить её сейчас. */
 export type MailingAudienceResponse = {
-  activeWithinDays: number | null;
-  /** Участники с активной привязкой, прошедшие фильтр. Столько строк ляжет в снимок. */
+  /** Участники программы с активной привязкой. Столько строк ляжет в снимок. */
   total: number;
   /** Из них выключили уведомления: в снимок попадут, сообщения не получат. */
   notificationsDisabled: number;

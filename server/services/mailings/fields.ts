@@ -1,11 +1,11 @@
 import type { MailingFieldsInput, MailingRow } from '#server/repositories/mailings';
 import {
-  InvalidActiveWithinDaysError,
+  MailingFieldTooLongError,
   MailingTextTooLongError,
 } from '#server/services/mailings/errors';
 import {
   buildMailingMessage,
-  MAILING_ACTIVE_DAYS_MAX,
+  MAILING_TEXT_MAX_LENGTH,
   mailingMessageLimit,
 } from '#shared/mailing';
 import type { Mailing } from '#shared/types/mailing';
@@ -21,7 +21,6 @@ export const toMailing = (row: MailingRow): Mailing => ({
   textRu: row.textRu,
   textUz: row.textUz,
   photoPath: row.photoPath,
-  activeWithinDays: row.activeWithinDays,
   status: row.status,
   createdByName: row.createdByName,
   createdAt: row.createdAt.toISOString(),
@@ -45,27 +44,6 @@ export type MailingRequestFields = {
   title?: unknown;
   textRu?: unknown;
   textUz?: unknown;
-  activeWithinDays?: unknown;
-};
-
-/**
- * Фильтр активности из тела или строки запроса. Пусто — фильтра нет, все участники.
- *
- * Непустое, но негодное — отказ, а не «фильтра нет»: молча разосланное всему парку вместо
- * «ездившим за неделю» не отзывается.
- */
-export const readActiveWithinDays = (value: unknown): number | null => {
-  if (value === undefined || value === null || value === '') {
-    return null;
-  }
-
-  const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
-
-  if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAILING_ACTIVE_DAYS_MAX) {
-    throw new InvalidActiveWithinDaysError(value);
-  }
-
-  return parsed;
 };
 
 /**
@@ -83,23 +61,35 @@ export const readMailingFields = (
     return null;
   }
 
-  return {
-    title,
-    textRu,
-    textUz: textUz === '' ? null : textUz,
-    activeWithinDays: readActiveWithinDays(body?.activeWithinDays),
-  };
+  return { title, textRu, textUz: textUz === '' ? null : textUz };
 };
 
 /**
- * Влезает ли сообщение в то, что примет Telegram.
+ * Жёсткий предел каждого текста при сохранении — физический потолок `sendMessage`.
+ *
+ * От фото он не зависит и склейку не меряет: это свойство поля, и в форме он стоит
+ * `maxlength`. Длиннее Telegram не примет ни с фото, ни без, и такой текст в черновике —
+ * не рабочее состояние, а ошибка ввода.
+ */
+export const assertMailingFieldLengths = (texts: { textRu: string; textUz: string | null }): void => {
+  if (texts.textRu.length > MAILING_TEXT_MAX_LENGTH) {
+    throw new MailingFieldTooLongError('textRu', MAILING_TEXT_MAX_LENGTH);
+  }
+
+  if (texts.textUz !== null && texts.textUz.length > MAILING_TEXT_MAX_LENGTH) {
+    throw new MailingFieldTooLongError('textUz', MAILING_TEXT_MAX_LENGTH);
+  }
+};
+
+/**
+ * Влезает ли сообщение в то, что примет Telegram. Зовётся только запуском.
  *
  * Меряется склейка — ровно то, что уйдёт: оба текста с заголовками языков и пустой строкой
- * между блоками (`shared/mailing.ts`). Порознь 900 + 900 проходят, а отказывают на первом же
- * адресате. Потолок зависит от фото: подпись к нему вчетверо короче сообщения.
+ * между блоками (`shared/mailing.ts`). Потолок зависит от фото.
  *
- * Проверяется и при сохранении, и при загрузке фото, и при запуске — рассылка, упавшая
- * на лимите на первом адресате, отказала бы всем четырём тысячам разом.
+ * Сохранение и загрузка фото эту проверку не зовут: черновик — рабочее состояние, и человек
+ * вправе сначала положить картинку, а потом подрезать текст. Отказ фото из-за длины текста —
+ * отказ не тому действию (issue #136, прогон 15-09-2026).
  */
 export const assertMailingTexts = (
   texts: { textRu: string; textUz: string | null },

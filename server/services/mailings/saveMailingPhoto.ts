@@ -7,7 +7,6 @@ import {
   MailingStatusMismatchError,
   UnknownMailingError,
 } from '#server/services/mailings/errors';
-import { assertMailingTexts } from '#server/services/mailings/fields';
 import { readMailing } from '#server/services/mailings/readMailing';
 import { MAX_PHOTO_BYTES, PHOTO_EXTENSION_BY_TYPE } from '#shared/photo';
 import type { Mailing } from '#shared/types/mailing';
@@ -18,8 +17,9 @@ import type { Mailing } from '#shared/types/mailing';
  * Порядок тот же, что у фото товара (server/services/products/saveProductPhoto.ts): сначала
  * файл, потом колонка — иначе рассылка ссылалась бы на файл, которого нет.
  *
- * Тексты проверяются до записи файла: с фото текст становится подписью, а у подписи потолок
- * вчетверо ниже. Черновик с длинным текстом отказывает в фото сразу, а не на запуске.
+ * Длина текстов здесь не проверяется: с фото потолок склейки падает до 1024, но черновик —
+ * рабочее состояние, и человек вправе сначала положить картинку, а потом подрезать текст.
+ * Перебор показывает форма, а не пускает запуск (issue #136, прогон 15-09-2026).
  */
 const log = consola.withTag('mailings:photo');
 
@@ -47,8 +47,6 @@ export const saveMailingPhoto = async (input: SaveMailingPhotoInput): Promise<Ma
   if (current.status !== 'draft') {
     throw new MailingStatusMismatchError(input.mailingId, current.status, 'draft');
   }
-
-  assertMailingTexts(current, true);
 
   const photoPath = await writeMailingPhoto(input.mailingId, input.contentType, input.bytes);
 

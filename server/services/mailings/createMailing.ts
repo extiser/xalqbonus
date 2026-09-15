@@ -1,6 +1,6 @@
 import { consola } from 'consola';
 import { insertDraftMailing } from '#server/repositories/mailings';
-import { assertMailingTexts, type MailingFields } from '#server/services/mailings/fields';
+import { assertMailingFieldLengths, type MailingFields } from '#server/services/mailings/fields';
 import { readMailing } from '#server/services/mailings/readMailing';
 import type { Mailing } from '#shared/types/mailing';
 
@@ -17,7 +17,8 @@ export const createMailing = async (
   fields: MailingFields,
   createdById: string,
 ): Promise<Mailing> => {
-  assertMailingTexts(fields, false);
+  // Только жёсткий предел поля: склейка по потолку Telegram — условие запуска, а не сохранения.
+  assertMailingFieldLengths(fields);
 
   const mailingId = await insertDraftMailing({ ...fields, photoPath: null, createdById });
 

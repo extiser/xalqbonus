@@ -23,7 +23,6 @@ CREATE TABLE "mailings" (
     "text_ru" TEXT NOT NULL,
     "text_uz" TEXT,
     "photo_path" TEXT,
-    "active_within_days" INTEGER,
     "status" "mailing_status" NOT NULL,
     "created_by_id" UUID NOT NULL,
     "started_at" TIMESTAMPTZ(6),
@@ -80,11 +79,6 @@ ALTER TABLE "mailings" ADD CONSTRAINT "mailings_status_times_check"
         END
     );
 
--- Фильтр активности — положительное число дней. «За последние ноль дней» — это фильтр,
--- который никого не пропускает, а «все участники» записываются пустым значением.
-ALTER TABLE "mailings" ADD CONSTRAINT "mailings_active_within_days_check"
-    CHECK ("active_within_days" IS NULL OR "active_within_days" > 0);
-
 -- Пустой текст — это сообщение, которое Telegram не примет. Узбекский пуст значением NULL,
 -- а не пустой строкой: «всем на русском» записывается одним способом.
 ALTER TABLE "mailings" ADD CONSTRAINT "mailings_texts_check"
@@ -107,6 +101,3 @@ COMMENT ON TABLE "mailing_recipients" IS
 
 COMMENT ON COLUMN "mailing_recipients"."message_id" IS
     'message_id от Telegram у исхода sent. Удалить сообщение у водителя можно только по нему.';
-
-COMMENT ON COLUMN "mailings"."active_within_days" IS
-    'Фильтр «ездил за последние N дней» по завершённым поездкам. NULL — все участники с активной привязкой.';

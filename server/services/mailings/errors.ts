@@ -37,6 +37,8 @@ export class MailingStatusMismatchError extends MailingError {
 /**
  * Сообщение длиннее, чем примет Telegram. Про склейку целиком — оба текста с заголовками
  * языков, — а не про одно поле: 900 + 900 по отдельности влезают, вместе нет.
+ *
+ * Отказ запуска и только его: сохранение черновика и загрузка фото по склейке не отказывают.
  */
 export class MailingTextTooLongError extends MailingError {
   constructor(
@@ -48,10 +50,16 @@ export class MailingTextTooLongError extends MailingError {
   }
 }
 
-/** Фильтр «ездил за последние N дней» не целое число в допустимых границах. */
-export class InvalidActiveWithinDaysError extends MailingError {
-  constructor(public readonly value: unknown) {
-    super(`фильтр активности не годится: ${String(value)}`);
+/**
+ * Один текст длиннее физического потолка `sendMessage`. Свойство поля, а не сообщения:
+ * от фото не зависит и проверяется при сохранении.
+ */
+export class MailingFieldTooLongError extends MailingError {
+  constructor(
+    public readonly field: 'textRu' | 'textUz',
+    public readonly limit: number,
+  ) {
+    super(`текст ${field} длиннее ${limit} знаков`);
   }
 }
 
