@@ -33,6 +33,16 @@ describe('сообщение рассылки', () => {
     }
   });
 
+  it('пустой русский даёт один узбекский текст без заголовка', () => {
+    for (const empty of [null, '', '   \n ']) {
+      const message = buildMailingMessage(empty, 'Faqat oʻzbekcha');
+
+      expect(message.text).toBe('Faqat oʻzbekcha');
+      expect(message.html).toBe('Faqat oʻzbekcha');
+      expect(message.text).not.toContain(MAILING_HEADING_UZ);
+    }
+  });
+
   it('экранируются тексты, а не заголовки', () => {
     const message = buildMailingMessage('Скидка <50%> & подарок', 'a<b>c');
 
@@ -49,6 +59,8 @@ describe('сообщение рассылки', () => {
     const overhead = `${MAILING_HEADING_RU}\n\n\n${MAILING_HEADING_UZ}\n`.length;
 
     expect(buildMailingMessage(russian, uzbek).text.length).toBe(1000 + overhead);
+    // Один блок — его длина: заголовков у одноязычного сообщения нет.
     expect(buildMailingMessage(russian, null).text.length).toBe(500);
+    expect(buildMailingMessage(null, uzbek).text.length).toBe(500);
   });
 });

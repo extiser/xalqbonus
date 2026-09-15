@@ -13,7 +13,7 @@ import {
   MailingStatusMismatchError,
   UnknownMailingError,
 } from '#server/services/mailings/errors';
-import { assertMailingTexts } from '#server/services/mailings/fields';
+import { assertMailingLaunchable } from '#server/services/mailings/fields';
 import { readMailing } from '#server/services/mailings/readMailing';
 import type { Mailing } from '#shared/types/mailing';
 
@@ -24,8 +24,10 @@ import type { Mailing } from '#shared/types/mailing';
  * рассылку, которой некому уходить и которую нельзя ни запустить заново, ни честно посчитать.
  * Пустой снимок откатывает и статус: рассылать некому, и это не отправка.
  *
- * Предел длины склейки проверяется здесь и только здесь: это условие запуска, а не
- * сохранения — черновик с перебором сохраняется, а уходить не должен (issue #136).
+ * Заголовок, текст хотя бы на одном языке и предел длины проверяются здесь и только здесь: это
+ * условия запуска, а не сохранения — черновик без них сохраняется, а уходить не должен
+ * (issue #136, #148). Та же полнота стоит проверкой в базе: не черновик без текста
+ * не записывается.
  *
  * Задания ставятся после фиксации, а не внутри: Redis в транзакцию базы не входит, и задание,
  * поставленное до фиксации, воркер мог бы взять раньше, чем появится строка снимка.
@@ -43,7 +45,7 @@ export const launchMailing = async (mailingId: string): Promise<Mailing> => {
   }
 
   if (current.status === 'draft') {
-    assertMailingTexts(current, current.photoPath !== null);
+    assertMailingLaunchable(current);
 
     const snapshot = await db.$transaction(async (transaction) => {
       if (!(await markMailingRunning(mailingId, transaction))) {

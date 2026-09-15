@@ -117,17 +117,22 @@ const priceItems = async (
     items.map((item) => item.productId),
     transaction,
   );
+  // Черновик отсекается здесь, в выборке каталога, тем же условием, что и на витрине:
+  // водителю он не виден нигде, и корзина, собранная руками, его тоже не закажет (issue #148).
+  // Цена у опубликованного есть всегда — проверкой `products_published_complete_check`.
   const priceByProduct = new Map(
-    products
-      .filter((product) => product.archivedAt === null)
-      .map((product) => [product.id, product.pricePoints]),
+    products.flatMap((product) =>
+      product.publishedAt !== null && product.archivedAt === null && product.pricePoints !== null
+        ? [[product.id, product.pricePoints] as const]
+        : [],
+    ),
   );
 
   return items.map((item) => {
     const unitPoints = priceByProduct.get(item.productId);
 
-    // Нет в каталоге и архивный — один отказ: водителю в обоих случаях нельзя заказать
-    // этот товар, а знать, существовал ли он когда-нибудь, ему незачем.
+    // Нет в каталоге, черновик и архивный — один отказ: водителю во всех случаях нельзя
+    // заказать этот товар, а знать, существовал ли он когда-нибудь, ему незачем.
     if (unitPoints === undefined) {
       throw new ProductUnavailableError(item.productId);
     }

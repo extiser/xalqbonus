@@ -3,13 +3,13 @@ import { createError, type H3Error } from 'h3';
 import {
   MailingAudienceEmptyError,
   MailingFieldTooLongError,
+  MailingNotLaunchableError,
   MailingPhotoTooLargeError,
   MailingPhotoTypeNotAllowedError,
   MailingStatusMismatchError,
-  MailingTextTooLongError,
   UnknownMailingError,
 } from '#server/services/mailings/errors';
-import { mailingTooLongText } from '#shared/mailing';
+import { MAILING_AUDIENCE_EMPTY_TEXT, mailingLaunchProblemText } from '#shared/mailing';
 import { MAX_PHOTO_MB } from '#shared/photo';
 
 /**
@@ -17,17 +17,17 @@ import { MAX_PHOTO_MB } from '#shared/photo';
  *
  * Отказы — строками при своих правилах, а не кодами словаря двери: они про предмет разговора,
  * а не про доступ (docs/decisions.md → «Отказ двери веба говорит кодом, а текст живёт
- * словарём»). Собраны в одном месте, потому что ручек рассылок восемь, а отказов на всех
- * один набор, и восемь копий разошлись бы формулировкой.
+ * словарём»). Собраны в одном месте, потому что ручек рассылок девять, а отказов на всех
+ * один набор, и девять копий разошлись бы формулировкой.
  *
- * Фраза про перебор склейки берётся из `shared/mailing.ts`: та же стоит у закрытой кнопки
- * запуска в форме.
+ * Причины незапускаемой рассылки и фраза про пустую аудиторию берутся из `shared/mailing.ts`:
+ * те же стоят у закрытой кнопки запуска на экране.
  *
  * `null` — не отказ, а поломка: такое уходит пятисоткой.
  */
 
 const STATUS_ACTION_TEXT = {
-  draft: 'Правится и запускается только черновик. Эта рассылка уже запущена.',
+  draft: 'Правится, запускается и удаляется только черновик. Эта рассылка уже запущена.',
   running: 'Остановить можно только идущую рассылку.',
   stopped: 'Скопировать можно только остановленную рассылку.',
   finished: 'Действие для завершённой рассылки не предусмотрено.',
@@ -53,8 +53,13 @@ export const explainMailingFailure = (error: unknown): H3Error | null => {
     return reject(409, 'Conflict', STATUS_ACTION_TEXT[error.expected]);
   }
 
-  if (error instanceof MailingTextTooLongError) {
-    return reject(400, 'Bad Request', mailingTooLongText(error.length, error.limit, error.withPhoto));
+  // Все причины одним ответом — так же, как экран перечисляет их у кнопки.
+  if (error instanceof MailingNotLaunchableError) {
+    return reject(
+      409,
+      'Conflict',
+      `Рассылку нельзя запустить. ${error.problems.map(mailingLaunchProblemText).join(' ')}`,
+    );
   }
 
   if (error instanceof MailingFieldTooLongError) {
@@ -66,11 +71,7 @@ export const explainMailingFailure = (error: unknown): H3Error | null => {
   }
 
   if (error instanceof MailingAudienceEmptyError) {
-    return reject(
-      409,
-      'Conflict',
-      'Участников программы с привязанным Telegram сейчас нет — рассылать некому.',
-    );
+    return reject(409, 'Conflict', MAILING_AUDIENCE_EMPTY_TEXT);
   }
 
   // 415 и 413 — как у фото товара: тело понято, не принимается тип или размер.

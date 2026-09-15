@@ -4,9 +4,10 @@ import { Prisma } from '#server/generated/prisma/client';
 /**
  * Товары каталога.
  *
- * Товар не удаляется, а архивируется: на него ссылаются позиции заказов, и позиция обязана
- * помнить, что именно было заказано (docs/decisions.md → «Каталог: заказ — это касса,
- * остаток живёт по офисам»). `DELETE` в этом файле не появляется ни для чего.
+ * Опубликованный товар не удаляется, а архивируется: на него ссылаются позиции заказов,
+ * и позиция обязана помнить, что именно было заказано (docs/decisions.md → «Каталог: заказ —
+ * это касса, остаток живёт по офисам»). `DELETE` в этом файле ровно один — у черновика,
+ * на который не ссылается никто (issue #148).
  *
  * Схема в сыром SQL указывается явно — `xb.products`, а не `products`: `?schema=xb` в строке
  * подключения понимает Prisma, а не `pg`, и запрос без префикса молча ушёл бы в `public`
@@ -17,14 +18,17 @@ type Executor = Prisma.TransactionClient;
 
 export type ProductRow = {
   id: string;
-  name: string;
+  /** Пусто только у черновика — проверкой `products_published_complete_check`. */
+  name: string | null;
   description: string | null;
   /** Относительный путь на томе приложения. Файл кладёт сервис фото, здесь только колонка. */
   photoPath: string | null;
-  /** Цена в баллах на сейчас. Позиция заказа запоминает её своей копией. */
-  pricePoints: number;
-  priceRetail: number;
-  priceCost: number;
+  /** Цена в баллах на сейчас. Позиция заказа запоминает её своей копией. Пусто у черновика. */
+  pricePoints: number | null;
+  priceRetail: number | null;
+  priceCost: number | null;
+  /** Пусто — черновик: водителю не виден, заказать и принять в офис нельзя. */
+  publishedAt: Date | null;
   /** Заполнено — товар архивный: заказать нельзя, а прошлые заказы его помнят. */
   archivedAt: Date | null;
   updatedAt: Date;
@@ -38,21 +42,24 @@ const PRODUCT_COLUMNS = Prisma.sql`
   "price_points" AS "pricePoints",
   "price_retail" AS "priceRetail",
   "price_cost"   AS "priceCost",
+  "published_at" AS "publishedAt",
   "archived_at"  AS "archivedAt",
   "updated_at"   AS "updatedAt"
 `;
 
 /**
- * Весь каталог — и работающие товары, и архивные, архивные последними.
+ * Весь каталог — черновики, работающие товары и архивные: черновики первыми, архивные
+ * последними.
  *
- * Отбора по архивности нет намеренно: экран показывает архив признаком, а не прячет его.
- * Витрина водителя архивные товары не показывает, но это её отбор, а не этого запроса.
+ * Отбора нет намеренно: экран показывает черновик и архив признаком, а не прячет их.
+ * Черновик сотруднику обязан быть виден — иначе его не дописать. Витрина водителя
+ * не показывает ни того, ни другого, но это её отбор, а не этого запроса.
  */
 export const listProducts = async (client: Executor = db): Promise<ProductRow[]> =>
   client.$queryRaw<ProductRow[]>`
     SELECT ${PRODUCT_COLUMNS}
       FROM xb.products
-     ORDER BY ("archived_at" IS NOT NULL), "name"
+     ORDER BY ("published_at" IS NOT NULL), ("archived_at" IS NOT NULL), "name"
   `;
 
 export const findProduct = async (
@@ -84,15 +91,17 @@ export const findProductsByIds = async (
      WHERE "id" = ANY(${productIds}::uuid[])
   `;
 
+/** Поля товара, которые правит форма. Пусто — `null`: у черновика обязательных нет. */
 export type ProductInput = {
-  name: string;
+  name: string | null;
   description: string | null;
-  pricePoints: number;
-  priceRetail: number;
-  priceCost: number;
+  pricePoints: number | null;
+  priceRetail: number | null;
+  priceCost: number | null;
 };
 
-export const insertProduct = async (
+/** Заводит черновик: `published_at` пуст, публикация — отдельное действие. */
+export const insertProductDraft = async (
   input: ProductInput,
   client: Executor = db,
 ): Promise<ProductRow> => {
@@ -101,9 +110,9 @@ export const insertProduct = async (
     VALUES (
       ${input.name},
       ${input.description},
-      ${input.pricePoints},
-      ${input.priceRetail},
-      ${input.priceCost}
+      ${input.pricePoints}::int,
+      ${input.priceRetail}::int,
+      ${input.priceCost}::int
     )
     RETURNING ${PRODUCT_COLUMNS}
   `;
@@ -121,6 +130,9 @@ export const insertProduct = async (
  * Правка товара целиком. Фото сюда не входит: оно приезжает своим запросом,
  * потому что это файл, а не поле формы.
  *
+ * Полноту опубликованного товара держит `products_published_complete_check`: правка,
+ * стирающая у него цену, отбивается базой, даже если проверку в сервисе обошли.
+ *
  * Пустой ответ — товара с таким идентификатором нет.
  */
 export const updateProductFields = async (
@@ -132,9 +144,9 @@ export const updateProductFields = async (
     UPDATE xb.products
        SET "name"         = ${input.name},
            "description"  = ${input.description},
-           "price_points" = ${input.pricePoints},
-           "price_retail" = ${input.priceRetail},
-           "price_cost"   = ${input.priceCost},
+           "price_points" = ${input.pricePoints}::int,
+           "price_retail" = ${input.priceRetail}::int,
+           "price_cost"   = ${input.priceCost}::int,
            "updated_at"   = now()
      WHERE "id" = ${productId}::uuid
     RETURNING ${PRODUCT_COLUMNS}
@@ -166,7 +178,56 @@ export const updateProductPhotoPath = async (
   return rows[0] ?? null;
 };
 
-/** Ставит или снимает отметку архива. Устроена как у офиса — см. `repositories/offices.ts`. */
+/**
+ * Черновик → опубликован. Повтор у опубликованного отметку не двигает: время публикации —
+ * первое, а не последнее нажатие.
+ *
+ * Полноту здесь проверяет база (`products_published_complete_check`): сервис смотрит поля
+ * до записи ради ответа человеку, а правка, пришедшая между его чтением и этой записью,
+ * отбивается ограничением. Пустой ответ — товара нет.
+ */
+export const markProductPublished = async (
+  productId: string,
+  client: Executor = db,
+): Promise<ProductRow | null> => {
+  const rows = await client.$queryRaw<ProductRow[]>`
+    UPDATE xb.products
+       SET "published_at" = COALESCE("published_at", now()),
+           "updated_at"   = now()
+     WHERE "id" = ${productId}::uuid
+    RETURNING ${PRODUCT_COLUMNS}
+  `;
+
+  return rows[0] ?? null;
+};
+
+/**
+ * Удаляет черновик физически и возвращает путь его фото, чтобы сервис снял файл с тома.
+ * `null` — строки нет или товар опубликован: опубликованный архивируется, а не удаляется.
+ *
+ * Условие «ещё черновик» стоит в самом `DELETE`, а не проверкой перед ним: между нажатием
+ * «Удалить» и записью товар мог опубликовать второй сотрудник.
+ */
+export const deleteProductDraft = async (
+  productId: string,
+  client: Executor = db,
+): Promise<{ photoPath: string | null } | null> => {
+  const rows = await client.$queryRaw<{ photoPath: string | null }[]>`
+    DELETE FROM xb.products
+     WHERE "id" = ${productId}::uuid
+       AND "published_at" IS NULL
+    RETURNING "photo_path" AS "photoPath"
+  `;
+
+  return rows[0] ?? null;
+};
+
+/**
+ * Ставит или снимает отметку архива. Устроена как у офиса — см. `repositories/offices.ts`.
+ *
+ * Только у опубликованного: черновик живым не был, и архивировать его нечего — он удаляется
+ * (`products_archived_published_check`). Пустой ответ — товара нет или это черновик.
+ */
 export const updateProductArchived = async (
   productId: string,
   archived: boolean,
@@ -180,6 +241,7 @@ export const updateProductArchived = async (
            END,
            "updated_at"  = now()
      WHERE "id" = ${productId}::uuid
+       AND "published_at" IS NOT NULL
     RETURNING ${PRODUCT_COLUMNS}
   `;
 

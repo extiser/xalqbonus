@@ -204,18 +204,24 @@ export type CreateTestProductInput = {
   archived?: boolean;
 };
 
-/** Товар каталога. Сумовые цены тестам безразличны и ставятся любыми неотрицательными. */
+/**
+ * Товар каталога — опубликованный, как всё, что живёт на витрине. Сумовые цены тестам
+ * безразличны и ставятся любыми неотрицательными.
+ */
 export const createTestProduct = async ({
   pricePoints,
   archived = false,
 }: CreateTestProductInput): Promise<string> => {
   const rows = await db.$queryRaw<{ id: string }[]>`
-    INSERT INTO xb.products ("name", "price_points", "price_retail", "price_cost", "archived_at")
+    INSERT INTO xb.products (
+      "name", "price_points", "price_retail", "price_cost", "published_at", "archived_at"
+    )
     VALUES (
       'Тестовый товар',
       ${pricePoints},
       ${pricePoints * 1000},
       ${pricePoints * 800},
+      now(),
       ${archived ? new Date() : null}::timestamptz
     )
     RETURNING "id"
@@ -225,6 +231,11 @@ export const createTestProduct = async ({
   createdProductIds.add(productId);
 
   return productId;
+};
+
+/** Товар, заведённый сервисом, а не фикстурой, — чтобы уборка сняла и его. */
+export const trackTestProduct = (productId: string): void => {
+  createdProductIds.add(productId);
 };
 
 export type StockSnapshot = {

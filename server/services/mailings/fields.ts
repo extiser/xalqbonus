@@ -1,13 +1,9 @@
 import type { MailingFieldsInput, MailingRow } from '#server/repositories/mailings';
 import {
   MailingFieldTooLongError,
-  MailingTextTooLongError,
+  MailingNotLaunchableError,
 } from '#server/services/mailings/errors';
-import {
-  buildMailingMessage,
-  MAILING_TEXT_MAX_LENGTH,
-  mailingMessageLimit,
-} from '#shared/mailing';
+import { MAILING_TEXT_MAX_LENGTH, mailingLaunchProblems } from '#shared/mailing';
 import type { Mailing } from '#shared/types/mailing';
 
 /**
@@ -46,23 +42,23 @@ export type MailingRequestFields = {
   textUz?: unknown;
 };
 
-/**
- * Поля рассылки из тела запроса. `null` — нет заголовка или русского текста: это разбор
- * запроса, а не отказ человеку (docs/frontend.md → «Обязательное поле — свойство поля»).
- */
-export const readMailingFields = (
-  body: MailingRequestFields | null | undefined,
-): MailingFields | null => {
-  const title = typeof body?.title === 'string' ? body.title.trim() : '';
-  const textRu = typeof body?.textRu === 'string' ? body.textRu.trim() : '';
-  const textUz = typeof body?.textUz === 'string' ? body.textUz.trim() : '';
+/** Строка поля, обрезанная по краям. Пустое и не строка — `null`: пусто пишется одним способом. */
+const readText = (value: unknown): string | null => {
+  const text = typeof value === 'string' ? value.trim() : '';
 
-  if (title === '' || textRu === '') {
-    return null;
-  }
-
-  return { title, textRu, textUz: textUz === '' ? null : textUz };
+  return text === '' ? null : text;
 };
+
+/**
+ * Поля черновика из тела запроса. Обязательных нет: черновик заводится первым набранным
+ * символом или выбранным файлом, и заголовка у него в этот момент может не быть
+ * (issue #148). Чего не хватает для запуска, решает запуск.
+ */
+export const readMailingFields = (body: MailingRequestFields | null | undefined): MailingFields => ({
+  title: readText(body?.title),
+  textRu: readText(body?.textRu),
+  textUz: readText(body?.textUz),
+});
 
 /**
  * Жёсткий предел каждого текста при сохранении — физический потолок `sendMessage`.
@@ -71,8 +67,11 @@ export const readMailingFields = (
  * `maxlength`. Длиннее Telegram не примет ни с фото, ни без, и такой текст в черновике —
  * не рабочее состояние, а ошибка ввода.
  */
-export const assertMailingFieldLengths = (texts: { textRu: string; textUz: string | null }): void => {
-  if (texts.textRu.length > MAILING_TEXT_MAX_LENGTH) {
+export const assertMailingFieldLengths = (texts: {
+  textRu: string | null;
+  textUz: string | null;
+}): void => {
+  if (texts.textRu !== null && texts.textRu.length > MAILING_TEXT_MAX_LENGTH) {
     throw new MailingFieldTooLongError('textRu', MAILING_TEXT_MAX_LENGTH);
   }
 
@@ -82,23 +81,19 @@ export const assertMailingFieldLengths = (texts: { textRu: string; textUz: strin
 };
 
 /**
- * Влезает ли сообщение в то, что примет Telegram. Зовётся только запуском.
+ * Можно ли запускать черновик. Зовётся только запуском.
  *
- * Меряется склейка — ровно то, что уйдёт: оба текста с заголовками языков и пустой строкой
- * между блоками (`shared/mailing.ts`). Потолок зависит от фото.
+ * Все причины сразу — заголовок, текст хотя бы на одном языке и длина по потолку Telegram — тем же списком,
+ * что экран показывает у закрытой кнопки (`shared/mailing.ts`). Потолок склейки зависит от фото.
  *
  * Сохранение и загрузка фото эту проверку не зовут: черновик — рабочее состояние, и человек
  * вправе сначала положить картинку, а потом подрезать текст. Отказ фото из-за длины текста —
  * отказ не тому действию (issue #136, прогон 15-09-2026).
  */
-export const assertMailingTexts = (
-  texts: { textRu: string; textUz: string | null },
-  withPhoto: boolean,
-): void => {
-  const limit = mailingMessageLimit(withPhoto);
-  const { length } = buildMailingMessage(texts.textRu, texts.textUz).text;
+export const assertMailingLaunchable = (row: MailingRow): void => {
+  const problems = mailingLaunchProblems(row, row.photoPath !== null);
 
-  if (length > limit) {
-    throw new MailingTextTooLongError(length, limit, withPhoto);
+  if (problems.length > 0) {
+    throw new MailingNotLaunchableError(row.id, problems);
   }
 };

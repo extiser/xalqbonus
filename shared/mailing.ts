@@ -44,20 +44,28 @@ export type MailingMessage = {
  *
  * Оба языка уходят одним сообщением, русский первым, каждый под жирным заголовком — а не
  * на языке аккаунта: язык выставляется один раз при регистрации и сменить его водителю
- * негде (решение Руслана 15-09-2026, issue #136). Пустой узбекский — уходит один русский,
- * и заголовков нет вовсе: у одноязычного сообщения подписывать нечего.
+ * негде (решение Руслана 15-09-2026, issue #136).
+ *
+ * Заголовки языков ставятся, только когда заполнены оба текста. Один заполненный — русский
+ * или узбекский — уходит без заголовка: у одноязычного сообщения подписывать нечего
+ * (решение Руслана 15-09-2026, PR #149). Длина тогда считается по этому одному блоку.
  *
  * Тексты обрезаются по краям так же, как при сохранении: форма зовёт сборку на набранном,
  * и счётчик обязан считать то, что ляжет в базу.
  *
  * Экранируются только тексты: заголовки наши и разметки не содержат.
  */
-export const buildMailingMessage = (textRu: string, textUz: string | null): MailingMessage => {
-  const russian = textRu.trim();
+export const buildMailingMessage = (
+  textRu: string | null,
+  textUz: string | null,
+): MailingMessage => {
+  const russian = (textRu ?? '').trim();
   const uzbek = (textUz ?? '').trim();
 
-  if (uzbek === '') {
-    return { text: russian, html: escapeHtml(russian) };
+  if (russian === '' || uzbek === '') {
+    const single = russian === '' ? uzbek : russian;
+
+    return { text: single, html: escapeHtml(single) };
   }
 
   return {
@@ -73,19 +81,71 @@ export const mailingTooLongText = (length: number, limit: number, withPhoto: boo
   `Сообщение вместе с заголовками языков — ${length} знаков, а Telegram принимает ` +
   `${withPhoto ? 'в подписи к фото' : 'в сообщении'} не больше ${limit}. Сократите тексты.`;
 
-/**
- * Почему рассылку нельзя запустить по длине. `null` — сообщение влезает.
- *
- * Это условие запуска, а не сохранения: черновик — рабочее состояние, и человек вправе
- * сначала положить картинку, а потом подрезать текст (issue #136, прогон 15-09-2026).
- */
-export const mailingLengthProblem = (
-  textRu: string,
-  textUz: string | null,
-  withPhoto: boolean,
-): string | null => {
-  const limit = mailingMessageLimit(withPhoto);
-  const { length } = buildMailingMessage(textRu, textUz).text;
-
-  return length > limit ? mailingTooLongText(length, limit, withPhoto) : null;
+/** Тексты рассылки, от которых зависит запуск. Пусто — `null` или пустая строка формы. */
+export type MailingLaunchFields = {
+  title: string | null;
+  textRu: string | null;
+  textUz: string | null;
 };
+
+/** Почему рассылку нельзя запустить. */
+export type MailingLaunchProblem =
+  | { kind: 'missing_title' }
+  /** Нет текста ни на одном языке. Любого одного достаточно: рассылка только на узбекском — рабочий случай. */
+  | { kind: 'missing_text' }
+  | { kind: 'too_long'; length: number; limit: number; withPhoto: boolean };
+
+const isBlank = (value: string | null): boolean => value === null || value.trim() === '';
+
+/**
+ * Все причины, по которым рассылку нельзя запустить, сразу. Пустой список — можно.
+ *
+ * Сразу все, а не первая: правка по одной причине за круг — это три круга там, где хватает
+ * одного взгляда (issue #148). Список один на ручку запуска, которая решает, и на экран,
+ * который закрывает кнопку и перечисляет причины рядом с ней.
+ *
+ * Это условия запуска, а не сохранения: черновик — рабочее состояние, он заводится первым
+ * символом, и человек вправе сначала положить картинку, а потом подрезать текст (issue #136).
+ *
+ * Пустой аудитории здесь нет: её знает только подсчёт в базе, и отказ о ней отдельный —
+ * `MAILING_AUDIENCE_EMPTY_TEXT`.
+ */
+export const mailingLaunchProblems = (
+  fields: MailingLaunchFields,
+  withPhoto: boolean,
+): MailingLaunchProblem[] => {
+  const problems: MailingLaunchProblem[] = [];
+
+  if (isBlank(fields.title)) {
+    problems.push({ kind: 'missing_title' });
+  }
+
+  if (isBlank(fields.textRu) && isBlank(fields.textUz)) {
+    problems.push({ kind: 'missing_text' });
+  }
+
+  const limit = mailingMessageLimit(withPhoto);
+  const { length } = buildMailingMessage(fields.textRu, fields.textUz).text;
+
+  if (length > limit) {
+    problems.push({ kind: 'too_long', length, limit, withPhoto });
+  }
+
+  return problems;
+};
+
+/** Причина человеческим языком — одна фраза и для отказа ручки, и для строки у кнопки. */
+export const mailingLaunchProblemText = (problem: MailingLaunchProblem): string => {
+  switch (problem.kind) {
+    case 'missing_title':
+      return 'Нет заголовка.';
+    case 'missing_text':
+      return 'Нет текста ни на одном языке.';
+    case 'too_long':
+      return mailingTooLongText(problem.length, problem.limit, problem.withPhoto);
+  }
+};
+
+/** Адресатов ноль — фраза одна на отказ запуска и на причину у закрытой кнопки. */
+export const MAILING_AUDIENCE_EMPTY_TEXT =
+  'Участников программы с привязанным Telegram сейчас нет — рассылать некому.';

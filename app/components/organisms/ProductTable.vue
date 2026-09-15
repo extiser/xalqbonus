@@ -4,7 +4,12 @@ import type { ProductListResponse } from '#shared/types/catalog';
 import type { LoadState } from '~/types/loadState';
 
 /**
- * Каталог товаров: фото, название, цена в баллах и обе цены в сумах, признак архива.
+ * Каталог товаров: фото, название, цена в баллах и обе цены в сумах, признаки черновика
+ * и архива.
+ *
+ * Черновики стоят первыми и помечены: водителю они не видны, а сотруднику видны — иначе
+ * недописанное не найти и не дописать (issue #148). Пустое название и пустая цена черновика
+ * подписаны словом, а не оставлены пустым местом.
  *
  * Закупочная цена показана здесь же, и это вторая причина, по которой раздел открыт
  * владельцу и админу: три цены рядом — материал отчёта парку о стоимости балла
@@ -14,12 +19,14 @@ defineProps<{
   state: LoadState;
   data: ProductListResponse | null;
 }>();
+
+const price = (value: number | null): string => (value === null ? '—' : formatNumber(value));
 </script>
 
 <template>
   <MoleculesSectionPanel
     title="Товары"
-    note="Товар не удаляется, а уходит в архив: на него ссылаются позиции заказов, и позиция обязана помнить, что именно было заказано."
+    note="Черновик водителю не виден и удаляется целиком. Опубликованный товар не удаляется, а уходит в архив: на него ссылаются позиции заказов."
   >
     <MoleculesStateNotice v-if="state === 'loading'" state="loading" message="Читаем каталог…" />
     <MoleculesStateNotice
@@ -41,7 +48,7 @@ defineProps<{
         <MoleculesProductPhoto
           :photo-path="product.photoPath"
           :updated-at="product.updatedAt"
-          :name="product.name"
+          :name="product.name ?? 'Товар без названия'"
         />
         <div class="min-w-40 flex-1">
           <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -49,9 +56,10 @@ defineProps<{
               :to="`/products/${product.productId}`"
               class="text-sm font-semibold text-slate-900 underline underline-offset-2 hover:text-slate-600"
             >
-              {{ product.name }}
+              {{ product.name ?? 'Без названия' }}
             </NuxtLink>
-            <AtomsStatusBadge v-if="product.archivedAt" tone="muted" label="В архиве" />
+            <AtomsStatusBadge v-if="product.publishedAt === null" tone="warn" label="Черновик" />
+            <AtomsStatusBadge v-else-if="product.archivedAt" tone="muted" label="В архиве" />
           </div>
           <p v-if="product.description" class="mt-0.5 text-xs text-slate-500">
             {{ product.description }}
@@ -59,14 +67,12 @@ defineProps<{
         </div>
         <div class="w-28 text-right">
           <p class="text-xs text-slate-500">баллов</p>
-          <p class="text-sm font-semibold text-slate-900">
-            {{ formatNumber(product.pricePoints) }}
-          </p>
+          <p class="text-sm font-semibold text-slate-900">{{ price(product.pricePoints) }}</p>
         </div>
         <div class="w-44 text-right">
           <p class="text-xs text-slate-500">розница · закупка, сум</p>
           <p class="text-sm text-slate-700">
-            {{ formatNumber(product.priceRetail) }} · {{ formatNumber(product.priceCost) }}
+            {{ price(product.priceRetail) }} · {{ price(product.priceCost) }}
           </p>
         </div>
       </li>

@@ -1,3 +1,5 @@
+import type { ProductPublishProblem } from '#shared/product';
+
 /**
  * Доменные ошибки товаров.
  *
@@ -32,6 +34,33 @@ export class InvalidProductPriceError extends ProductError {
         ? 'цена в баллах должна быть целым положительным числом'
         : 'цена в сумах должна быть целым неотрицательным числом',
     );
+  }
+}
+
+/**
+ * Товару не хватает обязательных полей: черновик не публикуется, опубликованный не теряет
+ * их правкой. Несёт все причины сразу — экран называет их одним списком (issue #148).
+ */
+export class ProductIncompleteError extends ProductError {
+  constructor(
+    public readonly productId: string,
+    public readonly problems: ProductPublishProblem[],
+  ) {
+    super(`товару ${productId} не хватает полей: ${problems.join(', ')}`);
+  }
+}
+
+/** Действие только для черновика, а товар опубликован: удаляется только черновик. */
+export class ProductNotDraftError extends ProductError {
+  constructor(public readonly productId: string) {
+    super(`товар ${productId} опубликован, а действие только для черновика`);
+  }
+}
+
+/** Действие только для опубликованного, а это черновик: архивируется только живой товар. */
+export class ProductDraftError extends ProductError {
+  constructor(public readonly productId: string) {
+    super(`товар ${productId} — черновик, а действие только для опубликованного`);
   }
 }
 

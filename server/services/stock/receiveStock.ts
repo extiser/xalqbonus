@@ -5,6 +5,7 @@ import {
   InvalidReceiveQuantityError,
   UnknownStockTargetError,
 } from '#server/services/stock/errors';
+import { assertStockProduct } from '#server/services/stock/stockProduct';
 import { FOREIGN_KEY_VIOLATION, isConstraintViolation } from '#server/utils/postgresErrors';
 
 /**
@@ -40,6 +41,8 @@ export const receiveStock = async (input: ReceiveStockInput): Promise<StockRow> 
   if (!Number.isInteger(input.quantity) || input.quantity <= 0) {
     throw new InvalidReceiveQuantityError(input.quantity);
   }
+
+  await assertStockProduct(input.officeId, input.productId);
 
   let stock: StockRow;
 

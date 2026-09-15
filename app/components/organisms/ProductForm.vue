@@ -1,61 +1,73 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
-import type { Product, ProductRequestBody } from '#shared/types/catalog';
+import type { AutosaveState } from '~/composables/useDraftAutosave';
+import type { Product } from '#shared/types/catalog';
 
 /**
- * Форма товара — одна на заведение и правку, как и у офиса.
+ * Форма товара — одна на черновик и опубликованный, вместе с фото.
  *
- * Фото в неё не входит: это файл, и уезжает он своим запросом, к уже заведённому товару.
- * Иначе форма заведения либо требовала бы картинку, либо отправляла два запроса подряд,
- * второй из которых мог бы не дойти.
+ * **Черновик сохраняет себя сам** (issue #148): кнопки нет, рядом отметка «сохраняем…» или
+ * «сохранено», и обязательных полей нет — черновик ещё не дописан, а чего не хватает для
+ * публикации, называет страница у кнопки «Опубликовать».
  *
- * Границы цен стоят свойствами полей: баллы строго больше нуля, сумы — от нуля. Проверяет их
- * браузер, рядом с полем; сервер проверяет то же самое заново, потому что запрос приходит
- * не только отсюда (docs/frontend.md → «Обязательное поле — свойство поля»).
+ * **Опубликованный правится как раньше**: поля обязательны, правка уходит кнопкой
+ * «Сохранить». Он уже на витрине, и промежуточное состояние набора туда уезжать не должно.
+ *
+ * Фото стоит в самой форме, рядом с текстом: выбранный файл уходит сразу своим запросом —
+ * это файл, и отправлять его с каждой правкой цены незачем. Запрос шлёт страница.
+ *
+ * Поля принадлежат странице — `v-model` на каждое: у черновика истина то, что на экране,
+ * и ответ сервера набранное не перезаписывает.
+ *
+ * Границы цен стоят свойствами полей: баллы строго больше нуля, сумы — от нуля. Сервер
+ * проверяет то же самое заново, потому что запрос приходит не только отсюда
+ * (docs/frontend.md → «Обязательное поле — свойство поля»).
  */
 const props = defineProps<{
   title: string;
-  submitLabel: string;
+  /** Что правим. `null` — черновика ещё нет, он появится первым действием. */
   product: Product | null;
+  mode: 'draft' | 'published';
+  autosaveState: AutosaveState;
+  autosaveError: string | null;
+  /** Сохранение опубликованного в пути. */
   saving: boolean;
+  /** Что ответил сервер на сохранение опубликованного. */
   error: string | null;
+  uploading: boolean;
+  photoError: string | null;
 }>();
 
-const emit = defineEmits<{ submit: [body: ProductRequestBody] }>();
+const emit = defineEmits<{ submit: []; upload: [file: File]; retry: [] }>();
 
-const name = ref('');
-const description = ref('');
-const pricePoints = ref('');
-const priceRetail = ref('');
-const priceCost = ref('');
+const name = defineModel<string>('name', { required: true });
+const description = defineModel<string>('description', { required: true });
+const pricePoints = defineModel<string>('pricePoints', { required: true });
+const priceRetail = defineModel<string>('priceRetail', { required: true });
+const priceCost = defineModel<string>('priceCost', { required: true });
 
-watch(
-  () => props.product,
-  (product) => {
-    name.value = product?.name ?? '';
-    description.value = product?.description ?? '';
-    pricePoints.value = product === null ? '' : String(product.pricePoints);
-    priceRetail.value = product === null ? '' : String(product.priceRetail);
-    priceCost.value = product === null ? '' : String(product.priceCost);
-  },
-  { immediate: true },
-);
+/**
+ * У опубликованного фото уходит сразу, а текст ждёт «Сохранить» — и без подписи эта разница
+ * читается как дефект. Отложить фото до кнопки значило бы вернуть временное хранилище файла,
+ * отклонённое в #148. У черновика подписи нет: там сразу сохраняется всё.
+ */
+const PUBLISHED_PHOTO_NOTE = 'Фото меняется сразу, без сохранения';
 
 const submit = (): void => {
-  emit('submit', {
-    name: name.value,
-    description: description.value,
-    pricePoints: Number(pricePoints.value),
-    priceRetail: Number(priceRetail.value),
-    priceCost: Number(priceCost.value),
-  });
+  if (props.mode === 'published') {
+    emit('submit');
+  }
 };
 </script>
 
 <template>
   <MoleculesSectionPanel :title="title">
     <form class="space-y-4" @submit.prevent="submit">
-      <MoleculesFormField v-model="name" label="Название" type="text" required />
+      <MoleculesFormField
+        v-model="name"
+        label="Название"
+        type="text"
+        :required="mode === 'published'"
+      />
       <MoleculesTextAreaField
         v-model="description"
         label="Описание"
@@ -67,28 +79,45 @@ const submit = (): void => {
           v-model="pricePoints"
           label="Цена в баллах"
           :min="1"
-          required
+          :required="mode === 'published'"
           hint="Чем платит водитель."
         />
         <MoleculesNumberField
           v-model="priceRetail"
           label="Розница, сум"
           :min="0"
-          required
+          :required="mode === 'published'"
           hint="Для отчёта парку."
         />
         <MoleculesNumberField
           v-model="priceCost"
           label="Закупка, сум"
           :min="0"
-          required
+          :required="mode === 'published'"
           hint="Для стоимости балла."
         />
       </div>
 
-      <p v-if="error" class="text-sm text-red-700">{{ error }}</p>
+      <OrganismsPhotoField
+        :photo-path="product?.photoPath ?? null"
+        :updated-at="product?.updatedAt ?? ''"
+        :name="name || 'Товар'"
+        :uploading="uploading"
+        :error="photoError"
+        :note="mode === 'published' ? PUBLISHED_PHOTO_NOTE : null"
+        @upload="(file) => emit('upload', file)"
+      />
 
-      <AtomsSubmitButton :label="submitLabel" :disabled="saving" />
+      <MoleculesAutosaveStatus
+        v-if="mode === 'draft'"
+        :state="autosaveState"
+        :error="autosaveError"
+        @retry="emit('retry')"
+      />
+      <template v-else>
+        <p v-if="error" class="text-sm text-red-700">{{ error }}</p>
+        <AtomsSubmitButton label="Сохранить" :disabled="saving" />
+      </template>
     </form>
   </MoleculesSectionPanel>
 </template>

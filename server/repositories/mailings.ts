@@ -17,8 +17,10 @@ type Executor = Prisma.TransactionClient;
 
 export type MailingRow = {
   id: string;
-  title: string;
-  textRu: string;
+  /** Пусто только у черновика — проверкой `mailings_texts_check`. */
+  title: string | null;
+  /** Пусто только у черновика. */
+  textRu: string | null;
   textUz: string | null;
   photoPath: string | null;
   status: MailingStatus;
@@ -91,8 +93,8 @@ export const findMailing = async (
 };
 
 export type MailingFieldsInput = {
-  title: string;
-  textRu: string;
+  title: string | null;
+  textRu: string | null;
   textUz: string | null;
 };
 
@@ -184,6 +186,28 @@ export const clearDraftMailingPhotoPath = async (
   `;
 
   return updated > 0;
+};
+
+/**
+ * Удаляет черновик физически и возвращает путь его фото, чтобы сервис снял файл с тома.
+ * `null` — строки нет или она уже не черновик.
+ *
+ * Условие «ещё черновик» стоит в самом `DELETE`: между нажатием «Удалить» и записью рассылку
+ * мог запустить второй сотрудник, и тогда удалять нельзя — снимок уже ссылается на неё.
+ * У черновика снимка нет по построению, поэтому строк адресатов здесь не трогаем.
+ */
+export const deleteDraftMailing = async (
+  mailingId: string,
+  client: Executor = db,
+): Promise<{ photoPath: string | null } | null> => {
+  const rows = await client.$queryRaw<{ photoPath: string | null }[]>`
+    DELETE FROM xb.mailings
+     WHERE "id" = ${mailingId}::uuid
+       AND "status" = 'draft'
+    RETURNING "photo_path" AS "photoPath"
+  `;
+
+  return rows[0] ?? null;
 };
 
 /**
@@ -314,7 +338,8 @@ export const finishMailingIfDone = async (
 /** Текст и фото рассылки и её статус — то, что отправка читает перед каждым адресатом. */
 export type MailingDeliveryRow = {
   status: MailingStatus;
-  textRu: string;
+  /** Пусто только у черновика, а черновик не отправляется. */
+  textRu: string | null;
   textUz: string | null;
   photoPath: string | null;
   /** Исход этого адресата. `null` — в снимке его нет. */

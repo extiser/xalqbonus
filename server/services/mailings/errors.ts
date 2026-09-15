@@ -1,4 +1,5 @@
 import type { MailingStatus } from '#server/generated/prisma/enums';
+import type { MailingLaunchProblem } from '#shared/mailing';
 
 /**
  * Доменные ошибки рассылок.
@@ -21,7 +22,7 @@ export class UnknownMailingError extends MailingError {
 }
 
 /**
- * Действие не подходит рассылке в её статусе: правят и запускают только черновик,
+ * Действие не подходит рассылке в её статусе: правят, запускают и удаляют только черновик,
  * останавливают только идущую, копируют только остановленную.
  */
 export class MailingStatusMismatchError extends MailingError {
@@ -35,18 +36,20 @@ export class MailingStatusMismatchError extends MailingError {
 }
 
 /**
- * Сообщение длиннее, чем примет Telegram. Про склейку целиком — оба текста с заголовками
- * языков, — а не про одно поле: 900 + 900 по отдельности влезают, вместе нет.
+ * Черновик нельзя запустить: нет заголовка, нет текста ни на одном языке, склейка длиннее, чем примет
+ * Telegram. Несёт все причины сразу — экран называет их одним списком (issue #148).
  *
- * Отказ запуска и только его: сохранение черновика и загрузка фото по склейке не отказывают.
+ * Отказ запуска и только его: сохранение черновика и загрузка фото по этим причинам
+ * не отказывают.
  */
-export class MailingTextTooLongError extends MailingError {
+export class MailingNotLaunchableError extends MailingError {
   constructor(
-    public readonly length: number,
-    public readonly limit: number,
-    public readonly withPhoto: boolean,
+    public readonly mailingId: string,
+    public readonly problems: MailingLaunchProblem[],
   ) {
-    super(`сообщение рассылки ${length} знаков длиннее потолка ${limit}`);
+    super(
+      `рассылку ${mailingId} нельзя запустить: ${problems.map((problem) => problem.kind).join(', ')}`,
+    );
   }
 }
 
