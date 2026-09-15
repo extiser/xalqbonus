@@ -14,7 +14,7 @@ import {
  * Отметка «поездки учтены до» на экране участника.
  *
  * Строка два дня показывала «19:26» двухдневной давности без признака, что время
- * не сегодняшнее (issue #133). Тест читает экран через сервис — ровно тем путём, которым
+ * не сегодняшнее (issue #133); теперь дата пишется всегда и перед временем (issue #142). Тест читает экран через сервис — ровно тем путём, которым
  * его читает ручка, — и заодно прогоняет сырой запрос последнего прогона в настоящую базу.
  *
  * «Сейчас» — 14.09.2026 10:43 по Ташкенту, тот самый момент со стенда.
@@ -54,65 +54,51 @@ describe('отметка поездок на экране участника', (
     await disconnectDatabase();
   });
 
-  it('прогон сегодня — время без даты, обычной подписью', async () => {
-    // 09:00 по Ташкенту того же дня.
-    const finishedAt = new Date('2026-09-14T04:00:00.000Z');
+  it('прогон свежий — дата и время, обычной подписью', async () => {
+    // 09:00 по Ташкенту того же дня: даты не опускаем и «сегодня» не пишем.
+    const sameDay = new Date('2026-09-14T04:00:00.000Z');
 
-    expect(await readNote(finishedAt, 'ru')).toEqual({
-      text: 'Поездки учтены до 09:00',
+    expect(await readNote(sameDay, 'ru')).toEqual({
+      text: 'Поездки учтены до 14.09.2026, 09:00',
       stale: false,
     });
 
     await resetOrdersSyncState();
 
-    expect(await readNote(finishedAt, 'uz')).toEqual({
-      text: 'Safarlar soat 09:00 gacha hisobga olingan',
-      stale: false,
-    });
-  });
-
-  it('прогон вчера — со словом «вчера», и предупреждение только после суток', async () => {
-    // Вчера 19:26 — пятнадцать часов назад: подпись, не предупреждение.
+    // Вчера 19:26 — пятнадцать часов назад: полная дата вместо «вчера», не предупреждение.
     const lastEvening = new Date('2026-09-13T14:26:00.000Z');
 
-    expect(await readNote(lastEvening, 'ru')).toEqual({
-      text: 'Поездки учтены до 19:26 вчера',
-      stale: false,
-    });
-
-    await resetOrdersSyncState();
-
     expect(await readNote(lastEvening, 'uz')).toEqual({
-      text: 'Safarlar kecha soat 19:26 gacha hisobga olingan',
+      text: 'Safarlar 13.09.2026 soat 19:26 gacha hisobga olingan',
       stale: false,
-    });
-
-    await resetOrdersSyncState();
-
-    // Вчера 09:00 — больше суток назад: день всё ещё вчерашний, но строка уже предупреждение.
-    expect(await readNote(new Date(NOW.getTime() - 25 * HOUR_MS), 'ru')).toEqual({
-      text: 'Поездки учтены до 09:43 вчера',
-      stale: true,
     });
   });
 
-  it('прогон старше суток — с датой и предупреждением', async () => {
+  it('прогон старше суток — та же строка, но с предупреждением', async () => {
+    // Вчера 09:43 — больше суток назад: день всё ещё вчерашний, но строка уже предупреждение.
+    expect(await readNote(new Date(NOW.getTime() - 25 * HOUR_MS), 'ru')).toEqual({
+      text: 'Поездки учтены до 13.09.2026, 09:43',
+      stale: true,
+    });
+
+    await resetOrdersSyncState();
+
     const twoDaysAgo = new Date('2026-09-12T14:26:00.000Z');
 
     expect(await readNote(twoDaysAgo, 'ru')).toEqual({
-      text: 'Поездки учтены до 19:26 12.09',
+      text: 'Поездки учтены до 12.09.2026, 19:26',
       stale: true,
     });
 
     await resetOrdersSyncState();
 
     expect(await readNote(twoDaysAgo, 'uz')).toEqual({
-      text: 'Safarlar 12.09 soat 19:26 gacha hisobga olingan',
+      text: 'Safarlar 12.09.2026 soat 19:26 gacha hisobga olingan',
       stale: true,
     });
   });
 
-  it('успешных прогонов нет — строки нет', async () => {
+  it('успешных прогонов нет — строка «данные ещё не поступали», не предупреждением', async () => {
     const { personId } = await createTestPerson({ inProgram: true });
 
     const screen = await readMemberScreen(
@@ -120,6 +106,9 @@ describe('отметка поездок на экране участника', (
       NOW,
     );
 
-    expect(screen.screen === 'member' && screen.tripsNote).toBeNull();
+    expect(screen.screen === 'member' && screen.tripsNote).toEqual({
+      text: 'Данные о поездках ещё не поступали',
+      stale: false,
+    });
   });
 });

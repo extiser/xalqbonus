@@ -5,13 +5,7 @@ import { findLastSuccessfulRunFinishedAt } from '#server/repositories/syncRuns';
 import { memberScreenTexts } from '#server/services/drivers/memberScreen';
 import type { LinkedDriver } from '#server/services/drivers/readLinkedDriver';
 import { memberOrderTexts } from '#server/services/orders/memberOrderScreen';
-import {
-  DAY_MS,
-  formatClockTime,
-  formatDayKey,
-  formatDayMonth,
-  previousDayKey,
-} from '#server/utils/parkTime';
+import { DAY_MS, formatCalendarDate, formatClockTime } from '#server/utils/parkTime';
 import type { MiniAppStateResponse, TripsNote } from '#shared/types/miniapp';
 
 /**
@@ -35,31 +29,25 @@ import type { MiniAppStateResponse, TripsNote } from '#shared/types/miniapp';
 const FRESHNESS_KIND = 'orders';
 
 /**
- * Отметка поездок: время прогона и, когда он не сегодняшний, его день.
+ * Отметка поездок: полная дата и время прогона, при любом его возрасте.
  *
- * День подписывается всегда, когда он не сегодня: «19:26» двухдневной давности без даты
- * читается как сегодняшнее время, и строка два дня говорила водителю неправду (issue #133).
+ * Без «сегодня» и «вчера»: «19:26» без даты читается как сегодняшнее время (issue #133),
+ * а относительное слово после времени — задом наперёд (issue #142).
  *
  * Предупреждение — по прошедшим суткам, а не по календарю: прогон вчера в 19:26, увиденный
  * сегодня в 10:43, отстаёт на пятнадцать часов и в порядке, а вчерашний в 09:00, увиденный
  * в 10:43, — уже нет.
  */
-const tripsNote = (syncedAt: Date, language: Language, now: Date): TripsNote => {
-  const time = formatClockTime(syncedAt);
-  const day = formatDayKey(syncedAt);
-
-  const text =
-    day === formatDayKey(now)
-      ? plainText('trips_counted_today', language, { time })
-      : day === previousDayKey(now)
-        ? plainText('trips_counted_yesterday', language, { time })
-        : plainText('trips_counted_date', language, { time, date: formatDayMonth(syncedAt) });
-
-  return { text, stale: now.getTime() - syncedAt.getTime() > DAY_MS };
-};
+const tripsNote = (syncedAt: Date, language: Language, now: Date): TripsNote => ({
+  text: plainText('trips_counted', language, {
+    date: formatCalendarDate(syncedAt),
+    time: formatClockTime(syncedAt),
+  }),
+  stale: now.getTime() - syncedAt.getTime() > DAY_MS,
+});
 
 /**
- * «Сейчас» приходит параметром: от него зависит подпись дня и предупреждение, и тест
+ * «Сейчас» приходит параметром: от него зависит предупреждение, и тест
  * задаёт его явно, а не ждёт нужного часа.
  */
 export const readMemberScreen = async (
@@ -76,9 +64,12 @@ export const readMemberScreen = async (
     language: driver.language,
     name: driver.name,
     balance: formatPoints(driver.points),
-    // Успешных прогонов не было ни одного — строки нет вовсе. Подписать её «неизвестно»
-    // значило бы занять место на экране сообщением, которое водителю нечего делать.
-    tripsNote: syncedAt === null ? null : tripsNote(syncedAt, driver.language, now),
+    // Успешных прогонов не было ни одного — строка говорит, что данных ещё нет. Пустота
+    // здесь не работает: рядом стоит кнопка обновления, и одна она читается поломкой.
+    tripsNote:
+      syncedAt === null
+        ? { text: plainText('trips_not_received', driver.language), stale: false }
+        : tripsNote(syncedAt, driver.language, now),
     // Обещание первых пяти поездок — тому, у кого в журнале нет ни одной. Не по факту
     // сегодняшней регистрации: перенесённый из старой базы приходит сюда с тысячей
     // поездок за спиной, и обещать ему бонус за первые пять — враньё (issue #101).

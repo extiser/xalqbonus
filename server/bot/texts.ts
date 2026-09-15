@@ -42,9 +42,8 @@ export type TextKey =
   | 'linked_new'
   | 'welcome_bonus_promise'
   | 'balance_title'
-  | 'trips_counted_today'
-  | 'trips_counted_yesterday'
-  | 'trips_counted_date'
+  | 'trips_counted'
+  | 'trips_not_received'
   | 'history_empty'
   | 'history_failed'
   | 'button_show_more'
@@ -224,20 +223,22 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
    * операции и в отметку не входят. «Данные обновлены в 19:26» под записью «сегодня 10:39»
    * читалась как «баланс пересчитан раньше операции, которая уже в списке» (issue #133).
    *
-   * Тремя ключами, а не словом, подставленным в один: место дня во фразе на двух языках
-   * разное, и склеенная подстановкой узбекская фраза читалась бы переводом.
+   * Дата всегда полная и стоит перед временем, без «сегодня» и «вчера»: «до 19:26 12.09»
+   * читалось задом наперёд, сначала час, потом день (issue #142).
    */
-  trips_counted_today: {
-    ru: 'Поездки учтены до {time}',
-    uz: 'Safarlar soat {time} gacha hisobga olingan',
-  },
-  trips_counted_yesterday: {
-    ru: 'Поездки учтены до {time} вчера',
-    uz: 'Safarlar kecha soat {time} gacha hisobga olingan',
-  },
-  trips_counted_date: {
-    ru: 'Поездки учтены до {time} {date}',
+  trips_counted: {
+    ru: 'Поездки учтены до {date}, {time}',
     uz: 'Safarlar {date} soat {time} gacha hisobga olingan',
+  },
+  /**
+   * Отметка, когда успешного прогона не было ни одного — первые минуты после выката.
+   *
+   * Строкой, а не пустотой: без неё кнопка обновления висит одна, без единого слова
+   * (стенд, PR #152). Не предупреждение: данных нет, а не синхронизация отстала.
+   */
+  trips_not_received: {
+    ru: 'Данные о поездках ещё не поступали',
+    uz: "Safarlar haqida ma'lumotlar hali kelmagan",
   },
   /**
    * Пустая история. Подписывается всегда: у нового участника операций нет ни одной,
