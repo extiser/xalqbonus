@@ -44,8 +44,11 @@ export type MailingMessage = {
  *
  * Оба языка уходят одним сообщением, русский первым, каждый под жирным заголовком — а не
  * на языке аккаунта: язык выставляется один раз при регистрации и сменить его водителю
- * негде (решение Руслана 15-09-2026, issue #136). Пустой узбекский — уходит один русский,
- * и заголовков нет вовсе: у одноязычного сообщения подписывать нечего.
+ * негде (решение Руслана 15-09-2026, issue #136).
+ *
+ * Заголовки языков ставятся, только когда заполнены оба текста. Один заполненный — русский
+ * или узбекский — уходит без заголовка: у одноязычного сообщения подписывать нечего
+ * (решение Руслана 15-09-2026, PR #149). Длина тогда считается по этому одному блоку.
  *
  * Тексты обрезаются по краям так же, как при сохранении: форма зовёт сборку на набранном,
  * и счётчик обязан считать то, что ляжет в базу.
@@ -59,8 +62,10 @@ export const buildMailingMessage = (
   const russian = (textRu ?? '').trim();
   const uzbek = (textUz ?? '').trim();
 
-  if (uzbek === '') {
-    return { text: russian, html: escapeHtml(russian) };
+  if (russian === '' || uzbek === '') {
+    const single = russian === '' ? uzbek : russian;
+
+    return { text: single, html: escapeHtml(single) };
   }
 
   return {
@@ -86,7 +91,8 @@ export type MailingLaunchFields = {
 /** Почему рассылку нельзя запустить. */
 export type MailingLaunchProblem =
   | { kind: 'missing_title' }
-  | { kind: 'missing_text_ru' }
+  /** Нет текста ни на одном языке. Любого одного достаточно: рассылка только на узбекском — рабочий случай. */
+  | { kind: 'missing_text' }
   | { kind: 'too_long'; length: number; limit: number; withPhoto: boolean };
 
 const isBlank = (value: string | null): boolean => value === null || value.trim() === '';
@@ -114,8 +120,8 @@ export const mailingLaunchProblems = (
     problems.push({ kind: 'missing_title' });
   }
 
-  if (isBlank(fields.textRu)) {
-    problems.push({ kind: 'missing_text_ru' });
+  if (isBlank(fields.textRu) && isBlank(fields.textUz)) {
+    problems.push({ kind: 'missing_text' });
   }
 
   const limit = mailingMessageLimit(withPhoto);
@@ -133,8 +139,8 @@ export const mailingLaunchProblemText = (problem: MailingLaunchProblem): string 
   switch (problem.kind) {
     case 'missing_title':
       return 'Нет заголовка.';
-    case 'missing_text_ru':
-      return 'Нет текста на русском.';
+    case 'missing_text':
+      return 'Нет текста ни на одном языке.';
     case 'too_long':
       return mailingTooLongText(problem.length, problem.limit, problem.withPhoto);
   }

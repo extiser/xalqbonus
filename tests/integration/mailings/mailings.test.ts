@@ -417,23 +417,25 @@ describe('рассылки', () => {
 
     // Причины называются все сразу, а не по одной за нажатие.
     await expect(launchMailing(empty.mailingId)).rejects.toMatchObject({
-      problems: [{ kind: 'missing_title' }, { kind: 'missing_text_ru' }],
+      problems: [{ kind: 'missing_title' }, { kind: 'missing_text' }],
     });
 
-    // Узбекский без русского — всё ещё без русского.
-    await updateMailing(empty.mailingId, { title: 'Заголовок', textRu: null, textUz: 'Salom' });
+    // Заголовок без текста — текста нет ни на одном языке.
+    await updateMailing(empty.mailingId, { title: 'Заголовок', textRu: null, textUz: null });
 
     await expect(launchMailing(empty.mailingId)).rejects.toMatchObject({
-      problems: [{ kind: 'missing_text_ru' }],
+      problems: [{ kind: 'missing_text' }],
     });
 
-    // Дописанный запускается — ровно тем, что сохранено последним.
-    await updateMailing(empty.mailingId, { title: 'Заголовок', textRu: 'Привет', textUz: 'Salom' });
+    // Одного языка достаточно, любого: только узбекский запускается — и проверка базы
+    // `mailings_texts_check` пускает не черновик без русского текста.
+    await updateMailing(empty.mailingId, { title: 'Заголовок', textRu: null, textUz: 'Salom' });
 
     const launched = await launchMailing(empty.mailingId);
 
     expect(launched.status).toBe('running');
-    expect(launched.textRu).toBe('Привет');
+    expect(launched.textRu).toBeNull();
+    expect(launched.textUz).toBe('Salom');
   });
 
   it('черновик удаляется вместе с файлом фото, а запущенная рассылка — нет', async () => {
