@@ -43,6 +43,7 @@ export type TextKey =
   | 'welcome_bonus_promise'
   | 'balance_title'
   | 'trips_counted'
+  | 'trips_not_received'
   | 'history_empty'
   | 'history_failed'
   | 'button_show_more'
@@ -228,6 +229,16 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   trips_counted: {
     ru: 'Поездки учтены до {date}, {time}',
     uz: 'Safarlar {date} soat {time} gacha hisobga olingan',
+  },
+  /**
+   * Отметка, когда успешного прогона не было ни одного — первые минуты после выката.
+   *
+   * Строкой, а не пустотой: без неё кнопка обновления висит одна, без единого слова
+   * (стенд, PR #152). Не предупреждение: данных нет, а не синхронизация отстала.
+   */
+  trips_not_received: {
+    ru: 'Данные о поездках ещё не поступали',
+    uz: "Safarlar haqida ma'lumotlar hali kelmagan",
   },
   /**
    * Пустая история. Подписывается всегда: у нового участника операций нет ни одной,

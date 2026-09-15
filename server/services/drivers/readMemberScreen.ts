@@ -64,9 +64,12 @@ export const readMemberScreen = async (
     language: driver.language,
     name: driver.name,
     balance: formatPoints(driver.points),
-    // Успешных прогонов не было ни одного — строки нет вовсе. Подписать её «неизвестно»
-    // значило бы занять место на экране сообщением, которое водителю нечего делать.
-    tripsNote: syncedAt === null ? null : tripsNote(syncedAt, driver.language, now),
+    // Успешных прогонов не было ни одного — строка говорит, что данных ещё нет. Пустота
+    // здесь не работает: рядом стоит кнопка обновления, и одна она читается поломкой.
+    tripsNote:
+      syncedAt === null
+        ? { text: plainText('trips_not_received', driver.language), stale: false }
+        : tripsNote(syncedAt, driver.language, now),
     // Обещание первых пяти поездок — тому, у кого в журнале нет ни одной. Не по факту
     // сегодняшней регистрации: перенесённый из старой базы приходит сюда с тысячей
     // поездок за спиной, и обещать ему бонус за первые пять — враньё (issue #101).

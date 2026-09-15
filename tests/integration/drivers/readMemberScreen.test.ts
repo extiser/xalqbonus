@@ -98,7 +98,7 @@ describe('отметка поездок на экране участника', (
     });
   });
 
-  it('успешных прогонов нет — строки нет', async () => {
+  it('успешных прогонов нет — строка «данные ещё не поступали», не предупреждением', async () => {
     const { personId } = await createTestPerson({ inProgram: true });
 
     const screen = await readMemberScreen(
@@ -106,6 +106,9 @@ describe('отметка поездок на экране участника', (
       NOW,
     );
 
-    expect(screen.screen === 'member' && screen.tripsNote).toBeNull();
+    expect(screen.screen === 'member' && screen.tripsNote).toEqual({
+      text: 'Данные о поездках ещё не поступали',
+      stale: false,
+    });
   });
 });
