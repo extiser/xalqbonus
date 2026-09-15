@@ -153,18 +153,44 @@ export const useDraftAutosave = <Fields extends Record<string, string>>(
     state.value = 'idle';
   };
 
-  // Уход со страницы досохраняет набранное. Не вышло — спрашиваем, а не теряем молча.
+  /**
+   * Открыт ли диалог «правка не сохранилась». Рисует его страница — `ConfirmDialog`, тот же,
+   * что у опубликованного товара: композабл разметки не знает, а браузерный `confirm` в вебе
+   * не используется.
+   */
+  const leaveFailureOpen = ref(false);
+  let answerLeave: ((leave: boolean) => void) | null = null;
+
+  // Уход со страницы досохраняет набранное и, если вышло, ничего не спрашивает. Не вышло —
+  // переход ждёт ответа диалога, а не теряет правку молча.
   onBeforeRouteLeave(async () => {
     if (!options.enabled() || (await drain(false))) {
       return true;
     }
 
-    return window.confirm(`Последняя правка не сохранилась: ${error.value ?? ''} Уйти без неё?`);
+    leaveFailureOpen.value = true;
+
+    return new Promise<boolean>((resolve) => {
+      answerLeave = resolve;
+    });
   });
 
-  // Перезагрузку и закрытие вкладки дождаться нельзя — можно только предупредить.
+  /** Ответ диалога: `true` — уйти без несохранённой правки. */
+  const resolveLeave = (leave: boolean): void => {
+    leaveFailureOpen.value = false;
+    answerLeave?.(leave);
+    answerLeave = null;
+  };
+
+  /**
+   * Перезагрузку и закрытие вкладки дождаться нельзя — можно только предупредить.
+   *
+   * Предупреждаем только в окне, где правка ещё в пути: таймер автосохранения не сработал
+   * или запрос не вернулся. Вне него всё, что можно было сохранить, сохранено, и вопрос
+   * браузера был бы ложной тревогой.
+   */
   const warnBeforeUnload = (event: BeforeUnloadEvent): void => {
-    if (options.enabled() && (isDirty() || running !== null)) {
+    if (options.enabled() && (timer !== null || running !== null)) {
       event.preventDefault();
     }
   };
@@ -185,5 +211,7 @@ export const useDraftAutosave = <Fields extends Record<string, string>>(
     saveNow: (): Promise<boolean> => drain(true),
     replace,
     discard,
+    leaveFailureOpen,
+    resolveLeave,
   };
 };

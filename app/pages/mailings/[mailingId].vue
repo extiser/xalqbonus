@@ -393,6 +393,16 @@ onBeforeUnmount(stopRefreshing);
 
 <template>
   <div class="space-y-6">
+    <MoleculesConfirmDialog
+      :open="autosave.leaveFailureOpen.value"
+      title="Уйти без сохранения?"
+      :message="`Последняя правка черновика не сохранилась: ${autosave.error.value ?? ''} Если уйти, она пропадёт.`"
+      confirm-label="Уйти без сохранения"
+      cancel-label="Остаться"
+      @confirm="autosave.resolveLeave(true)"
+      @cancel="autosave.resolveLeave(false)"
+    />
+
     <div>
       <NuxtLink to="/mailings" class="text-sm text-slate-500 underline underline-offset-2">
         ← Все рассылки
