@@ -9,12 +9,14 @@ import {
 import { recordRecipientOutcome } from '#server/repositories/mailings';
 import { copyMailing } from '#server/services/mailings/copyMailing';
 import { createMailing } from '#server/services/mailings/createMailing';
+import { deleteMailingDraft } from '#server/services/mailings/deleteMailingDraft';
 import { deliverMailingMessage } from '#server/services/mailings/deliverMailingMessage';
 import {
   MailingAudienceEmptyError,
   MailingFieldTooLongError,
+  MailingNotLaunchableError,
   MailingStatusMismatchError,
-  MailingTextTooLongError,
+  UnknownMailingError,
 } from '#server/services/mailings/errors';
 import { launchMailing } from '#server/services/mailings/launchMailing';
 import { readMailing, readMailingList } from '#server/services/mailings/readMailing';
@@ -227,11 +229,9 @@ describe('рассылки', () => {
 
     expect(overflowing.textRu).toHaveLength(2034);
 
-    await expect(launchMailing(draft.mailingId)).rejects.toBeInstanceOf(MailingTextTooLongError);
+    await expect(launchMailing(draft.mailingId)).rejects.toBeInstanceOf(MailingNotLaunchableError);
     await expect(launchMailing(draft.mailingId)).rejects.toMatchObject({
-      length: 4097,
-      limit: 4096,
-      withPhoto: false,
+      problems: [{ kind: 'too_long', length: 4097, limit: 4096, withPhoto: false }],
     });
 
     // 500 + 500 влезают в сообщение; фото к ним встаёт, хотя подписью это 1030 из 1024.
@@ -250,9 +250,7 @@ describe('рассылки', () => {
     expect(photographed.photoPath).not.toBeNull();
 
     await expect(launchMailing(draft.mailingId)).rejects.toMatchObject({
-      length: 1030,
-      limit: 1024,
-      withPhoto: true,
+      problems: [{ kind: 'too_long', length: 1030, limit: 1024, withPhoto: true }],
     });
 
     const after = await readMailing(draft.mailingId);
@@ -401,5 +399,73 @@ describe('рассылки', () => {
     await expect(copyMailing(copy.mailingId, employeeId)).rejects.toBeInstanceOf(
       MailingStatusMismatchError,
     );
+  });
+
+  it('черновик заводится пустым, дописывается и не запускается, пока не хватает хоть чего-то', async () => {
+    const { employeeId } = await createTestEmployee({ role: 'admin' });
+
+    await createMember();
+
+    // Первым действием выбрали фото: заголовка и текстов ещё нет, а черновик уже есть.
+    const empty = await createMailing({ title: null, textRu: null, textUz: null }, employeeId);
+
+    trackTestMailing(empty.mailingId);
+
+    expect(empty).toEqual(
+      expect.objectContaining({ status: 'draft', title: null, textRu: null, textUz: null }),
+    );
+
+    // Причины называются все сразу, а не по одной за нажатие.
+    await expect(launchMailing(empty.mailingId)).rejects.toMatchObject({
+      problems: [{ kind: 'missing_title' }, { kind: 'missing_text_ru' }],
+    });
+
+    // Узбекский без русского — всё ещё без русского.
+    await updateMailing(empty.mailingId, { title: 'Заголовок', textRu: null, textUz: 'Salom' });
+
+    await expect(launchMailing(empty.mailingId)).rejects.toMatchObject({
+      problems: [{ kind: 'missing_text_ru' }],
+    });
+
+    // Дописанный запускается — ровно тем, что сохранено последним.
+    await updateMailing(empty.mailingId, { title: 'Заголовок', textRu: 'Привет', textUz: 'Salom' });
+
+    const launched = await launchMailing(empty.mailingId);
+
+    expect(launched.status).toBe('running');
+    expect(launched.textRu).toBe('Привет');
+  });
+
+  it('черновик удаляется вместе с файлом фото, а запущенная рассылка — нет', async () => {
+    const { employeeId } = await createTestEmployee({ role: 'admin' });
+    const draft = await createDraft(employeeId);
+
+    const withPhoto = await saveMailingPhoto({
+      mailingId: draft.mailingId,
+      contentType: 'image/png',
+      bytes: PNG_BYTES,
+    });
+    const file = resolveMailingPhotoFile((withPhoto.photoPath ?? '').split('/').pop() ?? '') ?? '';
+
+    expect(existsSync(file)).toBe(true);
+
+    await deleteMailingDraft(draft.mailingId);
+
+    expect(existsSync(file)).toBe(false);
+    await expect(readMailing(draft.mailingId)).rejects.toBeInstanceOf(UnknownMailingError);
+    // Повтор — рассылки уже нет.
+    await expect(deleteMailingDraft(draft.mailingId)).rejects.toBeInstanceOf(UnknownMailingError);
+
+    // Запущенная не удаляется: у неё снимок и исходы.
+    await createMember();
+
+    const launched = await createDraft(employeeId);
+
+    await launchMailing(launched.mailingId);
+
+    await expect(deleteMailingDraft(launched.mailingId)).rejects.toBeInstanceOf(
+      MailingStatusMismatchError,
+    );
+    expect((await readMailing(launched.mailingId)).status).toBe('running');
   });
 });

@@ -22,8 +22,10 @@ export type MailingCounters = {
 
 export type Mailing = {
   mailingId: string;
-  title: string;
-  textRu: string;
+  /** Пусто только у черновика: он заводится первым набранным символом (issue #148). */
+  title: string | null;
+  /** Пусто только у черновика. */
+  textRu: string | null;
   /** Пусто — уходит один русский текст, без заголовков языков. */
   textUz: string | null;
   /** Относительный путь на томе приложения. */
@@ -47,11 +49,14 @@ export type MailingResponse = {
   mailing: Mailing;
 };
 
-/** Тело заведения и правки черновика. Узбекский приходит пустой строкой, если не набран. */
+/**
+ * Тело заведения и правки черновика — то, что набрано в форме. Пустое поле приходит пустой
+ * строкой: обязательных у черновика нет, и «пусто значит не задано» решает сервер.
+ */
 export type MailingRequestBody = {
   title: string;
   textRu: string;
-  textUz?: string;
+  textUz: string;
 };
 
 /** Сколько человек получит рассылку, если запустить её сейчас. */

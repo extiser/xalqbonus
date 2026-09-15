@@ -1,6 +1,6 @@
 import { accessSync, constants, mkdirSync } from 'node:fs';
 import { mkdir, readdir, unlink, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 import { PRODUCT_PHOTO_DIR, readUploadsDir } from '#server/adapters/uploads/config';
 import { PHOTO_EXTENSION_BY_TYPE } from '#shared/photo';
@@ -123,3 +123,27 @@ const PHOTO_FILE_NAME =
 
 export const resolveProductPhotoFile = (fileName: string): string | null =>
   PHOTO_FILE_NAME.test(fileName) ? join(photoDir(), fileName) : null;
+
+/**
+ * Удаляет файл фото с тома — вместе с черновиком товара (issue #148). Путь сверяется с тем,
+ * что пишет `writeProductPhoto`: `..` в колонке — то, ради чего сверка и стоит.
+ *
+ * Файла уже нет — не отказ: снимать нечего, и повтор удаления обязан отвечать тем же.
+ */
+export const deleteProductPhoto = async (photoPath: string): Promise<void> => {
+  const fileName = basename(photoPath);
+
+  if (photoPath !== `${PRODUCT_PHOTO_DIR}/${fileName}` || !PHOTO_FILE_NAME.test(fileName)) {
+    throw new Error(`путь фото товара не нашего вида: ${photoPath}`);
+  }
+
+  try {
+    await unlink(join(photoDir(), fileName));
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      return;
+    }
+
+    throw error;
+  }
+};

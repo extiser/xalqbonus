@@ -1,44 +1,170 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import { useDraftAutosave } from '~/composables/useDraftAutosave';
 import { failureText } from '~/utils/requestError';
 import { toLoadState } from '~/utils/loadState';
-import type { ProductRequestBody, ProductResponse } from '#shared/types/catalog';
+import { productPublishProblems, productPublishProblemText } from '#shared/product';
+import type { Product, ProductRequestBody, ProductResponse } from '#shared/types/catalog';
 
 /**
- * Страница товара: правка, фото, архив.
+ * Экран товара: новый, черновик и опубликованный — одна страница (issue #148).
  *
- * Фото уезжает своим запросом — `multipart/form-data` с одним файлом, — а не полем формы
- * правки: собрать в одном запросе шесть текстовых полей и файл можно, но тогда каждая правка
- * цены отправляла бы картинку заново.
+ * **Новый** — `/products/new`. Записи нет, пока человек ничего не сделал: открыл и ушёл —
+ * в каталоге пусто. Первый набранный символ или выбранное фото заводит черновик, и адрес
+ * меняется на адрес записи — без перехода: страница та же (`key` ниже), и курсор остаётся
+ * в поле. Перезагрузка после этого поднимает черновик целиком, с текстом и фото.
+ *
+ * **Черновик** сохраняет себя сам, публикуется отдельным действием — только полным,
+ * и причины называются все сразу — и удаляется целиком, вместе с фото.
+ *
+ * **Опубликованный** живёт как раньше: правка кнопкой «Сохранить», архив вместо удаления.
+ *
+ * Фото уезжает своим запросом — `multipart/form-data` с одним файлом, — а не полем правки:
+ * собрать в одном запросе текстовые поля и файл можно, но тогда каждая правка цены
+ * отправляла бы картинку заново.
  */
 
 definePageMeta({
   middleware: 'catalog-access',
+  // Один экземпляр страницы на `/products/new` и адрес заведённого из него черновика: смена
+  // адреса после заведения не пересоздаёт форму, и набранное в ней не теряется.
+  key: 'product-editor',
 });
 
-const route = useRoute();
-const productId = computed(() => String(route.params.productId));
+/** Адрес нового товара. Идентификатором не является — ручкам он не уходит. */
+const NEW_PRODUCT = 'new';
 
+type ProductFormFields = ProductRequestBody;
+
+const route = useRoute();
+const routeId = computed(() => String(route.params.productId));
+
+// За товаром ходим один раз — при открытии адреса записи. Смена адреса запрос не повторяет
+// сама (`watch: false`): после заведения черновика запись уже на руках, а переход к другой
+// записи разбирает `watch` ниже.
 const { data, status, refresh } = await useFetch<ProductResponse>(
-  () => `/api/products/${productId.value}`,
+  () => `/api/products/${routeId.value}`,
+  { immediate: routeId.value !== NEW_PRODUCT, watch: false },
 );
 
-useHead({ title: () => `${data.value?.product.name ?? 'Товар'} — XalqBonus` });
+const product = computed<Product | null>(() => data.value?.product ?? null);
 
-const state = computed(() => toLoadState(status.value));
-const archived = computed(() => data.value?.product.archivedAt !== null);
+const setProduct = (next: Product): void => {
+  data.value = { product: next };
+};
+
+const toFields = (source: Product | null): ProductFormFields => ({
+  name: source?.name ?? '',
+  description: source?.description ?? '',
+  pricePoints: source?.pricePoints == null ? '' : String(source.pricePoints),
+  priceRetail: source?.priceRetail == null ? '' : String(source.priceRetail),
+  priceCost: source?.priceCost == null ? '' : String(source.priceCost),
+});
+
+/** То, что на экране. Ответ сервера его не перезаписывает. */
+const fields = ref<ProductFormFields>(toFields(product.value));
+
+const isDraft = computed(() => product.value === null || product.value.publishedAt === null);
+const archived = computed(() => product.value?.archivedAt != null);
+
+/**
+ * Три состояния экрана. Новый товар читать неоткуда — он готов сразу, и заведённый из него
+ * черновик тоже: запрос за ним не шёл, запись пришла ответом заведения.
+ */
+const state = computed(() =>
+  product.value !== null || routeId.value === NEW_PRODUCT ? 'ready' : toLoadState(status.value),
+);
+
+useHead({
+  title: () => `${fields.value.name.trim() || (product.value ? 'Черновик товара' : 'Новый товар')} — XalqBonus`,
+});
+
+/**
+ * Сохранение черновика: первое заводит запись и переводит адрес на неё, остальные правят.
+ *
+ * Адрес меняется заменой, а не переходом: «назад» из черновика ведёт в каталог, а не на пустую
+ * форму, которая завела бы второй черновик.
+ */
+const saveDraft = async (snapshot: ProductFormFields): Promise<void> => {
+  const current = product.value;
+
+  if (current === null) {
+    const created = await $fetch<ProductResponse>('/api/products', {
+      method: 'POST',
+      body: snapshot,
+    });
+
+    setProduct(created.product);
+    await navigateTo(`/products/${created.product.productId}`, { replace: true });
+
+    return;
+  }
+
+  const updated = await $fetch<ProductResponse>(`/api/products/${current.productId}`, {
+    method: 'PATCH',
+    body: snapshot,
+  });
+
+  setProduct(updated.product);
+};
+
+const autosave = useDraftAutosave({
+  fields,
+  save: saveDraft,
+  enabled: () => isDraft.value,
+});
+
+// Переход к другой записи на той же странице — копией, историей браузера: поля подменяются
+// прочитанной записью. Свой же только что заведённый черновик сюда не попадает — он уже на руках.
+watch(routeId, async (id) => {
+  if (id === NEW_PRODUCT) {
+    data.value = undefined;
+    autosave.replace(toFields(null));
+
+    return;
+  }
+
+  if (id === product.value?.productId) {
+    return;
+  }
+
+  data.value = undefined;
+  await refresh();
+  autosave.replace(toFields(product.value));
+});
+
+/** Причины, по которым черновик не публикуется, — по тому, что на экране. */
+const publishProblems = computed(() =>
+  productPublishProblems({
+    name: fields.value.name.trim() || null,
+    pricePoints: fields.value.pricePoints.trim() === '' ? null : Number(fields.value.pricePoints),
+    priceRetail: fields.value.priceRetail.trim() === '' ? null : Number(fields.value.priceRetail),
+    priceCost: fields.value.priceCost.trim() === '' ? null : Number(fields.value.priceCost),
+  }).map(productPublishProblemText),
+);
 
 const saving = ref(false);
 const saveError = ref<string | null>(null);
 
-const save = async (body: ProductRequestBody): Promise<void> => {
+/** Правка опубликованного — кнопкой, как раньше. */
+const savePublished = async (): Promise<void> => {
+  const current = product.value;
+
+  if (!current) {
+    return;
+  }
+
   saving.value = true;
   saveError.value = null;
 
   try {
-    await $fetch<ProductResponse>(`/api/products/${productId.value}`, { method: 'PATCH', body });
-    await refresh();
+    const updated = await $fetch<ProductResponse>(`/api/products/${current.productId}`, {
+      method: 'PATCH',
+      body: fields.value,
+    });
+
+    setProduct(updated.product);
   } catch (error) {
     saveError.value = failureText(error);
   } finally {
@@ -46,47 +172,111 @@ const save = async (body: ProductRequestBody): Promise<void> => {
   }
 };
 
-const toggleArchive = async (): Promise<void> => {
-  saving.value = true;
-  saveError.value = null;
+const acting = ref(false);
+const actionError = ref<string | null>(null);
+
+const runAction = async (request: () => Promise<void>): Promise<void> => {
+  acting.value = true;
+  actionError.value = null;
 
   try {
-    await $fetch<ProductResponse>(
-      `/api/products/${productId.value}/${archived.value ? 'unarchive' : 'archive'}`,
+    await request();
+  } catch (error) {
+    actionError.value = failureText(error);
+  } finally {
+    acting.value = false;
+  }
+};
+
+/**
+ * Публикация судит по тому, что на экране: несохранённое досохраняется перед ней. Не вышло —
+ * причина уже стоит у отметки сохранения, и публиковать прежнее состояние нельзя.
+ */
+const publish = (): Promise<void> =>
+  runAction(async () => {
+    if (!(await autosave.flush()) || !product.value) {
+      return;
+    }
+
+    const published = await $fetch<ProductResponse>(
+      `/api/products/${product.value.productId}/publish`,
       { method: 'POST' },
     );
-    await refresh();
-  } catch (error) {
-    saveError.value = failureText(error);
-  } finally {
-    saving.value = false;
-  }
-};
+
+    setProduct(published.product);
+  });
+
+/** Удаление черновика вместе с фото. Правка, не успевшая уехать, бросается — удаляем же. */
+const removeDraft = (): Promise<void> =>
+  runAction(async () => {
+    if (!window.confirm('Удалить черновик вместе с фото? Вернуть его будет нельзя.')) {
+      return;
+    }
+
+    await autosave.discard();
+
+    const current = product.value;
+
+    if (current) {
+      await $fetch(`/api/products/${current.productId}`, { method: 'DELETE' });
+    }
+
+    await navigateTo('/products');
+  });
+
+const toggleArchive = (): Promise<void> =>
+  runAction(async () => {
+    const current = product.value;
+
+    if (!current) {
+      return;
+    }
+
+    const updated = await $fetch<ProductResponse>(
+      `/api/products/${current.productId}/${archived.value ? 'unarchive' : 'archive'}`,
+      { method: 'POST' },
+    );
+
+    setProduct(updated.product);
+  });
 
 const uploading = ref(false);
 const photoError = ref<string | null>(null);
 
 /**
- * Загрузка фото. Тело собирается `FormData`: заголовок `multipart/form-data` с границей
- * ставит браузер сам, и задавать его руками нельзя — граница в нём не совпадёт с телом.
+ * Фото — в один шаг. Черновика ещё нет — заводим его этим же выбором и кладём файл к нему.
  *
- * После ответа товар перечитывается: вместе с путём фото двигается `updated_at`, а он и есть
- * версия в адресе картинки. Без этого браузер показывал бы прежнюю — кэш у адреса длинный.
+ * Тело собирается `FormData`: заголовок `multipart/form-data` с границей ставит браузер сам,
+ * и задавать его руками нельзя — граница в нём не совпадёт с телом. Ответ несёт новый
+ * `updated_at` — версию адреса картинки, без неё браузер показывал бы прежнюю.
  */
 const upload = async (file: File): Promise<void> => {
   uploading.value = true;
   photoError.value = null;
 
-  const body = new FormData();
-
-  body.append('photo', file);
-
   try {
-    await $fetch<ProductResponse>(`/api/products/${productId.value}/photo`, {
+    if (product.value === null && !(await autosave.saveNow())) {
+      photoError.value = autosave.error.value;
+
+      return;
+    }
+
+    const current = product.value;
+
+    if (!current) {
+      return;
+    }
+
+    const body = new FormData();
+
+    body.append('photo', file);
+
+    const updated = await $fetch<ProductResponse>(`/api/products/${current.productId}/photo`, {
       method: 'POST',
       body,
     });
-    await refresh();
+
+    setProduct(updated.product);
   } catch (error) {
     photoError.value = failureText(error);
   } finally {
@@ -101,10 +291,17 @@ const upload = async (file: File): Promise<void> => {
       <NuxtLink to="/products" class="text-sm text-slate-500 underline underline-offset-2">
         ← Весь каталог
       </NuxtLink>
-      <h1 class="mt-2 text-xl font-semibold text-slate-900">
-        {{ data?.product.name ?? 'Товар' }}
-      </h1>
-      <p v-if="data?.product.archivedAt" class="mt-1 text-sm text-slate-500">
+      <div class="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h1 class="text-xl font-semibold text-slate-900">
+          {{ fields.name.trim() || (product ? 'Без названия' : 'Новый товар') }}
+        </h1>
+        <AtomsStatusBadge v-if="state === 'ready' && isDraft" tone="warn" label="Черновик" />
+        <AtomsStatusBadge v-else-if="archived" tone="muted" label="В архиве" />
+      </div>
+      <p v-if="state === 'ready' && isDraft" class="mt-1 text-sm text-slate-500">
+        Водителю не виден нигде, пока товар не опубликован.
+      </p>
+      <p v-else-if="archived" class="mt-1 text-sm text-slate-500">
         Товар в архиве: водителю не показывается, но остаётся в истории заказов и в остатках.
       </p>
     </div>
@@ -115,35 +312,72 @@ const upload = async (file: File): Promise<void> => {
       state="error"
       message="Товар не прочитался. Это отказ запроса, а не отсутствие товара."
     />
-    <template v-else-if="data">
+    <template v-else>
       <OrganismsProductForm
-        title="Правка товара"
-        submit-label="Сохранить"
-        :product="data.product"
+        v-model:name="fields.name"
+        v-model:description="fields.description"
+        v-model:price-points="fields.pricePoints"
+        v-model:price-retail="fields.priceRetail"
+        v-model:price-cost="fields.priceCost"
+        :title="isDraft ? 'Черновик' : 'Правка товара'"
+        :product="product"
+        :mode="isDraft ? 'draft' : 'published'"
+        :autosave-state="autosave.state.value"
+        :autosave-error="autosave.error.value"
         :saving="saving"
         :error="saveError"
-        @submit="save"
-      />
-
-      <OrganismsPhotoForm
-        :photo-path="data.product.photoPath"
-        :updated-at="data.product.updatedAt"
-        :name="data.product.name"
         :uploading="uploading"
-        :error="photoError"
+        :photo-error="photoError"
+        @submit="savePublished"
         @upload="upload"
       />
 
+      <template v-if="isDraft">
+        <MoleculesSectionPanel
+          title="Публикация"
+          note="После публикации товар живёт как любой другой: попадает на витрину офиса, где лежит, принимает приход и уходит в архив, а не удаляется."
+        >
+          <AtomsActionButton
+            label="Опубликовать"
+            tone="primary"
+            :disabled="acting || product === null || publishProblems.length > 0"
+            @click="publish"
+          />
+          <ul
+            v-if="publishProblems.length > 0"
+            class="mt-3 list-inside list-disc space-y-0.5 text-sm text-red-700"
+          >
+            <li v-for="problem in publishProblems" :key="problem">{{ problem }}</li>
+          </ul>
+          <p v-if="actionError" class="mt-3 text-sm text-red-700">{{ actionError }}</p>
+        </MoleculesSectionPanel>
+
+        <MoleculesSectionPanel
+          v-if="product"
+          title="Удаление"
+          note="Черновик удаляется целиком, вместе с фото: ни заказов, ни остатков у него нет. Брошенный черновик сам не удаляется — только этой кнопкой."
+        >
+          <AtomsActionButton
+            label="Удалить черновик"
+            tone="danger"
+            :disabled="acting"
+            @click="removeDraft"
+          />
+        </MoleculesSectionPanel>
+      </template>
+
       <MoleculesSectionPanel
+        v-else
         title="Архив"
         note="Удаления нет: на товар ссылаются позиции заказов, и позиция обязана помнить, что именно было заказано."
       >
         <AtomsActionButton
           :label="archived ? 'Вернуть из архива' : 'Убрать в архив'"
           :tone="archived ? 'primary' : 'danger'"
-          :disabled="saving"
+          :disabled="acting"
           @click="toggleArchive"
         />
+        <p v-if="actionError" class="mt-3 text-sm text-red-700">{{ actionError }}</p>
       </MoleculesSectionPanel>
     </template>
   </div>

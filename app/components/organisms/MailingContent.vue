@@ -18,7 +18,7 @@ defineProps<{
         v-if="mailing.photoPath"
         :photo-path="mailing.photoPath"
         :updated-at="mailing.updatedAt"
-        :name="mailing.title"
+        :name="mailing.title ?? 'Рассылка'"
         size="large"
       />
       <div class="min-w-64 flex-1 space-y-4">

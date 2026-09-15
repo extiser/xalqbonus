@@ -13,6 +13,7 @@ import {
   StockWouldGoNegativeError,
   UnknownStockTargetError,
 } from '#server/services/stock/errors';
+import { assertStockProduct } from '#server/services/stock/stockProduct';
 import {
   CHECK_VIOLATION,
   FOREIGN_KEY_VIOLATION,
@@ -71,6 +72,8 @@ export const adjustStock = async (input: AdjustStockInput): Promise<StockRow> =>
       throw new InvalidStockTargetError(input.targetOnHand);
     }
   }
+
+  await assertStockProduct(input.officeId, input.productId);
 
   let appliedDelta = 0;
   let stock: StockRow;

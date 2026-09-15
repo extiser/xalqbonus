@@ -166,6 +166,9 @@ export type OfficeStockListRow = {
  *
  * Архивные товары остаются в таблице последними: на них может лежать остаток, и «товар
  * в архиве» не означает «полка пуста».
+ *
+ * Черновиков здесь нет: в офис принимается только опубликованный товар, иначе на черновик
+ * ссылался бы журнал остатков и удалить его было бы нельзя (issue #148).
  */
 export const listOfficeStock = async (
   officeId: string,
@@ -182,6 +185,7 @@ export const listOfficeStock = async (
       LEFT JOIN xb.office_stock AS stock
              ON stock."product_id" = product."id"
             AND stock."office_id" = ${officeId}::uuid
+     WHERE product."published_at" IS NOT NULL
      ORDER BY (product."archived_at" IS NOT NULL), product."name"
   `;
 
@@ -202,6 +206,9 @@ export type ShowcaseRow = {
  * `JOIN`, а не `LEFT JOIN`, как у таблицы остатков: витрина обещает то, что лежит
  * на полке, и товар без строки остатка или с нулём в ней водителю не показывается.
  * Резерв сюда не входит — занятое висящими заказами уже не свободно.
+ *
+ * Черновик отсекается здесь, в выборке, а не на экране: водителю он не виден нигде
+ * (issue #148). Заказ отсекает его тем же условием в `placeOrder`.
  */
 export const listOfficeShowcase = async (
   officeId: string,
@@ -219,6 +226,7 @@ export const listOfficeShowcase = async (
       JOIN xb.products AS product ON product."id" = stock."product_id"
      WHERE stock."office_id" = ${officeId}::uuid
        AND stock."on_hand" > 0
+       AND product."published_at" IS NOT NULL
        AND product."archived_at" IS NULL
      ORDER BY product."name"
   `;

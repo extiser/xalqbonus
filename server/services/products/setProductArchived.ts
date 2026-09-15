@@ -1,16 +1,18 @@
 import { consola } from 'consola';
-import { updateProductArchived } from '#server/repositories/products';
-import { UnknownProductError } from '#server/services/products/errors';
+import { findProduct, updateProductArchived } from '#server/repositories/products';
+import { ProductDraftError, UnknownProductError } from '#server/services/products/errors';
 import { toProduct } from '#server/services/products/fields';
 import type { Product } from '#shared/types/catalog';
 
 /**
  * Архивирование товара и возврат из архива.
  *
- * Удаления нет и не будет: на товар ссылаются позиции заказов, и позиция обязана помнить,
- * что именно было заказано (docs/decisions.md → «Позиция помнит цену»). Архивный товар
- * исчезает из витрины водителя, но остаётся в истории и в таблице остатков — на полке
- * он может ещё лежать.
+ * Удаления у опубликованного нет и не будет: на товар ссылаются позиции заказов, и позиция
+ * обязана помнить, что именно было заказано (docs/decisions.md → «Позиция помнит цену»).
+ * Архивный товар исчезает из витрины водителя, но остаётся в истории и в таблице остатков —
+ * на полке он может ещё лежать.
+ *
+ * Черновик не архивируется: живым он не был, и убирают его удалением (issue #148).
  */
 const log = consola.withTag('products:archive');
 
@@ -21,6 +23,10 @@ export const setProductArchived = async (
   const row = await updateProductArchived(productId, archived);
 
   if (!row) {
+    if (await findProduct(productId)) {
+      throw new ProductDraftError(productId);
+    }
+
     throw new UnknownProductError(productId);
   }
 

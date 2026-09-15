@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed } from 'vue';
+import type { AutosaveState } from '~/composables/useDraftAutosave';
 import { formatNumber } from '~/utils/format';
 import {
   buildMailingMessage,
@@ -7,51 +8,49 @@ import {
   MAILING_TEXT_MAX_LENGTH,
   mailingMessageLimit,
 } from '#shared/mailing';
-import type { Mailing, MailingAudienceResponse, MailingRequestBody } from '#shared/types/mailing';
+import type { Mailing, MailingAudienceResponse } from '#shared/types/mailing';
 import type { LoadState } from '~/types/loadState';
 
 /**
- * Форма рассылки — одна на заведение и правку черновика.
+ * Форма черновика рассылки — тексты и фото на одном экране.
+ *
+ * **Черновик сохраняет себя сам** (issue #148): кнопки нет, рядом отметка «сохраняем…» или
+ * «сохранено». Запускается то, что на экране: страница досохраняет набранное перед запуском.
+ * Обязательных полей нет — черновик заводится первым символом, а чего не хватает для запуска,
+ * страница называет у кнопки.
+ *
+ * **Фото — здесь же, рядом с текстом.** Подпись «если добавить фото, потолок станет 1 024»
+ * стояла на экране, где добавить фото было негде; теперь поле под ней.
  *
  * Число адресатов показывается здесь же: сколько человек получит сообщение, сотрудник обязан
- * видеть до сохранения. Считает страница — компонент данных не запрашивает
+ * видеть до запуска. Считает страница — компонент данных не запрашивает
  * (docs/frontend.md → «Данные в компоненты не ходят»).
  *
  * Предел и остаток форма считает сама, той же склейкой, что уйдёт в Telegram
  * (`shared/mailing.ts`), и пересчитывает потолок вместе с фото. Перебор — не отказ
- * сохранению: черновик — рабочее состояние, и подрезать текст можно потом. Поэтому при
- * переборе поля подсвечиваются, рядом сказано, на сколько длиннее, а «Сохранить» работает;
- * не пускает такое сообщение запуск (issue #136, прогон 15-09-2026).
+ * сохранению: поля подсвечиваются, рядом сказано, на сколько длиннее; не пускает такое
+ * сообщение запуск (issue #136, прогон 15-09-2026).
  *
  * Жёсткий предел у каждого текста свой и стоит `maxlength`: длиннее `sendMessage` Telegram
  * не примет ни в каком виде.
  */
 const props = defineProps<{
-  title: string;
-  submitLabel: string;
-  /** Что правим. `null` — заводим новую рассылку. */
+  heading: string;
+  /** Что правим. `null` — черновика ещё нет, он появится первым действием. */
   mailing: Mailing | null;
-  saving: boolean;
-  error: string | null;
+  autosaveState: AutosaveState;
+  autosaveError: string | null;
   audienceState: LoadState;
   audience: MailingAudienceResponse | null;
+  uploading: boolean;
+  photoError: string | null;
 }>();
 
-const emit = defineEmits<{ submit: [body: MailingRequestBody] }>();
+const emit = defineEmits<{ upload: [file: File]; removePhoto: [] }>();
 
-const mailingTitle = ref('');
-const textRu = ref('');
-const textUz = ref('');
-
-watch(
-  () => props.mailing,
-  (mailing) => {
-    mailingTitle.value = mailing?.title ?? '';
-    textRu.value = mailing?.textRu ?? '';
-    textUz.value = mailing?.textUz ?? '';
-  },
-  { immediate: true },
-);
+const title = defineModel<string>('title', { required: true });
+const textRu = defineModel<string>('textRu', { required: true });
+const textUz = defineModel<string>('textUz', { required: true });
 
 const withPhoto = computed(() => props.mailing?.photoPath != null);
 const limit = computed(() => mailingMessageLimit(withPhoto.value));
@@ -59,19 +58,17 @@ const length = computed(() => buildMailingMessage(textRu.value, textUz.value).te
 const remaining = computed(() => limit.value - length.value);
 const tooLong = computed(() => remaining.value < 0);
 
-const submit = (): void => {
-  emit('submit', { title: mailingTitle.value, textRu: textRu.value, textUz: textUz.value });
-};
+/** Подсказка под полем фото — числа из `shared/mailing.ts`, а не вписанные руками. */
+const photoNote = `Необязательно. С фото сообщение уходит подписью к нему — потолок ${formatNumber(MAILING_CAPTION_MAX_LENGTH)} знаков вместо ${formatNumber(MAILING_TEXT_MAX_LENGTH)}.`;
 </script>
 
 <template>
-  <MoleculesSectionPanel :title="title">
-    <form class="space-y-4" @submit.prevent="submit">
+  <MoleculesSectionPanel :title="heading">
+    <div class="space-y-4">
       <MoleculesFormField
-        v-model="mailingTitle"
+        v-model="title"
         label="Заголовок"
         type="text"
-        required
         hint="Для списка рассылок. Водителю не уходит."
       />
 
@@ -79,7 +76,6 @@ const submit = (): void => {
         v-model="textRu"
         label="Текст на русском"
         :rows="6"
-        required
         :maxlength="MAILING_TEXT_MAX_LENGTH"
         :invalid="tooLong"
       />
@@ -98,8 +94,7 @@ const submit = (): void => {
           <span class="font-semibold tabular-nums">{{ formatNumber(length) }}</span>
           из {{ formatNumber(limit) }} знаков.
           <template v-if="tooLong">
-            Длиннее на {{ formatNumber(-remaining) }} — сохранить можно, запустить нельзя, пока
-            не сократите.
+            Длиннее на {{ formatNumber(-remaining) }} — запустить нельзя, пока не сократите.
           </template>
           <template v-else>Осталось {{ formatNumber(remaining) }}.</template>
         </p>
@@ -109,10 +104,22 @@ const submit = (): void => {
             {{ formatNumber(MAILING_CAPTION_MAX_LENGTH) }} вместо {{ formatNumber(MAILING_TEXT_MAX_LENGTH) }}.
           </template>
           <template v-else>
-            Без фото. Если добавить фото, потолок станет {{ formatNumber(MAILING_CAPTION_MAX_LENGTH) }}.
+            Без фото. Если добавить фото ниже, потолок станет {{ formatNumber(MAILING_CAPTION_MAX_LENGTH) }}.
           </template>
         </p>
       </div>
+
+      <OrganismsPhotoField
+        :photo-path="mailing?.photoPath ?? null"
+        :updated-at="mailing?.updatedAt ?? ''"
+        :name="title || 'Рассылка'"
+        :uploading="uploading"
+        :error="photoError"
+        :note="photoNote"
+        removable
+        @upload="(file) => emit('upload', file)"
+        @remove="emit('removePhoto')"
+      />
 
       <div class="rounded-md bg-slate-50 px-3 py-2 text-sm">
         <p v-if="audienceState === 'loading'" class="text-slate-500">Считаем адресатов…</p>
@@ -130,9 +137,7 @@ const submit = (): void => {
         </p>
       </div>
 
-      <p v-if="error" class="text-sm text-red-700">{{ error }}</p>
-
-      <AtomsSubmitButton :label="submitLabel" :disabled="saving" />
-    </form>
+      <MoleculesAutosaveStatus :state="autosaveState" :error="autosaveError" />
+    </div>
   </MoleculesSectionPanel>
 </template>

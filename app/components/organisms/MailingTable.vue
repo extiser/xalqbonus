@@ -44,7 +44,7 @@ defineProps<{
               :to="`/mailings/${mailing.mailingId}`"
               class="text-sm font-semibold text-slate-900 underline underline-offset-2 hover:text-slate-600"
             >
-              {{ mailing.title }}
+              {{ mailing.title ?? 'Без заголовка' }}
             </NuxtLink>
             <AtomsStatusBadge
               :tone="mailingStatusTone(mailing.status)"

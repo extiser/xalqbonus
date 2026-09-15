@@ -87,18 +87,22 @@ export type OfficeEmployeesResponse = {
 
 export type Product = {
   productId: string;
-  name: string;
+  /** Пусто только у черновика: он заводится первым набранным символом (issue #148). */
+  name: string | null;
   description: string | null;
   /**
    * Относительный путь файла на томе — `products/<uuid>.<расширение>`. Адрес картинки
    * разметка собирает сама: `/uploads/` плюс этот путь плюс `?v=<updatedAt>`.
    */
   photoPath: string | null;
-  pricePoints: number;
+  /** Пусто только у черновика — как и обе цены в сумах. */
+  pricePoints: number | null;
   /** Розничная цена в сумах. */
-  priceRetail: number;
+  priceRetail: number | null;
   /** Себестоимость в сумах. */
-  priceCost: number;
+  priceCost: number | null;
+  /** Пусто — черновик: водителю не виден нигде, удаляется, а не архивируется. */
+  publishedAt: string | null;
   archivedAt: string | null;
   /**
    * Время последней правки. Нужно разметке: имя файла фото меняется вместе с расширением,
@@ -111,12 +115,16 @@ export type ProductListResponse = {
   products: Product[];
 };
 
+/**
+ * Тело заведения и правки товара — то, что набрано в форме, строками. Пустое поле — пустая
+ * строка: обязательных у черновика нет, и «пусто значит не задано» решает сервер.
+ */
 export type ProductRequestBody = {
   name: string;
-  description?: string;
-  pricePoints: number;
-  priceRetail: number;
-  priceCost: number;
+  description: string;
+  pricePoints: string;
+  priceRetail: string;
+  priceCost: string;
 };
 
 export type ProductResponse = {
