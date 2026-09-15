@@ -261,6 +261,37 @@ const runAction = async (request: () => Promise<void>): Promise<void> => {
 };
 
 /**
+ * Подтверждения экрана — своим диалогом, а не браузерным `confirm`: необратимое действие в вебе
+ * спрашивает `ConfirmDialog` (issue #148). Диалог один на экран, запрос — промисом: действие
+ * ждёт ответа тем же `await`, каким ждало браузерного окна.
+ *
+ * Кнопка согласия всегда красная — все четыре действия экрана необратимы, — а фокус, Escape
+ * и клик мимо окна отдают отказ (app/components/molecules/ConfirmDialog.vue).
+ */
+type Confirmation = {
+  title: string;
+  message: string;
+  /** Подпись действием: «Отозвать», а не «ОК». */
+  confirmLabel: string;
+};
+
+const confirmation = ref<Confirmation | null>(null);
+
+let answerConfirmation: ((confirmed: boolean) => void) | null = null;
+
+const askConfirmation = (request: Confirmation): Promise<boolean> =>
+  new Promise<boolean>((resolve) => {
+    answerConfirmation = resolve;
+    confirmation.value = request;
+  });
+
+const resolveConfirmation = (confirmed: boolean): void => {
+  answerConfirmation?.(confirmed);
+  answerConfirmation = null;
+  confirmation.value = null;
+};
+
+/**
  * Запуск. Уходит то, что на экране: несохранённое досохраняется перед подтверждением,
  * а не сохранилось — не запускаем, причина уже стоит у отметки сохранения.
  *
@@ -285,14 +316,16 @@ const launch = (): Promise<void> =>
 
     const disabledNote =
       fresh.notificationsDisabled > 0
-        ? ` Из них ${formatNumber(fresh.notificationsDisabled)} отключили уведомления и сообщения не получат.`
+        ? `Из них ${formatNumber(fresh.notificationsDisabled)} отключили уведомления и сообщения не получат. `
         : '';
 
-    if (
-      !window.confirm(
-        `Разослать «${fields.value.title.trim()}» — ${formatNumber(fresh.total)} адресатам?${disabledNote} Отозвать отправленное можно только в течение ${MAILING_RECALL_WINDOW_HOURS} часов.`,
-      )
-    ) {
+    const confirmed = await askConfirmation({
+      title: `Разослать «${fields.value.title.trim()}» — ${formatNumber(fresh.total)} адресатам?`,
+      message: `${disabledNote}Отозвать отправленное можно только в течение ${MAILING_RECALL_WINDOW_HOURS} часов.`,
+      confirmLabel: 'Запустить',
+    });
+
+    if (!confirmed) {
       return;
     }
 
@@ -306,7 +339,13 @@ const launch = (): Promise<void> =>
 /** Удаление черновика вместе с фото. Правка, не успевшая уехать, бросается — удаляем же. */
 const removeDraft = (): Promise<void> =>
   runAction(async () => {
-    if (!window.confirm('Удалить черновик вместе с фото? Вернуть его будет нельзя.')) {
+    const confirmed = await askConfirmation({
+      title: 'Удалить черновик вместе с фото?',
+      message: 'Вернуть его будет нельзя.',
+      confirmLabel: 'Удалить',
+    });
+
+    if (!confirmed) {
       return;
     }
 
@@ -329,12 +368,18 @@ const stop = (): Promise<void> =>
   runAction(async () => {
     const current = mailing.value;
 
-    if (
-      !current ||
-      !window.confirm(
-        'Остановить рассылку? Кто ещё не получил сообщение, уже не получит. Возобновить нельзя — только скопировать в новый черновик.',
-      )
-    ) {
+    if (!current) {
+      return;
+    }
+
+    const confirmed = await askConfirmation({
+      title: 'Остановить рассылку?',
+      message:
+        'Кто ещё не получил сообщение, уже не получит. Возобновить нельзя — только скопировать в новый черновик.',
+      confirmLabel: 'Остановить',
+    });
+
+    if (!confirmed) {
       return;
     }
 
@@ -433,11 +478,13 @@ const recall = (): Promise<void> =>
 
     const recipients = current.counters.sent;
 
-    if (
-      !window.confirm(
-        `Сообщение будет удалено у ${formatNumber(recipients)} ${pluralize(recipients, 'водителя', 'водителей', 'водителей')}. Отменить это нельзя.`,
-      )
-    ) {
+    const confirmed = await askConfirmation({
+      title: 'Отозвать рассылку?',
+      message: `Сообщение будет удалено у ${formatNumber(recipients)} ${pluralize(recipients, 'водителя', 'водителей', 'водителей')}. Отменить это нельзя.`,
+      confirmLabel: 'Отозвать',
+    });
+
+    if (!confirmed) {
       return;
     }
 
@@ -498,6 +545,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   stopRefreshing();
+  // Ушли со страницы с открытым вопросом — это отказ: действие не должно ждать ответа вечно.
+  resolveConfirmation(false);
 
   if (nowTimer !== null) {
     clearInterval(nowTimer);
@@ -516,6 +565,15 @@ onBeforeUnmount(() => {
       cancel-label="Остаться"
       @confirm="autosave.resolveLeave(true)"
       @cancel="autosave.resolveLeave(false)"
+    />
+    <MoleculesConfirmDialog
+      :open="confirmation !== null"
+      :title="confirmation?.title ?? ''"
+      :message="confirmation?.message ?? ''"
+      :confirm-label="confirmation?.confirmLabel ?? ''"
+      cancel-label="Отмена"
+      @confirm="resolveConfirmation(true)"
+      @cancel="resolveConfirmation(false)"
     />
 
     <div>
