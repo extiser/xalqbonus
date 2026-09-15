@@ -8,7 +8,7 @@ import {
 } from '#server/adapters/uploads/mailingPhotos';
 import { markRecipientRecalled, recordRecipientOutcome } from '#server/repositories/mailings';
 import { completeMailingRecall } from '#server/services/mailings/completeMailingRecall';
-import { copyMailing } from '#server/services/mailings/copyMailing';
+import { copyMailing, copyMailingTitle } from '#server/services/mailings/copyMailing';
 import { createMailing } from '#server/services/mailings/createMailing';
 import { deleteMailingDraft } from '#server/services/mailings/deleteMailingDraft';
 import { deliverMailingMessage } from '#server/services/mailings/deliverMailingMessage';
@@ -67,6 +67,9 @@ import { disconnectQueues } from '../support/queues';
  */
 
 const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+
+/** Заголовок копии тестовой рассылки: одна пометка, сколько бы раз ни копировали. */
+const COPY_TITLE = /^Тестовая рассылка — копия \d{2}\.\d{2}\.\d{4}, \d{2}:\d{2}$/;
 
 /** Участник программы; `linked: false` — без привязки, `inProgram: false` — вне программы. */
 const createMember = async (
@@ -226,8 +229,21 @@ describe('рассылки', () => {
 
     trackTestMailing(copy.mailingId);
 
-    expect(copy).toEqual(expect.objectContaining({ status: 'draft', title: draft.title }));
+    expect(copy).toEqual(
+      expect.objectContaining({ status: 'draft', title: expect.stringMatching(COPY_TITLE) }),
+    );
     expect(copy.counters.total).toBe(0);
+  });
+
+  it('заголовок копии кончается пометкой с временем парка, и пометки не копятся', () => {
+    // 16:30 UTC — 21:30 в Ташкенте.
+    const moment = new Date('2026-09-15T16:30:00Z');
+
+    expect(copyMailingTitle('Тестовая 3', moment)).toBe('Тестовая 3 — копия 15.09.2026, 21:30');
+    expect(copyMailingTitle('Тестовая 3 — копия 14.09.2026, 09:05', moment)).toBe(
+      'Тестовая 3 — копия 15.09.2026, 21:30',
+    );
+    expect(copyMailingTitle(null, moment)).toBeNull();
   });
 
   it('предел склейки — условие запуска: сохранение и фото с перебором проходят, запуск — нет', async () => {
@@ -401,7 +417,7 @@ describe('рассылки', () => {
     expect(copy).toEqual(
       expect.objectContaining({
         status: 'draft',
-        title: draft.title,
+        title: expect.stringMatching(COPY_TITLE),
         textRu: draft.textRu,
         textUz: draft.textUz,
         photoPath: null,
@@ -415,8 +431,13 @@ describe('рассылки', () => {
 
     trackTestMailing(copyOfDraft.mailingId);
 
+    // Копия копии пометку заменяет, а не дописывает вторую.
     expect(copyOfDraft).toEqual(
-      expect.objectContaining({ status: 'draft', title: draft.title, textRu: draft.textRu }),
+      expect.objectContaining({
+        status: 'draft',
+        title: expect.stringMatching(COPY_TITLE),
+        textRu: draft.textRu,
+      }),
     );
 
     // Идущая не копируется.

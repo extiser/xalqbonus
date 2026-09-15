@@ -10,10 +10,11 @@ import {
   UnknownMailingError,
 } from '#server/services/mailings/errors';
 import { readMailing } from '#server/services/mailings/readMailing';
+import { formatCalendarDate, formatClockTime } from '#server/utils/parkTime';
 import type { Mailing } from '#shared/types/mailing';
 
 /**
- * Копия рассылки в новый черновик: заголовок, тексты и фото. Копируется всё, кроме идущей
+ * Копия рассылки в новый черновик: заголовок с пометкой копии, тексты и фото. Копируется всё, кроме идущей
  * (решение Руслана 15-09-2026): завершённую — чтобы повторить то же объявление через неделю,
  * черновик — чтобы сделать из него второй похожий, остановленную — чтобы разослать заново.
  *
@@ -26,6 +27,29 @@ import type { Mailing } from '#shared/types/mailing';
  * оригинала.
  */
 const log = consola.withTag('mailings:copy');
+
+/** Пометка копии в конце заголовка — та, что ставит `copyMailingTitle`. */
+const COPY_MARK = /\s*— копия \d{2}\.\d{2}\.\d{4}, \d{2}:\d{2}$/;
+
+/**
+ * Заголовок копии: «Тестовая 3 — копия 15.09.2026, 21:30». Без пометки в списке стояли бы две
+ * одинаковые строки, и новую выдавала бы только колонка даты.
+ *
+ * Время — в зоне парка, теми же помощниками, что остальные даты (server/utils/parkTime.ts).
+ * Пометка, уже стоящая в конце, заменяется: копия копии иначе копила бы их одну за другой.
+ *
+ * Черновик без заголовка остаётся без него: одна пометка вместо названия читалась бы
+ * как поломка, а не как копия.
+ */
+export const copyMailingTitle = (title: string | null, moment: Date): string | null => {
+  if (title === null) {
+    return null;
+  }
+
+  const base = title.replace(COPY_MARK, '');
+
+  return `${base} — копия ${formatCalendarDate(moment)}, ${formatClockTime(moment)}`;
+};
 
 export const copyMailing = async (mailingId: string, createdById: string): Promise<Mailing> => {
   const source = await findMailing(mailingId);
@@ -41,7 +65,7 @@ export const copyMailing = async (mailingId: string, createdById: string): Promi
   }
 
   const copyId = await insertDraftMailing({
-    title: source.title,
+    title: copyMailingTitle(source.title, new Date()),
     textRu: source.textRu,
     textUz: source.textUz,
     photoPath: null,
