@@ -11,8 +11,34 @@ import { applyOrdersSchedule, createOrdersQueue, createOrdersWorker } from '#ser
 import { applySyncSchedule, createSyncQueue, createSyncWorker } from '#server/queues/sync';
 import { failAbandonedRuns } from '#server/repositories/syncRuns';
 import { readSyncConfig } from '#server/services/sync/config';
+import { readBotToken } from '#server/bot/config';
+import {
+  BOT_DISABLED_MESSAGE,
+  findMissingEnv,
+  MissingEnvError,
+  WORKER_REQUIRED_ENV,
+} from '#server/utils/requiredEnv';
 
 const log = consola.withTag('worker');
+
+// Окружение проверяется до первого соединения. Устройство то же, что у приложения
+// (server/plugins/00.env.ts), список свой: воркер отдельный процесс, и нужно ему своё.
+// Выброс на верхнем уровне модуля роняет процесс с ненулевым кодом (issue #153).
+const missingEnv = findMissingEnv(WORKER_REQUIRED_ENV);
+
+if (missingEnv.length > 0) {
+  log.error('не заполнены обязательные переменные окружения — воркер не поднимается', {
+    missing: missingEnv,
+  });
+
+  throw new MissingEnvError(missingEnv);
+}
+
+// Пустой токен воркер не роняет: синхронизации он не нужен, а цикл перезапусков из-за
+// выключенного бота остановил бы начисление баллов. Но выключенность обязана быть видна.
+if (readBotToken() === '') {
+  log.warn(BOT_DISABLED_MESSAGE, { reason: 'TG_BOT_TOKEN пуст' });
+}
 
 // Отметка живого цикла: файл трогается раз в интервал, healthcheck контейнера смотрит на его
 // возраст. Проверять сам процесс смысла нет — Docker и так знает, что тот запущен; вопрос

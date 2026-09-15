@@ -2,6 +2,7 @@ import { consola } from 'consola';
 import { readBotConfig, type BotConfig } from '#server/bot/config';
 import { createBotRuntime } from '#server/bot/instance';
 import { startBot } from '#server/bot/start';
+import { BOT_DISABLED_MESSAGE } from '#server/utils/requiredEnv';
 
 const log = consola.withTag('bot');
 
@@ -28,8 +29,10 @@ export default defineNitroPlugin((nitroApp) => {
   // процесса, а не всплывать необработанным промисом посреди уже работающего приложения.
   const config = readBotConfigLoudly();
 
+  // Выключенный бот — законное состояние, но не молчаливое: строка называет последствие,
+  // а не настройку (issue #153).
   if (!config) {
-    log.warn('TG_BOT_TOKEN пуст — бот не поднимается, приложение работает без него');
+    log.warn(BOT_DISABLED_MESSAGE, { reason: 'TG_BOT_TOKEN пуст' });
     return;
   }
 

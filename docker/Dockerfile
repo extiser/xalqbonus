@@ -102,8 +102,17 @@ USER node
 # процесс гарантированно роняет top-level await на failAbandonedRuns, но стоит обращению
 # к базе уехать ниже по server/queues/worker.ts или обернуться в try — и сборка образа
 # повиснет насмерть, без единой строки в логе.
+#
+# Реквизиты парка — заглушки: воркер проверяет обязательные переменные до первого соединения
+# (server/utils/requiredEnv.ts), и без них старт кончился бы строкой о незаполненном окружении,
+# не дойдя до базы, — проверка бандла упала бы. В сеть по заглушкам не уходит ничего: старт
+# падает на базе раньше, чем появляется первый прогон синхронизации.
 RUN out="$(DATABASE_URL='postgresql://smoke:smoke@127.0.0.1:1/smoke?schema=xb' \
            REDIS_URL='redis://redis-smoke-unreachable:6379' \
+           YANDEX_BASE_URL='https://fleet-smoke.invalid/' \
+           YANDEX_CLIENT_ID='smoke' \
+           YANDEX_API_KEY='smoke' \
+           YANDEX_PARK_ID='smoke' \
            timeout 60 node .output/worker.mjs 2>&1 || true)"; \
     if echo "$out" | grep -q 'DatabaseNotReachable\|ECONNREFUSED'; then \
       echo 'бандл воркера поднялся: старт дошёл до соединения с базой'; \

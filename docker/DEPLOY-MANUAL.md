@@ -355,11 +355,18 @@ curl -sS "https://api.telegram.org/bot$TG_BOT_TOKEN/getWebhookInfo"
 
 ```bash
 cd /srv/xalqbonus
-make prod-deploy               # ссылка по умолчанию: origin/main
-make prod-deploy ref=a1b2c3d   # явный коммит, тег или ветка
+make prod-deploy                                  # ссылка по умолчанию: origin/main
+make prod-deploy ref=a1b2c3d                      # явный коммит или тег
+make prod-deploy ref=origin/chore/153-env-check   # ветка — только как origin/<branch>
 # эквивалент:
 bash docker/scripts/deploy-manual.sh [REF]
 ```
+
+**Ветка задаётся как `origin/<branch>`, а не голым именем.** Скрипт делает
+`git reset --hard "$REF"`, а локальных веток задач на машине нет: после `git fetch` там лежат
+только `origin/<branch>`. Голое имя ветки падает с `unknown revision` (прогон 15-09-2026, `#142`).
+Подставлять `origin/` за человека скрипт не станет намеренно: ветка и тег с одинаковым именем
+неотличимы, и выбор между ними был бы догадкой.
 
 Ручного ввода посреди прогона выкат не требует: всё, что нужно, приходит аргументом.
 
