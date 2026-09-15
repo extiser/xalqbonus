@@ -46,14 +46,12 @@ export const explainMailingFailure = (error: unknown): H3Error | null => {
   }
 
   if (error instanceof MailingTextTooLongError) {
-    const language = error.field === 'textRu' ? 'Русский' : 'Узбекский';
-
     return reject(
       400,
       'Bad Request',
-      error.withPhoto
-        ? `${language} текст длиннее ${error.limit} знаков — столько Telegram принимает в подписи к фото.`
-        : `${language} текст длиннее ${error.limit} знаков — столько Telegram принимает в сообщении.`,
+      `Сообщение вместе с заголовками языков — ${error.length} знаков, а Telegram принимает ` +
+        `${error.withPhoto ? 'в подписи к фото' : 'в сообщении'} не больше ${error.limit}. ` +
+        'Сократите тексты.',
     );
   }
 

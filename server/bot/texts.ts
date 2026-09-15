@@ -2,6 +2,7 @@ import type { Language } from '#server/generated/prisma/enums';
 // Относительным путём, а не через `#shared`: этот модуль собирается ещё и в воркер,
 // а там из псевдонимов настроен один `#server` (package.json → `build:worker`).
 import type { OfficeContact } from '../../shared/types/miniapp';
+import { escapeHtml } from '../../shared/telegramHtml';
 
 /**
  * Тексты, которые система говорит водителю и сотруднику, — ключами в коде, а не строками
@@ -722,16 +723,6 @@ export const officeContacts = (language: Language): OfficeContact[] =>
     phone: office.phone,
     mapUrl: mapLink(office),
   }));
-
-/**
- * Экранирование для `parse_mode: HTML`.
- *
- * Имя водителя приходит из чужой системы и подставляется в разметку: угловая скобка
- * в имени иначе ломает сообщение целиком, и водитель не получает ничего. Тем же экранируется
- * текст рассылки — его набирает сотрудник, и «<3» в нём ломало бы сообщение так же.
- */
-export const escapeHtml = (value: string): string =>
-  value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 /**
  * Число баллов в человеческом виде: разряды разделены неразрывным пробелом.

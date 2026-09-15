@@ -3,14 +3,18 @@ import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { copyMailing } from '#server/services/mailings/copyMailing';
 import { createMailing } from '#server/services/mailings/createMailing';
 import { deliverMailingMessage } from '#server/services/mailings/deliverMailingMessage';
+import { recordRecipientOutcome } from '#server/repositories/mailings';
 import {
   MailingAudienceEmptyError,
   MailingStatusMismatchError,
+  MailingTextTooLongError,
 } from '#server/services/mailings/errors';
 import { launchMailing } from '#server/services/mailings/launchMailing';
 import { readMailing, readMailingList } from '#server/services/mailings/readMailing';
 import { readMailingAudience } from '#server/services/mailings/readMailingAudience';
+import { saveMailingPhoto } from '#server/services/mailings/saveMailingPhoto';
 import { stopMailing } from '#server/services/mailings/stopMailing';
+import { updateMailing } from '#server/services/mailings/updateMailing';
 import type { MailingCounters } from '#shared/types/mailing';
 import {
   cleanupTestData,
@@ -28,6 +32,8 @@ import {
   cleanupTestMailings,
   closeTestLinks,
   countTestRecipients,
+  markTestSentWithoutMessageId,
+  readTestMessageId,
   readTestRecipients,
   setTestNotificationsEnabled,
   trackTestMailing,
@@ -216,6 +222,74 @@ describe('рассылки', () => {
     expect(
       await deliverMailingMessage({ mailingId: draft.mailingId, personId: muted, lastAttempt: true }),
     ).toBe('not_running');
+  });
+
+  it('предел длины считает склейку с заголовками, а не каждый текст отдельно', async () => {
+    const { employeeId } = await createTestEmployee({ role: 'owner' });
+
+    // Заголовки и пустая строка между блоками — 30 знаков: 2033 + 2033 + 30 ровно в потолок.
+    const fits = await createDraft(employeeId, null);
+    const exact = await updateMailing(fits.mailingId, {
+      title: 'Ровно в потолок',
+      textRu: 'р'.repeat(2033),
+      textUz: 'o'.repeat(2033),
+      activeWithinDays: null,
+    });
+
+    expect(exact.textRu).toHaveLength(2033);
+
+    // Каждый текст порознь вдвое короче потолка, вместе — на знак длиннее.
+    const overflow = createMailing(
+      { title: 'Длиннее', textRu: 'р'.repeat(2034), textUz: 'o'.repeat(2033), activeWithinDays: null },
+      employeeId,
+    );
+
+    await expect(overflow).rejects.toBeInstanceOf(MailingTextTooLongError);
+    await expect(overflow).rejects.toMatchObject({ length: 4097, limit: 4096, withPhoto: false });
+
+    // С фото потолок подписи: 500 + 500 влезли в сообщение, но с заголовками это 1030 из 1024.
+    const captioned = await createDraft(employeeId, null);
+
+    await updateMailing(captioned.mailingId, {
+      title: 'Под фото',
+      textRu: 'р'.repeat(500),
+      textUz: 'o'.repeat(500),
+      activeWithinDays: null,
+    });
+
+    await expect(
+      saveMailingPhoto({
+        mailingId: captioned.mailingId,
+        contentType: 'image/png',
+        bytes: Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+      }),
+    ).rejects.toMatchObject({ length: 1030, limit: 1024, withPhoto: true });
+
+    expect((await readMailing(captioned.mailingId)).photoPath).toBeNull();
+  });
+
+  it('у исхода sent записан message_id, у прочих его нет', async () => {
+    const { employeeId } = await createTestEmployee({ role: 'owner' });
+    const delivered = await createMember({ tripDaysAgo: 1 });
+    const refused = await createMember({ tripDaysAgo: 1 });
+    const bypassed = await createMember({ tripDaysAgo: 1 });
+
+    const draft = await createDraft(employeeId, 2);
+
+    await launchMailing(draft.mailingId);
+
+    // Отправка в Telegram в тестах не идёт — исход пишется тем же вызовом репозитория,
+    // которым его пишет отправка после ответа Telegram.
+    expect(
+      await recordRecipientOutcome(draft.mailingId, delivered, { outcome: 'sent', messageId: 4242 }),
+    ).toBe(true);
+    expect(await recordRecipientOutcome(draft.mailingId, refused, { outcome: 'failed' })).toBe(true);
+
+    expect(await readTestMessageId(draft.mailingId, delivered)).toBe(4242n);
+    expect(await readTestMessageId(draft.mailingId, refused)).toBeNull();
+
+    // `sent` без идентификатора база не принимает.
+    await expect(markTestSentWithoutMessageId(draft.mailingId, bypassed)).rejects.toThrow();
   });
 
   it('остановка оставляет ждущих без отправки, а копия уходит в новый черновик', async () => {

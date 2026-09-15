@@ -134,7 +134,10 @@ const withClassifiedFailure = async <Result>(call: () => Promise<Result>): Promi
 };
 
 /**
- * Шлёт сообщение в чат. Успех — возврат без значения, отказ — `TelegramSendError`.
+ * Шлёт сообщение в чат. Успех — `message_id` отправленного, отказ — `TelegramSendError`.
+ *
+ * Идентификатор сообщения отдаётся наверх, потому что удалить сообщение у получателя можно
+ * только по нему: не записанный сейчас, он теряется навсегда.
  *
  * Идентификатор чата строкой: метод принимает его и числом, и строкой, а строка
  * не требует предположений о том, что id чата укладывается в безопасное целое JS
@@ -143,14 +146,16 @@ const withClassifiedFailure = async <Result>(call: () => Promise<Result>): Promi
  * `parse_mode: HTML` — как у экранов диалога: подстановки в текст экранируются сборщиком
  * текста, и разные режимы разметки на соседних сообщениях одного бота были бы ловушкой.
  */
-export const sendTelegramMessage = async (input: SendMessageInput): Promise<void> => {
-  await withClassifiedFailure(() =>
+export const sendTelegramMessage = async (input: SendMessageInput): Promise<number> => {
+  const message = await withClassifiedFailure(() =>
     getApi(input.token).sendMessage(input.telegramChatId.toString(), input.text, {
       parse_mode: 'HTML',
       link_preview_options: { is_disabled: true },
       reply_markup: replyMarkupFor(input.openAppButton),
     }),
   );
+
+  return message.message_id;
 };
 
 /**
@@ -173,13 +178,20 @@ export type SendPhotoInput = {
   openAppButton?: OpenAppButton;
 };
 
+export type SentPhoto = {
+  /** Идентификатор сообщения — по нему сообщение удаляется у получателя. */
+  messageId: number;
+  /**
+   * `file_id` картинки самого крупного размера, который Telegram нарезал: им следующие
+   * отправки ссылаются на неё.
+   */
+  fileId: string;
+};
+
 /**
- * Шлёт фото с подписью. Возвращает `file_id` отправленной картинки — самого крупного
- * размера, который Telegram нарезал: им следующие отправки и ссылаются на неё.
- *
- * Отказы разбираются так же, как у `sendTelegramMessage`.
+ * Шлёт фото с подписью. Отказы разбираются так же, как у `sendTelegramMessage`.
  */
-export const sendTelegramPhoto = async (input: SendPhotoInput): Promise<string> => {
+export const sendTelegramPhoto = async (input: SendPhotoInput): Promise<SentPhoto> => {
   const photo =
     input.photo.kind === 'file_id'
       ? input.photo.fileId
@@ -199,5 +211,5 @@ export const sendTelegramPhoto = async (input: SendPhotoInput): Promise<string> 
     throw new Error('Telegram принял фото, но не вернул ни одного размера');
   }
 
-  return largest.file_id;
+  return { messageId: message.message_id, fileId: largest.file_id };
 };

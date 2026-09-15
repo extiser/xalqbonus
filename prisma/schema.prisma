@@ -1309,6 +1309,10 @@ model MailingRecipient {
   outcome   MailingRecipientOutcome
   /// Когда исход стал известен. Пусто у `pending`.
   outcomeAt DateTime?               @map("outcome_at") @db.Timestamptz(6)
+  /// Идентификатор сообщения у получателя, вернувшийся от Telegram. Есть ровно у `sent`:
+  /// удалить отправленное можно только по нему, и не записанный при отправке он теряется
+  /// навсегда. Сам отзыв — отдельная задача, здесь только запись.
+  messageId BigInt?                 @map("message_id")
 
   mailing Mailing @relation(fields: [mailingId], references: [id])
   person  Person  @relation(fields: [personId], references: [id])

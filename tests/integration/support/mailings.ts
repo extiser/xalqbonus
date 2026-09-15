@@ -40,6 +40,35 @@ export const countTestRecipients = async (mailingId: string): Promise<number> =>
   return rows[0]?.total ?? 0;
 };
 
+/** `message_id` адресата в снимке. `null` — не записан. */
+export const readTestMessageId = async (
+  mailingId: string,
+  personId: string,
+): Promise<bigint | null> => {
+  const rows = await db.$queryRaw<{ messageId: bigint | null }[]>`
+    SELECT "message_id" AS "messageId"
+      FROM xb.mailing_recipients
+     WHERE "mailing_id" = ${mailingId}::uuid AND "person_id" = ${personId}::uuid
+  `;
+
+  return rows[0]?.messageId ?? null;
+};
+
+/**
+ * Пишет адресату `sent` мимо репозитория и без `message_id` — то, что обязана остановить
+ * проверка базы. Проверка, которая не умеет падать, не проверяет ничего.
+ */
+export const markTestSentWithoutMessageId = async (
+  mailingId: string,
+  personId: string,
+): Promise<void> => {
+  await db.$executeRaw`
+    UPDATE xb.mailing_recipients
+       SET "outcome" = 'sent'::xb.mailing_recipient_outcome, "outcome_at" = now()
+     WHERE "mailing_id" = ${mailingId}::uuid AND "person_id" = ${personId}::uuid
+  `;
+};
+
 export const setTestNotificationsEnabled = async (
   personId: string,
   enabled: boolean,

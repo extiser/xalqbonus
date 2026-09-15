@@ -5,6 +5,7 @@ import { formatDateTime, formatNumber } from '~/utils/format';
 import { mailingStatusLabel, mailingStatusTone } from '~/utils/labels';
 import { failureText } from '~/utils/requestError';
 import { toLoadState } from '~/utils/loadState';
+import { MAILING_CAPTION_MAX_LENGTH, MAILING_TEXT_MAX_LENGTH } from '#shared/mailing';
 import type {
   MailingAudienceResponse,
   MailingRequestBody,
@@ -39,6 +40,36 @@ useHead({ title: () => `${data.value?.mailing.title ?? 'Рассылка'} — X
 const state = computed(() => toLoadState(status.value));
 const mailing = computed(() => data.value?.mailing ?? null);
 const isDraft = computed(() => mailing.value?.status === 'draft');
+
+/**
+ * Строка под заголовком — фразами через пробел, собранная здесь, а не соседними `<template>`
+ * в разметке: пробел между ними Vue при сборке снимает, и фразы слипались
+ * («…10:40:15.Остановлена…»).
+ */
+const headerNote = computed(() => {
+  const current = mailing.value;
+
+  if (!current) {
+    return '';
+  }
+
+  const phrases = [`Завёл ${current.createdByName}.`];
+
+  if (current.startedAt) {
+    phrases.push(`Запущена ${formatDateTime(current.startedAt)}.`);
+  }
+
+  if (current.finishedAt) {
+    const verb = current.status === 'stopped' ? 'Остановлена' : 'Завершена';
+
+    phrases.push(`${verb} ${formatDateTime(current.finishedAt)}.`);
+  }
+
+  return phrases.join(' ');
+});
+
+/** Подсказка под полем фото — числа из `shared/mailing.ts`, а не вписанные руками. */
+const photoNote = `Необязательно. С фото сообщение уходит подписью к нему — потолок ${formatNumber(MAILING_CAPTION_MAX_LENGTH)} знаков вместо ${formatNumber(MAILING_TEXT_MAX_LENGTH)}.`;
 
 const activeWithinDays = ref('');
 
@@ -213,14 +244,7 @@ onBeforeUnmount(stopRefreshing);
           :label="mailingStatusLabel(mailing.status)"
         />
       </div>
-      <p v-if="mailing" class="mt-1 text-sm text-slate-500">
-        Завёл {{ mailing.createdByName }}.
-        <template v-if="mailing.startedAt">Запущена {{ formatDateTime(mailing.startedAt) }}.</template>
-        <template v-if="mailing.finishedAt">
-          {{ mailing.status === 'stopped' ? 'Остановлена' : 'Завершена' }}
-          {{ formatDateTime(mailing.finishedAt) }}.
-        </template>
-      </p>
+      <p v-if="mailing" class="mt-1 text-sm text-slate-500">{{ headerNote }}</p>
     </div>
 
     <MoleculesStateNotice v-if="state === 'loading'" state="loading" message="Читаем рассылку…" />
@@ -250,7 +274,7 @@ onBeforeUnmount(stopRefreshing);
           :name="mailing.title"
           :uploading="uploading"
           :error="photoError"
-          note="Необязательно. С фото текст уходит подписью к нему — до 1 024 знаков."
+          :note="photoNote"
           @upload="upload"
         />
 

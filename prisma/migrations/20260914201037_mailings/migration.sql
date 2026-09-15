@@ -40,6 +40,7 @@ CREATE TABLE "mailing_recipients" (
     "person_id" UUID NOT NULL,
     "outcome" "mailing_recipient_outcome" NOT NULL,
     "outcome_at" TIMESTAMPTZ(6),
+    "message_id" BIGINT,
 
     CONSTRAINT "mailing_recipients_pkey" PRIMARY KEY ("mailing_id","person_id")
 );
@@ -93,11 +94,19 @@ ALTER TABLE "mailings" ADD CONSTRAINT "mailings_texts_check"
 ALTER TABLE "mailing_recipients" ADD CONSTRAINT "mailing_recipients_outcome_at_check"
     CHECK (("outcome" = 'pending') = ("outcome_at" IS NULL));
 
+-- `message_id` есть ровно у отправленного. Отправленное без него не отозвать никогда,
+-- а идентификатор у неотправленного — запись, которой нечему соответствовать.
+ALTER TABLE "mailing_recipients" ADD CONSTRAINT "mailing_recipients_message_id_check"
+    CHECK (("outcome" = 'sent') = ("message_id" IS NOT NULL));
+
 COMMENT ON TABLE "mailings" IS
     'Рассылки участникам программы в Telegram. Остановленная не возобновляется — копируется в новый черновик.';
 
 COMMENT ON TABLE "mailing_recipients" IS
     'Снимок адресатов рассылки на момент запуска с исходом отправки. Счётчики экрана считаются отсюда.';
+
+COMMENT ON COLUMN "mailing_recipients"."message_id" IS
+    'message_id от Telegram у исхода sent. Удалить сообщение у водителя можно только по нему.';
 
 COMMENT ON COLUMN "mailings"."active_within_days" IS
     'Фильтр «ездил за последние N дней» по завершённым поездкам. NULL — все участники с активной привязкой.';

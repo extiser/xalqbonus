@@ -7,22 +7,28 @@ import {
 } from '#server/adapters/telegram/outgoing';
 import { readMailingPhoto } from '#server/adapters/uploads/mailingPhotos';
 import { readBotToken, readMiniAppUrl } from '#server/bot/config';
-import { escapeHtml, text } from '#server/bot/texts';
-import type { Language, MailingRecipientOutcome } from '#server/generated/prisma/enums';
+import type { MailingRecipientOutcome } from '#server/generated/prisma/enums';
 import {
   findMailingDelivery,
   finishMailingIfDone,
   recordRecipientOutcome,
   type MailingDeliveryRow,
+  type RecipientOutcomeRecord,
 } from '#server/repositories/mailings';
+// Относительным путём, а не через `#shared`: модуль собирается в воркер, а бандл воркера
+// знает только псевдоним `#server` (package.json → build:worker).
+import { buildMailingMessage } from '../../../shared/mailing';
 
 /**
  * Отправка рассылки одному адресату — то, что делает одно задание очереди `mailing`.
  *
- * Перед отправкой читается всё сразу: статус рассылки, исход адресата в снимке, его канал,
- * язык и выключатель уведомлений. Остановленная рассылка закрывает задание без отправки
+ * Перед отправкой читается всё сразу: статус рассылки, исход адресата в снимке, его канал
+ * и выключатель уведомлений. Остановленная рассылка закрывает задание без отправки
  * и оставляет адресата `pending`; записанный исход не переписывается — повтор задания после
  * рестарта воркера на нём и кончается.
+ *
+ * Язык получателя не читается: сообщение уходит на обоих языках сразу, одной и той же
+ * склейкой, что считает форма (`shared/mailing.ts`).
  *
  * Отправка «хотя бы раз», а не «ровно раз»: упади воркер между ответом Telegram и записью
  * исхода, повтор задания пошлёт сообщение второй раз. Закрыть это окно нечем — Telegram
@@ -64,57 +70,56 @@ export type DeliverMailingInput = {
  */
 const uploadedPhotoFileIds = new Map<string, string>();
 
-/** Текст на языке получателя; пустой узбекский — русский. Экранирован под `parse_mode: HTML`. */
-const messageTextFor = (row: MailingDeliveryRow, language: Language): string =>
-  escapeHtml(language === 'uz' && row.textUz !== null ? row.textUz : row.textRu);
+/**
+ * Подпись кнопки — на обоих языках, раз и сообщение на обоих. Через косую черту, как у
+ * заглушки Mini App, где язык человека тоже не прочитан (docs/frontend.md → «Язык»);
+ * русский первым — как в самом сообщении.
+ */
+const OPEN_APP_BUTTON_TEXT = '🎁 Открыть приложение / Ilovani ochish';
 
 /**
- * Кнопка «Открыть приложение» на языке получателя. Пусто на машине без `TG_MINIAPP_URL`:
- * Telegram открывает Mini App только по `https`, и сообщение уходит без кнопки — так же,
- * как приветствие бота (server/bot/greeting.ts).
+ * Кнопка «Открыть приложение». Пусто на машине без `TG_MINIAPP_URL`: Telegram открывает
+ * Mini App только по `https`, и сообщение уходит без кнопки — так же, как приветствие бота
+ * (server/bot/greeting.ts).
  */
-const openAppButtonFor = (language: Language): OpenAppButton | undefined => {
+const openAppButton = (): OpenAppButton | undefined => {
   const url = readMiniAppUrl();
 
-  return url === '' ? undefined : { text: text('button_open_app', language), url };
+  return url === '' ? undefined : { text: OPEN_APP_BUTTON_TEXT, url };
 };
 
-const send = async (
-  token: string,
-  telegramChatId: bigint,
-  row: MailingDeliveryRow,
-  language: Language,
-): Promise<void> => {
-  const messageText = messageTextFor(row, language);
-  const openAppButton = openAppButtonFor(language);
+/** Шлёт сообщение и возвращает его `message_id`. */
+const send = async (token: string, telegramChatId: bigint, row: MailingDeliveryRow): Promise<number> => {
+  const { html } = buildMailingMessage(row.textRu, row.textUz);
+  const button = openAppButton();
 
   if (row.photoPath === null) {
-    await sendTelegramMessage({ token, telegramChatId, text: messageText, openAppButton });
-
-    return;
+    return sendTelegramMessage({ token, telegramChatId, text: html, openAppButton: button });
   }
 
   const cachedFileId = uploadedPhotoFileIds.get(row.photoPath);
-  const fileId = await sendTelegramPhoto({
+  const sent = await sendTelegramPhoto({
     token,
     telegramChatId,
     photo:
       cachedFileId === undefined
         ? { kind: 'upload', ...(await readMailingPhoto(row.photoPath)) }
         : { kind: 'file_id', fileId: cachedFileId },
-    caption: messageText,
-    openAppButton,
+    caption: html,
+    openAppButton: button,
   });
 
-  uploadedPhotoFileIds.set(row.photoPath, fileId);
+  uploadedPhotoFileIds.set(row.photoPath, sent.fileId);
+
+  return sent.messageId;
 };
 
 /** Пишет исход и закрывает рассылку, если ждущих не осталось. */
 const settle = async (
   input: DeliverMailingInput,
-  outcome: Exclude<MailingRecipientOutcome, 'pending'>,
+  record: RecipientOutcomeRecord,
 ): Promise<MailingDeliveryOutcome> => {
-  const recorded = await recordRecipientOutcome(input.mailingId, input.personId, outcome);
+  const recorded = await recordRecipientOutcome(input.mailingId, input.personId, record);
 
   if (!recorded) {
     return 'already_recorded';
@@ -124,7 +129,7 @@ const settle = async (
     log.info('рассылка завершена: адресаты кончились', { mailingId: input.mailingId });
   }
 
-  return outcome;
+  return record.outcome;
 };
 
 export const deliverMailingMessage = async (
@@ -151,15 +156,15 @@ export const deliverMailingMessage = async (
   // остаётся без канала при любом токене.
   //
   // Человек потерял привязку или вышел из программы после снимка: писать некуда.
-  if (row.telegramChatId === null || row.language === null) {
+  if (row.telegramChatId === null || row.notificationsEnabled === null) {
     log.info('адресат рассылки без активной привязки', { mailingId, personId });
 
-    return settle(input, 'invalid_chat');
+    return settle(input, { outcome: 'invalid_chat' });
   }
 
   // Выключил уведомления уже после снимка — рассылка уважает это и в момент отправки.
-  if (row.notificationsEnabled === false) {
-    return settle(input, 'skipped_disabled');
+  if (!row.notificationsEnabled) {
+    return settle(input, { outcome: 'skipped_disabled' });
   }
 
   const token = readBotToken();
@@ -170,24 +175,25 @@ export const deliverMailingMessage = async (
   if (token === '') {
     log.error('рассылка не отправлена: TG_BOT_TOKEN пуст, отправлять нечем', { mailingId });
 
-    return settle(input, 'failed');
+    return settle(input, { outcome: 'failed' });
   }
 
   const chatId = row.telegramChatId.toString();
+  let messageId: number;
 
   try {
-    await send(token, row.telegramChatId, row, row.language);
+    messageId = await send(token, row.telegramChatId, row);
   } catch (error) {
     if (error instanceof TelegramSendError && error.kind === 'invalid_chat') {
       log.info('канал адресата рассылки умер', { mailingId, chatId, reason: error.message });
 
-      return settle(input, 'invalid_chat');
+      return settle(input, { outcome: 'invalid_chat' });
     }
 
     if (error instanceof TelegramSendError && error.kind === 'rejected') {
       log.warn('Telegram отклонил сообщение рассылки', { mailingId, chatId, reason: error.message });
 
-      return settle(input, 'failed');
+      return settle(input, { outcome: 'failed' });
     }
 
     log.warn('сообщение рассылки не ушло', {
@@ -204,13 +210,13 @@ export const deliverMailingMessage = async (
     const rateLimited = error instanceof TelegramSendError && error.kind === 'rate_limit';
 
     if (input.lastAttempt && !rateLimited) {
-      await settle(input, 'failed');
+      await settle(input, { outcome: 'failed' });
     }
 
     throw error;
   }
 
-  log.info('сообщение рассылки отправлено', { mailingId, chatId, language: row.language });
+  log.info('сообщение рассылки отправлено', { mailingId, chatId, messageId });
 
-  return settle(input, 'sent');
+  return settle(input, { outcome: 'sent', messageId });
 };

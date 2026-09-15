@@ -1,10 +1,6 @@
 import { db } from '#server/db';
 import { Prisma } from '#server/generated/prisma/client';
-import type {
-  Language,
-  MailingRecipientOutcome,
-  MailingStatus,
-} from '#server/generated/prisma/enums';
+import type { MailingRecipientOutcome, MailingStatus } from '#server/generated/prisma/enums';
 
 /**
  * Рассылки и снимок их адресатов.
@@ -336,7 +332,7 @@ export type MailingDeliveryRow = {
   outcome: MailingRecipientOutcome | null;
   /** Куда писать: активная привязка на момент отправки. `null` — привязки нет. */
   telegramChatId: bigint | null;
-  language: Language | null;
+  /** Выключатель уведомлений. `null` — строки участия нет: человек вне программы. */
   notificationsEnabled: boolean | null;
 };
 
@@ -345,7 +341,9 @@ export type MailingDeliveryRow = {
  * исход в снимке и канал связи на сейчас.
  *
  * Канал читается в момент отправки, а не берётся из снимка: за минуты очереди человек
- * успевает и выключить уведомления, и сменить язык, и потерять привязку.
+ * успевает и выключить уведомления, и потерять привязку.
+ *
+ * Языка здесь нет: рассылка уходит на обоих языках сразу (`shared/mailing.ts`).
  */
 export const findMailingDelivery = async (
   mailingId: string,
@@ -359,7 +357,6 @@ export const findMailingDelivery = async (
            mailing."photo_path"             AS "photoPath",
            recipient."outcome",
            link."telegram_chat_id"          AS "telegramChatId",
-           settings."language",
            settings."notifications_enabled" AS "notificationsEnabled"
       FROM xb.mailings AS mailing
       LEFT JOIN xb.mailing_recipients AS recipient
@@ -377,19 +374,30 @@ export const findMailingDelivery = async (
 };
 
 /**
+ * Исход адресата. У `sent` — обязательно с `message_id` от Telegram, у прочих его нет:
+ * тип не даёт записать одно без другого, а в базе то же держит проверка.
+ */
+export type RecipientOutcomeRecord =
+  | { outcome: 'sent'; messageId: number }
+  | { outcome: Exclude<MailingRecipientOutcome, 'pending' | 'sent'> };
+
+/**
  * Записывает исход адресата. Только поверх `pending`: повтор задания, пришедший после
  * записанного исхода, не переписывает его. `false` — исход уже был.
  */
 export const recordRecipientOutcome = async (
   mailingId: string,
   personId: string,
-  outcome: Exclude<MailingRecipientOutcome, 'pending'>,
+  record: RecipientOutcomeRecord,
   client: Executor = db,
 ): Promise<boolean> => {
+  const messageId = record.outcome === 'sent' ? record.messageId : null;
+
   const updated = await client.$executeRaw`
     UPDATE xb.mailing_recipients
-       SET "outcome"    = ${outcome}::xb.mailing_recipient_outcome,
-           "outcome_at" = now()
+       SET "outcome"    = ${record.outcome}::xb.mailing_recipient_outcome,
+           "outcome_at" = now(),
+           "message_id" = ${messageId}::bigint
      WHERE "mailing_id" = ${mailingId}::uuid
        AND "person_id" = ${personId}::uuid
        AND "outcome" = 'pending'

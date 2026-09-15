@@ -34,14 +34,17 @@ export class MailingStatusMismatchError extends MailingError {
   }
 }
 
-/** Текст длиннее, чем примет Telegram: у подписи к фото потолок вчетверо ниже. */
+/**
+ * Сообщение длиннее, чем примет Telegram. Про склейку целиком — оба текста с заголовками
+ * языков, — а не про одно поле: 900 + 900 по отдельности влезают, вместе нет.
+ */
 export class MailingTextTooLongError extends MailingError {
   constructor(
-    public readonly field: 'textRu' | 'textUz',
+    public readonly length: number,
     public readonly limit: number,
     public readonly withPhoto: boolean,
   ) {
-    super(`текст ${field} длиннее ${limit} знаков`);
+    super(`сообщение рассылки ${length} знаков длиннее потолка ${limit}`);
   }
 }
 

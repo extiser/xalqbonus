@@ -4,9 +4,9 @@ import {
   MailingTextTooLongError,
 } from '#server/services/mailings/errors';
 import {
+  buildMailingMessage,
   MAILING_ACTIVE_DAYS_MAX,
-  MAILING_CAPTION_MAX_LENGTH,
-  MAILING_TEXT_MAX_LENGTH,
+  mailingMessageLimit,
 } from '#shared/mailing';
 import type { Mailing } from '#shared/types/mailing';
 
@@ -92,22 +92,23 @@ export const readMailingFields = (
 };
 
 /**
- * Влезают ли тексты в то, что примет Telegram. Потолок зависит от фото: подпись к нему
- * вчетверо короче сообщения. Проверяется и при сохранении, и при загрузке фото, и при
- * запуске — рассылка, упавшая на лимите на первом же адресате, отказала бы всем четырём
- * тысячам разом.
+ * Влезает ли сообщение в то, что примет Telegram.
+ *
+ * Меряется склейка — ровно то, что уйдёт: оба текста с заголовками языков и пустой строкой
+ * между блоками (`shared/mailing.ts`). Порознь 900 + 900 проходят, а отказывают на первом же
+ * адресате. Потолок зависит от фото: подпись к нему вчетверо короче сообщения.
+ *
+ * Проверяется и при сохранении, и при загрузке фото, и при запуске — рассылка, упавшая
+ * на лимите на первом адресате, отказала бы всем четырём тысячам разом.
  */
 export const assertMailingTexts = (
   texts: { textRu: string; textUz: string | null },
   withPhoto: boolean,
 ): void => {
-  const limit = withPhoto ? MAILING_CAPTION_MAX_LENGTH : MAILING_TEXT_MAX_LENGTH;
+  const limit = mailingMessageLimit(withPhoto);
+  const { length } = buildMailingMessage(texts.textRu, texts.textUz).text;
 
-  if (texts.textRu.length > limit) {
-    throw new MailingTextTooLongError('textRu', limit, withPhoto);
-  }
-
-  if (texts.textUz !== null && texts.textUz.length > limit) {
-    throw new MailingTextTooLongError('textUz', limit, withPhoto);
+  if (length > limit) {
+    throw new MailingTextTooLongError(length, limit, withPhoto);
   }
 };
