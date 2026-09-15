@@ -24,11 +24,16 @@ withDefaults(
     error: string | null;
     /** Что ещё сказать под полем — например, что фото делает текст подписью. */
     note?: string | null;
+    /**
+     * Можно ли снять фото. У рассылки фото необязательно и выбирается не с первого раза;
+     * у товара снятия нет — картинка там заменяется, а не убирается.
+     */
+    removable?: boolean;
   }>(),
-  { note: null },
+  { note: null, removable: false },
 );
 
-const emit = defineEmits<{ upload: [file: File] }>();
+const emit = defineEmits<{ upload: [file: File]; remove: [] }>();
 
 /** Выбранный файл и отказ по размеру — состояние этой формы, а не ответ сервера. */
 const chosen = ref<File | null>(null);
@@ -58,12 +63,21 @@ const submit = (): void => {
 <template>
   <MoleculesSectionPanel title="Фото">
     <div class="flex flex-wrap items-start gap-6">
-      <MoleculesProductPhoto
-        :photo-path="photoPath"
-        :updated-at="updatedAt"
-        :name="name"
-        size="large"
-      />
+      <div class="space-y-2">
+        <MoleculesProductPhoto
+          :photo-path="photoPath"
+          :updated-at="updatedAt"
+          :name="name"
+          size="large"
+        />
+        <AtomsActionButton
+          v-if="removable && photoPath"
+          label="Убрать фото"
+          tone="danger"
+          :disabled="uploading"
+          @click="emit('remove')"
+        />
+      </div>
 
       <form class="min-w-64 flex-1 space-y-3" @submit.prevent="submit">
         <label class="block">

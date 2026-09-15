@@ -175,6 +175,25 @@ export const updateDraftMailingPhotoPath = async (
 };
 
 /**
+ * Снимает фото с черновика. `false` — строки нет или она уже не черновик: у запущенной
+ * фото уходит адресатам, и снять его на середине значило бы разослать две разные рассылки.
+ */
+export const clearDraftMailingPhotoPath = async (
+  mailingId: string,
+  client: Executor = db,
+): Promise<boolean> => {
+  const updated = await client.$executeRaw`
+    UPDATE xb.mailings
+       SET "photo_path" = NULL,
+           "updated_at" = now()
+     WHERE "id" = ${mailingId}::uuid
+       AND "status" = 'draft'
+  `;
+
+  return updated > 0;
+};
+
+/**
  * Участники программы, которых возьмёт рассылка: строка `person_settings` и активная
  * привязка Telegram. С фильтром — ещё и завершённая поездка за последние N дней на любом
  * профиле человека.

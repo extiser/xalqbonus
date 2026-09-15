@@ -124,6 +124,24 @@ const upload = async (file: File): Promise<void> => {
   }
 };
 
+/**
+ * Снятие фото. После ответа рассылка перечитывается, форма получает черновик без фото —
+ * и потолок её счётчика возвращается к сообщению без подписи тут же.
+ */
+const removePhoto = async (): Promise<void> => {
+  uploading.value = true;
+  photoError.value = null;
+
+  try {
+    await $fetch<MailingResponse>(`/api/mailings/${mailingId.value}/photo`, { method: 'DELETE' });
+    await refresh();
+  } catch (error) {
+    photoError.value = failureText(error);
+  } finally {
+    uploading.value = false;
+  }
+};
+
 const acting = ref(false);
 const actionError = ref<string | null>(null);
 
@@ -275,7 +293,9 @@ onBeforeUnmount(stopRefreshing);
           :uploading="uploading"
           :error="photoError"
           :note="photoNote"
+          removable
           @upload="upload"
+          @remove="removePhoto"
         />
 
         <MoleculesSectionPanel

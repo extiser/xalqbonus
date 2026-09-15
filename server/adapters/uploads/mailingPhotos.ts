@@ -105,6 +105,28 @@ export const copyMailingPhoto = async (photoPath: string, toMailingId: string): 
   return `${MAILING_PHOTO_DIR}/${targetName}`;
 };
 
+/**
+ * Удаляет файл фото с тома. Файла уже нет — не отказ: снимать нечего, и повтор снятия
+ * обязан отвечать тем же, что первое.
+ */
+export const deleteMailingPhoto = async (photoPath: string): Promise<void> => {
+  const fileName = fileNameOfPath(photoPath);
+
+  if (!fileName) {
+    throw new Error(`путь фото рассылки не нашего вида: ${photoPath}`);
+  }
+
+  try {
+    await unlink(join(photoDir(), fileName));
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      return;
+    }
+
+    throw error;
+  }
+};
+
 /** Байты фото и имя файла — для выгрузки в Telegram. */
 export const readMailingPhoto = async (
   photoPath: string,

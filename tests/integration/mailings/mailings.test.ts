@@ -1,5 +1,11 @@
+import { existsSync } from 'node:fs';
+
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
+import {
+  deleteMailingPhoto,
+  resolveMailingPhotoFile,
+} from '#server/adapters/uploads/mailingPhotos';
 import { copyMailing } from '#server/services/mailings/copyMailing';
 import { createMailing } from '#server/services/mailings/createMailing';
 import { deliverMailingMessage } from '#server/services/mailings/deliverMailingMessage';
@@ -12,6 +18,7 @@ import {
 import { launchMailing } from '#server/services/mailings/launchMailing';
 import { readMailing, readMailingList } from '#server/services/mailings/readMailing';
 import { readMailingAudience } from '#server/services/mailings/readMailingAudience';
+import { removeMailingPhoto } from '#server/services/mailings/removeMailingPhoto';
 import { saveMailingPhoto } from '#server/services/mailings/saveMailingPhoto';
 import { stopMailing } from '#server/services/mailings/stopMailing';
 import { updateMailing } from '#server/services/mailings/updateMailing';
@@ -266,6 +273,48 @@ describe('рассылки', () => {
     ).rejects.toMatchObject({ length: 1030, limit: 1024, withPhoto: true });
 
     expect((await readMailing(captioned.mailingId)).photoPath).toBeNull();
+  });
+
+  it('фото снимается с черновика вместе с файлом, а у запущенной — нет', async () => {
+    const { employeeId } = await createTestEmployee({ role: 'admin' });
+    const draft = await createDraft(employeeId, 1);
+
+    const withPhoto = await saveMailingPhoto({
+      mailingId: draft.mailingId,
+      contentType: 'image/png',
+      bytes: Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+    });
+    const photoPath = withPhoto.photoPath ?? '';
+    const file = resolveMailingPhotoFile(photoPath.split('/').pop() ?? '') ?? '';
+
+    expect(photoPath).not.toBe('');
+    expect(existsSync(file)).toBe(true);
+
+    const removed = await removeMailingPhoto(draft.mailingId);
+
+    expect(removed.photoPath).toBeNull();
+    expect(existsSync(file)).toBe(false);
+    // Повтор снятия — не отказ: снимать нечего.
+    expect((await removeMailingPhoto(draft.mailingId)).photoPath).toBeNull();
+
+    // У запущенной рассылки фото уходит адресатам и не снимается.
+    await createMember({ tripDaysAgo: 0 });
+
+    const photographed = await saveMailingPhoto({
+      mailingId: draft.mailingId,
+      contentType: 'image/png',
+      bytes: Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+    });
+
+    await launchMailing(draft.mailingId);
+
+    await expect(removeMailingPhoto(draft.mailingId)).rejects.toBeInstanceOf(
+      MailingStatusMismatchError,
+    );
+    expect((await readMailing(draft.mailingId)).photoPath).toBe(photographed.photoPath);
+
+    // Файл убирается за тестом: рассылка уже не черновик, и сервис его не снимет.
+    await deleteMailingPhoto(photographed.photoPath ?? '');
   });
 
   it('у исхода sent записан message_id, у прочих его нет', async () => {

@@ -7,7 +7,7 @@ COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
 .DEFAULT_GOAL := help
 
 .PHONY: help up up-d down restart logs ps shell psql migrate migrate-create migrate-diff generate typecheck test test-db \
-        db-restore db-schema db-exec invariants license-collisions legacy-vs-api import-legacy \
+        db-restore db-schema invariants license-collisions legacy-vs-api import-legacy \
         employee-owner prod-employee-owner \
         import-legacy-dump \
         sync-orders sync-registry sync-state \
@@ -73,16 +73,6 @@ db-restore: ## Восстановить продовый дамп в локал�
 	fi
 	cat "$(dump)" | $(COMPOSE) exec -T postgres sh -c 'pg_restore --no-owner --no-privileges -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' 
 	$(MAKE) db-schema
-
-# SQL-файл по локальной базе — рабочей или, параметром db=, любой другой в том же контейнере.
-# Нужна там, где миграцию, ещё не ушедшую в main, правят на месте: применённую её `migrate deploy`
-# второй раз не накатит, и откатить её в локальной и тестовой базе можно только SQL-ом руками.
-# Идёт одной транзакцией под ON_ERROR_STOP: половина отката хуже отказа целиком.
-# Боевой базы цель не касается — стек у неё локальный (docs/infra.md → «Два окружения»).
-db-exec: ## Выполнить SQL-файл на локальной БД. make db-exec file=<файл.sql> [db=<база>]
-	@test -n "$(file)" || { echo "укажите файл: make db-exec file=<файл.sql> [db=<база>]"; exit 1; }
-	@test -f "$(file)" || { echo "файла нет: $(file)"; exit 1; }
-	$(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$(or $(db),$$POSTGRES_DB)" -v ON_ERROR_STOP=1 --single-transaction -q' < "$(file)"
 
 # Инварианты журнала баллов. Запросы возвращают пустой результат, когда всё сходится;
 # схема в них указана явно — search_path у сырого соединения дефолтный, и запрос без
