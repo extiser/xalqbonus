@@ -69,6 +69,45 @@ export const markTestSentWithoutMessageId = async (
   `;
 };
 
+/**
+ * Сдвигает время отправки адресата в прошлое. Отправки в Telegram в тестах нет, и возраст
+ * сообщения — окно отзыва и привязка на момент отправки — ставится этим.
+ */
+export const shiftTestOutcomeAt = async (
+  mailingId: string,
+  personId: string,
+  hoursAgo: number,
+): Promise<void> => {
+  await db.$executeRaw`
+    UPDATE xb.mailing_recipients
+       SET "outcome_at" = now() - make_interval(hours => ${hoursAgo}::int)
+     WHERE "mailing_id" = ${mailingId}::uuid AND "person_id" = ${personId}::uuid
+  `;
+};
+
+/** `recalled_at` адресата. `null` — не отозван. */
+export const readTestRecalledAt = async (
+  mailingId: string,
+  personId: string,
+): Promise<Date | null> => {
+  const rows = await db.$queryRaw<{ recalledAt: Date | null }[]>`
+    SELECT "recalled_at" AS "recalledAt"
+      FROM xb.mailing_recipients
+     WHERE "mailing_id" = ${mailingId}::uuid AND "person_id" = ${personId}::uuid
+  `;
+
+  return rows[0]?.recalledAt ?? null;
+};
+
+/** Пишет отметку отзыва мимо репозитория — у недошедшего её обязана остановить проверка базы. */
+export const markTestRecalled = async (mailingId: string, personId: string): Promise<void> => {
+  await db.$executeRaw`
+    UPDATE xb.mailing_recipients
+       SET "recalled_at" = now()
+     WHERE "mailing_id" = ${mailingId}::uuid AND "person_id" = ${personId}::uuid
+  `;
+};
+
 export const setTestNotificationsEnabled = async (
   personId: string,
   enabled: boolean,

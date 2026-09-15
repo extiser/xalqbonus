@@ -6,10 +6,15 @@ import {
   MailingNotLaunchableError,
   MailingPhotoTooLargeError,
   MailingPhotoTypeNotAllowedError,
+  MailingRecallUnavailableError,
   MailingStatusMismatchError,
   UnknownMailingError,
 } from '#server/services/mailings/errors';
-import { MAILING_AUDIENCE_EMPTY_TEXT, mailingLaunchProblemText } from '#shared/mailing';
+import {
+  MAILING_AUDIENCE_EMPTY_TEXT,
+  mailingLaunchProblemText,
+  mailingRecallProblemText,
+} from '#shared/mailing';
 import { MAX_PHOTO_MB } from '#shared/photo';
 
 /**
@@ -17,7 +22,7 @@ import { MAX_PHOTO_MB } from '#shared/photo';
  *
  * Отказы — строками при своих правилах, а не кодами словаря двери: они про предмет разговора,
  * а не про доступ (docs/decisions.md → «Отказ двери веба говорит кодом, а текст живёт
- * словарём»). Собраны в одном месте, потому что ручек рассылок девять, а отказов на всех
+ * словарём»). Собраны в одном месте, потому что ручек рассылок десять, а отказов на всех
  * один набор, и девять копий разошлись бы формулировкой.
  *
  * Причины незапускаемой рассылки и фраза про пустую аудиторию берутся из `shared/mailing.ts`:
@@ -29,7 +34,7 @@ import { MAX_PHOTO_MB } from '#shared/photo';
 const STATUS_ACTION_TEXT = {
   draft: 'Правится, запускается и удаляется только черновик. Эта рассылка уже запущена.',
   running: 'Остановить можно только идущую рассылку.',
-  stopped: 'Скопировать можно только остановленную рассылку.',
+  stopped: 'Идущую рассылку не скопировать — сначала остановите её.',
   finished: 'Действие для завершённой рассылки не предусмотрено.',
 } as const;
 
@@ -68,6 +73,10 @@ export const explainMailingFailure = (error: unknown): H3Error | null => {
       'Bad Request',
       `${FIELD_TEXT[error.field]} длиннее ${error.limit} знаков — больше Telegram не принимает даже без фото.`,
     );
+  }
+
+  if (error instanceof MailingRecallUnavailableError) {
+    return reject(409, 'Conflict', mailingRecallProblemText(error.problem));
   }
 
   if (error instanceof MailingAudienceEmptyError) {

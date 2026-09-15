@@ -31,6 +31,12 @@ export const toMailing = (row: MailingRow): Mailing => ({
     invalidChat: row.invalidChat,
     failed: row.failed,
   },
+  recall: {
+    startedAt: row.recallStartedAt?.toISOString() ?? null,
+    finishedAt: row.recallFinishedAt?.toISOString() ?? null,
+    recalled: row.recalled,
+    deadlineAt: row.recallDeadlineAt?.toISOString() ?? null,
+  },
 });
 
 export type MailingFields = MailingFieldsInput;

@@ -6,8 +6,9 @@ import {
   deleteMailingPhoto,
   resolveMailingPhotoFile,
 } from '#server/adapters/uploads/mailingPhotos';
-import { recordRecipientOutcome } from '#server/repositories/mailings';
-import { copyMailing } from '#server/services/mailings/copyMailing';
+import { markRecipientRecalled, recordRecipientOutcome } from '#server/repositories/mailings';
+import { completeMailingRecall } from '#server/services/mailings/completeMailingRecall';
+import { copyMailing, copyMailingTitle } from '#server/services/mailings/copyMailing';
 import { createMailing } from '#server/services/mailings/createMailing';
 import { deleteMailingDraft } from '#server/services/mailings/deleteMailingDraft';
 import { deliverMailingMessage } from '#server/services/mailings/deliverMailingMessage';
@@ -15,14 +16,17 @@ import {
   MailingAudienceEmptyError,
   MailingFieldTooLongError,
   MailingNotLaunchableError,
+  MailingRecallUnavailableError,
   MailingStatusMismatchError,
   UnknownMailingError,
 } from '#server/services/mailings/errors';
 import { launchMailing } from '#server/services/mailings/launchMailing';
 import { readMailing, readMailingList } from '#server/services/mailings/readMailing';
 import { readMailingAudience } from '#server/services/mailings/readMailingAudience';
+import { recallMailingMessage } from '#server/services/mailings/recallMailingMessage';
 import { removeMailingPhoto } from '#server/services/mailings/removeMailingPhoto';
 import { saveMailingPhoto } from '#server/services/mailings/saveMailingPhoto';
+import { startMailingRecall } from '#server/services/mailings/startMailingRecall';
 import { stopMailing } from '#server/services/mailings/stopMailing';
 import { updateMailing } from '#server/services/mailings/updateMailing';
 import type { MailingCounters } from '#shared/types/mailing';
@@ -37,10 +41,13 @@ import {
   cleanupTestMailings,
   closeTestLinks,
   countTestRecipients,
+  markTestRecalled,
   markTestSentWithoutMessageId,
   readTestMessageId,
+  readTestRecalledAt,
   readTestRecipients,
   setTestNotificationsEnabled,
+  shiftTestOutcomeAt,
   trackTestMailing,
 } from '../support/mailings';
 import { disconnectQueues } from '../support/queues';
@@ -60,6 +67,9 @@ import { disconnectQueues } from '../support/queues';
  */
 
 const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+
+/** Заголовок копии тестовой рассылки: одна пометка, сколько бы раз ни копировали. */
+const COPY_TITLE = /^Тестовая рассылка — копия \d{2}\.\d{2}\.\d{4}, \d{2}:\d{2}$/;
 
 /** Участник программы; `linked: false` — без привязки, `inProgram: false` — вне программы. */
 const createMember = async (
@@ -213,6 +223,27 @@ describe('рассылки', () => {
     expect(
       await deliverMailingMessage({ mailingId: draft.mailingId, personId: muted, lastAttempt: true }),
     ).toBe('not_running');
+
+    // Завершённая копируется: то же объявление повторяют через неделю.
+    const copy = await copyMailing(draft.mailingId, employeeId);
+
+    trackTestMailing(copy.mailingId);
+
+    expect(copy).toEqual(
+      expect.objectContaining({ status: 'draft', title: expect.stringMatching(COPY_TITLE) }),
+    );
+    expect(copy.counters.total).toBe(0);
+  });
+
+  it('заголовок копии кончается пометкой с временем парка, и пометки не копятся', () => {
+    // 16:30 UTC — 21:30 в Ташкенте.
+    const moment = new Date('2026-09-15T16:30:00Z');
+
+    expect(copyMailingTitle('Тестовая 3', moment)).toBe('Тестовая 3 — копия 15.09.2026, 21:30');
+    expect(copyMailingTitle('Тестовая 3 — копия 14.09.2026, 09:05', moment)).toBe(
+      'Тестовая 3 — копия 15.09.2026, 21:30',
+    );
+    expect(copyMailingTitle(null, moment)).toBeNull();
   });
 
   it('предел склейки — условие запуска: сохранение и фото с перебором проходят, запуск — нет', async () => {
@@ -386,7 +417,7 @@ describe('рассылки', () => {
     expect(copy).toEqual(
       expect.objectContaining({
         status: 'draft',
-        title: draft.title,
+        title: expect.stringMatching(COPY_TITLE),
         textRu: draft.textRu,
         textUz: draft.textUz,
         photoPath: null,
@@ -395,10 +426,29 @@ describe('рассылки', () => {
     );
     expect(copy.counters.total).toBe(0);
 
-    // Копируется только остановленная.
-    await expect(copyMailing(copy.mailingId, employeeId)).rejects.toBeInstanceOf(
-      MailingStatusMismatchError,
+    // Черновик тоже копируется: из него делают второй похожий.
+    const copyOfDraft = await copyMailing(copy.mailingId, employeeId);
+
+    trackTestMailing(copyOfDraft.mailingId);
+
+    // Копия копии пометку заменяет, а не дописывает вторую.
+    expect(copyOfDraft).toEqual(
+      expect.objectContaining({
+        status: 'draft',
+        title: expect.stringMatching(COPY_TITLE),
+        textRu: draft.textRu,
+      }),
     );
+
+    // Идущая не копируется.
+    const running = await createDraft(employeeId);
+
+    await launchMailing(running.mailingId);
+
+    await expect(copyMailing(running.mailingId, employeeId)).rejects.toMatchObject({
+      status: 'running',
+      expected: 'stopped',
+    });
   });
 
   it('черновик заводится пустым, дописывается и не запускается, пока не хватает хоть чего-то', async () => {
@@ -469,5 +519,117 @@ describe('рассылки', () => {
       MailingStatusMismatchError,
     );
     expect((await readMailing(launched.mailingId)).status).toBe('running');
+  });
+
+  it('отзыв запускается один раз, снимает отправленное и исход не трогает', async () => {
+    const { employeeId } = await createTestEmployee({ role: 'owner' });
+    const removed = await createMember();
+    const kept = await createMember();
+    const refused = await createMember();
+
+    const draft = await createDraft(employeeId);
+
+    await launchMailing(draft.mailingId);
+
+    // Идущую сначала останавливают.
+    await expect(startMailingRecall(draft.mailingId)).rejects.toMatchObject({
+      problem: 'not_sent_yet',
+    });
+
+    await recordRecipientOutcome(draft.mailingId, removed, { outcome: 'sent', messageId: 101 });
+    await recordRecipientOutcome(draft.mailingId, kept, { outcome: 'sent', messageId: 102 });
+    await recordRecipientOutcome(draft.mailingId, refused, { outcome: 'failed' });
+
+    // Час назад — внутри окна и раньше привязки, заведённой тестом: чата на момент отправки
+    // не находится, и задание закрывается до обращения к Telegram.
+    await shiftTestOutcomeAt(draft.mailingId, removed, 1);
+    await shiftTestOutcomeAt(draft.mailingId, kept, 1);
+    await stopMailing(draft.mailingId);
+
+    const before = await readMailing(draft.mailingId);
+
+    expect(before.recall).toEqual(
+      expect.objectContaining({ startedAt: null, finishedAt: null, recalled: 0 }),
+    );
+    expect(before.recall.deadlineAt).not.toBeNull();
+
+    const started = await startMailingRecall(draft.mailingId);
+
+    expect(started.recall.startedAt).not.toBeNull();
+    expect(started.recall.finishedAt).toBeNull();
+
+    // Повтор нажатия — не отказ и не второй проход: отметка прежняя.
+    const repeated = await startMailingRecall(draft.mailingId);
+
+    expect(repeated.recall.startedAt).toBe(started.recall.startedAt);
+
+    // Удачное удаление пишется тем же вызовом репозитория, которым его пишет задание после
+    // ответа Telegram; повторное задание по снятому адресату запроса не шлёт.
+    expect(await markRecipientRecalled(draft.mailingId, removed)).toBe(true);
+    expect(
+      await recallMailingMessage({ mailingId: draft.mailingId, personId: removed, lastAttempt: false }),
+    ).toBe('already_recalled');
+    expect(
+      await recallMailingMessage({ mailingId: draft.mailingId, personId: kept, lastAttempt: false }),
+    ).toBe('not_recalled');
+    expect(
+      await recallMailingMessage({ mailingId: draft.mailingId, personId: refused, lastAttempt: false }),
+    ).toBe('not_recallable');
+
+    expect(await completeMailingRecall(draft.mailingId)).toBe('recall_finished');
+    expect(await completeMailingRecall(draft.mailingId)).toBe('recall_already_finished');
+
+    const after = await readMailing(draft.mailingId);
+
+    // «Отозвано 1 из 2»: не отозванный — отправленный без отметки при завершённом отзыве.
+    expect(after.recall.recalled).toBe(1);
+    expect(after.counters.sent).toBe(2);
+    expect(after.recall.finishedAt).not.toBeNull();
+    expect(await readTestRecalledAt(draft.mailingId, removed)).not.toBeNull();
+    expect(await readTestRecalledAt(draft.mailingId, kept)).toBeNull();
+
+    // Исход отправки после отзыва прежний.
+    const recipients = await readTestRecipients(draft.mailingId, [removed, kept]);
+
+    expect(recipients.map((row) => row.outcome)).toEqual(['sent', 'sent']);
+
+    // Отметку отзыва у недошедшего база не принимает.
+    await expect(markTestRecalled(draft.mailingId, refused)).rejects.toThrow();
+  });
+
+  it('отзыв не запускается у черновика, у недошедшей и после 48 часов', async () => {
+    const { employeeId } = await createTestEmployee({ role: 'admin' });
+    const member = await createMember();
+
+    const draft = await createDraft(employeeId);
+
+    await expect(startMailingRecall(draft.mailingId)).rejects.toMatchObject({
+      problem: 'not_sent_yet',
+    });
+
+    // Остановили раньше первой отправки — отзывать нечего.
+    await launchMailing(draft.mailingId);
+    await stopMailing(draft.mailingId);
+
+    await expect(startMailingRecall(draft.mailingId)).rejects.toMatchObject({
+      problem: 'nothing_sent',
+    });
+    expect((await readMailing(draft.mailingId)).recall.deadlineAt).toBeNull();
+
+    // Самое раннее отправленное старше окна.
+    const late = await createDraft(employeeId);
+
+    await launchMailing(late.mailingId);
+    await recordRecipientOutcome(late.mailingId, member, { outcome: 'sent', messageId: 7 });
+    await shiftTestOutcomeAt(late.mailingId, member, 49);
+    await stopMailing(late.mailingId);
+
+    await expect(startMailingRecall(late.mailingId)).rejects.toBeInstanceOf(
+      MailingRecallUnavailableError,
+    );
+    await expect(startMailingRecall(late.mailingId)).rejects.toMatchObject({
+      problem: 'window_expired',
+    });
+    expect((await readMailing(late.mailingId)).recall.startedAt).toBeNull();
   });
 });

@@ -1300,6 +1300,11 @@ model Mailing {
   startedAt        DateTime?     @map("started_at") @db.Timestamptz(6)
   /// Когда рассылка кончилась — остановкой или тем, что адресаты кончились.
   finishedAt       DateTime?     @map("finished_at") @db.Timestamptz(6)
+  /// Когда запустили отзыв отправленного. Заполнено — отзыв второй раз не запускается.
+  /// Бывает только у остановленной и завершённой — проверкой в миграции.
+  recallStartedAt  DateTime?     @map("recall_started_at") @db.Timestamptz(6)
+  /// Когда очередь прошла всех адресатов отзыва. С него «отозвано N из M» — итог, а не ход.
+  recallFinishedAt DateTime?     @map("recall_finished_at") @db.Timestamptz(6)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -1325,8 +1330,11 @@ model MailingRecipient {
   outcomeAt DateTime?               @map("outcome_at") @db.Timestamptz(6)
   /// Идентификатор сообщения у получателя, вернувшийся от Telegram. Есть ровно у `sent`:
   /// удалить отправленное можно только по нему, и не записанный при отправке он теряется
-  /// навсегда. Сам отзыв — отдельная задача, здесь только запись.
+  /// навсегда.
   messageId BigInt?                 @map("message_id")
+  /// Когда сообщение удалено у получателя отзывом. Исход при этом прежний — `sent`: отзыв
+  /// не отменяет факта, что сообщение дошло. Пусто у не отозванного, причина не хранится.
+  recalledAt DateTime?              @map("recalled_at") @db.Timestamptz(6)
 
   mailing Mailing @relation(fields: [mailingId], references: [id])
   person  Person  @relation(fields: [personId], references: [id])

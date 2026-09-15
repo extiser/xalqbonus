@@ -20,6 +20,24 @@ export type MailingCounters = {
   failed: number;
 };
 
+/**
+ * Отзыв отправленного. Отдельно от счётчиков исходов: отзыв исход не меняет, и отозванный
+ * адресат остаётся среди `sent`. «Отозвано N из M» — это `recalled` из `counters.sent`.
+ */
+export type MailingRecall = {
+  /** Заполнено — отзыв запущен, второй раз не запускается. */
+  startedAt: string | null;
+  /** Очередь прошла всех адресатов отзыва. Пусто при заполненном `startedAt` — отзыв идёт. */
+  finishedAt: string | null;
+  /** Сколько сообщений удалено у получателей. */
+  recalled: number;
+  /**
+   * До какого момента Telegram даёт удалить: самое раннее отправленное плюс 48 часов.
+   * Пусто — не отправлено ни одного сообщения.
+   */
+  deadlineAt: string | null;
+};
+
 export type Mailing = {
   mailingId: string;
   /** Пусто только у черновика: он заводится первым набранным символом (issue #148). */
@@ -42,6 +60,7 @@ export type Mailing = {
   updatedAt: string;
   /** До запуска снимка нет, и все счётчики нули. */
   counters: MailingCounters;
+  recall: MailingRecall;
 };
 
 export type MailingListResponse = {

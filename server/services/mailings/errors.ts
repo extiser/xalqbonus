@@ -1,5 +1,5 @@
 import type { MailingStatus } from '#server/generated/prisma/enums';
-import type { MailingLaunchProblem } from '#shared/mailing';
+import type { MailingLaunchProblem, MailingRecallProblem } from '#shared/mailing';
 
 /**
  * Доменные ошибки рассылок.
@@ -23,7 +23,7 @@ export class UnknownMailingError extends MailingError {
 
 /**
  * Действие не подходит рассылке в её статусе: правят, запускают и удаляют только черновик,
- * останавливают только идущую, копируют только остановленную.
+ * останавливают только идущую, копируют всё, кроме идущей.
  */
 export class MailingStatusMismatchError extends MailingError {
   constructor(
@@ -63,6 +63,19 @@ export class MailingFieldTooLongError extends MailingError {
     public readonly limit: number,
   ) {
     super(`текст ${field} длиннее ${limit} знаков`);
+  }
+}
+
+/**
+ * Рассылку нельзя отозвать: она ещё не прошла, не дошла ни до кого или окно Telegram
+ * в 48 часов истекло.
+ */
+export class MailingRecallUnavailableError extends MailingError {
+  constructor(
+    public readonly mailingId: string,
+    public readonly problem: MailingRecallProblem,
+  ) {
+    super(`рассылку ${mailingId} нельзя отозвать: ${problem}`);
   }
 }
 

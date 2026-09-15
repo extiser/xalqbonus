@@ -2,14 +2,16 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useDraftAutosave } from '~/composables/useDraftAutosave';
-import { formatDateTime, formatNumber } from '~/utils/format';
+import { formatDateTime, formatNumber, pluralize } from '~/utils/format';
 import { mailingStatusLabel, mailingStatusTone } from '~/utils/labels';
 import { failureText } from '~/utils/requestError';
 import { toLoadState } from '~/utils/loadState';
 import {
   MAILING_AUDIENCE_EMPTY_TEXT,
+  MAILING_RECALL_WINDOW_HOURS,
   mailingLaunchProblems,
   mailingLaunchProblemText,
+  mailingRecallProblemText,
 } from '#shared/mailing';
 import type {
   Mailing,
@@ -23,10 +25,10 @@ import type {
  *
  * - новая (`/mailings/new`) — пустая форма; черновик заводится первым символом или фото
  * - черновик — тексты и фото на одном экране, сохранение само, число адресатов, запуск
- *   отдельным подтверждением и удаление
- * - идёт — счётчики, которые обновляются сами, и остановка
- * - остановлена — счётчики и копия в новый черновик: остановленная не возобновляется
- * - завершена — счётчики
+ *   отдельным подтверждением, копия и удаление
+ * - идёт — счётчики, которые обновляются сами, и остановка; копии нет
+ * - остановлена — счётчики, копия в новый черновик (остановленная не возобновляется) и отзыв
+ * - завершена — счётчики, копия и отзыв
  *
  * Новая и заведённый из неё черновик — один экземпляр страницы (`key` ниже): адрес меняется
  * на адрес записи без перехода, и набранное не теряется (issue #148).
@@ -259,6 +261,42 @@ const runAction = async (request: () => Promise<void>): Promise<void> => {
 };
 
 /**
+ * Подтверждения экрана — своим диалогом, а не браузерным `confirm`: необратимое действие в вебе
+ * спрашивает `ConfirmDialog` (issue #148). Диалог один на экран, запрос — промисом: действие
+ * ждёт ответа тем же `await`, каким ждало браузерного окна.
+ *
+ * Фокус, Escape и клик мимо окна отдают отказ (app/components/molecules/ConfirmDialog.vue).
+ */
+type Confirmation = {
+  title: string;
+  message: string;
+  /** Подпись действием: «Отозвать», а не «ОК». */
+  confirmLabel: string;
+  /**
+   * Красный — только там, где что-то пропадает: остановка, удаление, отзыв. Запуск — главное
+   * действие экрана и красным не бывает: иначе цвет перестанет предупреждать. От случайного
+   * запуска страхует число адресатов в заголовке, а не цвет.
+   */
+  tone: 'primary' | 'danger';
+};
+
+const confirmation = ref<Confirmation | null>(null);
+
+let answerConfirmation: ((confirmed: boolean) => void) | null = null;
+
+const askConfirmation = (request: Confirmation): Promise<boolean> =>
+  new Promise<boolean>((resolve) => {
+    answerConfirmation = resolve;
+    confirmation.value = request;
+  });
+
+const resolveConfirmation = (confirmed: boolean): void => {
+  answerConfirmation?.(confirmed);
+  answerConfirmation = null;
+  confirmation.value = null;
+};
+
+/**
  * Запуск. Уходит то, что на экране: несохранённое досохраняется перед подтверждением,
  * а не сохранилось — не запускаем, причина уже стоит у отметки сохранения.
  *
@@ -283,14 +321,17 @@ const launch = (): Promise<void> =>
 
     const disabledNote =
       fresh.notificationsDisabled > 0
-        ? ` Из них ${formatNumber(fresh.notificationsDisabled)} отключили уведомления и сообщения не получат.`
+        ? `Из них ${formatNumber(fresh.notificationsDisabled)} отключили уведомления и сообщения не получат. `
         : '';
 
-    if (
-      !window.confirm(
-        `Разослать «${fields.value.title.trim()}» — ${formatNumber(fresh.total)} адресатам?${disabledNote} Отправленное не отзывается.`,
-      )
-    ) {
+    const confirmed = await askConfirmation({
+      title: `Разослать «${fields.value.title.trim()}» — ${formatNumber(fresh.total)} адресатам?`,
+      message: `${disabledNote}Отозвать отправленное можно только в течение ${MAILING_RECALL_WINDOW_HOURS} часов.`,
+      confirmLabel: 'Запустить',
+      tone: 'primary',
+    });
+
+    if (!confirmed) {
       return;
     }
 
@@ -304,7 +345,14 @@ const launch = (): Promise<void> =>
 /** Удаление черновика вместе с фото. Правка, не успевшая уехать, бросается — удаляем же. */
 const removeDraft = (): Promise<void> =>
   runAction(async () => {
-    if (!window.confirm('Удалить черновик вместе с фото? Вернуть его будет нельзя.')) {
+    const confirmed = await askConfirmation({
+      title: 'Удалить черновик вместе с фото?',
+      message: 'Вернуть его будет нельзя.',
+      confirmLabel: 'Удалить',
+      tone: 'danger',
+    });
+
+    if (!confirmed) {
       return;
     }
 
@@ -327,12 +375,19 @@ const stop = (): Promise<void> =>
   runAction(async () => {
     const current = mailing.value;
 
-    if (
-      !current ||
-      !window.confirm(
-        'Остановить рассылку? Кто ещё не получил сообщение, уже не получит. Возобновить нельзя — только скопировать в новый черновик.',
-      )
-    ) {
+    if (!current) {
+      return;
+    }
+
+    const confirmed = await askConfirmation({
+      title: 'Остановить рассылку?',
+      message:
+        'Кто ещё не получил сообщение, уже не получит. Возобновить нельзя — только скопировать в новый черновик.',
+      confirmLabel: 'Остановить',
+      tone: 'danger',
+    });
+
+    if (!confirmed) {
       return;
     }
 
@@ -343,9 +398,16 @@ const stop = (): Promise<void> =>
     setMailing(stopped.mailing);
   });
 
-/** Копия ведёт на свою страницу: следующий шаг — поправить и запустить её. */
+/**
+ * Копия ведёт на свою страницу: следующий шаг — поправить и запустить её. У черновика
+ * копируется то, что на экране: несохранённое досохраняется, а не сохранилось — не копируем.
+ */
 const copy = (): Promise<void> =>
   runAction(async () => {
+    if (isDraft.value && !(await autosave.flush())) {
+      return;
+    }
+
     const current = mailing.value;
 
     if (!current) {
@@ -360,12 +422,96 @@ const copy = (): Promise<void> =>
   });
 
 /**
- * Пока рассылка идёт, счётчики перечитываются сами: четыре тысячи адресатов уходят минутами,
- * и смотреть на застывшие нули, нажимая «обновить», — не то, ради чего экран.
+ * «Сейчас» для остатка окна отзыва. Двигается раз в минуту: остаток показывается часами,
+ * и страница, пролежавшая открытой полдня, не должна обещать то, чего Telegram уже не даст.
+ */
+const NOW_TICK_MS = 60_000;
+const now = ref(Date.now());
+
+const HOUR_MS = 3_600_000;
+
+/**
+ * Что сейчас с отзывом: можно ли нажать и что написать рядом с кнопкой.
+ *
+ * Кнопка не прячется ни в одном состоянии, а гаснет с пояснением: исчезнувшая кнопка читается
+ * как поломка (issue #150). Решает ручка — экран только не предлагает заведомо отказное.
+ */
+const recallState = computed((): { available: boolean; note: string } | null => {
+  const current = mailing.value;
+
+  if (!current || (current.status !== 'stopped' && current.status !== 'finished')) {
+    return null;
+  }
+
+  const { recall, counters } = current;
+  const tally = `${formatNumber(recall.recalled)} из ${formatNumber(counters.sent)}`;
+
+  if (recall.finishedAt !== null) {
+    return { available: false, note: `Отозвано ${tally}.` };
+  }
+
+  if (recall.startedAt !== null) {
+    return { available: false, note: `Отзыв идёт: снято ${tally}.` };
+  }
+
+  if (recall.deadlineAt === null) {
+    return { available: false, note: mailingRecallProblemText('nothing_sent') };
+  }
+
+  const left = new Date(recall.deadlineAt).getTime() - now.value;
+
+  if (left <= 0) {
+    return { available: false, note: mailingRecallProblemText('window_expired') };
+  }
+
+  const hours = Math.floor(left / HOUR_MS);
+
+  return {
+    available: true,
+    note:
+      hours === 0
+        ? 'Отозвать можно ещё меньше часа.'
+        : `Отозвать можно ещё ${hours} ${pluralize(hours, 'час', 'часа', 'часов')}.`,
+  };
+});
+
+/** Отзыв. Водителю вдогонку ничего не уходит — сообщение просто исчезает из переписки. */
+const recall = (): Promise<void> =>
+  runAction(async () => {
+    const current = mailing.value;
+
+    if (!current) {
+      return;
+    }
+
+    const recipients = current.counters.sent;
+
+    const confirmed = await askConfirmation({
+      title: 'Отозвать рассылку?',
+      message: `Сообщение будет удалено у ${formatNumber(recipients)} ${pluralize(recipients, 'водителя', 'водителей', 'водителей')}. Отменить это нельзя.`,
+      confirmLabel: 'Отозвать',
+      tone: 'danger',
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    const recalled = await $fetch<MailingResponse>(`/api/mailings/${current.mailingId}/recall`, {
+      method: 'POST',
+    });
+
+    setMailing(recalled.mailing);
+  });
+
+/**
+ * Пока рассылка идёт или идёт её отзыв, счётчики перечитываются сами: четыре тысячи адресатов
+ * уходят минутами, и смотреть на застывшие нули, нажимая «обновить», — не то, ради чего экран.
  */
 const REFRESH_INTERVAL_MS = 5_000;
 
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
+let nowTimer: ReturnType<typeof setInterval> | null = null;
 
 const stopRefreshing = (): void => {
   if (refreshTimer !== null) {
@@ -374,13 +520,31 @@ const stopRefreshing = (): void => {
   }
 };
 
+const inProgress = computed(() => {
+  const current = mailing.value;
+
+  if (!current) {
+    return false;
+  }
+
+  return (
+    current.status === 'running' ||
+    (current.recall.startedAt !== null && current.recall.finishedAt === null)
+  );
+});
+
 onMounted(() => {
+  now.value = Date.now();
+  nowTimer = setInterval(() => {
+    now.value = Date.now();
+  }, NOW_TICK_MS);
+
   watch(
-    () => mailing.value?.status,
-    (current) => {
+    inProgress,
+    (active) => {
       stopRefreshing();
 
-      if (current === 'running') {
+      if (active) {
         refreshTimer = setInterval(() => void refresh(), REFRESH_INTERVAL_MS);
       }
     },
@@ -388,7 +552,16 @@ onMounted(() => {
   );
 });
 
-onBeforeUnmount(stopRefreshing);
+onBeforeUnmount(() => {
+  stopRefreshing();
+  // Ушли со страницы с открытым вопросом — это отказ: действие не должно ждать ответа вечно.
+  resolveConfirmation(false);
+
+  if (nowTimer !== null) {
+    clearInterval(nowTimer);
+    nowTimer = null;
+  }
+});
 </script>
 
 <template>
@@ -401,6 +574,16 @@ onBeforeUnmount(stopRefreshing);
       cancel-label="Остаться"
       @confirm="autosave.resolveLeave(true)"
       @cancel="autosave.resolveLeave(false)"
+    />
+    <MoleculesConfirmDialog
+      :open="confirmation !== null"
+      :title="confirmation?.title ?? ''"
+      :message="confirmation?.message ?? ''"
+      :confirm-label="confirmation?.confirmLabel ?? ''"
+      :tone="confirmation?.tone ?? 'danger'"
+      cancel-label="Отмена"
+      @confirm="resolveConfirmation(true)"
+      @cancel="resolveConfirmation(false)"
     />
 
     <div>
@@ -463,6 +646,14 @@ onBeforeUnmount(stopRefreshing);
 
       <MoleculesSectionPanel
         v-if="mailing"
+        title="Копия"
+        note="Новый черновик с тем же заголовком, текстами и фото. Этот черновик остаётся как есть."
+      >
+        <AtomsActionButton label="Скопировать в новый черновик" :disabled="acting" @click="copy" />
+      </MoleculesSectionPanel>
+
+      <MoleculesSectionPanel
+        v-if="mailing"
         title="Удаление"
         note="Черновик удаляется целиком, вместе с фото: адресатов у него ещё нет. Брошенный черновик сам не удаляется — только этой кнопкой."
       >
@@ -481,25 +672,31 @@ onBeforeUnmount(stopRefreshing);
         :note="
           mailing.status === 'running'
             ? 'Обновляется каждые пять секунд, пока рассылка идёт.'
-            : 'Сумма исходов равна числу адресатов: считаются они одним запросом по снимку.'
+            : 'Сумма исходов равна числу адресатов: считаются они одним запросом по снимку. Отзыв исход не меняет — отозванные остаются среди отправленных.'
         "
       >
         <OrganismsMailingCounters :counters="mailing.counters" />
 
-        <div v-if="mailing.status === 'running' || mailing.status === 'stopped'" class="mt-4">
-          <AtomsActionButton
-            v-if="mailing.status === 'running'"
-            label="Остановить"
-            tone="danger"
-            :disabled="acting"
-            @click="stop"
-          />
-          <AtomsActionButton
-            v-else
-            label="Скопировать в новый черновик"
-            :disabled="acting"
-            @click="copy"
-          />
+        <div v-if="mailing.status === 'running'" class="mt-4">
+          <AtomsActionButton label="Остановить" tone="danger" :disabled="acting" @click="stop" />
+          <p v-if="actionError" class="mt-3 text-sm text-red-700">{{ actionError }}</p>
+        </div>
+
+        <div v-else-if="recallState" class="mt-4">
+          <div class="flex flex-wrap items-center gap-3">
+            <AtomsActionButton
+              label="Скопировать в новый черновик"
+              :disabled="acting"
+              @click="copy"
+            />
+            <AtomsActionButton
+              label="Отозвать"
+              tone="danger"
+              :disabled="acting || !recallState.available"
+              @click="recall"
+            />
+            <p class="text-sm text-slate-500">{{ recallState.note }}</p>
+          </div>
           <p v-if="actionError" class="mt-3 text-sm text-red-700">{{ actionError }}</p>
         </div>
       </MoleculesSectionPanel>
