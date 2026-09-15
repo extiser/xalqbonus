@@ -23,7 +23,7 @@ export class UnknownMailingError extends MailingError {
 
 /**
  * Действие не подходит рассылке в её статусе: правят, запускают и удаляют только черновик,
- * останавливают только идущую, копируют только остановленную.
+ * останавливают только идущую, копируют всё, кроме идущей.
  */
 export class MailingStatusMismatchError extends MailingError {
   constructor(

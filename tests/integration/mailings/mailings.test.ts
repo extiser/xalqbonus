@@ -220,6 +220,14 @@ describe('рассылки', () => {
     expect(
       await deliverMailingMessage({ mailingId: draft.mailingId, personId: muted, lastAttempt: true }),
     ).toBe('not_running');
+
+    // Завершённая копируется: то же объявление повторяют через неделю.
+    const copy = await copyMailing(draft.mailingId, employeeId);
+
+    trackTestMailing(copy.mailingId);
+
+    expect(copy).toEqual(expect.objectContaining({ status: 'draft', title: draft.title }));
+    expect(copy.counters.total).toBe(0);
   });
 
   it('предел склейки — условие запуска: сохранение и фото с перебором проходят, запуск — нет', async () => {
@@ -402,10 +410,24 @@ describe('рассылки', () => {
     );
     expect(copy.counters.total).toBe(0);
 
-    // Копируется только остановленная.
-    await expect(copyMailing(copy.mailingId, employeeId)).rejects.toBeInstanceOf(
-      MailingStatusMismatchError,
+    // Черновик тоже копируется: из него делают второй похожий.
+    const copyOfDraft = await copyMailing(copy.mailingId, employeeId);
+
+    trackTestMailing(copyOfDraft.mailingId);
+
+    expect(copyOfDraft).toEqual(
+      expect.objectContaining({ status: 'draft', title: draft.title, textRu: draft.textRu }),
     );
+
+    // Идущая не копируется.
+    const running = await createDraft(employeeId);
+
+    await launchMailing(running.mailingId);
+
+    await expect(copyMailing(running.mailingId, employeeId)).rejects.toMatchObject({
+      status: 'running',
+      expected: 'stopped',
+    });
   });
 
   it('черновик заводится пустым, дописывается и не запускается, пока не хватает хоть чего-то', async () => {

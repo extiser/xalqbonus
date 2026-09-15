@@ -86,7 +86,7 @@ const fileNameOfPath = (photoPath: string): string | null => {
 };
 
 /**
- * Копирует фото рассылки под другую рассылку — так копия остановленной получает свою
+ * Копирует фото рассылки под другую рассылку — так копия рассылки получает свою
  * картинку, а не ссылку на чужую: замена фото в копии иначе переписала бы файл оригинала.
  */
 export const copyMailingPhoto = async (photoPath: string, toMailingId: string): Promise<string> => {

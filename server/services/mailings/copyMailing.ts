@@ -13,7 +13,9 @@ import { readMailing } from '#server/services/mailings/readMailing';
 import type { Mailing } from '#shared/types/mailing';
 
 /**
- * Копия остановленной рассылки в новый черновик: заголовок, тексты и фото.
+ * Копия рассылки в новый черновик: заголовок, тексты и фото. Копируется всё, кроме идущей
+ * (решение Руслана 15-09-2026): завершённую — чтобы повторить то же объявление через неделю,
+ * черновик — чтобы сделать из него второй похожий, остановленную — чтобы разослать заново.
  *
  * Снимок не копируется. Новая рассылка снимет свой при запуске, и те, кто получил сообщение
  * от остановленной, получат его снова — копия означает «разослать заново», а не «дослать».
@@ -32,7 +34,9 @@ export const copyMailing = async (mailingId: string, createdById: string): Promi
     throw new UnknownMailingError(mailingId);
   }
 
-  if (source.status !== 'stopped') {
+  // Идущую не копируют: её снимок и тексты ещё в работе. Ожидание `stopped` — не «только
+  // остановленную», а шаг, который делает копию возможной.
+  if (source.status === 'running') {
     throw new MailingStatusMismatchError(mailingId, source.status, 'stopped');
   }
 
