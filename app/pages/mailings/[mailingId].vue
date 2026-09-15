@@ -265,14 +265,19 @@ const runAction = async (request: () => Promise<void>): Promise<void> => {
  * спрашивает `ConfirmDialog` (issue #148). Диалог один на экран, запрос — промисом: действие
  * ждёт ответа тем же `await`, каким ждало браузерного окна.
  *
- * Кнопка согласия всегда красная — все четыре действия экрана необратимы, — а фокус, Escape
- * и клик мимо окна отдают отказ (app/components/molecules/ConfirmDialog.vue).
+ * Фокус, Escape и клик мимо окна отдают отказ (app/components/molecules/ConfirmDialog.vue).
  */
 type Confirmation = {
   title: string;
   message: string;
   /** Подпись действием: «Отозвать», а не «ОК». */
   confirmLabel: string;
+  /**
+   * Красный — только там, где что-то пропадает: остановка, удаление, отзыв. Запуск — главное
+   * действие экрана и красным не бывает: иначе цвет перестанет предупреждать. От случайного
+   * запуска страхует число адресатов в заголовке, а не цвет.
+   */
+  tone: 'primary' | 'danger';
 };
 
 const confirmation = ref<Confirmation | null>(null);
@@ -323,6 +328,7 @@ const launch = (): Promise<void> =>
       title: `Разослать «${fields.value.title.trim()}» — ${formatNumber(fresh.total)} адресатам?`,
       message: `${disabledNote}Отозвать отправленное можно только в течение ${MAILING_RECALL_WINDOW_HOURS} часов.`,
       confirmLabel: 'Запустить',
+      tone: 'primary',
     });
 
     if (!confirmed) {
@@ -343,6 +349,7 @@ const removeDraft = (): Promise<void> =>
       title: 'Удалить черновик вместе с фото?',
       message: 'Вернуть его будет нельзя.',
       confirmLabel: 'Удалить',
+      tone: 'danger',
     });
 
     if (!confirmed) {
@@ -377,6 +384,7 @@ const stop = (): Promise<void> =>
       message:
         'Кто ещё не получил сообщение, уже не получит. Возобновить нельзя — только скопировать в новый черновик.',
       confirmLabel: 'Остановить',
+      tone: 'danger',
     });
 
     if (!confirmed) {
@@ -482,6 +490,7 @@ const recall = (): Promise<void> =>
       title: 'Отозвать рассылку?',
       message: `Сообщение будет удалено у ${formatNumber(recipients)} ${pluralize(recipients, 'водителя', 'водителей', 'водителей')}. Отменить это нельзя.`,
       confirmLabel: 'Отозвать',
+      tone: 'danger',
     });
 
     if (!confirmed) {
@@ -571,6 +580,7 @@ onBeforeUnmount(() => {
       :title="confirmation?.title ?? ''"
       :message="confirmation?.message ?? ''"
       :confirm-label="confirmation?.confirmLabel ?? ''"
+      :tone="confirmation?.tone ?? 'danger'"
       cancel-label="Отмена"
       @confirm="resolveConfirmation(true)"
       @cancel="resolveConfirmation(false)"
