@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { MAX_PHOTO_BYTES, MAX_PHOTO_MB, PHOTO_ACCEPT } from '#shared/photo';
 
 /**
@@ -15,7 +15,7 @@ import { MAX_PHOTO_BYTES, MAX_PHOTO_MB, PHOTO_ACCEPT } from '#shared/photo';
  * проверяется при выборе — до отправки (`docs/frontend.md` → «Обязательное поле — свойство
  * поля»). Числа приходят из `shared/photo.ts`, откуда их читает и сервер.
  */
-withDefaults(
+const props = withDefaults(
   defineProps<{
     photoPath: string | null;
     /** Время последней правки владельца фото — версия адреса картинки. */
@@ -37,6 +37,27 @@ withDefaults(
 );
 
 const emit = defineEmits<{ upload: [file: File]; remove: [] }>();
+
+/**
+ * Ключ поля выбора файла. Фото сняли — поле перерисовывается пустым (прогон 15-09-2026).
+ *
+ * Значение `input[type=file]` само не сбрасывается и присвоить ему файл нельзя, поэтому после
+ * снятия превью говорило «без фото», а рядом висело имя снятого файла — две разные вещи
+ * об одном и том же. Перерисовка по ключу, а не `input.value = ''`: значение принадлежит
+ * атому поля, и лезть в его элемент отсюда значило бы править чужой компонент снаружи.
+ *
+ * Замена на другой файл поле не сбрасывает: путь фото меняется на новый, и имя в поле верное.
+ */
+const fileInputKey = ref(0);
+
+watch(
+  () => props.photoPath,
+  (photoPath, previous) => {
+    if (photoPath === null && previous !== null) {
+      fileInputKey.value += 1;
+    }
+  },
+);
 
 /** Отказ по размеру — состояние этого поля, а не ответ сервера. */
 const sizeNotice = ref<string | null>(null);
@@ -80,7 +101,7 @@ const choose = (file: File | null): void => {
     <div class="min-w-64 flex-1 space-y-2">
       <label class="block">
         <span class="mb-1 block text-sm font-medium text-slate-700">Фото</span>
-        <AtomsFileInput :accept="PHOTO_ACCEPT" @change="choose" />
+        <AtomsFileInput :key="fileInputKey" :accept="PHOTO_ACCEPT" @change="choose" />
         <span class="mt-1 block text-sm text-slate-500">
           JPEG, PNG или WebP, до {{ MAX_PHOTO_MB }} МБ. Загружается сразу после выбора; прежнее
           фото заменится.
