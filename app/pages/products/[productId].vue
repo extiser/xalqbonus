@@ -418,6 +418,7 @@ const upload = async (file: File): Promise<void> => {
         :photo-error="photoError"
         @submit="savePublished"
         @upload="upload"
+        @retry="autosave.retry"
       />
 
       <template v-if="isDraft">

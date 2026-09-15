@@ -37,7 +37,7 @@ const props = defineProps<{
   photoError: string | null;
 }>();
 
-const emit = defineEmits<{ submit: []; upload: [file: File] }>();
+const emit = defineEmits<{ submit: []; upload: [file: File]; retry: [] }>();
 
 const name = defineModel<string>('name', { required: true });
 const description = defineModel<string>('description', { required: true });
@@ -112,6 +112,7 @@ const submit = (): void => {
         v-if="mode === 'draft'"
         :state="autosaveState"
         :error="autosaveError"
+        @retry="emit('retry')"
       />
       <template v-else>
         <p v-if="error" class="text-sm text-red-700">{{ error }}</p>

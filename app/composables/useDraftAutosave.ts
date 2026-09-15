@@ -91,9 +91,11 @@ export const useDraftAutosave = <Fields extends Record<string, string>>(
     }
 
     let mustSave = force;
+    let attempted = false;
 
     while (mustSave || isDirty()) {
       mustSave = false;
+      attempted = true;
       running = saveOnce();
 
       const saved = await running;
@@ -105,8 +107,12 @@ export const useDraftAutosave = <Fields extends Record<string, string>>(
       }
     }
 
-    if (state.value === 'saving') {
+    // Отметка описывает результат последней попытки, а не то, с чего попытка началась: прошедший
+    // запрос гасит и «Не сохранено», и его причину. Прохода без запроса — сохранять было нечего —
+    // отметка не касается: «Сохранено» ставится только ответом сервера, а не возвратом связи.
+    if (attempted) {
       state.value = 'saved';
+      error.value = null;
     }
 
     return true;
@@ -198,11 +204,27 @@ export const useDraftAutosave = <Fields extends Record<string, string>>(
     }
   };
 
-  onMounted(() => window.addEventListener('beforeunload', warnBeforeUnload));
+  /**
+   * Повтор, когда вернулась связь (прогон 15-09-2026). Без него «Не сохранено» — тупик: новая
+   * попытка планируется только следующим знаком, а догадаться набрать лишний символ нельзя.
+   * Только у черновика: опубликованный товар сохраняется кнопкой, и связь за человека
+   * «Сохранить» не нажимает.
+   */
+  const retryWhenOnline = (): void => {
+    if (options.enabled()) {
+      void drain(false);
+    }
+  };
+
+  onMounted(() => {
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    window.addEventListener('online', retryWhenOnline);
+  });
 
   onBeforeUnmount(() => {
     clearTimer();
     window.removeEventListener('beforeunload', warnBeforeUnload);
+    window.removeEventListener('online', retryWhenOnline);
   });
 
   return {
@@ -210,6 +232,11 @@ export const useDraftAutosave = <Fields extends Record<string, string>>(
     error,
     /** Досохранить набранное перед действием, которое судит по сохранённому. */
     flush: (): Promise<boolean> => drain(false),
+    /**
+     * Повторить неудавшееся сохранение — кнопкой рядом с «Не сохранено». Событие `online`
+     * ловит только полную потерю сети, а отказ сервера при живой сети чинится лишь явным действием.
+     */
+    retry: (): Promise<boolean> => drain(false),
     /** Сохранить сейчас, даже нетронутое, — чтобы запись появилась. */
     saveNow: (): Promise<boolean> => drain(true),
     replace,

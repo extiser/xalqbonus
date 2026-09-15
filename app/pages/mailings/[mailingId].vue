@@ -439,6 +439,7 @@ onBeforeUnmount(stopRefreshing);
         :photo-error="photoError"
         @upload="upload"
         @remove-photo="removePhoto"
+        @retry="autosave.retry"
       />
 
       <MoleculesSectionPanel

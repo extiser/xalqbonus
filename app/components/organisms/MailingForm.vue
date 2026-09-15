@@ -46,7 +46,7 @@ const props = defineProps<{
   photoError: string | null;
 }>();
 
-const emit = defineEmits<{ upload: [file: File]; removePhoto: [] }>();
+const emit = defineEmits<{ upload: [file: File]; removePhoto: []; retry: [] }>();
 
 const title = defineModel<string>('title', { required: true });
 const textRu = defineModel<string>('textRu', { required: true });
@@ -137,7 +137,11 @@ const photoNote = `Необязательно. С фото сообщение у
         </p>
       </div>
 
-      <MoleculesAutosaveStatus :state="autosaveState" :error="autosaveError" />
+      <MoleculesAutosaveStatus
+        :state="autosaveState"
+        :error="autosaveError"
+        @retry="emit('retry')"
+      />
     </div>
   </MoleculesSectionPanel>
 </template>
