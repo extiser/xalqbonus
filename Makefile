@@ -6,7 +6,7 @@ COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
 
 .DEFAULT_GOAL := help
 
-.PHONY: help up up-d down restart logs ps shell psql migrate migrate-create migrate-diff generate typecheck test test-db \
+.PHONY: help up up-d down restart logs ps shell psql sql migrate migrate-create migrate-diff generate typecheck test test-db \
         db-restore db-schema invariants license-collisions legacy-vs-api import-legacy \
         employee-owner prod-employee-owner \
         import-legacy-dump \
@@ -41,6 +41,23 @@ shell: ## Shell внутри app-контейнера (local)
 
 psql: ## Войти в psql локальной БД
 	$(COMPOSE) exec postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
+
+# Прогон SQL-файла по локальной базе одной сессией: временные таблицы, созданные
+# в начале файла, видны запросам в конце — сверки строятся именно так. Файл уходит
+# на stdin, поэтому `exec -T`: без него docker отказывается цеплять не-терминал.
+#
+# Схема в запросах указывается явно — `xb.trips`, а не `trips`. У сырого соединения
+# `search_path` дефолтный, и запрос без префикса ушёл бы в `public`, где живут таблицы
+# старого бота (docs/decisions.md → «В сыром SQL схема указывается явно»).
+#
+# `-v ON_ERROR_STOP=1` — чтобы ошибка в запросе останавливала прогон и давала ненулевой код:
+# по умолчанию psql печатает ошибку, идёт дальше и выходит с нулём. `-X` — чтобы личный
+# `.psqlrc` не менял поведение прогона. `-q` глушит служебные `CREATE TABLE` / `INSERT 0 N`,
+# результаты запросов остаются обычными таблицами psql.
+sql: ## Прогнать SQL-файл по локальной БД одной сессией. Использование: make sql file=scripts/sync-state.sql
+	@test -n "$(file)" || { echo "укажите файл: make sql file=<путь>.sql"; exit 1; }
+	@test -f "$(file)" || { echo "файла нет: $(file)"; exit 1; }
+	$(COMPOSE) exec -T postgres sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -q' < "$(file)"
 
 migrate: ## Применить миграции к локальной БД
 	$(COMPOSE) exec app npx prisma migrate deploy
