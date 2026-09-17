@@ -72,20 +72,21 @@ const photoNote = `Необязательно. С фото сообщение у
         hint="Для списка рассылок. Водителю не уходит."
       />
 
-      <MoleculesTextAreaField
-        v-model="textRu"
-        label="Текст на русском"
-        :rows="6"
-        :maxlength="MAILING_TEXT_MAX_LENGTH"
-        :invalid="tooLong"
-      />
+      <!-- Поля в том же порядке, в каком блоки уйдут в сообщении: узбекский первым (issue #160). -->
       <MoleculesTextAreaField
         v-model="textUz"
         label="Текст на узбекском"
         :rows="6"
         :maxlength="MAILING_TEXT_MAX_LENGTH"
         :invalid="tooLong"
-        hint="Заполните хотя бы один язык, любой. Оба — уходят одним сообщением, каждый под заголовком языка; один — без заголовка."
+      />
+      <MoleculesTextAreaField
+        v-model="textRu"
+        label="Текст на русском"
+        :rows="6"
+        :maxlength="MAILING_TEXT_MAX_LENGTH"
+        :invalid="tooLong"
+        hint="Заполните хотя бы один язык, любой. Оба уходят одним сообщением: узбекский первым, каждый с флагом в начале, между ними разделитель. Один — без флага и разделителя."
       />
 
       <!-- Аудиторию по языку мы не режем сознательно, а пишущий узбекский текст легко решит,
@@ -96,7 +97,7 @@ const photoNote = `Необязательно. С фото сообщение у
 
       <div class="rounded-md px-3 py-2 text-sm" :class="tooLong ? 'bg-red-50' : 'bg-slate-50'">
         <p :class="tooLong ? 'text-red-700' : 'text-slate-700'">
-          Сообщение с заголовками языков:
+          Сообщение с флагами и разделителем языков:
           <span class="font-semibold tabular-nums">{{ formatNumber(length) }}</span>
           из {{ formatNumber(limit) }} знаков.
           <template v-if="tooLong">
