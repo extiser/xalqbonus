@@ -25,18 +25,18 @@ defineProps<{
       />
       <div class="min-w-64 flex-1 space-y-4">
         <div>
-          <p class="text-xs text-slate-500">на русском</p>
-          <p v-if="mailing.textRu" class="mt-1 text-sm whitespace-pre-line text-slate-900">
-            {{ mailing.textRu }}
-          </p>
-          <p v-else class="mt-1 text-sm text-slate-500">не задан — ушёл один узбекский текст</p>
-        </div>
-        <div>
           <p class="text-xs text-slate-500">на узбекском</p>
           <p v-if="mailing.textUz" class="mt-1 text-sm whitespace-pre-line text-slate-900">
             {{ mailing.textUz }}
           </p>
           <p v-else class="mt-1 text-sm text-slate-500">не задан — ушёл один русский текст</p>
+        </div>
+        <div>
+          <p class="text-xs text-slate-500">на русском</p>
+          <p v-if="mailing.textRu" class="mt-1 text-sm whitespace-pre-line text-slate-900">
+            {{ mailing.textRu }}
+          </p>
+          <p v-else class="mt-1 text-sm text-slate-500">не задан — ушёл один узбекский текст</p>
         </div>
       </div>
     </div>
