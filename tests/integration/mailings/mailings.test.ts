@@ -249,13 +249,13 @@ describe('рассылки', () => {
   it('предел склейки — условие запуска: сохранение и фото с перебором проходят, запуск — нет', async () => {
     const { employeeId } = await createTestEmployee({ role: 'owner' });
 
-    // Заголовки и пустая строка между блоками — 30 знаков: 2034 + 2033 + 30 на знак длиннее
+    // Флаги, разделитель и пустые строки вокруг него — 22 знака: 2034 + 2041 + 22 на знак длиннее
     // потолка, а каждый текст порознь вдвое короче его. Черновик сохраняется.
     const draft = await createDraft(employeeId);
     const overflowing = await updateMailing(draft.mailingId, {
       title: 'На знак длиннее',
       textRu: 'р'.repeat(2034),
-      textUz: 'o'.repeat(2033),
+      textUz: 'o'.repeat(2041),
     });
 
     expect(overflowing.textRu).toHaveLength(2034);
@@ -265,11 +265,11 @@ describe('рассылки', () => {
       problems: [{ kind: 'too_long', length: 4097, limit: 4096, withPhoto: false }],
     });
 
-    // 500 + 500 влезают в сообщение; фото к ним встаёт, хотя подписью это 1030 из 1024.
+    // 500 + 503 влезают в сообщение; фото к ним встаёт, хотя подписью это 1025 из 1024.
     await updateMailing(draft.mailingId, {
       title: 'Под фото',
       textRu: 'р'.repeat(500),
-      textUz: 'o'.repeat(500),
+      textUz: 'o'.repeat(503),
     });
 
     const photographed = await saveMailingPhoto({
@@ -281,7 +281,7 @@ describe('рассылки', () => {
     expect(photographed.photoPath).not.toBeNull();
 
     await expect(launchMailing(draft.mailingId)).rejects.toMatchObject({
-      problems: [{ kind: 'too_long', length: 1030, limit: 1024, withPhoto: true }],
+      problems: [{ kind: 'too_long', length: 1025, limit: 1024, withPhoto: true }],
     });
 
     const after = await readMailing(draft.mailingId);
