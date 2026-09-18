@@ -1,4 +1,7 @@
 <!doctype html>
+<!-- Собрано из 02-promo-hero.html: сундуки вшиты как data:base64, чтобы файл
+     работал одним куском на стенде. Истина — 02-promo-hero.html, правки идут туда,
+     а эта копия пересобирается заново. Руками не править. -->
 <html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Неделя возвращения — шапка экрана акции</title>
@@ -16,6 +19,14 @@ body {
   justify-content: center;
 }
 
+/* Блобы режутся своим слоем, а не .hero: overflow на предке отключает
+   `position: sticky` у кнопки. */
+.glow-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
 .blob {
   position: absolute;
   z-index: 0;
@@ -135,7 +146,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  overflow: hidden;
   text-align: center;
 }
 .hello {
@@ -325,7 +335,9 @@ body {
 /* Отступ до кнопки задаёт gap самой шапки (18px) — свой margin
    складывался бы с ним и разводил вопрос с кнопкой вдвое. */
 .btn-wrap {
-  position: relative;
+  position: sticky;
+  bottom: 16px;
+  z-index: 3;
   display: block;
 }
 /* Золотое свечение вокруг: медленно дышит, анимируются только opacity
@@ -449,11 +461,13 @@ body {
 <div class="screen">
 
   <section class="hero">
-    <div class="blob" style="top: -120px; left: 50%; width: 420px; height: 330px; margin-left: -210px; filter: blur(52px); background: radial-gradient(circle, rgba(150,26,58,0.45) 0%, rgba(110,20,48,0.22) 52%, rgba(90,16,40,0) 76%);"></div>
-    <div class="blob blob-core" style="top: -150px; left: 0; width: 380px; height: 340px; filter: blur(38px); background: radial-gradient(circle, rgba(214,38,78,0.92) 0%, rgba(158,24,60,0.50) 46%, rgba(120,20,48,0) 72%);"></div>
-    <div class="blob blob-wine" style="top: -80px; left: 0; width: 320px; height: 300px; filter: blur(44px); background: radial-gradient(circle, rgba(122,26,92,0.86) 0%, rgba(80,20,64,0.42) 48%, rgba(60,16,48,0) 74%);"></div>
-    <div class="blob blob-amber" style="top: -20px; left: 0; width: 300px; height: 260px; filter: blur(48px); background: radial-gradient(circle, rgba(206,112,30,0.70) 0%, rgba(150,80,26,0.32) 48%, rgba(120,64,20,0) 74%);"></div>
-    <div style="position: absolute; inset: 0; background: linear-gradient(180deg, rgba(11,13,17,0) 44%, rgba(11,13,17,0.80) 78%, #0B0D11 100%);"></div>
+    <div class="glow-layer" aria-hidden="true">
+      <div class="blob" style="top: -120px; left: 50%; width: 420px; height: 330px; margin-left: -210px; filter: blur(52px); background: radial-gradient(circle, rgba(150,26,58,0.45) 0%, rgba(110,20,48,0.22) 52%, rgba(90,16,40,0) 76%);"></div>
+      <div class="blob blob-core" style="top: -150px; left: 0; width: 380px; height: 340px; filter: blur(38px); background: radial-gradient(circle, rgba(214,38,78,0.92) 0%, rgba(158,24,60,0.50) 46%, rgba(120,20,48,0) 72%);"></div>
+      <div class="blob blob-wine" style="top: -80px; left: 0; width: 320px; height: 300px; filter: blur(44px); background: radial-gradient(circle, rgba(122,26,92,0.86) 0%, rgba(80,20,64,0.42) 48%, rgba(60,16,48,0) 74%);"></div>
+      <div class="blob blob-amber" style="top: -20px; left: 0; width: 300px; height: 260px; filter: blur(48px); background: radial-gradient(circle, rgba(206,112,30,0.70) 0%, rgba(150,80,26,0.32) 48%, rgba(120,64,20,0) 74%);"></div>
+      <div style="position: absolute; inset: 0; background: linear-gradient(180deg, rgba(11,13,17,0) 44%, rgba(11,13,17,0.80) 78%, #0B0D11 100%);"></div>
+    </div>
 
     <div class="hello rise hero-rise">Здравствуйте, Бахтиёр!</div>
 
