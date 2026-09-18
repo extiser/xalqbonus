@@ -159,10 +159,10 @@ body {
   position: relative;
   margin: 0;
   font-family: Unbounded, Manrope, sans-serif;
-  font-size: 36px;
+  font-size: 30px;
   line-height: 1.1;
   font-weight: 700;
-  letter-spacing: -0.9px;
+  letter-spacing: -0.7px;
 }
 /* Лёгкое золото в заголовке: сверху белый, книзу тёплый уход в #F7BC3E.
    Заливка текстом — только там, где браузер умеет background-clip,
@@ -219,7 +219,7 @@ body {
   align-items: center;
   gap: 14px;
   padding: 12px 0 12px 35px;
-  font-size: 16px;
+  font-size: 15px;
 }
 .rule > div {
   flex: 1;
@@ -291,7 +291,7 @@ body {
    читается как подпись к решению, а не как хвост последней награды. */
 .ask {
   margin: 10px 0 10px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 400;
   color: #8E97A5;
   z-index: 1;
@@ -407,6 +407,23 @@ body {
   }
 }
 
+/* Ступени кегля вверх от самого узкого экрана. База посчитана на 320–360:
+   Unbounded широкий, и «возвращения» при 36px требует 314px, а колонка на 340
+   даёт 308 — слово упиралось в край (проверено на устройстве Руслана 18-09-2026).
+   Файл читается только в одну сторону: снизу вверх, min-width. */
+@media (min-width: 361px) {
+  .title {
+    font-size: 36px;
+    letter-spacing: -0.9px;
+  }
+  .rule {
+    font-size: 16px;
+  }
+  .ask {
+    font-size: 14px;
+  }
+}
+
 @media (min-width: 400px) {
   .hello {
     font-size: 16px;
@@ -415,7 +432,7 @@ body {
     padding: 60px 22px 22px;
   }
   .title {
-    font-size: 44px;
+    font-size: 36px;
   }
   .invite {
     font-size: 16px;
@@ -443,6 +460,22 @@ body {
   .rule--gold .rule-chest {
     width: 116px;
     height: 116px;
+  }
+}
+
+/* Заголовок растёт двумя ступенями. 44px просит 385px строки, а колонка
+   такой ширины появляется только при экране 430 — поэтому 44 включается там,
+   а на 415–429 стоит 40. Запас на 430 всего 1px: тронешь трекинг или текст
+   заголовка — перемерь (замер 18-09-2026, сессия 41). */
+@media (min-width: 415px) {
+  .title {
+    font-size: 40px;
+  }
+}
+
+@media (min-width: 430px) {
+  .title {
+    font-size: 44px;
   }
 }
 
