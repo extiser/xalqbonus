@@ -567,6 +567,7 @@ model Employee {
   ordersCancelled Order[]          @relation("order_cancelled_by")
   stockMovements  StockMovement[]
   mailings        Mailing[]
+  segments        Segment[]
 
   @@map("employees")
   @@schema("xb")
@@ -1344,5 +1345,56 @@ model MailingRecipient {
   @@index([mailingId, outcome])
   @@index([personId])
   @@map("mailing_recipients")
+  @@schema("xb")
+}
+
+// ---------------------------------------------------------------------------
+// Сегменты
+// ---------------------------------------------------------------------------
+
+/// Сегмент водителей: сохранённые условия отбора, а не люди (issue #165).
+///
+/// Состав берётся запросом в тот момент, когда понадобился: давность «20–90 дней» ползёт
+/// каждый день, и сохранённый список к концу недели описывал бы других людей. Замораживает
+/// состав тот, кому нужна неподвижность, — своим снимком. Отбор собирает один построитель
+/// (`server/repositories/segments.ts`), и экран, и потребитель берут состав из него.
+///
+/// Условия — явными колонками, а не `jsonb`: колонка с разнородным содержимым не проверяется
+/// ни типом, ни запросом. Склейка только «и», пустое условие в отбор не входит. Хотя бы одно
+/// условие задано всегда — проверкой в миграции: сегмент без условий — это весь реестр парка
+/// под видом среза.
+///
+/// Не удаляется, а архивируется: на сегмент ссылаются рассылки и акции, и удалённый унёс бы
+/// ответ на вопрос «кого мы тогда звали».
+model Segment {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  /// Для сотрудников: зачем срез и кого он должен брать. Водителю не уходит.
+  description String?
+
+  /// Сутки парка с последней завершённой поездки — не меньше. Задано хотя бы одна граница —
+  /// человек без единой завершённой поездки в состав не входит: «не ездил» — не «давно ездил».
+  daysSinceTripMin Int?     @map("days_since_trip_min")
+  /// Сутки парка с последней завершённой поездки — не больше.
+  daysSinceTripMax Int?     @map("days_since_trip_max")
+  /// Участник программы — есть строка `person_settings` — или нет.
+  programMember    Boolean? @map("program_member")
+  /// Активная привязка Telegram — есть или нет.
+  telegramLinked   Boolean? @map("telegram_linked")
+  /// Баланс водительского счёта — не меньше. Человек без счёта под условие не подходит.
+  balanceMin       BigInt?  @map("balance_min")
+  /// Баланс водительского счёта — не больше.
+  balanceMax       BigInt?  @map("balance_max")
+
+  createdById String    @map("created_by_id") @db.Uuid
+  /// Заполнено — сегмент убран из обращения: при выборе не предлагается, по ссылке открывается.
+  archivedAt  DateTime? @map("archived_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  createdBy Employee @relation(fields: [createdById], references: [id])
+
+  @@map("segments")
   @@schema("xb")
 }

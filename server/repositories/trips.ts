@@ -1,4 +1,5 @@
 import { db } from '#server/db';
+import { COMPLETED_TRIP_STATUS } from '#server/utils/tripStatus';
 
 /**
  * Чтение поездок для начисления баллов.
@@ -7,9 +8,6 @@ import { db } from '#server/db';
  * а не хранится в самой поездке: баланс принадлежит человеку, и склейка двойных учётных
  * записей иначе превращалась бы в переписывание миллиона строк (prisma/schema.prisma).
  */
-
-/** Единственный статус завершённой поездки. Значение из словаря Fleet API. */
-const COMPLETED_STATUS = 'complete';
 
 export type TripForAccrual = {
   tripOrderId: string;
@@ -74,7 +72,7 @@ export const countCompletedTripsByPerson = async (
               JOIN xb.park_profiles AS profile ON profile."profile_id" = trip."profile_id"
               JOIN xb.person_settings AS settings ON settings."person_id" = profile."person_id"
              WHERE profile."person_id" = ${personId}::uuid
-               AND trip."status" = ${COMPLETED_STATUS}
+               AND trip."status" = ${COMPLETED_TRIP_STATUS}
                AND trip."ended_at" IS NOT NULL
                AND trip."ended_at" >= settings."joined_at"
              LIMIT ${limit}

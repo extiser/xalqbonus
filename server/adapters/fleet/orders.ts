@@ -14,6 +14,7 @@
  * положит — дело сервиса (docs/principles.md → «Слои и зависимости»).
  */
 import type { FleetTransport } from '#server/adapters/fleet/client';
+import { COMPLETED_TRIP_STATUS } from '#server/utils/tripStatus';
 
 const ORDERS_PATH = '/v1/parks/orders/list';
 
@@ -35,7 +36,7 @@ const KNOWN_STATUSES = new Set([
   'driving',
   'waiting',
   'transporting',
-  'complete',
+  COMPLETED_TRIP_STATUS,
   'cancelled',
   'calling',
   'expired',

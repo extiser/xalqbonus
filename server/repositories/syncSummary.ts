@@ -1,4 +1,5 @@
 import { db } from '#server/db';
+import { COMPLETED_TRIP_STATUS } from '#server/utils/tripStatus';
 
 /**
  * Свод синхронизации за период — по таблицам данных, а не по журналу прогонов.
@@ -45,9 +46,6 @@ export type SyncPeriodCounts = {
   runsFailed: number;
 };
 
-/** Единственный статус поездки, за который начисляется балл. Значение словаря Fleet API. */
-const COMPLETED_STATUS = 'complete';
-
 export const readSyncPeriodCounts = async (from: Date): Promise<SyncPeriodCounts> => {
   const since = from.toISOString();
 
@@ -58,7 +56,7 @@ export const readSyncPeriodCounts = async (from: Date): Promise<SyncPeriodCounts
            (SELECT count(*)::int
               FROM xb.trips
              WHERE "ended_at" >= ${since}::timestamptz
-               AND "status" = ${COMPLETED_STATUS})                          AS "tripsCompleted",
+               AND "status" = ${COMPLETED_TRIP_STATUS})                     AS "tripsCompleted",
            (SELECT count(*)::int
               FROM xb.point_transfers
              WHERE "reason" = 'trip'::xb.point_reason
@@ -70,7 +68,7 @@ export const readSyncPeriodCounts = async (from: Date): Promise<SyncPeriodCounts
               LEFT JOIN xb.person_settings AS settings
                 ON settings."person_id" = profile."person_id"
              WHERE trip."ended_at" >= ${since}::timestamptz
-               AND trip."status" = ${COMPLETED_STATUS}
+               AND trip."status" = ${COMPLETED_TRIP_STATUS}
                AND settings."person_id" IS NULL)                            AS "outsideProgram",
            (SELECT count(*)::int
               FROM xb.sync_skips

@@ -27,6 +27,7 @@ import {
   type OrdersSyncKind,
   type SyncConfig,
 } from '#server/services/sync/config';
+import { COMPLETED_TRIP_STATUS } from '#server/utils/tripStatus';
 
 /**
  * Прогон синхронизации заказов: опрос Fleet API окном по времени завершения, запись
@@ -50,9 +51,6 @@ import {
  */
 
 const log = consola.withTag('sync:orders');
-
-/** Статус заказа, за который начисляется балл. Значение из словаря Fleet API. */
-const COMPLETED_STATUS = 'complete';
 
 /**
  * Сколько идентификаторов пропущенного показывать в сводке.
@@ -303,7 +301,7 @@ const writePage = async (
     // Незавершённый заказ на начисление не отдаётся и обработанным не помечается: он
     // вернётся позже с временем завершения в прошлом и начислится тогда. Выборка по
     // `ended_at` таких почти не отдаёт, но «почти» здесь недостаточно.
-    if (order.status === COMPLETED_STATUS) {
+    if (order.status === COMPLETED_TRIP_STATUS) {
       result.completedOrderIds.push(order.orderId);
     }
   }

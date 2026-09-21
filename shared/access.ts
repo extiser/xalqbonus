@@ -66,6 +66,14 @@ export const STAFF_ROLES: readonly EmployeeRole[] = ['owner', 'admin'];
 export const MAILING_ROLES: readonly EmployeeRole[] = ['owner', 'admin'];
 
 /**
+ * Сегменты водителей — экран и все ручки — владельцу и админу (issue #165).
+ *
+ * Менеджеру раздел закрыт: срез парка — не работа у стойки, и следом за срезом идёт
+ * рассылка, которую он и так не видит.
+ */
+export const SEGMENT_ROLES: readonly EmployeeRole[] = ['owner', 'admin'];
+
+/**
  * Ручное начисление и списание баллов водителю — всем ролям, включая менеджера (issue #131).
  *
  * В парке баллы руками правят именно менеджеры в офисах: они разговаривают с водителем,
