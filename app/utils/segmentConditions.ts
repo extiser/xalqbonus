@@ -48,13 +48,9 @@ const toFlagDraft = (value: boolean | null): SegmentFlagChoice => {
  * Пустое поле — не заданная граница. Набранное уходит числом как есть: дробь и прочее
  * отвергнет сервер тем же отказом, что для чужого клиента, — вторая проверка здесь сказала бы
  * то же самое вторым текстом.
- *
- * Через `String`, хотя тип обещает строку: `v-model` на `<input type="number">` сам приводит
- * набранное к числу, и в модель приезжает `20`, а не `'20'`, — пустое поле при этом остаётся
- * пустой строкой.
  */
 const fromBoundDraft = (value: string): number | null => {
-  const text = String(value).trim();
+  const text = value.trim();
 
   return text === '' ? null : Number(text);
 };

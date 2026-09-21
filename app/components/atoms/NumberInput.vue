@@ -13,6 +13,11 @@
  *
  * Значение — строка, а не число: пустое поле числом не выражается, а `null` в модели
  * заставил бы каждую форму отличать «не набрано» от нуля вручную.
+ *
+ * Поэтому модель пишется из `input.value`, а не через `v-model`: на `<input type="number">`
+ * Vue приводит набранное к числу, и в модели, объявленной строкой, оказывалось `3`. Формы
+ * звали у неё `.trim()` и падали молча — так застыли причины запуска акции (ручная проверка
+ * #172). `input.value` у числового поля — всегда строка, у пустого и нечитаемого — `''`.
  */
 const props = withDefaults(
   defineProps<{
@@ -38,6 +43,10 @@ const model = defineModel<string>({ required: true });
 
 const input = useTemplateRef<HTMLInputElement>('input');
 
+const onInput = (event: Event): void => {
+  model.value = (event.target as HTMLInputElement).value;
+};
+
 onMounted(() => {
   if (props.autofocus) {
     input.value?.focus();
@@ -48,7 +57,7 @@ onMounted(() => {
 <template>
   <input
     ref="input"
-    v-model="model"
+    :value="model"
     type="number"
     inputmode="numeric"
     step="1"
@@ -58,5 +67,6 @@ onMounted(() => {
     :aria-label="ariaLabel"
     :required="required"
     class="w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 transition-colors placeholder:text-slate-400 focus-visible:border-slate-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
+    @input="onInput"
   />
 </template>
