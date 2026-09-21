@@ -75,6 +75,13 @@ export const launchCampaign = async (campaignId: string): Promise<CampaignRespon
       throw new CampaignSegmentArchivedError(segment.id);
     }
 
+    // Строка окна Б — до снимка: половина участника ссылается на окно внешним ключом,
+    // и первый же участник половины Б без неё отбился бы. Даты пусты: половина ждёт своей
+    // очереди, и назначают её отдельно.
+    if (campaign.splitEnabled) {
+      await insertCampaignHalf(campaignId, 'b', { startsOn: null, endsOn: null }, transaction);
+    }
+
     const audienceSize = await insertCampaignParticipants(
       campaignId,
       toSegmentConditions(segment),
@@ -82,14 +89,9 @@ export const launchCampaign = async (campaignId: string): Promise<CampaignRespon
       transaction,
     );
 
-    // Запускать не на ком — это не акция. Исключение откатывает и снимок, и статус.
+    // Запускать не на ком — это не акция. Исключение откатывает и снимок, и окно Б, и статус.
     if (audienceSize === 0) {
       throw new CampaignAudienceEmptyError(campaignId);
-    }
-
-    // Строка окна Б — с пустыми датами: половина ждёт своей очереди, и назначают её отдельно.
-    if (campaign.splitEnabled) {
-      await insertCampaignHalf(campaignId, 'b', { startsOn: null, endsOn: null }, transaction);
     }
 
     if (!(await markCampaignRunning(campaignId, audienceSize, transaction))) {

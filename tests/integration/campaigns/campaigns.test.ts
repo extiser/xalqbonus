@@ -19,8 +19,15 @@ import { updateCampaign } from '#server/services/campaigns/updateCampaign';
 import type { LinkedDriver } from '#server/services/drivers/readLinkedDriver';
 import { createSegment } from '#server/services/segments/createSegment';
 import { setSegmentArchived } from '#server/services/segments/setSegmentArchived';
+import { FOREIGN_KEY_VIOLATION, isConstraintViolation } from '#server/utils/postgresErrors';
 import { EMPTY_SEGMENT_CONDITIONS } from '#shared/segment';
-import { cleanupTestCampaigns, readParticipants, trackTestCampaign } from '../support/campaigns';
+import {
+  cleanupTestCampaigns,
+  insertParticipantBypassingServices,
+  readParticipants,
+  readParticipantWindows,
+  trackTestCampaign,
+} from '../support/campaigns';
 import { cleanupTestData, createTestPerson, disconnectDatabase } from '../support/database';
 import { cleanupTestEmployees, createTestEmployee } from '../support/employees';
 import { grantPoints } from '../support/points';
@@ -192,6 +199,38 @@ describe('акции', () => {
 
     expect(await readParticipants(campaignId)).toHaveLength(5);
     expect((await readCampaign(campaignId)).campaign.splitEnabled).toBe(true);
+  });
+
+  it('половина участника ссылается на окно: без строки окна база участника не пишет', async () => {
+    const context = await setup(4);
+    const splitId = await createDraft(context);
+
+    // Со сплитом запуск проходит: строка окна Б заводится раньше снимка.
+    await launchCampaign(splitId);
+
+    const windows = await readParticipantWindows(splitId);
+
+    expect(windows).toHaveLength(4);
+    expect(new Set(windows.map((row) => row.half))).toEqual(new Set(['a', 'b']));
+    expect(windows.every((row) => row.hasWindow)).toBe(true);
+
+    // У акции без деления строки окна Б нет — и записать в половину Б некого.
+    const plainId = await createDraft(context, { splitEnabled: false });
+    const { personId: stranger } = await createTestPerson({ inProgram: true });
+
+    const failure = await insertParticipantBypassingServices(plainId, stranger, 'b').then(
+      () => null,
+      (error: unknown) => error,
+    );
+
+    expect(
+      isConstraintViolation(
+        failure,
+        FOREIGN_KEY_VIOLATION,
+        'campaign_participants_campaign_id_half_fkey',
+      ),
+    ).toBe(true);
+    expect(await readParticipants(plainId)).toHaveLength(0);
   });
 
   it('без деления все в половине А, и окна Б нет', async () => {

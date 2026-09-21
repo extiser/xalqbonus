@@ -56,3 +56,45 @@ export const readParticipants = async (campaignId: string): Promise<ParticipantS
      WHERE "campaign_id" = ${campaignId}::uuid
      ORDER BY "person_id"
   `;
+
+export type ParticipantWindowSnapshot = {
+  personId: string;
+  half: string;
+  /** Есть ли у половины участника строка окна. */
+  hasWindow: boolean;
+};
+
+/** Участник и строка окна его половины — соединением, которым окно читают сервисы. */
+export const readParticipantWindows = async (
+  campaignId: string,
+): Promise<ParticipantWindowSnapshot[]> =>
+  db.$queryRaw<ParticipantWindowSnapshot[]>`
+    SELECT participant."person_id"             AS "personId",
+           participant."half"::text            AS "half",
+           (half."campaign_id" IS NOT NULL)     AS "hasWindow"
+      FROM xb.campaign_participants AS participant
+      LEFT JOIN xb.campaign_halves AS half
+        ON half."campaign_id" = participant."campaign_id"
+       AND half."half" = participant."half"
+     WHERE participant."campaign_id" = ${campaignId}::uuid
+  `;
+
+/**
+ * Пишет участника мимо сервисов — так выглядела бы запись, забывшая завести окно половины.
+ * Нужна, чтобы проверить, что это держит база, а не порядок вызовов в коде.
+ */
+export const insertParticipantBypassingServices = async (
+  campaignId: string,
+  personId: string,
+  half: 'a' | 'b',
+): Promise<void> => {
+  await db.$executeRaw`
+    INSERT INTO xb.campaign_participants ("campaign_id", "person_id", "half", "state")
+    VALUES (
+      ${campaignId}::uuid,
+      ${personId}::uuid,
+      ${half}::xb.campaign_half,
+      'invited'::xb.campaign_participant_state
+    )
+  `;
+};

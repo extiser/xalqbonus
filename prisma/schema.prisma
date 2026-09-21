@@ -1503,7 +1503,8 @@ model CampaignHalf {
   startsAt   DateTime?        @map("starts_at") @db.Timestamptz(6)
   endsAt     DateTime?        @map("ends_at") @db.Timestamptz(6)
 
-  campaign Campaign @relation(fields: [campaignId], references: [id])
+  campaign     Campaign              @relation(fields: [campaignId], references: [id])
+  participants CampaignParticipant[]
 
   @@id([campaignId, half])
   @@map("campaign_halves")
@@ -1528,8 +1529,12 @@ model CampaignParticipant {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  campaign Campaign @relation(fields: [campaignId], references: [id])
-  person   Person   @relation(fields: [personId], references: [id])
+  campaign Campaign     @relation(fields: [campaignId], references: [id])
+  person   Person       @relation(fields: [personId], references: [id])
+  /// Окно половины участника. Внешним ключом, а не договорённостью: участник, чьей половины
+  /// нет в `campaign_halves`, выпал бы из каждого соединения с окном — акции не видел бы,
+  /// а в админке числился бы обычным приглашённым (ревью #170).
+  window   CampaignHalf @relation(fields: [campaignId, half], references: [campaignId, half], onDelete: Restrict, onUpdate: Cascade)
 
   @@id([campaignId, personId])
   /// Разбивка по состояниям и половинам на карточке акции.

@@ -325,7 +325,13 @@ export const setCampaignSecondHalfWindow = async (
  *
  * При делении половины режет `ntile(2)` над случайным порядком: они получаются равными,
  * а не примерно равными, и при нечётном числе в А на одного больше — `ntile` отдаёт лишнего
- * первой группе. Без деления всем `a`.
+ * первой группе. Без деления всем `a`, и `ntile` не считается вовсе: оконная функция
+ * вычисляется до любого условия вокруг неё, и внутри `CASE` она сортировала бы весь состав
+ * по случайному ключу впустую. Поэтому выражение половины выбирается здесь, кодом, — это
+ * выбор между двумя готовыми кусками SQL, а не сборка запроса из пользовательского ввода.
+ *
+ * Строки окон обеих половин к этому моменту обязаны быть: половина участника ссылается
+ * на `campaign_halves` внешним ключом.
  *
  * Повтор вторых строк не заводит: пара «акция + человек» — первичный ключ.
  */
@@ -334,19 +340,24 @@ export const insertCampaignParticipants = async (
   conditions: SegmentConditions,
   splitEnabled: boolean,
   client: Executor,
-): Promise<number> =>
-  client.$executeRaw`
+): Promise<number> => {
+  const halfSql = splitEnabled
+    ? Prisma.sql`CASE WHEN ntile(2) OVER (ORDER BY random()) = 2
+                      THEN 'b'::xb.campaign_half
+                      ELSE 'a'::xb.campaign_half
+                 END`
+    : Prisma.sql`'a'::xb.campaign_half`;
+
+  return client.$executeRaw`
     INSERT INTO xb.campaign_participants ("campaign_id", "person_id", "half", "state")
     SELECT ${campaignId}::uuid,
            member."personId",
-           CASE WHEN ${splitEnabled}::boolean AND ntile(2) OVER (ORDER BY random()) = 2
-                THEN 'b'::xb.campaign_half
-                ELSE 'a'::xb.campaign_half
-           END,
+           ${halfSql},
            'invited'::xb.campaign_participant_state
       FROM (${segmentMembersSql(conditions)}) AS member
     ON CONFLICT ("campaign_id", "person_id") DO NOTHING
   `;
+};
 
 /**
  * Черновик → идёт, с размером снимка. Одним `UPDATE`: у идущей размер снимка есть всегда —
