@@ -11,7 +11,16 @@
  * а серверному коду до `app/` доступа нет.
  */
 
-const TIME_ZONE = 'Asia/Tashkent';
+export const PARK_TIME_ZONE = 'Asia/Tashkent';
+
+/**
+ * Час, с которого начинаются сутки парка (docs/decisions.md → «Сутки — с 05:00 до 05:00
+ * по Ташкенту, одни на всё приложение»): смена, кончающаяся в три ночи, для водителя вчерашняя.
+ *
+ * По нему уже считает давность поездки у сегментов. `formatDayKey` ниже пока режет календарные
+ * сутки — его перевод на 05:00 идёт своей задачей (T40), это правка работающего поведения.
+ */
+export const PARK_DAY_START_HOUR = 5;
 
 /**
  * Время суток вида `14:32`.
@@ -20,7 +29,7 @@ const TIME_ZONE = 'Asia/Tashkent';
  * не зависит от того, какие локали собраны в образе.
  */
 const CLOCK = new Intl.DateTimeFormat('ru-RU', {
-  timeZone: TIME_ZONE,
+  timeZone: PARK_TIME_ZONE,
   hour: '2-digit',
   minute: '2-digit',
   hourCycle: 'h23',
@@ -28,7 +37,7 @@ const CLOCK = new Intl.DateTimeFormat('ru-RU', {
 
 /** Календарная дата вида `12.09.2026`. Цифрами, поэтому одинаково читается на обоих языках. */
 const CALENDAR_DATE = new Intl.DateTimeFormat('ru-RU', {
-  timeZone: TIME_ZONE,
+  timeZone: PARK_TIME_ZONE,
   day: '2-digit',
   month: '2-digit',
   year: 'numeric',
@@ -41,7 +50,7 @@ const CALENDAR_DATE = new Intl.DateTimeFormat('ru-RU', {
  * самое на десять строк длиннее.
  */
 const DAY_KEY = new Intl.DateTimeFormat('en-CA', {
-  timeZone: TIME_ZONE,
+  timeZone: PARK_TIME_ZONE,
   year: 'numeric',
   month: '2-digit',
   day: '2-digit',
