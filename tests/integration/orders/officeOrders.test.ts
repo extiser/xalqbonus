@@ -5,8 +5,9 @@ import type { EmployeeRole } from '#server/generated/prisma/enums';
 import { readEmployeeOffices } from '#server/services/offices/employeeOffices';
 import { OfficeNotOpenError } from '#server/services/offices/errors';
 import { cancelOfficeOrder } from '#server/services/orders/cancelOfficeOrder';
-import { OrderNotFoundError, OrderNotPendingError } from '#server/services/orders/errors';
-import { findOfficeOrderByCode } from '#server/services/orders/findOfficeOrderByCode';
+import { DeskCodeNotFoundError } from '#server/services/desk/errors';
+import { findDeskItemByCode } from '#server/services/desk/findDeskItemByCode';
+import { OrderNotPendingError } from '#server/services/orders/errors';
 import { issueOfficeOrder } from '#server/services/orders/issueOfficeOrder';
 import { placeOrder, type PlacedOrder } from '#server/services/orders/placeOrder';
 import { readOfficeOrders } from '#server/services/orders/readOfficeOrders';
@@ -35,6 +36,20 @@ import { grantPoints } from '../support/points';
  */
 
 type Worker = { employeeId: string; role: EmployeeRole };
+
+/**
+ * Заказ по коду — через поиск стойки, общий у заказов и наград (issue #172). Код заказа
+ * рождается с первой цифрой `0`–`4`, и стойка обязана ответить заказом, а не наградой.
+ */
+const findOfficeOrderByCode = async (worker: Worker, officeId: string, code: string) => {
+  const item = await findDeskItemByCode(worker, officeId, code);
+
+  if (item.kind !== 'order') {
+    throw new Error(`по коду заказа ${code} стойка ответила наградой`);
+  }
+
+  return item.order;
+};
 
 type Scenario = {
   personId: string;
@@ -116,7 +131,7 @@ describe('заказы у стойки', () => {
     // Выданный пропал из висящих: код освободился, и по нему больше не находится ничего.
     await expect(
       findOfficeOrderByCode(manager, scenario.officeId, scenario.order.code),
-    ).rejects.toBeInstanceOf(OrderNotFoundError);
+    ).rejects.toBeInstanceOf(DeskCodeNotFoundError);
   });
 
   it('второе нажатие «Выдать» отвечает «уже выдан» и второй операции не делает', async () => {
@@ -173,7 +188,7 @@ describe('заказы у стойки', () => {
     // В своём офисе чужой код — «не найден», как и несуществующий.
     await expect(
       findOfficeOrderByCode(manager, otherOffice, scenario.order.code),
-    ).rejects.toBeInstanceOf(OrderNotFoundError);
+    ).rejects.toBeInstanceOf(DeskCodeNotFoundError);
 
     // В чужой офис менеджера не пускают вовсе — ни искать, ни выдавать, ни отменять.
     await expect(

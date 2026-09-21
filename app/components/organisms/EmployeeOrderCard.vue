@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import type { OfficeOrder } from '#shared/types/orders';
+import { deskIssueQuestion } from '~/utils/deskQuestion';
 import { formatDate } from '~/utils/format';
 import { orderStatusLabel } from '~/utils/labels';
 
 /**
- * Карточка заказа у стойки в Mini App: номер, водитель, состав, сумма и сроки.
+ * Карточка заказа у стойки в Mini App: номер, водитель с позывным и телефоном, состав, сумма
+ * и сроки. Подтверждение выдачи называет водителя по имени (issue #172).
  *
  * «Выдать» и «Отменить» — обе в два нажатия. Выдачу назад не вернуть, отмена возвращает баллы
  * водителю, и одно случайное касание большим пальцем не должно делать ни того, ни другого.
@@ -45,6 +47,9 @@ watch(
       <p class="text-sm text-slate-500">
         Позывной: <span class="font-mono tabular-nums">{{ order.callsign ?? '—' }}</span>
       </p>
+      <p class="text-sm text-slate-500">
+        Телефон: <span class="tabular-nums">{{ order.phone ?? '—' }}</span>
+      </p>
     </div>
 
     <MoleculesOrderLineList
@@ -80,7 +85,9 @@ watch(
       </template>
 
       <template v-else-if="confirming === 'issue'">
-        <p class="text-base leading-relaxed">Выдать заказ № {{ order.number }}?</p>
+        <p class="text-base leading-relaxed">
+          {{ deskIssueQuestion(order.driverName, `заказ № ${order.number}`) }}
+        </p>
         <AtomsMiniAppButton label="Да, выдать" :disabled="acting" @click="$emit('issue')" />
         <AtomsMiniAppButton
           variant="secondary"

@@ -19,6 +19,8 @@ export const toProduct = (row: ProductRow): Product => ({
   priceCost: row.priceCost,
   publishedAt: row.publishedAt?.toISOString() ?? null,
   archivedAt: row.archivedAt?.toISOString() ?? null,
+  promo: row.promo,
+  hiddenInCatalog: row.hiddenInCatalog,
   updatedAt: row.updatedAt.toISOString(),
 });
 
@@ -29,6 +31,8 @@ export type ProductFields = {
   pricePoints: number | null;
   priceRetail: number | null;
   priceCost: number | null;
+  promo: boolean;
+  hiddenInCatalog: boolean;
 };
 
 /**
@@ -68,6 +72,8 @@ export type ProductRequestFields = {
   pricePoints?: unknown;
   priceRetail?: unknown;
   priceCost?: unknown;
+  promo?: unknown;
+  hiddenInCatalog?: unknown;
 };
 
 /**
@@ -83,6 +89,10 @@ export const readProductFields = (body: ProductRequestFields | null | undefined)
   pricePoints: readNumber(body?.pricePoints),
   priceRetail: readNumber(body?.priceRetail),
   priceCost: readNumber(body?.priceCost),
+  // Признаки: всё, кроме явного `true`, — «нет». Испорченный запрос не должен ни снять
+  // требование цены, ни спрятать товар с витрины.
+  promo: body?.promo === true,
+  hiddenInCatalog: body?.hiddenInCatalog === true,
 });
 
 /**

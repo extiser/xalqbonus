@@ -6,9 +6,13 @@ import type {
   OfficeOrderResponse,
   OfficeOrdersResponse,
 } from '#shared/types/orders';
+import type { DeskItemResponse, OfficeRewardResponse } from '#shared/types/rewards';
 
 /**
- * Стойка выдачи: заказ по коду, выдача, отмена и висящие заказы офиса.
+ * Стойка выдачи: заказ или награда по коду, выдача, отмена заказа и висящие заказы офиса.
+ *
+ * Поле кода одно на заказы и награды (issue #172): сотрудник набирает пять цифр и не решает
+ * заранее, что перед ним. Ответ размечен `kind`, и открытое на карточке — тоже.
  *
  * Один на обе двери, как и ручки под ним: Mini App передаёт заголовок с `initData`, веб —
  * ничего, за него говорит cookie. Больше двери здесь не различаются ничем
@@ -23,12 +27,12 @@ import type {
  * не этот; не взяла — отказ доменный и остаётся строкой рядом с полем. Веб не передаёт
  * ничего: там отказы двери разбирает общая проверка маршрута.
  */
-export const useOfficeOrderDesk = (
+export const useOfficeDesk = (
   readHeaders: () => Record<string, string>,
   reportDenial: (error: unknown) => boolean = () => false,
 ) => {
-  /** Заказ, открытый карточкой: найденный по коду или выбранный из списка. */
-  const current = ref<OfficeOrder | null>(null);
+  /** Что открыто карточкой: найденное по коду или заказ, выбранный из списка. */
+  const current = ref<DeskItemResponse | null>(null);
 
   const searching = ref(false);
   const searchError = ref<string | null>(null);
@@ -40,7 +44,7 @@ export const useOfficeOrderDesk = (
   /** Итог последнего действия — «Выдано, № 1042». Снимается следующим поиском. */
   const notice = ref<string | null>(null);
 
-  const findByCode = async (officeId: string, code: string): Promise<OfficeOrder | null> => {
+  const findByCode = async (officeId: string, code: string): Promise<DeskItemResponse | null> => {
     if (searching.value) {
       return null;
     }
@@ -50,15 +54,15 @@ export const useOfficeOrderDesk = (
     notice.value = null;
 
     try {
-      const response = await $fetch<OfficeOrderResponse>('/api/orders/by-code', {
+      const response = await $fetch<DeskItemResponse>('/api/desk/by-code', {
         headers: readHeaders(),
         query: { officeId, code },
       });
 
-      current.value = response.order;
+      current.value = response;
       actionError.value = null;
 
-      return response.order;
+      return response;
     } catch (error) {
       if (reportDenial(error)) {
         return null;
@@ -72,8 +76,9 @@ export const useOfficeOrderDesk = (
     }
   };
 
+  /** Открывает заказ из списка висящих. */
   const open = (order: OfficeOrder): void => {
-    current.value = order;
+    current.value = { kind: 'order', order };
     actionError.value = null;
     notice.value = null;
   };
@@ -83,10 +88,9 @@ export const useOfficeOrderDesk = (
     actionError.value = null;
   };
 
-  const act = async (action: 'issue' | 'cancel'): Promise<OfficeOrder | null> => {
-    const order = current.value;
-
-    if (!order || acting.value) {
+  /** Шлёт действие и возвращает то, что ответил сервер. `null` — отказ, текст уже на экране. */
+  const act = async <Result>(request: () => Promise<Result>): Promise<Result | null> => {
+    if (acting.value) {
       return null;
     }
 
@@ -94,12 +98,7 @@ export const useOfficeOrderDesk = (
     actionError.value = null;
 
     try {
-      const response = await $fetch<OfficeOrderResponse>(
-        `/api/orders/${order.orderId}/${action}`,
-        { method: 'POST', headers: readHeaders() },
-      );
-
-      return response.order;
+      return await request();
     } catch (error) {
       if (reportDenial(error)) {
         return null;
@@ -113,27 +112,75 @@ export const useOfficeOrderDesk = (
     }
   };
 
-  /** Выдаёт открытый заказ. После выдачи карточка закрывается: следующий водитель уже у стойки. */
-  const issue = async (): Promise<OfficeOrder | null> => {
-    const issued = await act('issue');
+  /**
+   * Выдаёт открытое — заказ или награду. После выдачи карточка закрывается: следующий водитель
+   * уже у стойки. `true` — выдано.
+   */
+  const issue = async (): Promise<boolean> => {
+    const item = current.value;
 
-    if (issued) {
-      current.value = null;
-      notice.value = `Выдано, № ${issued.number}`;
+    if (!item) {
+      return false;
     }
 
-    return issued;
+    if (item.kind === 'order') {
+      const response = await act(() =>
+        $fetch<OfficeOrderResponse>(`/api/orders/${item.order.orderId}/issue`, {
+          method: 'POST',
+          headers: readHeaders(),
+        }),
+      );
+
+      if (!response) {
+        return false;
+      }
+
+      current.value = null;
+      notice.value = `Выдано, № ${response.order.number}`;
+
+      return true;
+    }
+
+    const response = await act(() =>
+      $fetch<OfficeRewardResponse>(`/api/rewards/${item.reward.rewardId}/issue`, {
+        method: 'POST',
+        headers: readHeaders(),
+      }),
+    );
+
+    if (!response) {
+      return false;
+    }
+
+    current.value = null;
+    notice.value = `Выдана награда: ${response.reward.title}`;
+
+    return true;
   };
 
-  const cancel = async (): Promise<OfficeOrder | null> => {
-    const cancelled = await act('cancel');
+  /** Отменяет открытый заказ. У награды отмены нет: неполученная сгорает сама. */
+  const cancel = async (): Promise<boolean> => {
+    const item = current.value;
 
-    if (cancelled) {
-      current.value = null;
-      notice.value = `Отменено, № ${cancelled.number}: баллы и товар вернулись`;
+    if (!item || item.kind !== 'order') {
+      return false;
     }
 
-    return cancelled;
+    const response = await act(() =>
+      $fetch<OfficeOrderResponse>(`/api/orders/${item.order.orderId}/cancel`, {
+        method: 'POST',
+        headers: readHeaders(),
+      }),
+    );
+
+    if (!response) {
+      return false;
+    }
+
+    current.value = null;
+    notice.value = `Отменено, № ${response.order.number}: баллы и товар вернулись`;
+
+    return true;
   };
 
   // Висящие заказы офиса ---------------------------------------------------
@@ -165,7 +212,7 @@ export const useOfficeOrderDesk = (
     }
   };
 
-  /** Сбрасывает стойку при смене офиса: заказ и итоги прошлого офиса к новому не относятся. */
+  /** Сбрасывает стойку при смене офиса: найденное и итоги прошлого офиса к новому не относятся. */
   const reset = (): void => {
     current.value = null;
     searchError.value = null;

@@ -30,6 +30,9 @@ defineProps<{
       <span v-if="movement.orderNumber !== null" class="text-sm text-slate-500">
         заказ № {{ movement.orderNumber }}
       </span>
+      <span v-if="movement.rewardTitle !== null" class="text-sm text-slate-500">
+        награда: {{ movement.rewardTitle }}
+      </span>
     </div>
     <p class="mt-1 text-xs text-slate-500">
       {{ formatDateTime(movement.createdAt) }} · {{ movement.employeeName ?? DASH }}

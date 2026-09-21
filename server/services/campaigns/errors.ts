@@ -97,7 +97,11 @@ export type CampaignFieldProblem =
   /** Последний день окна раньше первого. */
   | 'window_reversed'
   /** Для окна половины Б нужны обе даты. */
-  | 'window_incomplete';
+  | 'window_incomplete'
+  /** Идентификатор офиса выдачи наград — не uuid. */
+  | 'office_invalid'
+  /** Срок жизни награды — не целое положительное число дней. */
+  | 'reward_lifetime_invalid';
 
 export class InvalidCampaignFieldsError extends CampaignError {
   constructor(public readonly problem: CampaignFieldProblem) {

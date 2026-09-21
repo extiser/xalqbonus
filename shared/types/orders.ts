@@ -49,6 +49,8 @@ export type OfficeOrder = {
   /** «Фамилия Имя» из профиля. `null` — профиль без имени: реестр приходит из чужой системы. */
   driverName: string | null;
   callsign: string | null;
+  /** Открытый номер профиля. `null` — телефона нет: у десятой части профилей его нет вовсе. */
+  phone: string | null;
   lines: OfficeOrderLine[];
   totalPoints: number;
   createdAt: string;

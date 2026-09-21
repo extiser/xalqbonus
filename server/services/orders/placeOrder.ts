@@ -119,10 +119,14 @@ const priceItems = async (
   );
   // Черновик отсекается здесь, в выборке каталога, тем же условием, что и на витрине:
   // водителю он не виден нигде, и корзина, собранная руками, его тоже не закажет (issue #148).
-  // Цена у опубликованного есть всегда — проверкой `products_published_complete_check`.
+  // Скрытый с витрины и приз без цены — тем же доводом (issue #172): витрина их не показывает,
+  // и заказ по идентификатору, набранному руками, их не берёт.
   const priceByProduct = new Map(
     products.flatMap((product) =>
-      product.publishedAt !== null && product.archivedAt === null && product.pricePoints !== null
+      product.publishedAt !== null &&
+      product.archivedAt === null &&
+      !product.hiddenInCatalog &&
+      product.pricePoints !== null
         ? [[product.id, product.pricePoints] as const]
         : [],
     ),

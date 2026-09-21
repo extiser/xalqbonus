@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /**
- * «Выдать по коду» над таблицей заказов в вебе.
+ * «Выдать по коду» над таблицей заказов в вебе. Код — заказа или награды: поле одно
+ * (issue #172).
  *
  * Поиск уходит и по пятой цифре, и кнопкой: за столом код могут вставить, а могут набрать
  * и нажать Enter — оба пути ведут в один и тот же запрос.
@@ -19,11 +20,11 @@ const emit = defineEmits<{ submit: [] }>();
 <template>
   <MoleculesSectionPanel
     title="Выдать по коду"
-    note="Пять цифр, которые называет водитель. Ищется среди заказов выбранного офиса, ждущих выдачи."
+    note="Пять цифр, которые называет водитель. Ищется среди заказов и наград выбранного офиса, ждущих выдачи."
   >
     <form class="flex flex-wrap items-center gap-3" @submit.prevent="emit('submit')">
       <div class="w-56">
-        <AtomsCodeInput v-model="code" label="Код заказа, пять цифр" @complete="emit('submit')" />
+        <AtomsCodeInput v-model="code" label="Код заказа или награды, пять цифр" @complete="emit('submit')" />
       </div>
       <AtomsSubmitButton label="Найти" size="large" :disabled="searching" />
     </form>

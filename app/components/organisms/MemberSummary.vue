@@ -42,9 +42,11 @@ defineProps<{
   /** «Обменять баллы» — вход в витрину, рядом с балансом: баллы копят, чтобы их обменять. */
   exchangeLabel: string;
   ordersLabel: string;
+  /** «Мои награды» — рядом с заказами: и то и другое получают в офисе (issue #172). */
+  rewardsLabel: string;
 }>();
 
-defineEmits<{ refresh: []; exchange: []; orders: [] }>();
+defineEmits<{ refresh: []; exchange: []; orders: []; rewards: [] }>();
 </script>
 
 <template>
@@ -108,6 +110,7 @@ defineEmits<{ refresh: []; exchange: []; orders: [] }>();
     <div class="flex flex-col gap-2">
       <AtomsMiniAppButton :label="exchangeLabel" @click="$emit('exchange')" />
       <AtomsMiniAppButton variant="secondary" :label="ordersLabel" @click="$emit('orders')" />
+      <AtomsMiniAppButton variant="secondary" :label="rewardsLabel" @click="$emit('rewards')" />
     </div>
 
     <p

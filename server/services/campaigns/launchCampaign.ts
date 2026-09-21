@@ -59,6 +59,9 @@ export const launchCampaign = async (campaignId: string): Promise<CampaignRespon
       segmentId: campaign.segmentId,
       startsOn: campaign.halfA.startsOn,
       endsOn: campaign.halfA.endsOn,
+      officeId: campaign.officeId,
+      rewardLifetimeDays:
+        campaign.rewardLifetimeDays === null ? null : String(campaign.rewardLifetimeDays),
     });
 
     if (problems.length > 0 || campaign.segmentId === null) {

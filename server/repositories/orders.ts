@@ -1,6 +1,11 @@
 import { db } from '#server/db';
 import { Prisma } from '#server/generated/prisma/client';
 import type { OrderCancelReason, OrderStatus } from '#server/generated/prisma/enums';
+import {
+  DESK_DRIVER_COLUMNS,
+  deskDriverJoins,
+  type DeskDriverColumns,
+} from '#server/repositories/deskDriver';
 
 /**
  * Заказы за баллы и их позиции.
@@ -323,7 +328,7 @@ export const listOrderLines = async (
      ORDER BY product."name"
   `;
 
-export type OfficeOrderRow = {
+export type OfficeOrderRow = DeskDriverColumns & {
   id: string;
   number: number;
   status: OrderStatus;
@@ -336,18 +341,11 @@ export type OfficeOrderRow = {
   issuedAt: Date | null;
   cancelledAt: Date | null;
   cancelReason: OrderCancelReason | null;
-  /** Из профиля парка. Пусто, если у человека профиля нет или поле в реестре не заполнено. */
-  firstName: string | null;
-  lastName: string | null;
-  callsign: string | null;
 };
 
 /**
- * Заказ глазами сотрудника: сам заказ, офис и водитель с позывным.
- *
- * Профилей у человека бывает несколько, и берётся тот же, по которому его называет бот:
- * работающий, а из них свежайший (`findDisplayProfile`). Своего правила выбора профиля здесь
- * нет — два правила однажды назвали бы одного водителя двумя именами.
+ * Заказ глазами сотрудника: сам заказ, офис и водитель с позывным и телефоном. Водитель —
+ * общим куском `deskDriver.ts`, тем же, что у карточки награды.
  */
 const OFFICE_ORDER_SELECT = Prisma.sql`
   SELECT "order"."id",
@@ -362,20 +360,10 @@ const OFFICE_ORDER_SELECT = Prisma.sql`
          "order"."issued_at"     AS "issuedAt",
          "order"."cancelled_at"  AS "cancelledAt",
          "order"."cancel_reason" AS "cancelReason",
-         profile."first_name"    AS "firstName",
-         profile."last_name"     AS "lastName",
-         profile."callsign"
+         ${DESK_DRIVER_COLUMNS}
     FROM xb.orders AS "order"
     JOIN xb.offices AS office ON office."id" = "order"."office_id"
-    LEFT JOIN LATERAL (
-      SELECT candidate."first_name",
-             candidate."last_name",
-             candidate."callsign"
-        FROM xb.park_profiles AS candidate
-       WHERE candidate."person_id" = "order"."person_id"
-       ORDER BY (candidate."work_status" = 'working') DESC, candidate."api_updated_at" DESC
-       LIMIT 1
-    ) AS profile ON true
+    ${deskDriverJoins(Prisma.sql`"order"."person_id"`)}
 `;
 
 export type OfficeOrdersFilter = {

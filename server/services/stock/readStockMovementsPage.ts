@@ -39,6 +39,7 @@ export const readStockMovementsPage = async (
       deltaOnHand: row.deltaOnHand,
       deltaReserved: row.deltaReserved,
       orderNumber: row.orderNumber,
+      rewardTitle: row.rewardTitle,
       employeeName: row.employeeName,
       note: row.note,
       createdAt: row.createdAt.toISOString(),

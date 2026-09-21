@@ -26,6 +26,8 @@ export const readOfficeStock = async (officeId: string): Promise<OfficeStockResp
       productId: row.productId,
       name: row.name,
       pricePoints: row.pricePoints,
+      promo: row.promo,
+      hiddenInCatalog: row.hiddenInCatalog,
       archivedAt: row.archivedAt?.toISOString() ?? null,
       onHand: row.onHand,
       reserved: row.reserved,

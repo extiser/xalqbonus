@@ -10,17 +10,21 @@ import {
 } from '#shared/orderDenials';
 
 /**
- * Отказ выдачи или отмены сотрудником, приведённый к ответу HTTP: код — экрану, текст — человеку.
+ * Отказ стойки — выдачи и отмены заказа, выдачи награды, — приведённый к ответу HTTP:
+ * код — экрану, текст — человеку.
  *
- * `404` — заказа нет или код не нашёлся, `409` — заказ есть, но уже не висит: выдан
- * или отменён раньше, чем дошло это нажатие.
+ * `404` — заказа или награды нет или код не нашёлся, `409` — они есть, но уже не ждут:
+ * выданы, отменены или сгорели раньше, чем дошло это нажатие.
  */
 
 const DENIAL_STATUS: Readonly<Record<OrderDenialCode, 404 | 409>> = {
-  order_code_not_found: 404,
+  desk_code_not_found: 404,
   order_not_found: 404,
   order_already_issued: 409,
   order_already_cancelled: 409,
+  reward_not_found: 404,
+  reward_already_issued: 409,
+  reward_already_expired: 409,
 };
 
 const STATUS_MESSAGE: Readonly<Record<404 | 409, string>> = {

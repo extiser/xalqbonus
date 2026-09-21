@@ -14,7 +14,7 @@ import type { EmployeePasswordResponse } from '#shared/types/employee';
  * Текст отказа — тот, что прислала ручка (`failureText`): правило длины живёт при ней,
  * и второй текст про то же на экране разошёлся бы с веб-страницей.
  *
- * Отказ сначала отдаётся странице через `reportDenial` — как у стойки (`useOfficeOrderDesk`):
+ * Отказ сначала отдаётся странице через `reportDenial` — как у стойки (`useOfficeDesk`):
  * отказ двери заменяет экран целиком, и решает это страница, а не композабл.
  */
 export const useEmployeePassword = (

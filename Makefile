@@ -62,6 +62,12 @@ sql: ## Прогнать SQL-файл по локальной БД одной с
 migrate: ## Применить миграции к локальной БД
 	$(COMPOSE) exec app npx prisma migrate deploy
 
+# Упавшая миграция откатывается транзакцией целиком, но запись о неудаче остаётся и не даёт
+# `migrate deploy` идти дальше. Цель снимает эту запись — только для миграции, которая
+# в базе действительно не оставила ничего.
+migrate-rolled-back: ## Отметить упавшую миграцию откатившейся. Использование: make migrate-rolled-back name=20260921132514_rewards
+	$(COMPOSE) exec app npx prisma migrate resolve --rolled-back $(name)
+
 migrate-create: ## Создать миграцию из изменённой схемы, не применяя. Использование: make migrate-create name=point_entries
 	$(COMPOSE) exec app npx prisma migrate dev --create-only --name $(name)
 

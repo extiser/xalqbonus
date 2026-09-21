@@ -32,7 +32,7 @@ export const CATALOG_ROLES: readonly EmployeeRole[] = ['owner', 'admin'];
 
 /**
  * Заказы офиса — выдача по коду и отмена — всем ролям: это и есть работа менеджера у стойки
- * (issue #122).
+ * (issue #122). Выдача наград на той же стойке открыта тем же списком (issue #172).
  *
  * В каком именно офисе человек работает, решает не этот список, а `ANY_OFFICE_ROLES` ниже:
  * роль открывает раздел, офис — заказы в нём.
@@ -94,3 +94,10 @@ export const CAMPAIGN_ROLES: readonly EmployeeRole[] = ['owner', 'admin'];
  * (docs/decisions.md → «Доступ определяется ролью, а не дверью»).
  */
 export const POINTS_ADJUST_ROLES: readonly EmployeeRole[] = ALL_EMPLOYEE_ROLES;
+
+/**
+ * Ручная выдача награды из карточки водителя — тем же правилом, что ручная правка баллов
+ * (issue #172): награду вручает тот, кто разговаривает с водителем в офисе, а защита — след:
+ * автор и пояснение обязательны и видны на карточке у стойки.
+ */
+export const REWARD_GRANT_ROLES: readonly EmployeeRole[] = POINTS_ADJUST_ROLES;

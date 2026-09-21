@@ -100,6 +100,17 @@ export type TextKey =
   | 'orders_title'
   | 'orders_empty'
   | 'orders_failed'
+  | 'button_my_rewards'
+  | 'rewards_title'
+  | 'rewards_empty'
+  | 'rewards_failed'
+  | 'reward_code_title'
+  | 'reward_state_credited'
+  | 'reward_state_awaiting'
+  | 'reward_state_issued'
+  | 'reward_state_expired'
+  | 'reward_origin_manual'
+  | 'reward_origin_campaign'
   | 'order_denied_office_unavailable'
   | 'order_denied_product_unavailable'
   | 'order_denied_insufficient_stock'
@@ -513,6 +524,53 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     uz: "Buyurtmalarni yuklab bo'lmadi. Qaytadan urinib ko'ring.",
   },
 
+  // Раздел «Мои награды» (issue #172). Узбекский — черновой: вычитывает переводчик одной
+  // волной ближе к выкату.
+  button_my_rewards: {
+    ru: 'Мои награды',
+    uz: 'Mukofotlarim',
+  },
+  rewards_title: {
+    ru: 'Мои награды',
+    uz: 'Mukofotlarim',
+  },
+  rewards_empty: {
+    ru: 'Наград пока нет.',
+    uz: "Hozircha mukofotlar yo'q.",
+  },
+  rewards_failed: {
+    ru: 'Не удалось загрузить награды. Попробуйте ещё раз.',
+    uz: "Mukofotlarni yuklab bo'lmadi. Qaytadan urinib ko'ring.",
+  },
+  reward_code_title: {
+    ru: 'Код для выдачи — покажите этот экран в офисе',
+    uz: "Olish kodi — bu ekranni ofisda ko'rsating",
+  },
+  reward_state_credited: {
+    ru: 'На балансе',
+    uz: 'Hisobingizda',
+  },
+  reward_state_awaiting: {
+    ru: 'Ждёт в офисе до {date}',
+    uz: '{date} gacha ofisda kutmoqda',
+  },
+  reward_state_issued: {
+    ru: 'Получена {moment}',
+    uz: '{moment} da olindi',
+  },
+  reward_state_expired: {
+    ru: 'Сгорела {date}: не забрали за срок',
+    uz: "{date} da kuyib ketdi: muddatida olinmadi",
+  },
+  reward_origin_manual: {
+    ru: 'Вручил парк',
+    uz: 'Park tomonidan berildi',
+  },
+  reward_origin_campaign: {
+    ru: 'Акция «{title}»',
+    uz: '«{title}» aksiyasi',
+  },
+
   // Отказы оформления и отмены. Разведены по причинам: экран обязан сказать, чего именно
   // не хватило, — баллов, товара на полке или открытого офиса, — потому что и действие
   // у водителя в каждом случае своё.
@@ -837,6 +895,7 @@ export const formatPoints = (points: bigint): string =>
 type CountedForms = Readonly<{ one: string; few: string; many: string }>;
 
 export type CountedTextKey =
+  | 'reward_points'
   | 'campaign_week_chest_days'
   | 'campaign_week_last_days'
   | 'campaign_week_days_left'
@@ -845,6 +904,19 @@ export type CountedTextKey =
   | 'campaign_today_goal_waiting';
 
 const COUNTED_TEXTS: Readonly<Record<CountedTextKey, Readonly<Record<Language, CountedForms>>>> = {
+  /** Награда баллами в разделе «Мои награды»: «300 баллов». */
+  reward_points: {
+    ru: {
+      one: '{count} балл',
+      few: '{count} балла',
+      many: '{count} баллов',
+    },
+    uz: {
+      one: '{count} ball',
+      few: '{count} ball',
+      many: '{count} ball',
+    },
+  },
   campaign_week_chest_days: {
     ru: {
       one: 'ещё {count} день с сундуками',

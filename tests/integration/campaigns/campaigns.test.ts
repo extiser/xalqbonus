@@ -3,6 +3,7 @@ import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import type { Language } from '#server/generated/prisma/enums';
 import { createCampaign } from '#server/services/campaigns/createCampaign';
 import {
+  CampaignNotLaunchableError,
   CampaignSecondHalfUnavailableError,
   CampaignSegmentArchivedError,
   CampaignSlugTakenError,
@@ -28,7 +29,12 @@ import {
   readParticipantWindows,
   trackTestCampaign,
 } from '../support/campaigns';
-import { cleanupTestData, createTestPerson, disconnectDatabase } from '../support/database';
+import {
+  cleanupTestData,
+  createTestOffice,
+  createTestPerson,
+  disconnectDatabase,
+} from '../support/database';
 import { cleanupTestEmployees, createTestEmployee } from '../support/employees';
 import { grantPoints } from '../support/points';
 import { cleanupTestSegments, trackTestSegment } from '../support/segments';
@@ -89,6 +95,8 @@ const asDriver = (personId: string, language: Language = 'ru'): LinkedDriver => 
 type Setup = {
   employeeId: string;
   segmentId: string;
+  /** Офис выдачи наград: без него акция не запускается (issue #172). */
+  officeId: string;
   personIds: string[];
 };
 
@@ -106,15 +114,22 @@ const setup = async (drivers: number): Promise<Setup> => {
 
   trackTestSegment(segment.segmentId);
 
-  return { employeeId, segmentId: segment.segmentId, personIds };
+  const officeId = await createTestOffice();
+
+  return { employeeId, segmentId: segment.segmentId, officeId, personIds };
 };
 
-const draftFields = (segmentId: string, overrides: Partial<CampaignFields> = {}): CampaignFields => ({
+const draftFields = (
+  context: Pick<Setup, 'segmentId' | 'officeId'>,
+  overrides: Partial<CampaignFields> = {},
+): CampaignFields => ({
   title: 'Неделя возвращения — тест',
   slug: nextSlug(),
-  segmentId,
+  segmentId: context.segmentId,
   ...WINDOW_A,
   splitEnabled: true,
+  officeId: context.officeId,
+  rewardLifetimeDays: 7,
   ...overrides,
 });
 
@@ -122,7 +137,7 @@ const createDraft = async (
   context: Setup,
   overrides: Partial<CampaignFields> = {},
 ): Promise<string> => {
-  const created = await createCampaign(draftFields(context.segmentId, overrides), context.employeeId);
+  const created = await createCampaign(draftFields(context, overrides), context.employeeId);
 
   trackTestCampaign(created.campaign.campaignId);
 
@@ -198,7 +213,7 @@ describe('акции', () => {
     await expect(launchCampaign(campaignId)).rejects.toBeInstanceOf(CampaignStatusMismatchError);
     // Правка запущенной отклоняется: ни сегмент, ни окно, ни деление не меняются.
     await expect(
-      updateCampaign(campaignId, draftFields(context.segmentId, { splitEnabled: false })),
+      updateCampaign(campaignId, draftFields(context, { splitEnabled: false })),
     ).rejects.toBeInstanceOf(CampaignStatusMismatchError);
 
     expect(await readParticipants(campaignId)).toHaveLength(5);
@@ -263,6 +278,31 @@ describe('акции', () => {
     expect((await readCampaign(campaignId)).campaign.status).toBe('draft');
   });
 
+  it('без офиса и срока наград акция не запускается и называет обе причины сразу', async () => {
+    const context = await setup(1);
+    const campaignId = await createDraft(context, { officeId: null, rewardLifetimeDays: null });
+
+    const failure = await launchCampaign(campaignId).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(CampaignNotLaunchableError);
+    expect((failure as CampaignNotLaunchableError).problems).toEqual([
+      'office_missing',
+      'reward_lifetime_missing',
+    ]);
+    expect(await readParticipants(campaignId)).toHaveLength(0);
+    expect((await readCampaign(campaignId)).campaign.status).toBe('draft');
+  });
+
+  it('офис и срок наград черновик сохраняет и отдаёт в карточке', async () => {
+    const context = await setup(1);
+    const campaignId = await createDraft(context, { rewardLifetimeDays: 10 });
+
+    const { campaign } = await readCampaign(campaignId);
+
+    expect(campaign.office?.officeId).toBe(context.officeId);
+    expect(campaign.rewardLifetimeDays).toBe(10);
+  });
+
   it('занятое короткое имя отбивается отказом по полю', async () => {
     const context = await setup(1);
     const slug = nextSlug();
@@ -270,7 +310,7 @@ describe('акции', () => {
     await createDraft(context, { slug });
 
     await expect(
-      createCampaign(draftFields(context.segmentId, { slug }), context.employeeId),
+      createCampaign(draftFields(context, { slug }), context.employeeId),
     ).rejects.toBeInstanceOf(CampaignSlugTakenError);
   });
 

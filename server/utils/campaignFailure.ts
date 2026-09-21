@@ -45,6 +45,8 @@ const FIELD_PROBLEM_TEXT: Record<CampaignFieldProblem, string> = {
   day_invalid: 'Дата окна не читается как день календаря.',
   window_reversed: 'Последний день окна раньше первого.',
   window_incomplete: 'Для окна нужны обе даты.',
+  office_invalid: 'Офис выбран неверно — выберите его из списка заново.',
+  reward_lifetime_invalid: 'Срок наград — целое число дней, не меньше одного.',
 };
 
 const reject = (statusCode: 400 | 404 | 409, statusMessage: string, message: string): H3Error =>

@@ -12,6 +12,11 @@
 export type ProductPublishFields = {
   name: string | null;
   pricePoints: number | null;
+  /**
+   * Приз для акции. Снимает требование цены в баллах: приз не продаётся, и выдуманная цена
+   * уехала бы в закупочные отчёты (issue #172). Остальные поля обязательны по-прежнему.
+   */
+  promo: boolean;
   priceRetail: number | null;
   priceCost: number | null;
 };
@@ -46,7 +51,7 @@ export const productPublishProblems = (fields: ProductPublishFields): ProductPub
     problems.push('missing_name');
   }
 
-  if (fields.pricePoints === null) {
+  if (fields.pricePoints === null && !fields.promo) {
     problems.push('missing_price_points');
   }
 

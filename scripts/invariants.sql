@@ -129,11 +129,12 @@ HAVING stock.reserved <> COALESCE(SUM(movement.delta_reserved), 0)
 ;
 SELECT :ROW_COUNT > 0 AS violated_stock_reserved \gset
 
-\warn '=== 7. Резерв не равен сумме позиций висящих заказов ==='
+\warn '=== 7. Резерв не равен сумме позиций висящих заказов и ждущих наград ==='
 -- stock:begin 3
 -- Третий запрос проверяет не кэш против журнала, а смысл самого резерва: занято ровно
--- столько, сколько ждут висящие заказы этого офиса. Ловит резерв, не снятый при выдаче
--- или отмене, — то есть товар, заблокированный навсегда.
+-- столько, сколько ждут висящие заказы этого офиса, плюс по штуке на каждую ждущую
+-- награду-товар (issue #172). Ловит резерв, не снятый при выдаче, отмене или сгорании, —
+-- то есть товар, заблокированный навсегда.
 --
 -- Считается двусторонне: в результат попадают и пары с ненулевым резервом без заказов,
 -- и пары с заказами без резерва. Односторонний запрос пропустил бы ровно ту половину,
@@ -145,13 +146,25 @@ SELECT
     COALESCE(pending.quantity, 0)                  AS pending_quantity
 FROM xb.office_stock AS stock
 FULL JOIN (
-    SELECT "order".office_id,
+    SELECT item.office_id,
            item.product_id,
            SUM(item.quantity) AS quantity
-    FROM xb.orders AS "order"
-    JOIN xb.order_items AS item ON item.order_id = "order".id
-    WHERE "order".status = 'pending'
-    GROUP BY "order".office_id, item.product_id
+    FROM (
+        SELECT "order".office_id,
+               item.product_id,
+               item.quantity
+          FROM xb.orders AS "order"
+          JOIN xb.order_items AS item ON item.order_id = "order".id
+         WHERE "order".status = 'pending'
+        UNION ALL
+        SELECT reward.office_id,
+               reward.product_id,
+               1 AS quantity
+          FROM xb.rewards AS reward
+         WHERE reward.status = 'awaiting'
+           AND reward.kind = 'product'
+    ) AS item
+    GROUP BY item.office_id, item.product_id
 ) AS pending
   ON pending.office_id = stock.office_id
  AND pending.product_id = stock.product_id

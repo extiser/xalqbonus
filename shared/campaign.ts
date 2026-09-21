@@ -47,7 +47,9 @@ export type CampaignLaunchProblem =
   | 'title_missing'
   | 'slug_missing'
   | 'segment_missing'
-  | 'window_missing';
+  | 'window_missing'
+  | 'office_missing'
+  | 'reward_lifetime_missing';
 
 /** Поля, по которым судит запуск: что на экране у формы и что в базе у сервера. */
 export type CampaignLaunchFields = {
@@ -56,6 +58,10 @@ export type CampaignLaunchFields = {
   segmentId: string | null;
   startsOn: string | null;
   endsOn: string | null;
+  /** Офис выдачи наград акции (issue #172). */
+  officeId: string | null;
+  /** Срок жизни неполученной награды в днях — строкой, как её набирает поле. */
+  rewardLifetimeDays: string | null;
 };
 
 const present = (value: string | null): boolean => value !== null && value.trim() !== '';
@@ -79,6 +85,14 @@ export const campaignLaunchProblems = (fields: CampaignLaunchFields): CampaignLa
     problems.push('window_missing');
   }
 
+  if (!present(fields.officeId)) {
+    problems.push('office_missing');
+  }
+
+  if (!present(fields.rewardLifetimeDays)) {
+    problems.push('reward_lifetime_missing');
+  }
+
   return problems;
 };
 
@@ -87,6 +101,8 @@ const LAUNCH_PROBLEM_TEXT: Record<CampaignLaunchProblem, string> = {
   slug_missing: 'Нужно короткое имя латиницей.',
   segment_missing: 'Нужно выбрать сегмент.',
   window_missing: 'Нужны обе даты окна половины А.',
+  office_missing: 'Нужно выбрать офис выдачи наград.',
+  reward_lifetime_missing: 'Нужен срок, через который сгорает неполученная награда.',
 };
 
 export const campaignLaunchProblemText = (problem: CampaignLaunchProblem): string =>

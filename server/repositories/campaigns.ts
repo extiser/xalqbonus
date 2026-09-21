@@ -46,6 +46,10 @@ export type CampaignRow = {
   segmentArchivedAt: Date | null;
   splitEnabled: boolean;
   audienceSize: number | null;
+  officeId: string | null;
+  officeName: string | null;
+  officeArchivedAt: Date | null;
+  rewardLifetimeDays: number | null;
   createdByName: string;
   createdAt: Date;
   updatedAt: Date;
@@ -88,6 +92,10 @@ const CAMPAIGN_SELECT = Prisma.sql`
          segment."archived_at"     AS "segmentArchivedAt",
          campaign."split_enabled"  AS "splitEnabled",
          campaign."audience_size"  AS "audienceSize",
+         campaign."office_id"      AS "officeId",
+         office."name"             AS "officeName",
+         office."archived_at"      AS "officeArchivedAt",
+         campaign."reward_lifetime_days" AS "rewardLifetimeDays",
          author."full_name"        AS "createdByName",
          campaign."created_at"     AS "createdAt",
          campaign."updated_at"     AS "updatedAt",
@@ -104,6 +112,7 @@ const CAMPAIGN_SELECT = Prisma.sql`
     FROM xb.campaigns AS campaign
     JOIN xb.employees AS author ON author."id" = campaign."created_by_id"
     LEFT JOIN xb.segments AS segment ON segment."id" = campaign."segment_id"
+    LEFT JOIN xb.offices AS office ON office."id" = campaign."office_id"
     LEFT JOIN xb.campaign_halves AS half_a
            ON half_a."campaign_id" = campaign."id" AND half_a."half" = 'a'
     LEFT JOIN xb.campaign_halves AS half_b
@@ -120,6 +129,10 @@ const toCampaignRow = (row: CampaignFlatRow): CampaignRow => ({
   segmentArchivedAt: row.segmentArchivedAt,
   splitEnabled: row.splitEnabled,
   audienceSize: row.audienceSize,
+  officeId: row.officeId,
+  officeName: row.officeName,
+  officeArchivedAt: row.officeArchivedAt,
+  rewardLifetimeDays: row.rewardLifetimeDays,
   createdByName: row.createdByName,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
@@ -184,6 +197,8 @@ export type CampaignDraftFields = {
   slug: string | null;
   segmentId: string | null;
   splitEnabled: boolean;
+  officeId: string | null;
+  rewardLifetimeDays: number | null;
 };
 
 /** Окно датами `YYYY-MM-DD`: первый и последний день включительно. */
@@ -208,12 +223,17 @@ export const insertDraftCampaign = async (
   client: Executor = db,
 ): Promise<string> => {
   const rows = await client.$queryRaw<{ id: string }[]>`
-    INSERT INTO xb.campaigns ("title", "slug", "segment_id", "split_enabled", "status", "created_by_id")
+    INSERT INTO xb.campaigns (
+      "title", "slug", "segment_id", "split_enabled", "office_id", "reward_lifetime_days",
+      "status", "created_by_id"
+    )
     VALUES (
       ${input.title},
       ${input.slug},
       ${input.segmentId}::uuid,
       ${input.splitEnabled},
+      ${input.officeId}::uuid,
+      ${input.rewardLifetimeDays}::int,
       'draft'::xb.campaign_status,
       ${input.createdById}::uuid
     )
@@ -241,6 +261,8 @@ export const updateDraftCampaign = async (
            "slug"          = ${input.slug},
            "segment_id"    = ${input.segmentId}::uuid,
            "split_enabled" = ${input.splitEnabled},
+           "office_id"     = ${input.officeId}::uuid,
+           "reward_lifetime_days" = ${input.rewardLifetimeDays}::int,
            "updated_at"    = now()
      WHERE "id" = ${campaignId}::uuid
        AND "status" = 'draft'
