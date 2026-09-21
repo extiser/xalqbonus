@@ -98,3 +98,43 @@ export const insertParticipantBypassingServices = async (
     )
   `;
 };
+
+/**
+ * Сдвигает момент вступления. Кнопка пишет `now()` базы, а сценариям нужен момент внутри
+ * окна, заданного тестом, — «четыре поездки до вступления и одна после».
+ */
+export const setParticipantJoinedAt = async (
+  campaignId: string,
+  personId: string,
+  joinedAt: Date,
+): Promise<void> => {
+  await db.$executeRaw`
+    UPDATE xb.campaign_participants
+       SET "joined_at" = ${joinedAt}::timestamptz
+     WHERE "campaign_id" = ${campaignId}::uuid
+       AND "person_id" = ${personId}::uuid
+  `;
+};
+
+export type ParticipantOutcomeSnapshot = {
+  personId: string;
+  outcome: string | null;
+  outcomeAt: Date | null;
+  qualifiedDays: number | null;
+  dayTrips: number[] | null;
+};
+
+/** Исход и снимок построчно — то, что лежит в базе, мимо сервисов. */
+export const readParticipantOutcomes = async (
+  campaignId: string,
+): Promise<ParticipantOutcomeSnapshot[]> =>
+  db.$queryRaw<ParticipantOutcomeSnapshot[]>`
+    SELECT "person_id"       AS "personId",
+           "outcome"::text   AS "outcome",
+           "outcome_at"      AS "outcomeAt",
+           "qualified_days"  AS "qualifiedDays",
+           "day_trips"       AS "dayTrips"
+      FROM xb.campaign_participants
+     WHERE "campaign_id" = ${campaignId}::uuid
+     ORDER BY "person_id"
+  `;

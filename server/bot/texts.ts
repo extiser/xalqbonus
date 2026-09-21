@@ -112,6 +112,14 @@ export type TextKey =
   | 'campaign_state_declined'
   | 'button_campaign_join'
   | 'campaign_decline'
+  | 'campaign_week_day'
+  | 'campaign_week_counter'
+  | 'campaign_week_last_day'
+  | 'campaign_week_prizes'
+  | 'campaign_week_every_goal'
+  | 'campaign_week_no_skips'
+  | 'campaign_today_goal_near'
+  | 'campaign_today_goal_taken'
   | 'not_in_registry'
   | 'not_in_park'
   | 'profile_fired'
@@ -569,6 +577,49 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Отказаться',
     uz: 'Voz kechish',
   },
+
+  // Блок недели и дневной цели (issue #168). Строки — по таблицам верха и низа
+  // `product/design/comeback/03-member-week-states.md` и шаблону `03-member-heat-scale.md`;
+  // выбор строки — `server/services/campaigns/weekProgress.ts`. Строки со счётом и склонением
+  // живут ниже, в `COUNTED_TEXTS`.
+  //
+  // Строка низа узкая: на 320 в ней около двадцати двух знаков в 11 px. При правке текста
+  // ширину надо мерить в браузере, а не прикидывать (эталон, раздел «Нижняя строка»).
+  campaign_week_day: {
+    ru: 'День {day} из {total}',
+    uz: '{day}-kun, jami {total}',
+  },
+  /** Счётчик зачётных дней. Число уже зажато на пятёрке — «6 из 5» не бывает. */
+  campaign_week_counter: {
+    ru: '{done} из {total} дней',
+    uz: '{total} kundan {done}',
+  },
+  campaign_week_last_day: {
+    ru: 'последний день',
+    uz: 'oxirgi kun',
+  },
+  /** «Призы», а не «сундуки»: сундуки дня открываются сразу, а в конце недели их два — большой и приветственный. */
+  campaign_week_prizes: {
+    ru: 'призы в конце недели',
+    uz: "hafta oxirida sovg'alar",
+  },
+  campaign_week_every_goal: {
+    ru: 'каждые 5 поездок — сундук',
+    uz: 'har 5 safar — sandiq',
+  },
+  campaign_week_no_skips: {
+    ru: 'пропусков не осталось',
+    uz: "o'tkazib yuborishga kun qolmadi",
+  },
+  /** Одна поездка до цели — «рядом» вместо «ждёт»; остальное как в общем шаблоне. */
+  campaign_today_goal_near: {
+    ru: 'Сундук дня рядом: всего 1 поездка',
+    uz: "Kun sandig'i yaqin: atigi 1 ta safar",
+  },
+  campaign_today_goal_taken: {
+    ru: 'Ура! Сундук дня ваш!',
+    uz: "Hurra! Kun sandig'i sizniki!",
+  },
   not_in_registry: {
     ru: 'Не получилось привязать номер автоматически — в данных таксопарка чего-то не хватает. Это чинится только в офисе: подойдите в любой офис Xalq Taxi с водительским удостоверением.',
     uz: "Raqamni avtomatik bog'lash imkoni bo'lmadi — taksopark ma'lumotlarida nimadir yetishmayapti. Bu faqat ofisda hal qilinadi: haydovchilik guvohnomangiz bilan Xalq Taxi'ning istalgan ofisiga murojaat qiling.",
@@ -774,6 +825,125 @@ export const officeContacts = (language: Language): OfficeContact[] =>
  */
 export const formatPoints = (points: bigint): string =>
   points.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '\u00A0');
+
+/**
+ * Строки со счётом — по формам числительного: 1 день, 2–4 дня, 5 дней.
+ *
+ * Отдельным словарём, а не тремя ключами на строку: форма выбирается правилом языка
+ * (`Intl.PluralRules`), и ключ, выбранный вызывающим по числу вручную, однажды забыл бы
+ * про «11 дней» и «21 день». У узбекского числительное не склоняется — формы у него одинаковые,
+ * а правило отдаёт ему только `one` и `other`.
+ */
+type CountedForms = Readonly<{ one: string; few: string; many: string }>;
+
+export type CountedTextKey =
+  | 'campaign_week_chest_days'
+  | 'campaign_week_last_days'
+  | 'campaign_week_days_left'
+  | 'campaign_week_skips_left'
+  | 'campaign_today_trips'
+  | 'campaign_today_goal_waiting';
+
+const COUNTED_TEXTS: Readonly<Record<CountedTextKey, Readonly<Record<Language, CountedForms>>>> = {
+  campaign_week_chest_days: {
+    ru: {
+      one: 'ещё {count} день с сундуками',
+      few: 'ещё {count} дня с сундуками',
+      many: 'ещё {count} дней с сундуками',
+    },
+    uz: {
+      one: 'yana {count} kun sandiqlar bilan',
+      few: 'yana {count} kun sandiqlar bilan',
+      many: 'yana {count} kun sandiqlar bilan',
+    },
+  },
+  /**
+   * «Последние N дня». Один день сюда не приходит — у него своя строка «последний день»,
+   * `campaign_week_last_day`; форма `one` стоит для полноты словаря.
+   */
+  campaign_week_last_days: {
+    ru: {
+      one: 'последний день',
+      few: 'последние {count} дня',
+      many: 'последние {count} дней',
+    },
+    uz: {
+      one: 'oxirgi {count} kun',
+      few: 'oxirgi {count} kun',
+      many: 'oxirgi {count} kun',
+    },
+  },
+  /** Слова «всего» здесь нет никогда: оно занято дневной целью, где значит «это немного». */
+  campaign_week_days_left: {
+    ru: {
+      one: 'остался {count} день',
+      few: 'осталось {count} дня',
+      many: 'осталось {count} дней',
+    },
+    uz: {
+      one: '{count} kun qoldi',
+      few: '{count} kun qoldi',
+      many: '{count} kun qoldi',
+    },
+  },
+  campaign_week_skips_left: {
+    ru: {
+      one: 'ещё {count} пропуск в запасе',
+      few: 'ещё {count} пропуска в запасе',
+      many: 'ещё {count} пропусков в запасе',
+    },
+    uz: {
+      one: "zaxirada yana {count} kun o'tkazib yuborish",
+      few: "zaxirada yana {count} kun o'tkazib yuborish",
+      many: "zaxirada yana {count} kun o'tkazib yuborish",
+    },
+  },
+  campaign_today_trips: {
+    ru: {
+      one: 'Сегодня {count} поездка',
+      few: 'Сегодня {count} поездки',
+      many: 'Сегодня {count} поездок',
+    },
+    uz: {
+      one: 'Bugun {count} ta safar',
+      few: 'Bugun {count} ta safar',
+      many: 'Bugun {count} ta safar',
+    },
+  },
+  /**
+   * «Сундук дня ждёт: всего N поездок», где N — остаток до пяти. Один шаблон на все состояния —
+   * один перевод вместо шести; «всего» выбрано осознанно: оно переводит число из условия
+   * в оценку «это немного» (`03-member-heat-scale.md`).
+   */
+  campaign_today_goal_waiting: {
+    ru: {
+      one: 'Сундук дня ждёт: всего {count} поездка',
+      few: 'Сундук дня ждёт: всего {count} поездки',
+      many: 'Сундук дня ждёт: всего {count} поездок',
+    },
+    uz: {
+      one: "Kun sandig'i kutmoqda: atigi {count} ta safar",
+      few: "Kun sandig'i kutmoqda: atigi {count} ta safar",
+      many: "Kun sandig'i kutmoqda: atigi {count} ta safar",
+    },
+  },
+};
+
+const PLURAL_RULES: Readonly<Record<Language, Intl.PluralRules>> = {
+  ru: new Intl.PluralRules('ru'),
+  uz: new Intl.PluralRules('uz'),
+};
+
+/** Форма числительного по правилу языка. `other` у русского — дробные, у узбекского — всё, кроме единицы. */
+const countedForm = (language: Language, count: number): keyof CountedForms => {
+  const category = PLURAL_RULES[language].select(count);
+
+  return category === 'one' || category === 'few' ? category : 'many';
+};
+
+/** Строка со счётом для экрана приложения — без экранирования, как `plainText`. */
+export const countedPlainText = (key: CountedTextKey, language: Language, count: number): string =>
+  COUNTED_TEXTS[key][language][countedForm(language, count)].replaceAll('{count}', String(count));
 
 /** Подстановки по именам в фигурных скобках. Экранирование — забота вызывающего. */
 const render = (

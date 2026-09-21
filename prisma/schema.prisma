@@ -324,6 +324,25 @@ enum CampaignParticipantState {
   @@schema("xb")
 }
 
+/// Исход окна участника — чем участие кончилось (issue #168). Ставит итог окна через четыре
+/// часа после его конца, один раз, и задним числом не пересматривается. Своим перечислением
+/// рядом с состоянием, а не его продолжением: состояние меняет водитель, исход — итог окна.
+enum CampaignParticipantOutcome {
+  /// Вступил и набрал нужное число зачётных дней.
+  returned
+  /// Вступил, ездил, зачётных дней не хватило.
+  short
+  /// Вступил и не сделал после вступления ни одной поездки за окно.
+  joined_no_trips
+  /// Открыл экран и не вступил. Сюда же явный отказ.
+  seen_not_joined
+  /// Экран акции не открыл.
+  no_response
+
+  @@map("campaign_participant_outcome")
+  @@schema("xb")
+}
+
 // ---------------------------------------------------------------------------
 // Люди и учётки
 // ---------------------------------------------------------------------------
@@ -1525,6 +1544,15 @@ model CampaignParticipant {
   openedAt   DateTime?                @map("opened_at") @db.Timestamptz(6)
   joinedAt   DateTime?                @map("joined_at") @db.Timestamptz(6)
   declinedAt DateTime?                @map("declined_at") @db.Timestamptz(6)
+  /// Исход окна. Пусто, пока итог не подведён. Проставлен — экран рисуется из снимка ниже
+  /// и не считает ничего: опоздавшая поездка не должна разойтись с объявленным итогом.
+  outcome       CampaignParticipantOutcome?
+  outcomeAt     DateTime?                   @map("outcome_at") @db.Timestamptz(6)
+  /// Сколько зачётных дней вышло на момент итога. Факт, а не счётчик: по нему считается
+  /// эффект волны и видно, кто на сколько не дотянул.
+  qualifiedDays Int?                        @map("qualified_days")
+  /// Зачитанные поездки по дням окна на момент итога — из них рисуются клетки замершей недели.
+  dayTrips      Int[]                       @map("day_trips")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -1539,6 +1567,8 @@ model CampaignParticipant {
   @@id([campaignId, personId])
   /// Разбивка по состояниям и половинам на карточке акции.
   @@index([campaignId, half, state])
+  /// Разбивка по исходам на карточке акции.
+  @@index([campaignId, half, outcome])
   /// Что у водителя с акцией — при каждом открытии Mini App.
   @@index([personId])
   @@map("campaign_participants")

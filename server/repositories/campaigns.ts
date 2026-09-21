@@ -2,11 +2,13 @@ import { db } from '#server/db';
 import { Prisma } from '#server/generated/prisma/client';
 import type {
   CampaignHalfCode,
+  CampaignParticipantOutcome,
   CampaignParticipantState,
   CampaignStatus,
 } from '#server/generated/prisma/enums';
 import { segmentMembersSql } from '#server/repositories/segments';
 import { parkDaySql, parkDayStartSql } from '#server/utils/parkDaySql';
+import { COMPLETED_TRIP_STATUS } from '#server/utils/tripStatus';
 import type { SegmentConditions } from '#shared/types/segment';
 
 /**
@@ -384,26 +386,39 @@ export const markCampaignRunning = async (
 export type CampaignStateCountRow = {
   half: CampaignHalfCode;
   state: CampaignParticipantState;
+  /** Пусто, пока итог окна не подведён. */
+  outcome: CampaignParticipantOutcome | null;
   total: number;
 };
 
-/** Сколько участников в каждом состоянии на каждой половине. Пустых сочетаний в ответе нет. */
+/**
+ * Сколько участников в каждом сочетании состояния и исхода на каждой половине — одним
+ * проходом на обе разбивки карточки. Пустых сочетаний в ответе нет.
+ */
 export const countCampaignParticipantStates = async (
   campaignId: string,
   client: Executor = db,
 ): Promise<CampaignStateCountRow[]> =>
   client.$queryRaw<CampaignStateCountRow[]>`
-    SELECT "half", "state", count(*)::int AS "total"
+    SELECT "half", "state", "outcome", count(*)::int AS "total"
       FROM xb.campaign_participants
      WHERE "campaign_id" = ${campaignId}::uuid
-     GROUP BY "half", "state"
-     ORDER BY "half", "state"
+     GROUP BY "half", "state", "outcome"
+     ORDER BY "half", "state", "outcome"
   `;
 
 export type CampaignParticipantFilter = {
   half: CampaignHalfCode | null;
   state: CampaignParticipantState | null;
+  outcome: CampaignParticipantOutcome | null;
 };
+
+/**
+ * Порядок страницы участников. По умолчанию — по фамилии; по зачётным дням и по времени
+ * итога — убыванием, пустые в конце: с фильтром «не дотянул» первыми встают те, кому
+ * не хватило одного дня.
+ */
+export type CampaignParticipantSort = 'name' | 'qualified_days' | 'outcome_at';
 
 const participantFilterSql = (campaignId: string, filter: CampaignParticipantFilter): Prisma.Sql =>
   Prisma.sql`
@@ -412,7 +427,29 @@ const participantFilterSql = (campaignId: string, filter: CampaignParticipantFil
          OR participant."half" = ${filter.half}::xb.campaign_half)
     AND (${filter.state}::xb.campaign_participant_state IS NULL
          OR participant."state" = ${filter.state}::xb.campaign_participant_state)
+    AND (${filter.outcome}::xb.campaign_participant_outcome IS NULL
+         OR participant."outcome" = ${filter.outcome}::xb.campaign_participant_outcome)
   `;
+
+const NAME_ORDER_SQL = Prisma.sql`profile."lastName" ASC NULLS LAST,
+              profile."firstName" ASC NULLS LAST,
+              participant."person_id" ASC`;
+
+/**
+ * Выражение порядка выбирается кодом из трёх готовых кусков SQL — это выбор, а не сборка
+ * запроса из пользовательского ввода. Имя и идентификатор в хвосте у всех: без них две
+ * страницы могут показать одну строку дважды.
+ */
+const participantOrderSql = (sort: CampaignParticipantSort): Prisma.Sql => {
+  switch (sort) {
+    case 'qualified_days':
+      return Prisma.sql`participant."qualified_days" DESC NULLS LAST, ${NAME_ORDER_SQL}`;
+    case 'outcome_at':
+      return Prisma.sql`participant."outcome_at" DESC NULLS LAST, ${NAME_ORDER_SQL}`;
+    case 'name':
+      return NAME_ORDER_SQL;
+  }
+};
 
 export const countCampaignParticipants = async (
   campaignId: string,
@@ -437,19 +474,21 @@ export type CampaignParticipantRow = {
   half: CampaignHalfCode;
   state: CampaignParticipantState;
   changedAt: Date;
+  outcome: CampaignParticipantOutcome | null;
+  qualifiedDays: number | null;
 };
 
 /**
  * Страница участников. «Когда сменилось» — отметка текущего состояния: конечные важнее
  * «открыл», у приглашённого — время снимка.
  *
- * Порядок — по фамилии, затем идентификатором человека: без него две страницы могут показать
- * одну строку дважды. Профиль для показа — как в поиске и сегментах: работающий важнее
+ * Порядок — `participantOrderSql`. Профиль для показа — как в поиске и сегментах: работающий важнее
  * уволенного, среди равных свежий.
  */
 export const listCampaignParticipantsPage = async (
   campaignId: string,
   filter: CampaignParticipantFilter,
+  sort: CampaignParticipantSort,
   limit: number,
   offset: number,
   client: Executor = db,
@@ -463,7 +502,9 @@ export const listCampaignParticipantsPage = async (
            participant."half",
            participant."state",
            coalesce(participant."declined_at", participant."joined_at",
-                    participant."opened_at", participant."created_at") AS "changedAt"
+                    participant."opened_at", participant."created_at") AS "changedAt",
+           participant."outcome",
+           participant."qualified_days" AS "qualifiedDays"
       FROM xb.campaign_participants AS participant
       LEFT JOIN LATERAL (
         SELECT candidate."last_name"   AS "lastName",
@@ -484,9 +525,7 @@ export const listCampaignParticipantsPage = async (
          WHERE candidate."person_id" = participant."person_id"
       ) AS profiles ON TRUE
      WHERE ${participantFilterSql(campaignId, filter)}
-     ORDER BY profile."lastName" ASC NULLS LAST,
-              profile."firstName" ASC NULLS LAST,
-              participant."person_id" ASC
+     ORDER BY ${participantOrderSql(sort)}
      LIMIT ${limit} OFFSET ${offset}
   `;
 
@@ -500,7 +539,63 @@ export type MemberCampaignRow = {
   state: CampaignParticipantState;
   startsOn: string;
   endsOn: string;
+  joinedAt: Date | null;
+  /** Длина окна половины в сутках парка — `W`. */
+  windowDays: number;
+  /** Номер сегодняшнего дня окна, с единицы, — `d`. */
+  day: number;
+  /** Сутки парка каждого дня окна, `YYYY-MM-DD`, по порядку. */
+  dayDates: string[];
+  outcome: CampaignParticipantOutcome | null;
+  qualifiedDays: number | null;
+  /** Снимок поездок по дням на момент итога. Пусто, пока итог не подведён. */
+  outcomeDayTrips: number[] | null;
 };
+
+/** Сутки парка, с которых начинается окно половины. */
+const windowFirstDaySql = (half: Prisma.Sql): Prisma.Sql => parkDaySql(Prisma.sql`${half}."starts_at"`);
+
+/**
+ * Длина окна половины в сутках парка — `W`. Метка конца — начало суток, следующих
+ * за последним днём, поэтому разница дат и есть число дней.
+ */
+const windowDaysSql = (half: Prisma.Sql): Prisma.Sql =>
+  Prisma.sql`(${parkDaySql(Prisma.sql`${half}."ends_at"`)} - ${windowFirstDaySql(half)})`;
+
+/**
+ * Зачитанные поездки участника по дням окна — массивом из `W` чисел в порядке дней (issue #168).
+ * Одно выражение на человека, а не семь запросов, и одно на экран и на итог окна: второй счёт
+ * тех же поездок однажды разошёлся бы с первым, и итог объявил бы не то, что видел водитель.
+ *
+ * - сутки режет `parkDaySql` — с 05:00 по Ташкенту; заказ через границу суток ложится
+ *   в день своего `ended_at` целиком;
+ * - в зачёт идут только завершённые после вступления: `ended_at >= joined_at`. Не `synced_at` —
+ *   он перезаписывается каждым прогоном, накрывшим заказ, и значит последнее касание,
+ *   а не первое появление. Пока `joined_at` пуст, сравнение не проходит ни разу — нули;
+ * - поездки берутся на человека через все его профили парка, как у `countCompletedTripsByPerson`:
+ *   переоформленный водитель иначе потерял бы часть поездок;
+ * - дни без поездок добираются рядом дней окна и приходят нулём, а не пропадают из выдачи.
+ *
+ * `participant` и `half` — псевдонимы строк участия и окна в окружающем запросе.
+ */
+const dayTripsSql = (participant: Prisma.Sql, half: Prisma.Sql): Prisma.Sql => Prisma.sql`
+  ARRAY(
+    SELECT coalesce(per_day."trips", 0)
+      FROM generate_series(0, ${windowDaysSql(half)} - 1) AS window_day("offset")
+      LEFT JOIN (
+        SELECT ${parkDaySql(Prisma.sql`trip."ended_at"`)} AS "day", count(*)::int AS "trips"
+          FROM xb.trips AS trip
+          JOIN xb.park_profiles AS profile ON profile."profile_id" = trip."profile_id"
+         WHERE profile."person_id" = ${participant}."person_id"
+           AND trip."status" = ${COMPLETED_TRIP_STATUS}
+           AND trip."ended_at" >= ${participant}."joined_at"
+           AND trip."ended_at" >= ${half}."starts_at"
+           AND trip."ended_at" < ${half}."ends_at"
+         GROUP BY 1
+      ) AS per_day ON per_day."day" = ${windowFirstDaySql(half)} + window_day."offset"
+     ORDER BY window_day."offset"
+  )
+`;
 
 /**
  * Акция, которая видна водителю в этот момент: он в снимке идущей акции, и окно его половины
@@ -512,6 +607,8 @@ export type MemberCampaignRow = {
  *
  * Если окон сразу несколько, берётся запущенная последней. «Сейчас» приходит параметром:
  * граница окна проверяется тестом на заданном часе, а не ожиданием утра восьмого числа.
+ * От него же считается день окна: сутки парка «сейчас» минус сутки начала, плюс единица, —
+ * в 04:50 это ещё вчерашний день.
  */
 export const findMemberCampaign = async (
   personId: string,
@@ -523,7 +620,18 @@ export const findMemberCampaign = async (
            campaign."title",
            participant."state",
            ${startsOnSql(Prisma.sql`half."starts_at"`)} AS "startsOn",
-           ${endsOnSql(Prisma.sql`half."ends_at"`)}     AS "endsOn"
+           ${endsOnSql(Prisma.sql`half."ends_at"`)}     AS "endsOn",
+           participant."joined_at"                      AS "joinedAt",
+           ${windowDaysSql(Prisma.sql`half`)}::int      AS "windowDays",
+           (${parkDaySql(Prisma.sql`${now}::timestamptz`)} - ${windowFirstDaySql(Prisma.sql`half`)} + 1)::int AS "day",
+           ARRAY(
+             SELECT to_char(${windowFirstDaySql(Prisma.sql`half`)} + window_day."offset", 'YYYY-MM-DD')
+               FROM generate_series(0, ${windowDaysSql(Prisma.sql`half`)} - 1) AS window_day("offset")
+              ORDER BY window_day."offset"
+           )                                            AS "dayDates",
+           participant."outcome",
+           participant."qualified_days"                 AS "qualifiedDays",
+           participant."day_trips"                      AS "outcomeDayTrips"
       FROM xb.campaign_participants AS participant
       JOIN xb.campaigns AS campaign ON campaign."id" = participant."campaign_id"
       JOIN xb.campaign_halves AS half
@@ -538,6 +646,154 @@ export const findMemberCampaign = async (
   `;
 
   return rows[0] ?? null;
+};
+
+/**
+ * Зачитанные поездки участника по дням окна его половины — от журнала, на момент запроса.
+ * Экран зовёт это, только пока исход не проставлен: после итога неделя рисуется из снимка.
+ */
+export const readParticipantDayTrips = async (
+  campaignId: string,
+  personId: string,
+  client: Executor = db,
+): Promise<number[]> => {
+  const rows = await client.$queryRaw<{ dayTrips: number[] }[]>`
+    SELECT ${dayTripsSql(Prisma.sql`participant`, Prisma.sql`half`)} AS "dayTrips"
+      FROM xb.campaign_participants AS participant
+      JOIN xb.campaign_halves AS half
+        ON half."campaign_id" = participant."campaign_id"
+       AND half."half" = participant."half"
+     WHERE participant."campaign_id" = ${campaignId}::uuid
+       AND participant."person_id" = ${personId}::uuid
+  `;
+
+  return rows[0]?.dayTrips ?? [];
+};
+
+// ---------------------------------------------------------------------------
+// Итог окна
+// ---------------------------------------------------------------------------
+
+export type CampaignHalfRef = {
+  campaignId: string;
+  half: CampaignHalfCode;
+};
+
+/**
+ * Половины идущих акций, чьё окно кончилось не меньше `buffer` назад и у которых остались
+ * участники без исхода. Буфер — на опоздавшие из Fleet API поездки (docs/decisions.md →
+ * «Сутки — с 05:00 до 05:00 по Ташкенту»).
+ */
+export const listHalvesDueForOutcome = async (
+  now: Date,
+  bufferHours: number,
+  client: Executor = db,
+): Promise<CampaignHalfRef[]> =>
+  client.$queryRaw<CampaignHalfRef[]>`
+    SELECT half."campaign_id" AS "campaignId", half."half"
+      FROM xb.campaign_halves AS half
+      JOIN xb.campaigns AS campaign ON campaign."id" = half."campaign_id"
+     WHERE campaign."status" = 'running'
+       AND half."ends_at" + make_interval(hours => ${bufferHours}::int) <= ${now}::timestamptz
+       AND EXISTS (
+             SELECT 1
+               FROM xb.campaign_participants AS participant
+              WHERE participant."campaign_id" = half."campaign_id"
+                AND participant."half" = half."half"
+                AND participant."outcome" IS NULL
+           )
+     ORDER BY half."ends_at", half."campaign_id", half."half"
+  `;
+
+export type ParticipantAwaitingOutcomeRow = {
+  personId: string;
+  state: CampaignParticipantState;
+  dayTrips: number[];
+};
+
+/** Участники половины без исхода — с состоянием и зачитанными поездками по дням окна. */
+export const listParticipantsAwaitingOutcome = async (
+  campaignId: string,
+  half: CampaignHalfCode,
+  client: Executor = db,
+): Promise<ParticipantAwaitingOutcomeRow[]> =>
+  client.$queryRaw<ParticipantAwaitingOutcomeRow[]>`
+    SELECT participant."person_id" AS "personId",
+           participant."state",
+           ${dayTripsSql(Prisma.sql`participant`, Prisma.sql`half`)} AS "dayTrips"
+      FROM xb.campaign_participants AS participant
+      JOIN xb.campaign_halves AS half
+        ON half."campaign_id" = participant."campaign_id"
+       AND half."half" = participant."half"
+     WHERE participant."campaign_id" = ${campaignId}::uuid
+       AND participant."half" = ${half}::xb.campaign_half
+       AND participant."outcome" IS NULL
+     ORDER BY participant."person_id"
+  `;
+
+export type ParticipantOutcomeInput = {
+  personId: string;
+  outcome: CampaignParticipantOutcome;
+  qualifiedDays: number;
+  dayTrips: number[];
+};
+
+/**
+ * Пишет исходы со снимком. Только туда, где исхода ещё нет, — условием в `UPDATE`, а не
+ * проверкой перед ним: повторный прогон, перезапуск воркера и две одновременные попытки
+ * не переписывают ничего. Задним числом исход не пересматривается. Возвращает, сколько
+ * строк получило исход сейчас.
+ *
+ * Пачка уезжает строкой JSON: массив поездок по дням у каждой строки свой, а `unnest`
+ * двумерный массив разворачивает по элементам, а не по строкам.
+ */
+export const writeParticipantOutcomes = async (
+  campaignId: string,
+  rows: readonly ParticipantOutcomeInput[],
+  client: Executor = db,
+): Promise<number> => {
+  if (rows.length === 0) {
+    return 0;
+  }
+
+  return client.$executeRaw`
+    UPDATE xb.campaign_participants AS participant
+       SET "outcome"        = decided."outcome"::xb.campaign_participant_outcome,
+           "outcome_at"     = now(),
+           "qualified_days" = decided."qualifiedDays",
+           "day_trips"      = decided."dayTrips",
+           "updated_at"     = now()
+      FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb)
+           AS decided("personId" uuid, "outcome" text, "qualifiedDays" int, "dayTrips" int[])
+     WHERE participant."campaign_id" = ${campaignId}::uuid
+       AND participant."person_id" = decided."personId"
+       AND participant."outcome" IS NULL
+  `;
+};
+
+/**
+ * Идёт → окончена — у каждой идущей акции, где исход получили все участники обеих половин.
+ * Условием в `UPDATE`: у половины Б без назначенного окна исходов нет, и акция ждёт её итога.
+ * По всем идущим, а не по только что подведённым: прогон, упавший между исходами и этим шагом,
+ * иначе оставил бы акцию идущей навсегда — следующему прогону подводить уже нечего.
+ * Возвращает идентификаторы оконченных сейчас.
+ */
+export const finishSettledCampaigns = async (client: Executor = db): Promise<string[]> => {
+  const rows = await client.$queryRaw<{ id: string }[]>`
+    UPDATE xb.campaigns AS campaign
+       SET "status"     = 'finished'::xb.campaign_status,
+           "updated_at" = now()
+     WHERE campaign."status" = 'running'
+       AND NOT EXISTS (
+             SELECT 1
+               FROM xb.campaign_participants AS participant
+              WHERE participant."campaign_id" = campaign."id"
+                AND participant."outcome" IS NULL
+           )
+    RETURNING campaign."id"
+  `;
+
+  return rows.map((row) => row.id);
 };
 
 /**

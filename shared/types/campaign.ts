@@ -7,11 +7,17 @@
 
 import type {
   CampaignHalfCode,
+  CampaignParticipantOutcome,
   CampaignParticipantState,
   CampaignStatus,
 } from '../../server/generated/prisma/enums';
 
-export type { CampaignHalfCode, CampaignParticipantState, CampaignStatus };
+export type {
+  CampaignHalfCode,
+  CampaignParticipantOutcome,
+  CampaignParticipantState,
+  CampaignStatus,
+};
 
 /**
  * Окно половины. Даты — то, что вводил сотрудник: первый и последний день окна. Метки —
@@ -52,11 +58,15 @@ export type Campaign = {
   halfB: CampaignWindow | null;
 };
 
-/** Разбивка состава по состояниям на одной половине. */
+/**
+ * Разбивка состава на одной половине — по состояниям и по исходам окна. Пока окно идёт,
+ * исходов нет ни у кого, и `outcomes` все нули: это нормальное состояние, а не пустота.
+ */
 export type CampaignHalfBreakdown = {
   half: CampaignHalfCode;
   total: number;
   states: Record<CampaignParticipantState, number>;
+  outcomes: Record<CampaignParticipantOutcome, number>;
 };
 
 export type CampaignListResponse = {
@@ -103,7 +113,14 @@ export type CampaignParticipant = {
   state: CampaignParticipantState;
   /** Когда состояние сменилось. У приглашённого — время снимка. */
   changedAt: string;
+  /** Исход окна. Пусто, пока итог не подведён. */
+  outcome: CampaignParticipantOutcome | null;
+  /** Зачётных дней на момент итога. Пусто, пока итог не подведён. */
+  qualifiedDays: number | null;
 };
+
+/** Порядок таблицы участников: по фамилии, по зачётным дням, по времени итога. */
+export type CampaignParticipantSort = 'name' | 'qualified_days' | 'outcome_at';
 
 export type CampaignParticipantsResponse = {
   total: number;

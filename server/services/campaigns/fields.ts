@@ -9,6 +9,7 @@ import { CAMPAIGN_SLUG_PATTERN, isCalendarDay } from '#shared/campaign';
 import type {
   Campaign,
   CampaignHalfBreakdown,
+  CampaignParticipantOutcome,
   CampaignParticipantState,
   CampaignWindow,
 } from '#shared/types/campaign';
@@ -55,17 +56,35 @@ const EMPTY_STATES: Readonly<Record<CampaignParticipantState, number>> = {
   declined: 0,
 };
 
+const EMPTY_OUTCOMES: Readonly<Record<CampaignParticipantOutcome, number>> = {
+  returned: 0,
+  short: 0,
+  joined_no_trips: 0,
+  seen_not_joined: 0,
+  no_response: 0,
+};
+
 /**
- * Разбивка по состояниям. Половина без единого участника в ответ не попадает: без деления
+ * Разбивка по состояниям и исходам. Половина без единого участника в ответ не попадает: без деления
  * строки `b` нет вовсе, и нули по ней утверждали бы, что контроль был.
  */
 export const toBreakdown = (rows: CampaignStateCountRow[]): CampaignHalfBreakdown[] => {
   const byHalf = new Map<CampaignHalfBreakdown['half'], CampaignHalfBreakdown>();
 
   for (const row of rows) {
-    const current = byHalf.get(row.half) ?? { half: row.half, total: 0, states: { ...EMPTY_STATES } };
+    const current = byHalf.get(row.half) ?? {
+      half: row.half,
+      total: 0,
+      states: { ...EMPTY_STATES },
+      outcomes: { ...EMPTY_OUTCOMES },
+    };
 
     current.states[row.state] += row.total;
+
+    if (row.outcome !== null) {
+      current.outcomes[row.outcome] += row.total;
+    }
+
     current.total += row.total;
     byHalf.set(row.half, current);
   }
