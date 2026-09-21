@@ -18,7 +18,7 @@ const STATES: CampaignParticipantState[] = ['invited', 'opened', 'joined', 'decl
 <template>
   <MoleculesSectionPanel
     title="Состав по состояниям"
-    note="«Открыл» — открыл экран акции в Mini App. «В деле» — нажал «Участвовать». Назад состояния не ходят."
+    note="«Открыл экран акции» — видел акцию в Mini App и ещё не ответил. «Участвует» — нажал «Участвовать», «отказался» — нажал «Отказаться». Назад состояния не ходят."
   >
     <MoleculesStateNotice
       v-if="breakdown.length === 0"

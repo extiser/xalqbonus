@@ -82,7 +82,7 @@ const driversLabel = (total: number): string =>
               <span class="font-semibold text-slate-900">{{ driversLabel(segmentCount.total) }}</span>.
             </p>
             <p class="mt-0.5 text-xs text-slate-500">
-              Посчитано {{ formatDateTime(segmentCount.calculatedAt) }} ({{ DISPLAY_TIME_ZONE_LABEL }}).
+              Посчитано {{ formatDateTime(segmentCount.calculatedAt) }} в зоне {{ DISPLAY_TIME_ZONE_LABEL }}.
               Завтра число будет другим: сегмент хранит условия, а не людей. Состав замрёт
               в момент запуска.
             </p>

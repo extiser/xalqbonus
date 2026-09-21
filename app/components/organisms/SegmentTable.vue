@@ -38,7 +38,7 @@ const driversLabel = (total: number): string =>
     />
     <div v-else>
       <p class="pb-3 text-xs text-slate-400">
-        Числа на {{ formatDateTime(data.calculatedAt) }} ({{ DISPLAY_TIME_ZONE_LABEL }})
+        Числа на {{ formatDateTime(data.calculatedAt) }} в зоне {{ DISPLAY_TIME_ZONE_LABEL }}
       </p>
       <ul>
         <li

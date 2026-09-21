@@ -276,10 +276,19 @@ const CAMPAIGN_STATUS_TONES: Record<Campaign['status'], 'ok' | 'warn' | 'muted'>
 export const campaignStatusTone = (status: Campaign['status']): 'ok' | 'warn' | 'muted' =>
   CAMPAIGN_STATUS_TONES[status];
 
+/**
+ * Слова те же, что водитель видит у себя в Mini App (`server/bot/texts.ts` → `campaign_state_*`):
+ * «Вы приглашены», «Вы участвуете», «Вы отказались». Один факт, названный в админке и у водителя
+ * разными словами, заставляет сверяющего каждый раз решать, то же это или нет.
+ *
+ * «Открыл экран акции», а не «открыл»: одно слово не говорит, что открыл, — Mini App, акцию
+ * или, когда придут сундуки, сундук. Водитель этого состояния отдельно не видит: для него
+ * открывший и не открывший одинаково «приглашены», разница нужна только замеру.
+ */
 const PARTICIPANT_STATE_LABELS: Record<CampaignParticipantState, string> = {
   invited: 'приглашён',
-  opened: 'открыл',
-  joined: 'в деле',
+  opened: 'открыл экран акции',
+  joined: 'участвует',
   declined: 'отказался',
 };
 
