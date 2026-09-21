@@ -106,6 +106,12 @@ export type TextKey =
   | 'order_denied_insufficient_points'
   | 'order_denied_not_found'
   | 'order_denied_not_pending'
+  | 'campaign_window'
+  | 'campaign_state_invited'
+  | 'campaign_state_joined'
+  | 'campaign_state_declined'
+  | 'button_campaign_join'
+  | 'campaign_decline'
   | 'not_in_registry'
   | 'not_in_park'
   | 'profile_fired'
@@ -527,6 +533,41 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   order_denied_not_pending: {
     ru: 'Этот заказ уже выдан или отменён.',
     uz: 'Bu buyurtma allaqachon berilgan yoki bekor qilingan.',
+  },
+
+  // Экран акции — рабочий минимум (issue #166): сроки, состояние строкой и два действия.
+  // Оформление по макетам приезжает своей задачей и переодевает эти же строки.
+  //
+  // Состояния названы теми же словами, что в админке (`app/utils/labels.ts` →
+  // `PARTICIPANT_STATE_LABELS`): приглашён, участвует, отказался. Меняется слово здесь —
+  // меняется и там: сотрудник сверяет экран водителя со списком участников.
+  campaign_window: {
+    ru: 'Сроки акции: {from} — {to}',
+    uz: 'Aksiya muddati: {from} — {to}',
+  },
+  /**
+   * Приглашён и ещё не решил. Одна строка на `invited` и `opened`: для водителя это одно
+   * и то же — экран он видит впервые или снова, а разница нужна только замеру.
+   */
+  campaign_state_invited: {
+    ru: 'Вы приглашены в акцию.',
+    uz: 'Siz aksiyaga taklif qilingansiz.',
+  },
+  campaign_state_joined: {
+    ru: 'Вы участвуете в акции.',
+    uz: 'Siz aksiyada ishtirok etyapsiz.',
+  },
+  campaign_state_declined: {
+    ru: 'Вы отказались от участия в акции.',
+    uz: "Siz aksiyada ishtirok etishdan voz kechdingiz.",
+  },
+  button_campaign_join: {
+    ru: 'Участвовать',
+    uz: 'Ishtirok etish',
+  },
+  campaign_decline: {
+    ru: 'Отказаться',
+    uz: 'Voz kechish',
   },
   not_in_registry: {
     ru: 'Не получилось привязать номер автоматически — в данных таксопарка чего-то не хватает. Это чинится только в офисе: подойдите в любой офис Xalq Taxi с водительским удостоверением.',

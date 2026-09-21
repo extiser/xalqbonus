@@ -68,7 +68,7 @@ const basisLabel = computed(() =>
       <div class="flex flex-wrap items-baseline gap-x-4 gap-y-1">
         <p class="font-mono text-2xl text-slate-900 tabular-nums">{{ totalLabel }}</p>
         <p class="text-sm text-slate-500">
-          на {{ formatDateTime(data.calculatedAt) }} ({{ DISPLAY_TIME_ZONE_LABEL }}), {{ basisLabel }}
+          на {{ formatDateTime(data.calculatedAt) }} в зоне {{ DISPLAY_TIME_ZONE_LABEL }}, {{ basisLabel }}
         </p>
         <p v-if="refreshing" class="text-sm text-slate-400">пересчитываем…</p>
       </div>

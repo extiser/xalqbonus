@@ -71,7 +71,9 @@ const onBackdropClick = (event: MouseEvent): void => {
   >
     <div class="space-y-4 px-5 py-4">
       <h2 class="text-base font-semibold text-slate-900">{{ title }}</h2>
-      <p class="text-sm text-slate-600">{{ message }}</p>
+      <!-- Переводы строк в тексте сохраняются: подтверждение запуска акции держит отдельной
+           строкой то, что состав больше не пересчитывается (issue #166). -->
+      <p class="text-sm whitespace-pre-line text-slate-600">{{ message }}</p>
       <div class="flex flex-wrap justify-end gap-2">
         <!-- Первой в разметке — безопасная: `showModal` ставит фокус на первое, что его принимает. -->
         <AtomsActionButton :label="cancelLabel" @click="emit('cancel')" />

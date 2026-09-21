@@ -6,7 +6,7 @@
  * придуманные идентификаторы обязаны быть уникальными на странице, и два одинаковых
  * поля в одной форме однажды этим столкнутся.
  */
-type FieldType = 'text' | 'tel' | 'password' | 'url';
+type FieldType = 'text' | 'tel' | 'password' | 'url' | 'date';
 
 withDefaults(
   defineProps<{
