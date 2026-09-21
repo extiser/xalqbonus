@@ -1,5 +1,5 @@
 import { findMemberCampaign, markParticipantOpened } from '#server/repositories/campaigns';
-import { describeMemberCampaign } from '#server/services/campaigns/memberCampaignScreen';
+import { presentMemberCampaign } from '#server/services/campaigns/memberCampaignScreen';
 import type { LinkedDriver } from '#server/services/drivers/readLinkedDriver';
 import type { MiniAppCampaignResponse } from '#shared/types/miniapp';
 
@@ -25,8 +25,14 @@ export const readMemberCampaign = async (
   }
 
   if (row.state === 'invited' && (await markParticipantOpened(row.campaignId, driver.personId))) {
-    return { campaign: describeMemberCampaign({ ...row, state: 'opened' }, driver.language) };
+    return {
+      campaign: await presentMemberCampaign(
+        { ...row, state: 'opened' },
+        driver.personId,
+        driver.language,
+      ),
+    };
   }
 
-  return { campaign: describeMemberCampaign(row, driver.language) };
+  return { campaign: await presentMemberCampaign(row, driver.personId, driver.language) };
 };

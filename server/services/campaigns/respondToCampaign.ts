@@ -4,7 +4,7 @@ import {
   markParticipantDeclined,
   markParticipantJoined,
 } from '#server/repositories/campaigns';
-import { describeMemberCampaign } from '#server/services/campaigns/memberCampaignScreen';
+import { presentMemberCampaign } from '#server/services/campaigns/memberCampaignScreen';
 import type { LinkedDriver } from '#server/services/drivers/readLinkedDriver';
 import type { MiniAppCampaignResponse } from '#shared/types/miniapp';
 
@@ -43,7 +43,9 @@ const respond = async (
 
   const after = await findMemberCampaign(driver.personId, now);
 
-  return { campaign: after ? describeMemberCampaign(after, driver.language) : null };
+  return {
+    campaign: after ? await presentMemberCampaign(after, driver.personId, driver.language) : null,
+  };
 };
 
 /** «Участвовать»: `invited | opened → joined`. */

@@ -5,7 +5,11 @@ import type {
   DriverOperationCounterparty,
   DriverTelegramLink,
 } from '#shared/types/driver';
-import type { Campaign, CampaignParticipantState } from '#shared/types/campaign';
+import type {
+  Campaign,
+  CampaignParticipantOutcome,
+  CampaignParticipantState,
+} from '#shared/types/campaign';
 import type { EmployeeAccount } from '#shared/types/employee';
 import type { Mailing } from '#shared/types/mailing';
 import type { OfficeOrder } from '#shared/types/orders';
@@ -294,6 +298,21 @@ const PARTICIPANT_STATE_LABELS: Record<CampaignParticipantState, string> = {
 
 export const participantStateLabel = (state: CampaignParticipantState): string =>
   PARTICIPANT_STATE_LABELS[state];
+
+/**
+ * Исходы окна — словами из схемы акции (`comeback.md` → «Схема акции по шагам»). Явный отказ
+ * сливается с «посмотрел и не вступил» — различает их состояние, а не исход.
+ */
+const PARTICIPANT_OUTCOME_LABELS: Record<CampaignParticipantOutcome, string> = {
+  returned: 'вернулся',
+  short: 'не дотянул',
+  joined_no_trips: 'нажал, но не выехал',
+  seen_not_joined: 'посмотрел и не вступил',
+  no_response: 'не откликнулся',
+};
+
+export const participantOutcomeLabel = (outcome: CampaignParticipantOutcome): string =>
+  PARTICIPANT_OUTCOME_LABELS[outcome];
 
 /** Половина Б при делении — контроль: подпись говорит это, чтобы её нули не читались провалом. */
 export const campaignHalfLabel = (half: 'a' | 'b'): string =>

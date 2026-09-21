@@ -15,6 +15,7 @@
 // перечисление, оно меняется нашей же миграцией. Импорт только типов — в сборку
 // не попадает ни байта.
 import type {
+  CampaignParticipantOutcome,
   CampaignParticipantState,
   EmployeeRole,
   Language,
@@ -192,6 +193,77 @@ export type MemberCampaign = {
   canRespond: boolean;
   joinLabel: string;
   declineLabel: string;
+  /**
+   * Прогресс недели (issue #168). `null` — вступления нет: считать не от чего, и чисел
+   * у приглашённого, открывшего экран и отказавшегося нет вовсе, а не нули.
+   */
+  progress: MemberCampaignProgress | null;
+};
+
+/** Вид строки блока недели: золото, серый или белый — выбирает сервер, экран только красит. */
+export type MemberWeekLineTone = 'gold' | 'grey' | 'white';
+
+export type MemberWeekLine = {
+  text: string;
+  tone: MemberWeekLineTone;
+};
+
+/** Клетка дня окна. */
+export type MemberWeekDay = {
+  /** Номер дня окна, с единицы. */
+  day: number;
+  /** Сутки парка, `YYYY-MM-DD`. */
+  date: string;
+  /** Зачитанных поездок в этот день — завершённых после вступления. У будущего дня ноль. */
+  trips: number;
+  /** День зачтён: поездок пять или больше. */
+  qualified: boolean;
+  kind: 'past' | 'today' | 'future';
+};
+
+/**
+ * Блок дневной цели. Ступень нагрева — 1 (0–1 поездка), 2 (2–3), 3 (4 и больше): три,
+ * а не шесть, чтобы экран не дёргался на каждой поездке.
+ */
+export type MemberCampaignToday = {
+  trips: number;
+  /** Сколько осталось до пяти; ноль — цель взята. */
+  tripsLeft: number;
+  goalTaken: boolean;
+  heatStep: 1 | 2 | 3;
+  /** «Сегодня 3 поездки». */
+  tripsText: string;
+  /** «Сундук дня ждёт: всего 2 поездки» или «Ура! Сундук дня ваш!». */
+  goalText: string;
+};
+
+/**
+ * Числа недели участника. Пока окно идёт, считаются от журнала при каждом показе; когда
+ * исход проставлен — `frozen`, и всё рисуется из снимка итога, сколько бы поездок ни доехало.
+ */
+export type MemberCampaignProgress = {
+  /** Номер сегодняшнего дня окна. У замершей недели — последний день окна. */
+  day: number;
+  /** Дней в окне. */
+  windowDays: number;
+  /** «День 3 из 7». */
+  dayText: string;
+  days: MemberWeekDay[];
+  /** Зачётных дней, зажато на пятёрке. */
+  done: number;
+  need: number;
+  slack: number;
+  chestDays: number;
+  /** Дневная цель. `null` у замершей недели: сегодняшнего дня в окне уже нет. */
+  today: MemberCampaignToday | null;
+  /** Верхняя строка справа. `null` — строки нет. */
+  weekTop: MemberWeekLine | null;
+  /** «2 из 5 дней» — слева в нижней строке. */
+  counterText: string;
+  /** Нижняя строка справа. `null` у замершей недели: правила для идущего окна там не работают. */
+  weekBottom: MemberWeekLine | null;
+  frozen: boolean;
+  outcome: CampaignParticipantOutcome | null;
 };
 
 /**

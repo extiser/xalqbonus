@@ -186,8 +186,12 @@ describe('акции', () => {
     expect(participants.filter((row) => row.half === 'a')).toHaveLength(3);
     expect(participants.filter((row) => row.half === 'b')).toHaveLength(2);
     expect(launched.breakdown).toEqual([
-      { half: 'a', total: 3, states: { invited: 3, opened: 0, joined: 0, declined: 0 } },
-      { half: 'b', total: 2, states: { invited: 2, opened: 0, joined: 0, declined: 0 } },
+      { half: 'a', total: 3, states: { invited: 3, opened: 0, joined: 0, declined: 0 },
+        outcomes: { returned: 0, short: 0, joined_no_trips: 0, seen_not_joined: 0, no_response: 0 },
+      },
+      { half: 'b', total: 2, states: { invited: 2, opened: 0, joined: 0, declined: 0 },
+        outcomes: { returned: 0, short: 0, joined_no_trips: 0, seen_not_joined: 0, no_response: 0 },
+      },
     ]);
 
     // Повторный запуск не проходит вовсе, а не «проходит и ничего не делает».
@@ -321,7 +325,9 @@ describe('акции', () => {
     const { breakdown } = await readCampaign(campaignId);
 
     expect(breakdown).toEqual([
-      { half: 'a', total: 4, states: { invited: 2, opened: 0, joined: 1, declined: 1 } },
+      { half: 'a', total: 4, states: { invited: 2, opened: 0, joined: 1, declined: 1 },
+        outcomes: { returned: 0, short: 0, joined_no_trips: 0, seen_not_joined: 0, no_response: 0 },
+      },
     ]);
 
     const page = await readCampaignParticipants(

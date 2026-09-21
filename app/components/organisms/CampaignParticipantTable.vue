@@ -1,15 +1,20 @@
 <script setup lang="ts">
 import { formatDateTime } from '~/utils/format';
-import { participantStateLabel } from '~/utils/labels';
+import { participantOutcomeLabel, participantStateLabel } from '~/utils/labels';
 import type { LoadState } from '~/types/loadState';
 import type { SelectOption } from '~/types/selectOption';
 import type { CampaignParticipantsResponse } from '#shared/types/campaign';
 
 /**
- * Участники акции: имя, позывной, половина, состояние и когда оно сменилось.
+ * Участники акции: имя, позывной, половина, состояние, когда оно сменилось, исход окна
+ * и зачётные дни.
  *
- * Фильтры — по половине (когда состав делили) и по состоянию. Листание — `PagerBar`,
- * по 25 строк: за данными ходит страница, компонент отдаёт наверх новое смещение и фильтры.
+ * Фильтры — по половине (когда состав делили), состоянию и исходу; порядок — по фамилии,
+ * зачётным дням или времени итога. Листание — `PagerBar`, по 25 строк: за данными ходит
+ * страница, компонент отдаёт наверх новое смещение и фильтры.
+ *
+ * Пока окно идёт, исход и зачётные дни пусты у всех — это нормальное состояние, а не пустой
+ * экран, и отдельной плашки ему не нужно.
  */
 defineProps<{
   state: LoadState;
@@ -22,6 +27,8 @@ const emit = defineEmits<{ page: [offset: number] }>();
 
 const half = defineModel<string>('half', { required: true });
 const participantState = defineModel<string>('participantState', { required: true });
+const outcome = defineModel<string>('outcome', { required: true });
+const sort = defineModel<string>('sort', { required: true });
 
 const HALF_OPTIONS: SelectOption[] = [
   { value: 'a', label: 'Половина А' },
@@ -32,6 +39,15 @@ const STATE_OPTIONS: SelectOption[] = (['invited', 'opened', 'joined', 'declined
   (value) => ({ value, label: participantStateLabel(value) }),
 );
 
+const OUTCOME_OPTIONS: SelectOption[] = (
+  ['returned', 'short', 'joined_no_trips', 'seen_not_joined', 'no_response'] as const
+).map((value) => ({ value, label: participantOutcomeLabel(value) }));
+
+const SORT_OPTIONS: SelectOption[] = [
+  { value: 'qualified_days', label: 'По зачётным дням' },
+  { value: 'outcome_at', label: 'По времени итога' },
+];
+
 const fullName = (row: CampaignParticipantsResponse['rows'][number]): string =>
   [row.lastName, row.firstName, row.middleName].filter(Boolean).join(' ') || 'Без имени';
 </script>
@@ -39,7 +55,7 @@ const fullName = (row: CampaignParticipantsResponse['rows'][number]): string =>
 <template>
   <MoleculesSectionPanel title="Участники">
     <div class="space-y-4">
-      <div class="grid gap-3 sm:grid-cols-2">
+      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <label v-if="splitEnabled" class="block">
           <span class="mb-1 block text-sm font-medium text-slate-700">Половина</span>
           <AtomsSelectInput v-model="half" :options="HALF_OPTIONS">
@@ -50,6 +66,18 @@ const fullName = (row: CampaignParticipantsResponse['rows'][number]): string =>
           <span class="mb-1 block text-sm font-medium text-slate-700">Состояние</span>
           <AtomsSelectInput v-model="participantState" :options="STATE_OPTIONS">
             <option value="">Все состояния</option>
+          </AtomsSelectInput>
+        </label>
+        <label class="block">
+          <span class="mb-1 block text-sm font-medium text-slate-700">Исход</span>
+          <AtomsSelectInput v-model="outcome" :options="OUTCOME_OPTIONS">
+            <option value="">Все исходы</option>
+          </AtomsSelectInput>
+        </label>
+        <label class="block">
+          <span class="mb-1 block text-sm font-medium text-slate-700">Порядок</span>
+          <AtomsSelectInput v-model="sort" :options="SORT_OPTIONS">
+            <option value="">По фамилии</option>
           </AtomsSelectInput>
         </label>
       </div>
@@ -78,7 +106,9 @@ const fullName = (row: CampaignParticipantsResponse['rows'][number]): string =>
                 <th class="py-2 pr-4 font-medium">Позывной</th>
                 <th v-if="splitEnabled" class="py-2 pr-4 font-medium">Половина</th>
                 <th class="py-2 pr-4 font-medium">Состояние</th>
-                <th class="py-2 font-medium">Когда сменилось</th>
+                <th class="py-2 pr-4 font-medium">Когда сменилось</th>
+                <th class="py-2 pr-4 font-medium">Исход</th>
+                <th class="py-2 font-medium">Зачётных дней</th>
               </tr>
             </thead>
             <tbody>
@@ -96,9 +126,13 @@ const fullName = (row: CampaignParticipantsResponse['rows'][number]): string =>
                   {{ row.half === 'a' ? 'А' : 'Б' }}
                 </td>
                 <td class="py-2 pr-4 text-slate-900">{{ participantStateLabel(row.state) }}</td>
-                <td class="py-2 whitespace-nowrap text-slate-600">
+                <td class="py-2 pr-4 whitespace-nowrap text-slate-600">
                   {{ formatDateTime(row.changedAt) }}
                 </td>
+                <td class="py-2 pr-4 text-slate-900">
+                  {{ row.outcome ? participantOutcomeLabel(row.outcome) : '—' }}
+                </td>
+                <td class="py-2 text-slate-900">{{ row.qualifiedDays ?? '—' }}</td>
               </tr>
             </tbody>
           </table>

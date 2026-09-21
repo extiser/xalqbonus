@@ -1,18 +1,34 @@
 <script setup lang="ts">
-import { campaignHalfLabel, participantStateLabel } from '~/utils/labels';
-import type { CampaignHalfBreakdown, CampaignParticipantState } from '#shared/types/campaign';
+import {
+  campaignHalfLabel,
+  participantOutcomeLabel,
+  participantStateLabel,
+} from '~/utils/labels';
+import type {
+  CampaignHalfBreakdown,
+  CampaignParticipantOutcome,
+  CampaignParticipantState,
+} from '#shared/types/campaign';
 
 /**
- * Разбивка состава акции по состояниям — отдельно по половинам, когда состав делили.
+ * Разбивка состава акции по состояниям и под ней — по исходам окна, отдельно по половинам,
+ * когда состав делили: без этого разреза замер контроля не посчитать.
  *
- * Состояния здесь только те, что водитель меняет сам. Исходы окна появятся с итогом окна
- * и сюда не подмешиваются.
+ * Состояния — то, что водитель меняет сам; исходы ставит итог окна. Пока окно идёт, исходы
+ * все нули — это нормальное состояние, а не пустота.
  */
 defineProps<{
   breakdown: CampaignHalfBreakdown[];
 }>();
 
 const STATES: CampaignParticipantState[] = ['invited', 'opened', 'joined', 'declined'];
+const OUTCOMES: CampaignParticipantOutcome[] = [
+  'returned',
+  'short',
+  'joined_no_trips',
+  'seen_not_joined',
+  'no_response',
+];
 </script>
 
 <template>
@@ -37,6 +53,15 @@ const STATES: CampaignParticipantState[] = ['invited', 'opened', 'joined', 'decl
             :key="state"
             :label="participantStateLabel(state)"
             :value="row.states[state]"
+          />
+        </dl>
+        <p class="text-xs font-medium text-slate-500">Исходы окна</p>
+        <dl class="grid grid-cols-2 gap-3 sm:grid-cols-5">
+          <MoleculesCounterTile
+            v-for="outcome in OUTCOMES"
+            :key="outcome"
+            :label="participantOutcomeLabel(outcome)"
+            :value="row.outcomes[outcome]"
           />
         </dl>
       </div>

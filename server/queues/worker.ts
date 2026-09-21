@@ -1,5 +1,10 @@
 import { consola } from 'consola';
 import { writeFileSync } from 'node:fs';
+import {
+  applyCampaignsSchedule,
+  createCampaignsQueue,
+  createCampaignsWorker,
+} from '#server/queues/campaigns';
 import { closeQueueConnection, getQueueConnection } from '#server/queues/connection';
 import { closeMailingQueue, createMailingWorker, getMailingQueue } from '#server/queues/mailing';
 import {
@@ -149,6 +154,21 @@ ordersWorker.on('error', (error: Error) => {
   log.warn('очередь заказов сообщила об ошибке', { error: error.message });
 });
 
+// Итог окна акций — четвёртая очередь, своя по той же причине: волна в тысячи участников
+// не должна вставать перед просрочкой заказов (server/queues/campaigns.ts).
+const campaignsQueue = createCampaignsQueue();
+const campaignsWorker = createCampaignsWorker();
+
+campaignsWorker.on('failed', (job, error) => {
+  // Исходы пишутся только туда, где их нет, поэтому упавший прогон ничего не портит:
+  // следующий через пятнадцать минут возьмёт тех же участников.
+  log.error('прогон итога окна упал', { kind: job?.data.kind, error: error.message });
+});
+
+campaignsWorker.on('error', (error: Error) => {
+  log.warn('очередь акций сообщила об ошибке', { error: error.message });
+});
+
 // Прошлый процесс мог уйти по SIGKILL, не закрыв свою строку прогона: `syncWorker.close()`
 // на SIGTERM дожидается прогона, а `docker stop` по таймауту и убийство по памяти такой
 // возможности не дают. Подбираем брошенное — иначе журнал прогонов копит вечно бегущие строки.
@@ -165,6 +185,7 @@ if (abandoned > 0) {
 
 await applySyncSchedule(syncQueue, config);
 await applyOrdersSchedule(ordersQueue);
+await applyCampaignsSchedule(campaignsQueue);
 
 log.info('воркер запущен', {
   liveEnabled: config.liveEnabled,
@@ -187,6 +208,10 @@ const shutdown = async (signal: string): Promise<void> => {
   // посередине оставит остальные следующему прогону — а не полузакрытый заказ.
   await ordersWorker.close();
   await ordersQueue.close();
+  // Итог окна — по той же причине: оборванный прогон оставит часть участников без исхода,
+  // и их возьмёт следующий.
+  await campaignsWorker.close();
+  await campaignsQueue.close();
   // Воркер уведомлений дожидается отправок, которые уже в руках: оборванная на середине
   // отправка — это сообщение, про которое неизвестно, ушло оно или нет.
   await notificationsWorker.close();

@@ -3,13 +3,15 @@ import {
   findCampaign,
   listCampaignParticipantsPage,
   type CampaignParticipantFilter,
+  type CampaignParticipantSort,
 } from '#server/repositories/campaigns';
 import { UnknownCampaignError } from '#server/services/campaigns/errors';
 import { CAMPAIGN_PARTICIPANTS_LIMIT } from '#shared/campaign';
 import type { CampaignParticipantsResponse } from '#shared/types/campaign';
 
 /**
- * Страница участников акции с фильтром по половине и состоянию.
+ * Страница участников акции с фильтром по половине, состоянию и исходу и с порядком
+ * по фамилии, зачётным дням или времени итога.
  *
  * Потолок страницы ставит сервис: он один знает, сколько строк ему не жалко отдать.
  * Больше страницы экрана не просят — сверх неё отдаётся ровно она.
@@ -17,6 +19,7 @@ import type { CampaignParticipantsResponse } from '#shared/types/campaign';
 export const readCampaignParticipants = async (
   campaignId: string,
   filter: CampaignParticipantFilter,
+  sort: CampaignParticipantSort,
   limit: number,
   offset: number,
 ): Promise<CampaignParticipantsResponse> => {
@@ -29,7 +32,7 @@ export const readCampaignParticipants = async (
 
   const [total, rows] = await Promise.all([
     countCampaignParticipants(campaignId, filter),
-    listCampaignParticipantsPage(campaignId, filter, pageLimit, pageOffset),
+    listCampaignParticipantsPage(campaignId, filter, sort, pageLimit, pageOffset),
   ]);
 
   return {
@@ -43,6 +46,8 @@ export const readCampaignParticipants = async (
       half: row.half,
       state: row.state,
       changedAt: row.changedAt.toISOString(),
+      outcome: row.outcome,
+      qualifiedDays: row.qualifiedDays,
     })),
     limit: pageLimit,
     offset: pageOffset,

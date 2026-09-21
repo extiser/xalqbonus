@@ -15,6 +15,8 @@ export const useCampaignParticipants = (readCampaignId: () => string | null) => 
   const data = ref<CampaignParticipantsResponse | null>(null);
   const half = ref('');
   const participantState = ref('');
+  const outcome = ref('');
+  const sort = ref('');
   const offset = ref(0);
 
   /** Номер последнего запроса: ответ на прежний фильтр, приехавший позже, не показывается. */
@@ -38,6 +40,8 @@ export const useCampaignParticipants = (readCampaignId: () => string | null) => 
           query: {
             half: half.value || undefined,
             state: participantState.value || undefined,
+            outcome: outcome.value || undefined,
+            sort: sort.value || undefined,
             limit: CAMPAIGN_PARTICIPANTS_LIMIT,
             offset: offset.value,
           },
@@ -55,7 +59,7 @@ export const useCampaignParticipants = (readCampaignId: () => string | null) => 
     }
   };
 
-  watch([half, participantState], () => {
+  watch([half, participantState, outcome, sort], () => {
     offset.value = 0;
     void load();
   });
@@ -65,5 +69,5 @@ export const useCampaignParticipants = (readCampaignId: () => string | null) => 
     void load();
   };
 
-  return { state, data, half, participantState, load, page };
+  return { state, data, half, participantState, outcome, sort, load, page };
 };

@@ -551,6 +551,8 @@ onBeforeUnmount(() => {
       <OrganismsCampaignParticipantTable
         v-model:half="participants.half.value"
         v-model:participant-state="participants.participantState.value"
+        v-model:outcome="participants.outcome.value"
+        v-model:sort="participants.sort.value"
         :state="participants.state.value"
         :data="participants.data.value"
         :split-enabled="campaign.splitEnabled"
