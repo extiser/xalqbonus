@@ -31,6 +31,10 @@ export type ProductRow = {
   publishedAt: Date | null;
   /** Заполнено — товар архивный: заказать нельзя, а прошлые заказы его помнят. */
   archivedAt: Date | null;
+  /** Приз для акции: публикуется без цены в баллах. */
+  promo: boolean;
+  /** Не показывать на витрине водителя. Остатки и приход видят его всегда. */
+  hiddenInCatalog: boolean;
   updatedAt: Date;
 };
 
@@ -44,6 +48,8 @@ const PRODUCT_COLUMNS = Prisma.sql`
   "price_cost"   AS "priceCost",
   "published_at" AS "publishedAt",
   "archived_at"  AS "archivedAt",
+  "promo",
+  "hidden_in_catalog" AS "hiddenInCatalog",
   "updated_at"   AS "updatedAt"
 `;
 
@@ -98,6 +104,8 @@ export type ProductInput = {
   pricePoints: number | null;
   priceRetail: number | null;
   priceCost: number | null;
+  promo: boolean;
+  hiddenInCatalog: boolean;
 };
 
 /** Заводит черновик: `published_at` пуст, публикация — отдельное действие. */
@@ -106,13 +114,18 @@ export const insertProductDraft = async (
   client: Executor = db,
 ): Promise<ProductRow> => {
   const rows = await client.$queryRaw<ProductRow[]>`
-    INSERT INTO xb.products ("name", "description", "price_points", "price_retail", "price_cost")
+    INSERT INTO xb.products (
+      "name", "description", "price_points", "price_retail", "price_cost",
+      "promo", "hidden_in_catalog"
+    )
     VALUES (
       ${input.name},
       ${input.description},
       ${input.pricePoints}::int,
       ${input.priceRetail}::int,
-      ${input.priceCost}::int
+      ${input.priceCost}::int,
+      ${input.promo},
+      ${input.hiddenInCatalog}
     )
     RETURNING ${PRODUCT_COLUMNS}
   `;
@@ -147,6 +160,8 @@ export const updateProductFields = async (
            "price_points" = ${input.pricePoints}::int,
            "price_retail" = ${input.priceRetail}::int,
            "price_cost"   = ${input.priceCost}::int,
+           "promo"        = ${input.promo},
+           "hidden_in_catalog" = ${input.hiddenInCatalog},
            "updated_at"   = now()
      WHERE "id" = ${productId}::uuid
     RETURNING ${PRODUCT_COLUMNS}

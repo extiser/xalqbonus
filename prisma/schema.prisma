@@ -218,6 +218,13 @@ enum StockMovementKind {
   order_issue
   /// Отмена заказа: резерв снят, товар вернулся в свободный остаток.
   order_release
+  /// Рождение награды-товара: товар ушёл из свободного остатка в резерв под награду.
+  /// Свой вид, а не `order_reserve`: три вида заказа обязаны нести заказ, а у награды его нет.
+  reward_reserve
+  /// Выдача награды на стойке: резерв снят, товар ушёл из офиса.
+  reward_issue
+  /// Сгорание награды: резерв вернулся в свободный остаток.
+  reward_release
 
   @@map("stock_movement_kind")
   @@schema("xb")
@@ -241,6 +248,45 @@ enum OrderCancelReason {
   expired
 
   @@map("order_cancel_reason")
+  @@schema("xb")
+}
+
+/// Что за награда. Набор фиксированный: баллы и товары уже есть сущностями, а всё остальное
+/// описывается словами (issue #172).
+enum RewardKind {
+  /// Баллы: зачисляются на баланс сразу, кода и офиса нет.
+  points
+  /// Товар из `products`: занимает остаток офиса резервом до выдачи.
+  product
+  /// Произвольная награда, описанная названием. На складе её нет, остаток не трогается.
+  custom
+
+  @@map("reward_kind")
+  @@schema("xb")
+}
+
+/// Где награда. Путь один и в одну сторону: `awaiting` → `issued` или `expired`;
+/// `credited` — конечное с рождения, у баллов другого не бывает.
+enum RewardStatus {
+  /// Баллы зачислены на баланс.
+  credited
+  /// Ждёт в офисе, код действует.
+  awaiting
+  /// Получена на стойке.
+  issued
+  /// Не забрали за срок — сгорела.
+  expired
+
+  @@map("reward_status")
+  @@schema("xb")
+}
+
+/// Почему награда выдаётся — то, что сотрудник видит на карточке у стойки.
+enum RewardSource {
+  campaign
+  manual
+
+  @@map("reward_source")
   @@schema("xb")
 }
 
@@ -367,6 +413,7 @@ model Person {
   orders        Order[]
   mailings      MailingRecipient[]
   campaigns     CampaignParticipant[]
+  rewards       Reward[]
 
   @@map("persons")
   @@schema("xb")
@@ -629,6 +676,8 @@ model Employee {
   mailings        Mailing[]
   segments        Segment[]
   campaigns       Campaign[]
+  rewardsIssued   Reward[]         @relation("reward_issued_by")
+  rewardsGranted  Reward[]         @relation("reward_granted_by")
 
   @@map("employees")
   @@schema("xb")
@@ -1110,6 +1159,8 @@ model Office {
   stock     OfficeStock[]
   movements StockMovement[]
   orders    Order[]
+  rewards   Reward[]
+  campaigns Campaign[]
 
   @@map("offices")
   @@schema("xb")
@@ -1160,7 +1211,8 @@ model Product {
   /// Относительный путь на именованном томе приложения. Файл кладёт веб — здесь только
   /// колонка (docs/decisions.md → «Фото товара — файл на именованном томе приложения»).
   photoPath   String?   @map("photo_path")
-  /// Пусто только у черновика — как и обе цены в сумах.
+  /// Пусто у черновика и может быть пусто у призового товара (`promo`): приз не продаётся,
+  /// и выдуманная цена уехала бы в закупочные отчёты (issue #172).
   pricePoints Int?      @map("price_points")
   /// Розничная цена в сумах.
   priceRetail Int?      @map("price_retail")
@@ -1169,6 +1221,12 @@ model Product {
   /// Пусто — черновик.
   publishedAt DateTime? @map("published_at") @db.Timestamptz(6)
   archivedAt  DateTime? @map("archived_at") @db.Timestamptz(6)
+  /// Участвует в акции: приз. Снимает с публикации требование цены в баллах, остальные
+  /// поля обязательны по-прежнему.
+  promo       Boolean   @default(false)
+  /// Не показывать на витрине водителя. Снимается — товар выходит на витрину без повторного
+  /// заведения. Остатки офиса и приход видят его всегда: иначе призы некуда оприходовать.
+  hiddenInCatalog Boolean @default(false) @map("hidden_in_catalog")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -1176,6 +1234,7 @@ model Product {
   stock      OfficeStock[]
   movements  StockMovement[]
   orderItems OrderItem[]
+  rewards    Reward[]
 
   @@map("products")
   @@schema("xb")
@@ -1195,8 +1254,9 @@ model OfficeStock {
   productId String   @map("product_id") @db.Uuid
   /// Свободный остаток: то, что лежит в офисе и ещё никем не занято.
   onHand    Int      @default(0) @map("on_hand")
-  /// Занято висящими заказами. Равно сумме позиций `pending`-заказов этого офиса —
-  /// третий запрос остатков в scripts/invariants.sql.
+  /// Занято висящими заказами и ждущими наградами-товарами. Равно сумме позиций
+  /// `pending`-заказов и числу `awaiting`-наград этого офиса — третий запрос остатков
+  /// в scripts/invariants.sql.
   reserved  Int      @default(0)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -1215,7 +1275,8 @@ model OfficeStock {
 /// (`stock_movements_kind_signs_check`): `incoming` — плюс к свободному остатку,
 /// `adjustment` — правка в любую сторону с автором и заметкой, `order_reserve` —
 /// из свободного в резерв, `order_issue` — резерв ушёл из офиса, `order_release` —
-/// резерв вернулся в свободный остаток. Три последних обязаны нести заказ.
+/// резерв вернулся в свободный остаток. Три вида заказа обязаны нести заказ, три вида награды
+/// (`reward_reserve`, `reward_issue`, `reward_release`) — награду и не несут заказа.
 model StockMovement {
   /// Журнальная таблица, на которую никто не ссылается, — bigint identity вместо uuid.
   id            BigInt            @id @default(autoincrement())
@@ -1227,6 +1288,8 @@ model StockMovement {
   /// Заказ, которым вызвано движение. Пуст у прихода и правки, обязателен у трёх
   /// видов заказа.
   orderId       String?           @map("order_id") @db.Uuid
+  /// Награда, которой вызвано движение. Обязательна у трёх видов награды, пуста у остальных.
+  rewardId      String?           @map("reward_id") @db.Uuid
   /// Сотрудник, оформивший приход, правку или выдачу. Пуст у движения, которое сделал
   /// водитель из Mini App или воркер просрочки.
   employeeId    String?           @map("employee_id") @db.Uuid
@@ -1236,10 +1299,12 @@ model StockMovement {
   office   Office    @relation(fields: [officeId], references: [id])
   product  Product   @relation(fields: [productId], references: [id])
   order    Order?    @relation(fields: [orderId], references: [id])
+  reward   Reward?   @relation(fields: [rewardId], references: [id])
   employee Employee? @relation(fields: [employeeId], references: [id])
 
   @@index([officeId, productId, id])
   @@index([orderId])
+  @@index([rewardId])
   @@map("stock_movements")
   @@schema("xb")
 }
@@ -1472,7 +1537,8 @@ model Segment {
 /// бы другие люди. Снимок — строки `campaign_participants`.
 ///
 /// Согласованность статуса с полями держится проверкой в миграции: у запущенной есть
-/// название, `slug`, сегмент, время запуска и размер снимка; у черновика последних двух нет.
+/// название, `slug`, сегмент, время запуска и размер снимка, офис выдачи наград и их срок;
+/// у черновика нет ни запуска, ни снимка.
 model Campaign {
   id           String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   /// Короткое латинское имя, `comeback-wave-1`. От него строится ключ идемпотентности
@@ -1489,6 +1555,10 @@ model Campaign {
   /// Сколько человек попало в снимок. Факт на дату запуска, а не счётчик: по нему видно,
   /// с чего волна начиналась. Пусто у черновика.
   audienceSize Int?           @map("audience_size")
+  /// Офис выдачи наград акции: призы лежат и выдаются в одном офисе. Обязателен у запущенной.
+  officeId           String? @map("office_id") @db.Uuid
+  /// Через сколько дней сгорает неполученная награда. Обязателен у запущенной.
+  rewardLifetimeDays Int?    @map("reward_lifetime_days")
   createdById  String         @map("created_by_id") @db.Uuid
   launchedAt   DateTime?      @map("launched_at") @db.Timestamptz(6)
 
@@ -1498,9 +1568,12 @@ model Campaign {
   /// `Restrict`, а не умолчание `SetNull` у необязательной связи: сегмент не удаляется
   /// (архив), а удалённый не должен молча стирать ответ «из кого снят состав».
   segment      Segment?              @relation(fields: [segmentId], references: [id], onDelete: Restrict)
+  /// `Restrict` тем же доводом, что у сегмента: офис не удаляется (архив).
+  office       Office?               @relation(fields: [officeId], references: [id], onDelete: Restrict)
   createdBy    Employee              @relation(fields: [createdById], references: [id])
   halves       CampaignHalf[]
   participants CampaignParticipant[]
+  rewards      Reward[]
 
   @@index([createdAt(sort: Desc)])
   @@map("campaigns")
@@ -1572,5 +1645,79 @@ model CampaignParticipant {
   /// Что у водителя с акцией — при каждом открытии Mini App.
   @@index([personId])
   @@map("campaign_participants")
+  @@schema("xb")
+}
+
+// ---------------------------------------------------------------------------
+// Награды
+// ---------------------------------------------------------------------------
+
+/// Награда водителю: баллы, товар из каталога или произвольная (issue #172).
+///
+/// Своя сущность, а не заказ: у заказа обязательно списание баллов и офис, выбранный водителем,
+/// позиция ссылается на товар витрины, а срок — это срок резерва. У награды списания нет, офис
+/// приходит от акции или сотрудника, товар может быть вне каталога, срок свой.
+///
+/// Появляется только через `grantReward`. Привязана к человеку, а не к учётке парка и не
+/// к участию в акции: баланс и награды принадлежат человеку.
+///
+/// Согласованность полей с видом и статусом держится проверками в миграции: у баллов пусты
+/// код, офис и срок и заполнены баллы; у товара — товар и офис; у `issued` — время
+/// и сотрудник выдачи; у `expired` — время сгорания.
+model Reward {
+  id       String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  personId String       @map("person_id") @db.Uuid
+  kind     RewardKind
+  /// Что написано водителю и на карточке стойки. Заполнено всегда, в том числе у товара:
+  /// название товара меняется, а выданная награда помнит, что выдавали, — тем же доводом,
+  /// что `order_items.unit_points`.
+  title    String
+  /// Только у баллов.
+  points   Int?
+  /// Только у товара.
+  productId String?     @map("product_id") @db.Uuid
+  /// Где получать. Обязателен у товара и произвольной, пуст у баллов.
+  officeId  String?     @map("office_id") @db.Uuid
+  /// Пять цифр для стойки, первая — 5–9: диапазон заказов 0–4 с ним не пересекается.
+  /// Уникален среди `awaiting` частичным индексом. Пуст у баллов.
+  code      String?
+  status    RewardStatus
+  /// Когда неполученная сгорает. Пуст у баллов: сгорать нечему.
+  expiresAt DateTime?   @map("expires_at") @db.Timestamptz(6)
+
+  issuedAt           DateTime? @map("issued_at") @db.Timestamptz(6)
+  issuedByEmployeeId String?   @map("issued_by_employee_id") @db.Uuid
+  expiredAt          DateTime? @map("expired_at") @db.Timestamptz(6)
+
+  source     RewardSource
+  /// Акция, если источник `campaign`.
+  campaignId String?      @map("campaign_id") @db.Uuid
+  /// Откуда внутри источника: «сундук дня, третий день». Текстом: сундуков ещё нет,
+  /// а карточка стойки обязана объяснять уже сейчас.
+  sourceNote String?      @map("source_note")
+  /// Кто вручил — у источника `manual`.
+  grantedByEmployeeId String? @map("granted_by_employee_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  person           Person    @relation(fields: [personId], references: [id])
+  // `Restrict`, а не умолчание `SetNull` у необязательной связи: товар, офис и акция
+  // не удаляются, а удалённый молча стёр бы у награды ответ «что и где выдавали».
+  product          Product?  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  office           Office?   @relation(fields: [officeId], references: [id], onDelete: Restrict)
+  campaign         Campaign? @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  issuedByEmployee Employee? @relation("reward_issued_by", fields: [issuedByEmployeeId], references: [id])
+  grantedByEmployee Employee? @relation("reward_granted_by", fields: [grantedByEmployeeId], references: [id])
+
+  movements StockMovement[]
+
+  /// Список водителя, свежие первыми.
+  @@index([personId, createdAt(sort: Desc)])
+  /// Что ждёт в офисе.
+  @@index([officeId, status])
+  /// Разбор волны в админке.
+  @@index([campaignId])
+  @@map("rewards")
   @@schema("xb")
 }

@@ -115,11 +115,11 @@ export class CancelAuthorMismatchError extends OrdersError {
 }
 
 /**
- * Висящего заказа нет: по коду среди висящих этого офиса не нашёлся (`findOfficeOrderByCode`)
- * или по идентификатору уже не висит (`issueOrder`).
+ * Висящего заказа нет: по идентификатору он уже не висит (`issueOrder`). Код у стойки ищет
+ * `findDeskItemByCode`, и его отказ — `DeskCodeNotFoundError`.
  */
 export class OrderNotFoundError extends OrdersError {
-  /** Код или идентификатор заказа — то, по чему искали. */
+  /** Идентификатор заказа — то, по чему искали. */
   constructor(public readonly reference: string) {
     super(`висящего заказа ${reference} нет`);
   }

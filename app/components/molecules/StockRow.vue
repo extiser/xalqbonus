@@ -76,9 +76,13 @@ const archived = computed(() => props.row.archivedAt !== null);
     <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
       <div class="min-w-40 flex-1">
         <p class="text-sm font-medium text-slate-900">{{ row.name }}</p>
-        <p class="mt-0.5 text-xs text-slate-500">{{ formatNumber(row.pricePoints) }} баллов</p>
+        <p class="mt-0.5 text-xs text-slate-500">
+          {{ row.pricePoints === null ? 'без цены в баллах' : `${formatNumber(row.pricePoints)} баллов` }}
+        </p>
       </div>
 
+      <AtomsStatusBadge v-if="row.promo" tone="ok" label="Для акции" />
+      <AtomsStatusBadge v-if="row.hiddenInCatalog" tone="muted" label="Не на витрине" />
       <AtomsStatusBadge v-if="archived" tone="muted" label="В архиве" />
 
       <div class="w-20 text-right">

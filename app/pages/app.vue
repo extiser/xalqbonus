@@ -14,7 +14,8 @@ import { useEmployeePassword } from '~/composables/useEmployeePassword';
 import { useMemberCampaign } from '~/composables/useMemberCampaign';
 import { useMemberHistory } from '~/composables/useMemberHistory';
 import { useMemberOrders } from '~/composables/useMemberOrders';
-import { useOfficeOrderDesk } from '~/composables/useOfficeOrderDesk';
+import { useMemberRewards } from '~/composables/useMemberRewards';
+import { useOfficeDesk } from '~/composables/useOfficeDesk';
 import { failureDenial, failureText } from '~/utils/requestError';
 import {
   hasSignedInitData,
@@ -132,6 +133,9 @@ const memberOrders = useMemberOrders(
   () => member.value?.orderTexts.requestFailed ?? LOAD_FAILED,
 );
 
+/** Раздел «Мои награды» (issue #172). Читается при открытии раздела и при возврате в него. */
+const memberRewards = useMemberRewards(() => initData);
+
 /**
  * Акция участника (issue #166). Читается вместе с экраном участника: первое чтение и есть
  * «открыл экран акции». Запасной текст отказа — тот же, что у витрины.
@@ -153,7 +157,7 @@ const employeeCode = ref('');
 
 // Отказ отдаётся странице обёрткой, а не самой функцией: `reportDoorDenial` объявлена ниже,
 // рядом с `failWith`, и к моменту первого запроса уже существует.
-const officeDesk = useOfficeOrderDesk(
+const officeDesk = useOfficeDesk(
   () => ({ [INIT_DATA_HEADER]: initData }),
   (error) => reportDoorDenial(error),
 );
@@ -255,12 +259,12 @@ const finishEmployeeAction = async (done: boolean): Promise<void> => {
   }
 };
 
-const issueEmployeeOrder = async (): Promise<void> => {
-  await finishEmployeeAction((await officeDesk.issue()) !== null);
+const issueEmployeeItem = async (): Promise<void> => {
+  await finishEmployeeAction(await officeDesk.issue());
 };
 
 const cancelEmployeeOrder = async (): Promise<void> => {
-  await finishEmployeeAction((await officeDesk.cancel()) !== null);
+  await finishEmployeeAction(await officeDesk.cancel());
 };
 
 /**
@@ -270,7 +274,7 @@ const cancelEmployeeOrder = async (): Promise<void> => {
  * строку, и роутер при переходе портит её (issue #90, #105). Шапки с навигацией нет —
  * «назад» делает системная кнопка Telegram (`layouts/miniapp.vue`).
  */
-type MemberScreenName = 'home' | 'offices' | 'showcase' | 'confirm' | 'order' | 'orders';
+type MemberScreenName = 'home' | 'offices' | 'showcase' | 'confirm' | 'order' | 'orders' | 'rewards';
 
 /** Путь по экранам. Последний — показанный; «назад» снимает его. */
 const screens = ref<MemberScreenName[]>(['home']);
@@ -307,6 +311,8 @@ const goBack = (): void => {
     void refresh();
   } else if (currentScreen.value === 'orders') {
     void memberOrders.loadOrders();
+  } else if (currentScreen.value === 'rewards') {
+    void memberRewards.load();
   }
 };
 
@@ -349,6 +355,11 @@ const openExchange = (): void => {
 const openOrders = (): void => {
   openScreen('orders');
   void memberOrders.loadOrders();
+};
+
+const openRewards = (): void => {
+  openScreen('rewards');
+  void memberRewards.load();
 };
 
 const selectOffice = (officeId: string): void => {
@@ -703,12 +714,21 @@ const share = (): void => {
     </template>
 
     <OrganismsEmployeeOrderCard
-      v-else-if="officeDesk.current.value"
-      :order="officeDesk.current.value"
+      v-else-if="officeDesk.current.value?.kind === 'order'"
+      :order="officeDesk.current.value.order"
       :acting="officeDesk.acting.value"
       :error="officeDesk.actionError.value"
-      @issue="issueEmployeeOrder"
+      @issue="issueEmployeeItem"
       @cancel="cancelEmployeeOrder"
+      @close="officeDesk.close()"
+    />
+
+    <OrganismsEmployeeRewardCard
+      v-else-if="officeDesk.current.value?.kind === 'reward'"
+      :reward="officeDesk.current.value.reward"
+      :acting="officeDesk.acting.value"
+      :error="officeDesk.actionError.value"
+      @issue="issueEmployeeItem"
       @close="officeDesk.close()"
     />
 
@@ -763,9 +783,11 @@ const share = (): void => {
         :refresh-failed-note="refreshFailedNote"
         :exchange-label="member.orderTexts.exchangePoints"
         :orders-label="member.orderTexts.myOrders"
+        :rewards-label="member.rewardTexts.myRewards"
         @refresh="refresh"
         @exchange="openExchange"
         @orders="openOrders"
+        @rewards="openRewards"
       />
 
       <OrganismsMemberHistory
@@ -827,6 +849,13 @@ const share = (): void => {
       :orders="memberOrders.orders.value"
       :texts="member.orderTexts"
       @open="openOrder"
+    />
+
+    <OrganismsMemberRewardList
+      v-else-if="currentScreen === 'rewards'"
+      :state="memberRewards.state.value"
+      :rewards="memberRewards.rewards.value"
+      :texts="member.rewardTexts"
     />
 
     <div v-if="currentScreen !== 'home' && !systemBack" class="pt-4">

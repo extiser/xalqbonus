@@ -22,6 +22,7 @@ import type {
   CampaignResponse,
   CampaignWindowRequestBody,
 } from '#shared/types/campaign';
+import type { OfficeListResponse } from '#shared/types/catalog';
 import type { SegmentListResponse, SegmentPreviewResponse } from '#shared/types/segment';
 
 /**
@@ -78,6 +79,8 @@ type CampaignFormFields = {
   startsOn: string;
   endsOn: string;
   splitEnabled: 'yes' | '';
+  officeId: string;
+  rewardLifetimeDays: string;
 };
 
 const toFields = (source: Campaign | null): CampaignFormFields => ({
@@ -87,6 +90,8 @@ const toFields = (source: Campaign | null): CampaignFormFields => ({
   startsOn: source?.halfA.startsOn ?? '',
   endsOn: source?.halfA.endsOn ?? '',
   splitEnabled: source?.splitEnabled ? 'yes' : '',
+  officeId: source?.office?.officeId ?? '',
+  rewardLifetimeDays: source?.rewardLifetimeDays == null ? '' : String(source.rewardLifetimeDays),
 });
 
 /** То, что на экране. Ответ сервера его не перезаписывает. */
@@ -193,6 +198,21 @@ const { data: segments } = await useFetch<SegmentListResponse>('/api/segments');
 
 const selectedSegment = computed(
   () => segments.value?.segments.find((segment) => segment.segmentId === fields.value.segmentId) ?? null,
+);
+
+/**
+ * Офисы выдачи наград — только рабочие. Выбранный раньше и ушедший в архив остаётся в списке
+ * с пометкой тем же доводом, что сегмент.
+ */
+const { data: offices } = await useFetch<OfficeListResponse>('/api/offices');
+
+const officeOptions = computed<SelectOption[]>(() =>
+  (offices.value?.offices ?? [])
+    .filter((office) => office.archivedAt === null || office.officeId === fields.value.officeId)
+    .map((office) => ({
+      value: office.officeId,
+      label: office.archivedAt === null ? office.name : `${office.name} (в архиве)`,
+    })),
 );
 
 const segmentArchived = computed(() => (selectedSegment.value?.archivedAt ?? null) !== null);
@@ -479,7 +499,10 @@ onBeforeUnmount(() => {
         v-model:starts-on="fields.startsOn"
         v-model:ends-on="fields.endsOn"
         v-model:split-enabled="splitEnabled"
+        v-model:office-id="fields.officeId"
+        v-model:reward-lifetime-days="fields.rewardLifetimeDays"
         :segment-options="segmentOptions"
+        :office-options="officeOptions"
         :segment-archived="segmentArchived"
         :segment-count-state="segmentCountState"
         :segment-count="segmentCount"
@@ -516,6 +539,15 @@ onBeforeUnmount(() => {
           <MoleculesFactRow
             label="В снимке"
             :value="campaign.audienceSize === null ? DASH : driversCount(campaign.audienceSize)"
+          />
+          <MoleculesFactRow label="Офис выдачи наград" :value="campaign.office?.name ?? DASH" />
+          <MoleculesFactRow
+            label="Срок наград"
+            :value="
+              campaign.rewardLifetimeDays === null
+                ? DASH
+                : `${campaign.rewardLifetimeDays} ${pluralize(campaign.rewardLifetimeDays, 'день', 'дня', 'дней')}`
+            "
           />
           <MoleculesFactRow
             label="Деление"

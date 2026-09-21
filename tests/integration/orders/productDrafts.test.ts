@@ -55,6 +55,8 @@ const EMPTY = {
   pricePoints: null,
   priceRetail: null,
   priceCost: null,
+  promo: false,
+  hiddenInCatalog: false,
 };
 
 const COMPLETE = {
@@ -63,6 +65,8 @@ const COMPLETE = {
   pricePoints: 40,
   priceRetail: 40_000,
   priceCost: 30_000,
+  promo: false,
+  hiddenInCatalog: false,
 };
 
 const createDraft = async (fields: typeof EMPTY | typeof COMPLETE = EMPTY) => {

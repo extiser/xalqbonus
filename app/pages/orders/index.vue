@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { useOfficeOrderDesk } from '~/composables/useOfficeOrderDesk';
+import { useOfficeDesk } from '~/composables/useOfficeDesk';
 import { toLoadState } from '~/utils/loadState';
 import { failureDenial } from '~/utils/requestError';
 import type { SelectOption } from '~/types/selectOption';
 import type { OfficeOrdersResponse } from '#shared/types/orders';
 
 /**
- * Раздел «Заказы»: заказы офиса, выдача по коду и отмена — для всех ролей.
+ * Раздел «Заказы»: заказы офиса, выдача по коду и отмена — для всех ролей. Поле кода одно
+ * на заказы и награды (issue #172): найденная награда открывается своей карточкой.
  *
  * Те же ручки и те же действия, что у стойки в Mini App: здесь за столом, под cookie
  * (docs/decisions.md → «Доступ определяется ролью, а не дверью»). Менеджеру в выборе офиса
@@ -23,7 +24,7 @@ const selectedOfficeId = ref('');
 const selectedStatus = ref('');
 const offset = ref(0);
 
-const desk = useOfficeOrderDesk(() => ({}));
+const desk = useOfficeDesk(() => ({}));
 const code = ref('');
 
 const {
@@ -139,12 +140,21 @@ const cancel = async (): Promise<void> => {
       />
 
       <OrganismsOfficeOrderCard
-        v-if="desk.current.value"
-        :order="desk.current.value"
+        v-if="desk.current.value?.kind === 'order'"
+        :order="desk.current.value.order"
         :acting="desk.acting.value"
         :error="desk.actionError.value"
         @issue="issue"
         @cancel="cancel"
+        @close="desk.close()"
+      />
+
+      <OrganismsOfficeRewardCard
+        v-else-if="desk.current.value?.kind === 'reward'"
+        :reward="desk.current.value.reward"
+        :acting="desk.acting.value"
+        :error="desk.actionError.value"
+        @issue="issue"
         @close="desk.close()"
       />
 

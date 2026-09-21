@@ -13,6 +13,7 @@ import type {
 import type { EmployeeAccount } from '#shared/types/employee';
 import type { Mailing } from '#shared/types/mailing';
 import type { OfficeOrder } from '#shared/types/orders';
+import type { OfficeReward } from '#shared/types/rewards';
 import type { SyncRunRow, SyncSkipRow } from '#shared/types/sync';
 
 /**
@@ -183,10 +184,27 @@ const STOCK_MOVEMENT_KIND_LABELS: Record<StockMovementEntry['kind'], string> = {
   order_reserve: 'резерв под заказ',
   order_issue: 'выдача заказа',
   order_release: 'снятие резерва',
+  reward_reserve: 'резерв под награду',
+  reward_issue: 'выдача награды',
+  reward_release: 'награда сгорела, товар на полке',
 };
 
 export const stockMovementKindLabel = (kind: StockMovementEntry['kind']): string =>
   STOCK_MOVEMENT_KIND_LABELS[kind];
+
+/**
+ * Подписи наград у стойки (issue #172). Полным `Record` — новый статус обязан уронить проверку
+ * типов здесь.
+ */
+const REWARD_STATUS_LABELS: Record<OfficeReward['status'], string> = {
+  credited: 'зачислена на баланс',
+  awaiting: 'ждёт выдачи',
+  issued: 'выдана',
+  expired: 'сгорела',
+};
+
+export const rewardStatusLabel = (status: OfficeReward['status']): string =>
+  REWARD_STATUS_LABELS[status];
 
 /**
  * Подписи заказов офиса. Полным `Record` — по той же причине, что у видов движения:

@@ -38,6 +38,13 @@ export type CampaignSegmentRef = {
   archivedAt: string | null;
 };
 
+export type CampaignOfficeRef = {
+  officeId: string;
+  name: string;
+  /** Офис в архиве: наград он не выдаёт. */
+  archived: boolean;
+};
+
 export type Campaign = {
   campaignId: string;
   /** Пусто только у черновика. */
@@ -47,6 +54,10 @@ export type Campaign = {
   status: CampaignStatus;
   segment: CampaignSegmentRef | null;
   splitEnabled: boolean;
+  /** Офис выдачи наград акции. Обязателен у запущенной (issue #172). */
+  office: CampaignOfficeRef | null;
+  /** Через сколько дней сгорает неполученная награда. Обязателен у запущенной. */
+  rewardLifetimeDays: number | null;
   /** Сколько человек попало в снимок на дату запуска. Пусто у черновика. */
   audienceSize: number | null;
   createdByName: string;
@@ -94,6 +105,9 @@ export type CampaignRequestBody = {
   startsOn: string;
   endsOn: string;
   splitEnabled: boolean;
+  officeId: string;
+  /** Строкой, как набрано в поле: «пусто значит не задано» решает сервер. */
+  rewardLifetimeDays: string;
 };
 
 /** Тело назначения окна половины Б. */

@@ -35,7 +35,14 @@ definePageMeta({
 /** Адрес нового товара. Идентификатором не является — ручкам он не уходит. */
 const NEW_PRODUCT = 'new';
 
-type ProductFormFields = ProductRequestBody;
+/**
+ * Поля формы — строками все, включая признаки: автосохранение сравнивает снимки полей,
+ * а строка — единственное, что у него сравнивается без оговорок. Так же у акции.
+ */
+type ProductFormFields = Omit<ProductRequestBody, 'promo' | 'hiddenInCatalog'> & {
+  promo: 'yes' | '';
+  hiddenInCatalog: 'yes' | '';
+};
 
 const route = useRoute();
 const routeId = computed(() => String(route.params.productId));
@@ -60,10 +67,32 @@ const toFields = (source: Product | null): ProductFormFields => ({
   pricePoints: source?.pricePoints == null ? '' : String(source.pricePoints),
   priceRetail: source?.priceRetail == null ? '' : String(source.priceRetail),
   priceCost: source?.priceCost == null ? '' : String(source.priceCost),
+  promo: source?.promo ? 'yes' : '',
+  hiddenInCatalog: source?.hiddenInCatalog ? 'yes' : '',
+});
+
+const toRequestBody = (snapshot: ProductFormFields): ProductRequestBody => ({
+  ...snapshot,
+  promo: snapshot.promo === 'yes',
+  hiddenInCatalog: snapshot.hiddenInCatalog === 'yes',
 });
 
 /** То, что на экране. Ответ сервера его не перезаписывает. */
 const fields = ref<ProductFormFields>(toFields(product.value));
+
+const promo = computed({
+  get: () => fields.value.promo === 'yes',
+  set: (value: boolean) => {
+    fields.value = { ...fields.value, promo: value ? 'yes' : '' };
+  },
+});
+
+const hiddenInCatalog = computed({
+  get: () => fields.value.hiddenInCatalog === 'yes',
+  set: (value: boolean) => {
+    fields.value = { ...fields.value, hiddenInCatalog: value ? 'yes' : '' };
+  },
+});
 
 const isDraft = computed(() => product.value === null || product.value.publishedAt === null);
 const archived = computed(() => product.value?.archivedAt != null);
@@ -92,7 +121,7 @@ const saveDraft = async (snapshot: ProductFormFields): Promise<void> => {
   if (current === null) {
     const created = await $fetch<ProductResponse>('/api/products', {
       method: 'POST',
-      body: snapshot,
+      body: toRequestBody(snapshot),
     });
 
     setProduct(created.product);
@@ -103,7 +132,7 @@ const saveDraft = async (snapshot: ProductFormFields): Promise<void> => {
 
   const updated = await $fetch<ProductResponse>(`/api/products/${current.productId}`, {
     method: 'PATCH',
-    body: snapshot,
+    body: toRequestBody(snapshot),
   });
 
   setProduct(updated.product);
@@ -128,6 +157,8 @@ const normalizeFields = (source: ProductFormFields): ProductFormFields => {
     pricePoints: number(source.pricePoints),
     priceRetail: number(source.priceRetail),
     priceCost: number(source.priceCost),
+    promo: source.promo,
+    hiddenInCatalog: source.hiddenInCatalog,
   };
 };
 
@@ -210,6 +241,7 @@ const publishProblems = computed(() =>
     pricePoints: fields.value.pricePoints.trim() === '' ? null : Number(fields.value.pricePoints),
     priceRetail: fields.value.priceRetail.trim() === '' ? null : Number(fields.value.priceRetail),
     priceCost: fields.value.priceCost.trim() === '' ? null : Number(fields.value.priceCost),
+    promo: promo.value,
   }).map(productPublishProblemText),
 );
 
@@ -230,7 +262,7 @@ const savePublished = async (): Promise<void> => {
   try {
     const updated = await $fetch<ProductResponse>(`/api/products/${current.productId}`, {
       method: 'PATCH',
-      body: fields.value,
+      body: toRequestBody(fields.value),
     });
 
     setProduct(updated.product);
@@ -407,6 +439,8 @@ const upload = async (file: File): Promise<void> => {
         v-model:price-points="fields.pricePoints"
         v-model:price-retail="fields.priceRetail"
         v-model:price-cost="fields.priceCost"
+        v-model:promo="promo"
+        v-model:hidden-in-catalog="hiddenInCatalog"
         :title="isDraft ? 'Черновик' : 'Правка товара'"
         :product="product"
         :mode="isDraft ? 'draft' : 'published'"

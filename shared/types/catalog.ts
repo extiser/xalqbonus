@@ -104,6 +104,10 @@ export type Product = {
   /** Пусто — черновик: водителю не виден нигде, удаляется, а не архивируется. */
   publishedAt: string | null;
   archivedAt: string | null;
+  /** Приз для акции: публикуется без цены в баллах (issue #172). */
+  promo: boolean;
+  /** Не показывать на витрине водителя. Снимается — товар выходит на витрину как есть. */
+  hiddenInCatalog: boolean;
   /**
    * Время последней правки. Нужно разметке: имя файла фото меняется вместе с расширением,
    * а не с содержимым, и без этой отметки перезалитая картинка осталась бы в кэше браузера.
@@ -125,6 +129,8 @@ export type ProductRequestBody = {
   pricePoints: string;
   priceRetail: string;
   priceCost: string;
+  promo: boolean;
+  hiddenInCatalog: boolean;
 };
 
 export type ProductResponse = {
@@ -145,11 +151,19 @@ export type ProductResponse = {
 export type OfficeStockRow = {
   productId: string;
   name: string;
-  pricePoints: number;
+  /** Пусто у приза: он не продаётся (issue #172). */
+  pricePoints: number | null;
+  /** Приз для акции. */
+  promo: boolean;
+  /** Не показывается на витрине, но приходуется и лежит как любой другой. */
+  hiddenInCatalog: boolean;
   archivedAt: string | null;
   /** Свободный остаток: лежит в офисе и никем не занят. */
   onHand: number;
-  /** Занято висящими заказами. Правка его не трогает: он принадлежит оплаченным заказам. */
+  /**
+   * Занято висящими заказами и ждущими наградами. Правка его не трогает: он принадлежит
+   * оплаченным заказам и обещанным призам.
+   */
   reserved: number;
 };
 
@@ -199,6 +213,8 @@ export type StockMovementEntry = {
   deltaReserved: number;
   /** Номер заказа, которым вызвано движение. Пуст у прихода и правки. */
   orderNumber: number | null;
+  /** Награда, которой вызвано движение, — её название. Пусто у всех, кроме трёх видов награды. */
+  rewardTitle: string | null;
   /** Кто сделал. Пуст у движения, сделанного водителем из Mini App или воркером просрочки. */
   employeeName: string | null;
   note: string | null;

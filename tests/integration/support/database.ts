@@ -200,8 +200,11 @@ export const createTestOffice = async ({ archived = false }: { archived?: boolea
 };
 
 export type CreateTestProductInput = {
-  pricePoints: number;
+  /** Пусто — приз без цены в баллах: такой бывает только с `promo`. */
+  pricePoints: number | null;
   archived?: boolean;
+  promo?: boolean;
+  hiddenInCatalog?: boolean;
 };
 
 /**
@@ -211,18 +214,23 @@ export type CreateTestProductInput = {
 export const createTestProduct = async ({
   pricePoints,
   archived = false,
+  promo = false,
+  hiddenInCatalog = false,
 }: CreateTestProductInput): Promise<string> => {
   const rows = await db.$queryRaw<{ id: string }[]>`
     INSERT INTO xb.products (
-      "name", "price_points", "price_retail", "price_cost", "published_at", "archived_at"
+      "name", "price_points", "price_retail", "price_cost", "published_at", "archived_at",
+      "promo", "hidden_in_catalog"
     )
     VALUES (
       'Тестовый товар',
-      ${pricePoints},
-      ${pricePoints * 1000},
-      ${pricePoints * 800},
+      ${pricePoints}::int,
+      ${(pricePoints ?? 5) * 1000},
+      ${(pricePoints ?? 5) * 800},
       now(),
-      ${archived ? new Date() : null}::timestamptz
+      ${archived ? new Date() : null}::timestamptz,
+      ${promo},
+      ${hiddenInCatalog}
     )
     RETURNING "id"
   `;
@@ -435,6 +443,15 @@ export const cleanupTestData = async (): Promise<void> => {
        WHERE "office_id" = ANY(${officeIds}::uuid[])
           OR "product_id" = ANY(${productIds}::uuid[])
     `;
+    // Награды — после движений и до товаров, офисов и людей: движение ссылается на награду
+    // ключом `SET NULL`, который обнулил бы `reward_id` у `reward_reserve` и нарушил проверку
+    // знаков, а награда ссылается на товар, офис и человека ключами `RESTRICT`.
+    await transaction.$executeRaw`
+      DELETE FROM xb.rewards
+       WHERE "person_id" = ANY(${personIds}::uuid[])
+          OR "office_id" = ANY(${officeIds}::uuid[])
+          OR "product_id" = ANY(${productIds}::uuid[])
+    `;
     await transaction.$executeRaw`
       DELETE FROM xb.order_items
        WHERE "order_id" IN (
@@ -496,6 +513,12 @@ export const cleanupTestData = async (): Promise<void> => {
     `;
     await transaction.$executeRaw`
       DELETE FROM xb.legacy_driver_map WHERE "person_id" = ANY(${personIds}::uuid[])
+    `;
+    // Телефоны ссылаются на профиль. Их заводит и уборка сотрудников (`setTestProfilePhone`),
+    // но она идёт после этой: сотрудник, вручивший награду, уходит только вместе с наградой.
+    await transaction.$executeRaw`
+      DELETE FROM xb.profile_phones
+       WHERE "profile_id" IN (SELECT "profile_id" FROM xb.park_profiles WHERE "person_id" = ANY(${personIds}::uuid[]))
     `;
     await transaction.$executeRaw`
       DELETE FROM xb.park_profiles WHERE "person_id" = ANY(${personIds}::uuid[])

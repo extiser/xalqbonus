@@ -23,6 +23,7 @@ import type {
   OrderStatus,
 } from '../../server/generated/prisma/enums';
 import type { EmployeeOffice } from './orders';
+import type { MemberRewardTexts } from './rewards';
 
 // Разметке язык нужен так же, как обработчику: на нём стоит переключатель экрана
 // регистрации. Пробрасывается отсюда, чтобы страница не лазила в каталог Prisma
@@ -170,6 +171,8 @@ export type MiniAppMemberScreen = {
    * экраны переключаются без перезагрузки, и язык у них тот же, что у экрана участника.
    */
   orderTexts: MemberOrderTexts;
+  /** Тексты раздела «Мои награды» (issue #172) — тем же приёмом, что тексты заказов. */
+  rewardTexts: MemberRewardTexts;
 };
 
 /**

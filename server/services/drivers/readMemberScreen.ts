@@ -5,6 +5,7 @@ import { findLastSuccessfulRunFinishedAt } from '#server/repositories/syncRuns';
 import { memberScreenTexts } from '#server/services/drivers/memberScreen';
 import type { LinkedDriver } from '#server/services/drivers/readLinkedDriver';
 import { memberOrderTexts } from '#server/services/orders/memberOrderScreen';
+import { memberRewardTexts } from '#server/services/rewards/memberRewardScreen';
 import { DAY_MS, formatCalendarDate, formatClockTime } from '#server/utils/parkTime';
 import type { MiniAppStateResponse, TripsNote } from '#shared/types/miniapp';
 
@@ -78,5 +79,6 @@ export const readMemberScreen = async (
     promise: hasTrips ? null : plainText('welcome_bonus_promise', driver.language),
     texts: memberScreenTexts(driver.language),
     orderTexts: memberOrderTexts(driver.language),
+    rewardTexts: memberRewardTexts(driver.language),
   };
 };

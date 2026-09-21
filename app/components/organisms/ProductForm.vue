@@ -44,6 +44,8 @@ const description = defineModel<string>('description', { required: true });
 const pricePoints = defineModel<string>('pricePoints', { required: true });
 const priceRetail = defineModel<string>('priceRetail', { required: true });
 const priceCost = defineModel<string>('priceCost', { required: true });
+const promo = defineModel<boolean>('promo', { required: true });
+const hiddenInCatalog = defineModel<boolean>('hiddenInCatalog', { required: true });
 
 /**
  * У опубликованного фото уходит сразу, а текст ждёт «Сохранить» — и без подписи эта разница
@@ -79,8 +81,8 @@ const submit = (): void => {
           v-model="pricePoints"
           label="Цена в баллах"
           :min="1"
-          :required="mode === 'published'"
-          hint="Чем платит водитель."
+          :required="mode === 'published' && !promo"
+          :hint="promo ? 'У приза необязательна: он не продаётся.' : 'Чем платит водитель.'"
         />
         <MoleculesNumberField
           v-model="priceRetail"
@@ -97,6 +99,32 @@ const submit = (): void => {
           hint="Для стоимости балла."
         />
       </div>
+
+      <fieldset class="space-y-2">
+        <label class="flex items-center gap-3">
+          <input
+            v-model="promo"
+            type="checkbox"
+            class="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
+          />
+          <span class="text-sm font-medium text-slate-900">Для акции</span>
+        </label>
+        <p class="text-sm text-slate-500">
+          Приз: публикуется без цены в баллах, приходуется и лежит в офисе как любой товар.
+        </p>
+        <label class="flex items-center gap-3">
+          <input
+            v-model="hiddenInCatalog"
+            type="checkbox"
+            class="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
+          />
+          <span class="text-sm font-medium text-slate-900">Не показывать в каталоге</span>
+        </label>
+        <p class="text-sm text-slate-500">
+          Водитель не видит товар на витрине. Снимите отметку — товар выйдет на витрину без
+          повторного заведения, если у него есть цена в баллах.
+        </p>
+      </fieldset>
 
       <OrganismsPhotoField
         :photo-path="product?.photoPath ?? null"

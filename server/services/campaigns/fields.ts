@@ -31,6 +31,11 @@ export const toCampaign = (row: CampaignRow): Campaign => ({
   slug: row.slug,
   title: row.title,
   status: row.status,
+  office:
+    row.officeId === null || row.officeName === null
+      ? null
+      : { officeId: row.officeId, name: row.officeName, archived: row.officeArchivedAt !== null },
+  rewardLifetimeDays: row.rewardLifetimeDays,
   segment:
     row.segmentId === null || row.segmentName === null
       ? null
@@ -100,6 +105,8 @@ export type CampaignFields = {
   startsOn: string | null;
   endsOn: string | null;
   splitEnabled: boolean;
+  officeId: string | null;
+  rewardLifetimeDays: number | null;
 };
 
 /**
@@ -114,6 +121,8 @@ export type CampaignRequestFields = {
   startsOn?: unknown;
   endsOn?: unknown;
   splitEnabled?: unknown;
+  officeId?: unknown;
+  rewardLifetimeDays?: unknown;
 };
 
 export type CampaignWindowRequestFields = {
@@ -136,6 +145,23 @@ const readDay = (value: unknown): string | null => {
   }
 
   return day;
+};
+
+/** Срок жизни награды: целое число дней, не меньше одного. Пусто — `null`. */
+const readLifetimeDays = (value: unknown): number | null => {
+  const text = typeof value === 'number' ? String(value) : readText(value);
+
+  if (text === null) {
+    return null;
+  }
+
+  const days = Number(text);
+
+  if (!Number.isInteger(days) || days < 1) {
+    throw new InvalidCampaignFieldsError('reward_lifetime_invalid');
+  }
+
+  return days;
 };
 
 /** Последний день не раньше первого. Окно в один день — рабочее: первый день равен последнему. */
@@ -172,6 +198,13 @@ export const readCampaignFields = (
 
   assertWindowOrder(startsOn, endsOn);
 
+  const officeText = readText(body?.officeId);
+  const officeId = officeText === null ? null : readUuid(officeText);
+
+  if (officeText !== null && officeId === null) {
+    throw new InvalidCampaignFieldsError('office_invalid');
+  }
+
   return {
     title: readText(body?.title),
     slug,
@@ -181,6 +214,8 @@ export const readCampaignFields = (
     // Переключатель: всё, кроме явного `true`, — «не делить». Деление — решение, и включиться
     // от испорченного запроса оно не должно.
     splitEnabled: body?.splitEnabled === true,
+    officeId,
+    rewardLifetimeDays: readLifetimeDays(body?.rewardLifetimeDays),
   };
 };
 

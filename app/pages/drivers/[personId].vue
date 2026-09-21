@@ -5,12 +5,19 @@ import { useCurrentEmployee } from '~/composables/useCurrentEmployee';
 import { DISPLAY_TIME_ZONE_LABEL } from '~/utils/format';
 import { toLoadState } from '~/utils/loadState';
 import { failureField, failureText } from '~/utils/requestError';
-import { POINTS_ADJUST_ROLES } from '#shared/access';
+import { POINTS_ADJUST_ROLES, REWARD_GRANT_ROLES } from '#shared/access';
 import type {
   ManualPointsField,
   ManualPointsRequestBody,
   ManualPointsResponse,
 } from '#shared/types/driver';
+import type {
+  ManualRewardField,
+  ManualRewardRequestBody,
+  ManualRewardResponse,
+  RewardGrantOptionsResponse,
+} from '#shared/types/rewards';
+import type { SelectOption } from '~/types/selectOption';
 
 /**
  * Карточка водителя: после неё на вопрос «откуда у водителя столько баллов» отвечают
@@ -111,6 +118,84 @@ const adjustPoints = async (body: ManualPointsRequestBody): Promise<void> => {
     adjusting.value = false;
   }
 };
+
+/**
+ * Выдачу награды видят роли из `REWARD_GRANT_ROLES` — тем же правилом, что правку баллов, —
+ * и только у водителя в программе: человеку вне её награду вручить некуда, он не видит
+ * ни раздела, ни кода (issue #172). Решает ручка, проверка здесь только прячет форму.
+ */
+const canGrant = computed(
+  () =>
+    employee.value !== null &&
+    REWARD_GRANT_ROLES.includes(employee.value.role) &&
+    card.value?.balance !== null &&
+    card.value?.balance !== undefined,
+);
+
+// Офисы и товары для формы выдачи — один раз при открытии карточки. Ручка открыта тем же
+// ролям, что и выдача: списки каталога и офисов менеджеру закрыты.
+const { data: grantOptions } = await useFetch<RewardGrantOptionsResponse>(
+  '/api/rewards/grant-options',
+  { immediate: canGrant.value },
+);
+
+const grantOfficeOptions = computed<SelectOption[]>(() =>
+  (grantOptions.value?.offices ?? []).map((office) => ({ value: office.officeId, label: office.name })),
+);
+
+const grantProductOptions = computed<SelectOption[]>(() =>
+  (grantOptions.value?.products ?? []).map((product) => ({
+    value: product.productId,
+    label: product.promo ? `${product.name} — для акции` : product.name,
+  })),
+);
+
+const granting = ref(false);
+const grantError = ref<string | null>(null);
+const grantErrorField = ref<ManualRewardField | null>(null);
+const grantsApplied = ref(0);
+const grantNotice = ref<string | null>(null);
+
+const GRANT_FIELDS: readonly ManualRewardField[] = [
+  'kind',
+  'points',
+  'productId',
+  'title',
+  'officeId',
+  'lifetimeDays',
+  'note',
+];
+
+/**
+ * Выдача, затем перечитывание карточки и истории: награда баллами меняет баланс и встаёт
+ * строкой в журнал, и обновить одно без другого значит показать их несогласованными.
+ */
+const grantReward = async (body: ManualRewardRequestBody): Promise<void> => {
+  granting.value = true;
+  grantError.value = null;
+  grantErrorField.value = null;
+  grantNotice.value = null;
+
+  try {
+    const result = await $fetch<ManualRewardResponse>(`/api/drivers/${personId.value}/rewards`, {
+      method: 'POST',
+      body,
+    });
+
+    grantsApplied.value += 1;
+    grantNotice.value = result.code
+      ? `Выдано. Код для стойки: ${result.code}`
+      : 'Выдано: баллы зачислены.';
+    historyOffset.value = 0;
+    await Promise.all([refreshCard(), refreshHistory()]);
+  } catch (error) {
+    const field = failureField(error);
+    grantError.value = failureText(error);
+    grantErrorField.value = GRANT_FIELDS.find((known) => known === field) ?? null;
+  } finally {
+    granting.value = false;
+  }
+};
 </script>
 
 <template>
@@ -158,6 +243,17 @@ const adjustPoints = async (body: ManualPointsRequestBody): Promise<void> => {
         :error-field="adjustErrorField"
         :applied-count="adjustmentsApplied"
         @submit="adjustPoints"
+      />
+      <OrganismsDriverRewardGrant
+        v-if="canGrant"
+        :office-options="grantOfficeOptions"
+        :product-options="grantProductOptions"
+        :saving="granting"
+        :error="grantError"
+        :error-field="grantErrorField"
+        :applied-count="grantsApplied"
+        :notice="grantNotice"
+        @submit="grantReward"
       />
       <OrganismsDriverMembership :card="card" />
       <OrganismsDriverParkProfiles :card="card" />

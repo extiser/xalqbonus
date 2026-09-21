@@ -60,6 +60,8 @@ const price = (value: number | null): string => (value === null ? '—' : format
             </NuxtLink>
             <AtomsStatusBadge v-if="product.publishedAt === null" tone="warn" label="Черновик" />
             <AtomsStatusBadge v-else-if="product.archivedAt" tone="muted" label="В архиве" />
+            <AtomsStatusBadge v-if="product.promo" tone="ok" label="Для акции" />
+            <AtomsStatusBadge v-if="product.hiddenInCatalog" tone="muted" label="Не на витрине" />
           </div>
           <p v-if="product.description" class="mt-0.5 text-xs text-slate-500">
             {{ product.description }}

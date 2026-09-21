@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import type { OfficeOrder } from '#shared/types/orders';
+import { deskIssueQuestion } from '~/utils/deskQuestion';
 import { formatDate } from '~/utils/format';
 import { orderCancelReasonLabel, orderStatusLabel } from '~/utils/labels';
 
@@ -34,6 +35,7 @@ watch(
       <MoleculesFactRow label="Статус" :value="orderStatusLabel(order.status)" />
       <MoleculesFactRow label="Водитель" :value="order.driverName" />
       <MoleculesFactRow label="Позывной" :value="order.callsign" mono />
+      <MoleculesFactRow label="Телефон" :value="order.phone" mono />
       <MoleculesFactRow v-if="order.code" label="Код" :value="order.code" mono />
       <MoleculesFactRow label="Оформлен" :value="formatDate(order.createdAt)" />
       <MoleculesFactRow
@@ -69,7 +71,7 @@ watch(
       </template>
 
       <template v-else-if="confirming === 'issue'">
-        <span class="text-sm">Выдать заказ № {{ order.number }}?</span>
+        <span class="text-sm">{{ deskIssueQuestion(order.driverName, `заказ № ${order.number}`) }}</span>
         <AtomsActionButton label="Да, выдать" tone="primary" :disabled="acting" @click="emit('issue')" />
         <AtomsActionButton label="Не выдавать" :disabled="acting" @click="confirming = null" />
       </template>

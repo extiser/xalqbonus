@@ -5,7 +5,8 @@ import type { LoadState } from '~/types/loadState';
 import type { SelectOption } from '~/types/selectOption';
 
 /**
- * Форма черновика акции: название, короткое имя, сегмент, окно половины А и деление 50 на 50.
+ * Форма черновика акции: название, короткое имя, сегмент, окно половины А, деление 50 на 50,
+ * офис выдачи наград и их срок.
  *
  * **Черновик сохраняет себя сам** (issue #148): кнопки нет, рядом отметка «сохраняем…»
  * или «сохранено». Обязательных полей нет — черновик заводится первым действием, а чего
@@ -17,6 +18,8 @@ import type { SelectOption } from '~/types/selectOption';
  */
 defineProps<{
   segmentOptions: SelectOption[];
+  /** Рабочие офисы — где лежат и выдаются призы акции. */
+  officeOptions: SelectOption[];
   /** Выбранный сегмент в архиве: он сохранился, но запуск по нему не пройдёт. */
   segmentArchived: boolean;
   segmentCountState: LoadState;
@@ -34,6 +37,8 @@ const segmentId = defineModel<string>('segmentId', { required: true });
 const startsOn = defineModel<string>('startsOn', { required: true });
 const endsOn = defineModel<string>('endsOn', { required: true });
 const splitEnabled = defineModel<boolean>('splitEnabled', { required: true });
+const officeId = defineModel<string>('officeId', { required: true });
+const rewardLifetimeDays = defineModel<string>('rewardLifetimeDays', { required: true });
 
 const driversLabel = (total: number): string =>
   `${formatNumber(total)} ${pluralize(total, 'водитель', 'водителя', 'водителей')}`;
@@ -117,6 +122,28 @@ const driversLabel = (total: number): string =>
           Эффект акции меряется сравнением половин за одни и те же дни.
         </p>
       </div>
+
+      <fieldset class="space-y-3">
+        <legend class="text-sm font-semibold text-slate-900">Награды</legend>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <label class="block">
+            <span class="mb-1 block text-sm font-medium text-slate-700">Офис выдачи</span>
+            <AtomsSelectInput v-model="officeId" :options="officeOptions">
+              <option value="">Выберите офис</option>
+            </AtomsSelectInput>
+          </label>
+          <MoleculesNumberField
+            v-model="rewardLifetimeDays"
+            label="Срок, дней"
+            :min="1"
+            hint="Через столько дней неполученная награда сгорает."
+          />
+        </div>
+        <p class="text-sm text-slate-500">
+          Призы акции лежат и выдаются в одном офисе: водитель получает их там по коду из раздела
+          «Мои награды». Сгоревший приз возвращается на полку свободным.
+        </p>
+      </fieldset>
 
       <MoleculesAutosaveStatus
         :state="autosaveState"

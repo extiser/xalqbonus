@@ -1,3 +1,4 @@
+import { deskDriverName } from '#server/repositories/deskDriver';
 import {
   findOfficeOrder,
   listOrderLines,
@@ -14,19 +15,6 @@ import type { OfficeOrder } from '#shared/types/orders';
  * и отмена.
  */
 
-/**
- * «Фамилия Имя» — порядком реестра парка, как в поиске водителя в вебе.
- * Пусто и то и другое — `null`: выдумывать имя экрану незачем, он поставит прочерк.
- */
-const driverName = (row: OfficeOrderRow): string | null => {
-  const name = [row.lastName, row.firstName]
-    .map((part) => part?.trim() ?? '')
-    .filter((part) => part !== '')
-    .join(' ');
-
-  return name === '' ? null : name;
-};
-
 export const describeOfficeOrder = (row: OfficeOrderRow, lines: OrderLineRow[]): OfficeOrder => ({
   orderId: row.id,
   number: row.number,
@@ -36,8 +24,9 @@ export const describeOfficeOrder = (row: OfficeOrderRow, lines: OrderLineRow[]):
   code: row.status === 'pending' ? row.code : null,
   officeId: row.officeId,
   officeName: row.officeName,
-  driverName: driverName(row),
+  driverName: deskDriverName(row),
   callsign: row.callsign,
+  phone: row.phone,
   lines: lines.map((line) => ({
     productId: line.productId,
     name: line.name,

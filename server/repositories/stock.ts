@@ -3,7 +3,7 @@ import type { Prisma } from '#server/generated/prisma/client';
 import type { StockMovementKind } from '#server/generated/prisma/enums';
 
 /**
- * Остатки по офисам: журнал движения и его кэш.
+ * Остатки по офисам: журнал движения и его кэш. Движут остаток приход, правка, заказы и награды.
  *
  * Отношение ровно то же, что у журнала баллов и `accounts.balance`: истина лежит
  * в `stock_movements`, а `office_stock` — кэш, который правится только вместе с движением,
@@ -20,7 +20,7 @@ export type StockRow = {
   productId: string;
   /** Свободный остаток: лежит в офисе и никем не занят. */
   onHand: number;
-  /** Занято висящими заказами. */
+  /** Занято висящими заказами и ждущими наградами-товарами. */
   reserved: number;
 };
 
@@ -62,6 +62,8 @@ export type StockMovementInput = {
   /** Изменение резерва. */
   deltaReserved: number;
   orderId?: string | null;
+  /** Награда — у трёх видов награды, и только у них (`stock_movements_kind_signs_check`). */
+  rewardId?: string | null;
   employeeId?: string | null;
   note?: string | null;
 };
@@ -88,7 +90,7 @@ export const writeStockMovement = async (
     INSERT INTO xb.stock_movements (
       "office_id", "product_id", "kind",
       "delta_on_hand", "delta_reserved",
-      "order_id", "employee_id", "note"
+      "order_id", "reward_id", "employee_id", "note"
     )
     VALUES (
       ${input.officeId}::uuid,
@@ -97,6 +99,7 @@ export const writeStockMovement = async (
       ${input.deltaOnHand},
       ${input.deltaReserved},
       ${input.orderId ?? null}::uuid,
+      ${input.rewardId ?? null}::uuid,
       ${input.employeeId ?? null}::uuid,
       ${input.note ?? null}
     )
@@ -151,7 +154,10 @@ export const findStockRow = async (
 export type OfficeStockListRow = {
   productId: string;
   name: string;
-  pricePoints: number;
+  /** Пусто у приза. */
+  pricePoints: number | null;
+  promo: boolean;
+  hiddenInCatalog: boolean;
   archivedAt: Date | null;
   onHand: number;
   reserved: number;
@@ -169,6 +175,9 @@ export type OfficeStockListRow = {
  *
  * Черновиков здесь нет: в офис принимается только опубликованный товар, иначе на черновик
  * ссылался бы журнал остатков и удалить его было бы нельзя (issue #148).
+ *
+ * Скрытые с витрины товары здесь есть: призы приходуются и лежат как любой другой товар,
+ * и отбери их этот запрос — призы было бы некуда оприходовать (issue #172).
  */
 export const listOfficeStock = async (
   officeId: string,
@@ -178,6 +187,8 @@ export const listOfficeStock = async (
     SELECT product."id"           AS "productId",
            product."name",
            product."price_points" AS "pricePoints",
+           product."promo",
+           product."hidden_in_catalog" AS "hiddenInCatalog",
            product."archived_at"  AS "archivedAt",
            COALESCE(stock."on_hand", 0)  AS "onHand",
            COALESCE(stock."reserved", 0) AS "reserved"
@@ -194,6 +205,7 @@ export type ShowcaseRow = {
   name: string;
   description: string | null;
   photoPath: string | null;
+  /** Есть всегда: товар без цены на витрину не попадает. */
   pricePoints: number;
   updatedAt: Date;
   /** Свободный остаток офиса. */
@@ -209,6 +221,10 @@ export type ShowcaseRow = {
  *
  * Черновик отсекается здесь, в выборке, а не на экране: водителю он не виден нигде
  * (issue #148). Заказ отсекает его тем же условием в `placeOrder`.
+ *
+ * Скрытый с витрины и товар без цены в баллах — тоже (issue #172). Второе — следствие
+ * послабления публикации: приз публикуется без цены, и со снятым признаком «не показывать»
+ * он вышел бы на витрину без цены.
  */
 export const listOfficeShowcase = async (
   officeId: string,
@@ -228,6 +244,8 @@ export const listOfficeShowcase = async (
        AND stock."on_hand" > 0
        AND product."published_at" IS NOT NULL
        AND product."archived_at" IS NULL
+       AND NOT product."hidden_in_catalog"
+       AND product."price_points" IS NOT NULL
      ORDER BY product."name"
   `;
 
@@ -240,6 +258,8 @@ export type StockMovementListRow = {
   deltaReserved: number;
   /** Номер заказа для человека. Пуст у прихода и правки. */
   orderNumber: number | null;
+  /** Название награды. Пусто у всех, кроме видов награды. */
+  rewardTitle: string | null;
   /** Имя сотрудника. Пусто у движения, сделанного водителем или воркером просрочки. */
   employeeName: string | null;
   note: string | null;
@@ -270,12 +290,14 @@ export const listStockMovements = async (
            movement."delta_on_hand"  AS "deltaOnHand",
            movement."delta_reserved" AS "deltaReserved",
            "order"."number"          AS "orderNumber",
+           reward."title"            AS "rewardTitle",
            employee."full_name"      AS "employeeName",
            movement."note",
            movement."created_at"     AS "createdAt"
       FROM xb.stock_movements AS movement
       JOIN xb.products  AS product  ON product."id" = movement."product_id"
       LEFT JOIN xb.orders    AS "order"  ON "order"."id" = movement."order_id"
+      LEFT JOIN xb.rewards   AS reward   ON reward."id" = movement."reward_id"
       LEFT JOIN xb.employees AS employee ON employee."id" = movement."employee_id"
      WHERE movement."office_id" = ${officeId}::uuid
      ORDER BY movement."id" DESC

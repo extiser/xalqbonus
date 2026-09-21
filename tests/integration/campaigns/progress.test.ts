@@ -20,6 +20,7 @@ import {
 } from '../support/campaigns';
 import {
   cleanupTestData,
+  createTestOffice,
   createTestPerson,
   createTestTrip,
   disconnectDatabase,
@@ -90,6 +91,8 @@ const launch = async (count: number, splitEnabled = false): Promise<Setup> => {
 
   slugSequence += 1;
 
+  const officeId = await createTestOffice();
+
   const created = await createCampaign(
     {
       title: 'Неделя возвращения — прогресс',
@@ -97,6 +100,8 @@ const launch = async (count: number, splitEnabled = false): Promise<Setup> => {
       segmentId: segment.segmentId,
       ...WINDOW,
       splitEnabled,
+      officeId,
+      rewardLifetimeDays: 7,
     },
     employeeId,
   );
