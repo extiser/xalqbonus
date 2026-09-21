@@ -1,6 +1,7 @@
 import { db } from '#server/db';
 import { Prisma } from '#server/generated/prisma/client';
-import { PARK_DAY_START_HOUR, PARK_TIME_ZONE } from '#server/utils/parkTime';
+import { parkDaySql } from '#server/utils/parkDaySql';
+import { COMPLETED_TRIP_STATUS } from '#server/utils/tripStatus';
 // Относительным путём, а не через `#shared`: состав сегмента заберёт рассылка, а её модули
 // собираются в воркер, бандл которого знает только псевдоним `#server` (package.json →
 // build:worker).
@@ -179,21 +180,13 @@ export const updateSegmentArchived = async (
 // ---------------------------------------------------------------------------
 
 /**
- * Сутки парка момента: сдвиг на начало суток в зоне парка и дата. Вычитание двух таких дат
- * даёт целое число суток — ровно то, что стоит в колонке «дней с поездки».
- */
-const parkDay = (moment: Prisma.Sql): Prisma.Sql => Prisma.sql`
-  ((${moment} AT TIME ZONE ${PARK_TIME_ZONE}::text) - make_interval(hours => ${PARK_DAY_START_HOUR}::int))::date
-`;
-
-/**
  * Построитель отбора — единственный. Принимает условия, отдаёт SQL множества людей
  * с тем, по чему отбирали: `personId`, `daysSinceTrip`, `telegramLinked`, `balance`.
  *
  * Отбирает по реестру парка (`persons`), а не по участникам: участие — одно из условий,
  * и срез «не в программе» — тоже срез.
  *
- * Давность считается от `trips.ended_at` завершённых заказов (`status = 'complete'`) через
+ * Давность считается от `trips.ended_at` завершённых заказов (`COMPLETED_TRIP_STATUS`) через
  * `park_profiles` к человеку — по всем его учёткам сразу: увольнение и заведение заново дают
  * второй профиль, а человек один (docs/drivers.md). Считается в сутках парка с 05:00
  * по Ташкенту (docs/decisions.md → «Сутки — с 05:00 до 05:00»), от `now()` базы.
@@ -221,7 +214,7 @@ export const segmentMembersSql = (conditions: SegmentConditions): Prisma.Sql => 
            candidate."balance"
       FROM (
             SELECT person."id"                                    AS "personId",
-                   (${parkDay(Prisma.sql`now()`)} - ${parkDay(Prisma.sql`activity."lastTripEndedAt"`)})
+                   (${parkDaySql(Prisma.sql`now()`)} - ${parkDaySql(Prisma.sql`activity."lastTripEndedAt"`)})
                                                                   AS "daysSinceTrip",
                    (settings."person_id" IS NOT NULL)             AS "programMember",
                    (link."person_id" IS NOT NULL)                 AS "telegramLinked",
@@ -234,7 +227,7 @@ export const segmentMembersSql = (conditions: SegmentConditions): Prisma.Sql => 
                           max(trip."ended_at") AS "lastTripEndedAt"
                      FROM xb.trips AS trip
                      JOIN xb.park_profiles AS profile ON profile."profile_id" = trip."profile_id"
-                    WHERE trip."status" = 'complete'
+                    WHERE trip."status" = ${COMPLETED_TRIP_STATUS}
                     GROUP BY profile."person_id"
               ) AS activity ON activity."person_id" = person."id"
               LEFT JOIN xb.person_settings AS settings ON settings."person_id" = person."id"

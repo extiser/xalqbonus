@@ -22,12 +22,14 @@ export const readSegment = async (segmentId: string): Promise<Segment> => {
  * а число, лежащее колонкой, врало бы уже назавтра — давность ползёт каждый день.
  */
 export const readSegmentList = async (): Promise<SegmentListResponse> => {
-  const rows = await listSegments();
-  const counts = await Promise.all(rows.map((row) => countSegmentMembers(toSegment(row).conditions)));
+  const segments = (await listSegments()).map(toSegment);
+  const counts = await Promise.all(
+    segments.map((segment) => countSegmentMembers(segment.conditions)),
+  );
 
   return {
-    segments: rows.map((row, index) => ({
-      ...toSegment(row),
+    segments: segments.map((segment, index) => ({
+      ...segment,
       total: counts[index]?.total ?? 0,
     })),
     // Момент ответа, а не каждого подсчёта: подсчёты идут разом и расходятся на миллисекунды.

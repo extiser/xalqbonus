@@ -5,6 +5,7 @@ import { ensureDriverAccount } from '#server/services/points/ensureDriverAccount
 import { getSystemAccount } from '#server/services/points/getSystemAccount';
 import { buildTripIdempotencyKey } from '#server/services/points/idempotencyKey';
 import { transferPoints } from '#server/services/points/transfer';
+import { COMPLETED_TRIP_STATUS } from '#server/utils/tripStatus';
 
 /**
  * Начисление баллов за завершённые поездки.
@@ -26,9 +27,6 @@ const log = consola.withTag('points:trip-accrual');
 
 /** Курс. Продуктовое решение, унаследованное как есть (docs/points.md). */
 const POINTS_PER_COMPLETED_TRIP = 1;
-
-/** Единственный статус, за который начисляется балл. Значение из словаря Fleet API. */
-const COMPLETED_STATUS = 'complete';
 
 export type TripAccrualSummary = {
   /** Сколько различных поездок пришло на вход. */
@@ -75,7 +73,7 @@ const decideAccrual = (trip: TripForAccrual): AccrualDecision => {
   // Поездка в промежуточном статусе не начисляется и не помечается обработанной: она
   // вернётся позже с временем завершения в прошлом и начислится тогда. Именно на этом
   // старый бот терял пятую часть поездок (docs/analysis.md).
-  if (trip.status !== COMPLETED_STATUS) {
+  if (trip.status !== COMPLETED_TRIP_STATUS) {
     return { accrue: false, skipReason: 'notCompleted' };
   }
 

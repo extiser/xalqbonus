@@ -14,7 +14,15 @@ import type { Segment, SegmentConditions } from '#shared/types/segment';
  * с первым — предпросмотр принял бы то, что сохранение отвергнет.
  */
 
-/** Строка базы → ответ ручки. Баланс уезжает числом: `bigint` JSON не знает. */
+/**
+ * Строка базы → ответ ручки. Баланс уезжает числом: `bigint` JSON не знает.
+ *
+ * Колонки границ баланса — `bigint`, а контракт — `number`, и честен он только до 2^53:
+ * граница дальше `Number.MAX_SAFE_INTEGER` потеряет точность здесь молча, а на входе её
+ * не пропустит `readBound` (`Number.isSafeInteger`). Колонку не стоит считать честной
+ * по всему диапазону `bigint`. Практически недостижимо — балансы парка на много порядков
+ * меньше, — поэтому контракт не переведён на строку.
+ */
 export const toSegmentConditions = (row: SegmentRow): SegmentConditions => ({
   daysSinceTripMin: row.daysSinceTripMin,
   daysSinceTripMax: row.daysSinceTripMax,
