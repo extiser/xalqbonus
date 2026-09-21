@@ -66,7 +66,8 @@ migrate: ## Применить миграции к локальной БД
 # `migrate deploy` идти дальше. Цель снимает эту запись — только для миграции, которая
 # в базе действительно не оставила ничего.
 migrate-rolled-back: ## Отметить упавшую миграцию откатившейся. Использование: make migrate-rolled-back name=20260921132514_rewards
-	$(COMPOSE) exec app npx prisma migrate resolve --rolled-back $(name)
+	@test -n "$(name)" || { echo "укажите миграцию: make migrate-rolled-back name=<имя каталога из prisma/migrations>"; exit 1; }
+	$(COMPOSE) exec app npx prisma migrate resolve --rolled-back "$(name)"
 
 migrate-create: ## Создать миграцию из изменённой схемы, не применяя. Использование: make migrate-create name=point_entries
 	$(COMPOSE) exec app npx prisma migrate dev --create-only --name $(name)
@@ -264,8 +265,12 @@ prod-psql: ## Войти в psql prod-БД
 prod-invariants: ## Прогнать запросы инвариантов по prod-БД (ненулевой код при расхождении)
 	$(COMPOSE_PROD) exec -T postgres sh -c 'PGPASSWORD="$$POSTGRES_PASSWORD" psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -q' < scripts/invariants.sql
 
+# Обе прод-цели миграций идут одноразовым контейнером, а не `exec`: так же мигрирует сам выкат
+# (`docker/scripts/deploy-manual.sh`, шаг 4), и работающий `app` для них не нужен. Образ берётся
+# по `IMAGE_TAG` из `.env` — выкат переписывает его только после зелёной проверки готовности,
+# поэтому после неудачного выката это по-прежнему выкаченная версия, та же, что у `exec`.
 prod-migrate: ## Применить миграции к prod-БД
-	$(COMPOSE_PROD) exec app ./node_modules/.bin/prisma migrate deploy
+	$(COMPOSE_PROD) run --rm -T app ./node_modules/.bin/prisma migrate deploy
 
 # Прод-вариант `migrate-rolled-back`: снимает запись о неудаче, которую упавшая миграция
 # оставляет в `_prisma_migrations`, — без неё `prod-deploy` дальше миграции не идёт. Звать
@@ -276,7 +281,7 @@ prod-migrate: ## Применить миграции к prod-БД
 # Порядок восстановления — docker/DEPLOY-MANUAL.md → «Упавшая миграция».
 prod-migrate-rolled-back: ## Отметить упавшую миграцию откатившейся (prod). Использование: make prod-migrate-rolled-back name=20260921132514_rewards
 	@test -n "$(name)" || { echo "укажите миграцию: make prod-migrate-rolled-back name=<имя каталога из prisma/migrations>"; exit 1; }
-	$(COMPOSE_PROD) exec app ./node_modules/.bin/prisma migrate resolve --rolled-back $(name)
+	$(COMPOSE_PROD) run --rm -T app ./node_modules/.bin/prisma migrate resolve --rolled-back "$(name)"
 
 # Выкат и откат прода. Исполняются на боевой машине, а не с машины разработчика: скрипты
 # работают в каталоге выката /srv/xalqbonus и собирают образ там же. Прочие prod-цели выше —
