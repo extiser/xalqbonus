@@ -396,7 +396,7 @@ describe('награды', () => {
     const { rewards } = await readMemberRewards({ personId: scenario.personId, language: 'ru' });
     const expired = rewards.find((reward) => reward.rewardId === forgotten.id);
 
-    expect(expired?.stateText).toMatch(/^Сгорела \d{2}\.\d{2}\.\d{4}: не забрали за срок$/);
+    expect(expired?.stateText).toMatch(/^Срок вышел \d{2}\.\d{2}\.\d{4} — награда не получена$/);
     expect(expired?.code).toBeNull();
 
     await expectStockInvariantsHold();

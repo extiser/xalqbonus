@@ -36,7 +36,10 @@ export const issueReward = async (input: IssueRewardInput): Promise<{ issuedAt: 
       throw new RewardNotAwaitingError(input.rewardId, null);
     }
 
-    // Строка остатка — до записи статуса, тем же порядком, что у рождения: сначала остаток.
+    // Порядок блокировок — награда, затем остаток: строка награды уже взята выше, строка
+    // остатка берётся здесь, до записи статуса. С рождением он не встречается: `grantReward`
+    // существующую награду не блокирует, а вставляет новую, и общая у них только строка
+    // остатка — дедлоку не на чем сложиться. Сгорание берёт строки тем же порядком.
     if (reward.kind === 'product' && reward.officeId && reward.productId) {
       await lockStockRows(transaction, reward.officeId, [reward.productId]);
     }

@@ -559,8 +559,8 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     uz: '{moment} da olindi',
   },
   reward_state_expired: {
-    ru: 'Сгорела {date}: не забрали за срок',
-    uz: "{date} da kuyib ketdi: muddatida olinmadi",
+    ru: 'Срок вышел {date} — награда не получена',
+    uz: "Muddat {date} da tugadi — mukofot olinmagan",
   },
   reward_origin_manual: {
     ru: 'Вручил парк',
