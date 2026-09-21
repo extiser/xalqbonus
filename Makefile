@@ -6,12 +6,12 @@ COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
 
 .DEFAULT_GOAL := help
 
-.PHONY: help up up-d down restart logs ps shell psql sql migrate migrate-create migrate-diff generate typecheck test test-db \
+.PHONY: help up up-d down restart logs ps shell psql sql migrate migrate-rolled-back migrate-create migrate-diff generate typecheck test test-db \
         db-restore db-schema invariants license-collisions legacy-vs-api import-legacy \
         employee-owner prod-employee-owner \
         import-legacy-dump \
         sync-orders sync-registry sync-state \
-        prod-up prod-down prod-restart prod-logs prod-ps prod-shell prod-psql prod-invariants prod-migrate \
+        prod-up prod-down prod-restart prod-logs prod-ps prod-shell prod-psql prod-invariants prod-migrate prod-migrate-rolled-back \
         prod-deploy prod-rollback \
         proxy-up proxy-down proxy-ps proxy-logs proxy-validate proxy-reload
 
@@ -266,6 +266,17 @@ prod-invariants: ## Прогнать запросы инвариантов по 
 
 prod-migrate: ## Применить миграции к prod-БД
 	$(COMPOSE_PROD) exec app ./node_modules/.bin/prisma migrate deploy
+
+# Прод-вариант `migrate-rolled-back`: снимает запись о неудаче, которую упавшая миграция
+# оставляет в `_prisma_migrations`, — без неё `prod-deploy` дальше миграции не идёт. Звать
+# только для миграции, которая упала целиком в своей транзакции и в базе не оставила ничего.
+# Миграция, оставившая часть изменений, этой целью не снимается: её разбирают руками, иначе
+# база останется с половиной схемы при записи, что миграции не было. Причину сбоя — данные
+# или схему — чинят до вызова, иначе следующий выкат упадёт на том же месте.
+# Порядок восстановления — docker/DEPLOY-MANUAL.md → «Упавшая миграция».
+prod-migrate-rolled-back: ## Отметить упавшую миграцию откатившейся (prod). Использование: make prod-migrate-rolled-back name=20260921132514_rewards
+	@test -n "$(name)" || { echo "укажите миграцию: make prod-migrate-rolled-back name=<имя каталога из prisma/migrations>"; exit 1; }
+	$(COMPOSE_PROD) exec app ./node_modules/.bin/prisma migrate resolve --rolled-back $(name)
 
 # Выкат и откат прода. Исполняются на боевой машине, а не с машины разработчика: скрипты
 # работают в каталоге выката /srv/xalqbonus и собирают образ там же. Прочие prod-цели выше —
