@@ -1,0 +1,579 @@
+import { db } from '#server/db';
+import { Prisma } from '#server/generated/prisma/client';
+import type {
+  CampaignHalfCode,
+  CampaignParticipantState,
+  CampaignStatus,
+} from '#server/generated/prisma/enums';
+import { segmentMembersSql } from '#server/repositories/segments';
+import { parkDaySql, parkDayStartSql } from '#server/utils/parkDaySql';
+import type { SegmentConditions } from '#shared/types/segment';
+
+/**
+ * Акции, окна их половин и снимок участников (issue #166).
+ *
+ * Схема в сыром SQL указывается явно — `xb.campaigns`, а не `campaigns`
+ * (docs/decisions.md → «В сыром SQL схема указывается явно»).
+ *
+ * Переходы — статуса акции и состояния участника — пишутся условием на прежнее значение
+ * внутри `UPDATE`, а не проверкой перед ним: два нажатия подряд обязаны дать один переход,
+ * и решает это база (docs/principles.md → «Идемпотентность вместо аккуратности»).
+ *
+ * Окно хранится метками начала суток механики, а на экран уезжает ещё и датами. Перевод
+ * в обе стороны — здесь, одним выражением (`parkDaySql`, `parkDayStartSql`): второй перевод
+ * где-нибудь в коде однажды резал бы сутки по полуночи.
+ */
+
+type Executor = Prisma.TransactionClient;
+
+/** Окно половины из базы. Даты — `YYYY-MM-DD` в сутках парка, последний день включительно. */
+export type CampaignWindowRow = {
+  startsAt: Date | null;
+  endsAt: Date | null;
+  startsOn: string | null;
+  endsOn: string | null;
+};
+
+export type CampaignRow = {
+  id: string;
+  slug: string | null;
+  title: string | null;
+  status: CampaignStatus;
+  segmentId: string | null;
+  segmentName: string | null;
+  segmentArchivedAt: Date | null;
+  splitEnabled: boolean;
+  audienceSize: number | null;
+  createdByName: string;
+  createdAt: Date;
+  updatedAt: Date;
+  launchedAt: Date | null;
+  halfA: CampaignWindowRow;
+  /** Пусто, если строки половины Б нет: без деления её не заводят. */
+  halfB: CampaignWindowRow | null;
+};
+
+type CampaignFlatRow = Omit<CampaignRow, 'halfA' | 'halfB'> & {
+  hasHalfB: boolean;
+  halfAStartsAt: Date | null;
+  halfAEndsAt: Date | null;
+  halfAStartsOn: string | null;
+  halfAEndsOn: string | null;
+  halfBStartsAt: Date | null;
+  halfBEndsAt: Date | null;
+  halfBStartsOn: string | null;
+  halfBEndsOn: string | null;
+};
+
+/** Дата начала окна — сутки парка, в которые попадает метка начала. */
+const startsOnSql = (column: Prisma.Sql): Prisma.Sql =>
+  Prisma.sql`to_char(${parkDaySql(column)}, 'YYYY-MM-DD')`;
+
+/**
+ * Дата последнего дня окна. Метка конца — начало суток, следующих за последним днём,
+ * поэтому день на единицу раньше.
+ */
+const endsOnSql = (column: Prisma.Sql): Prisma.Sql =>
+  Prisma.sql`to_char(${parkDaySql(column)} - 1, 'YYYY-MM-DD')`;
+
+const CAMPAIGN_SELECT = Prisma.sql`
+  SELECT campaign."id",
+         campaign."slug",
+         campaign."title",
+         campaign."status",
+         campaign."segment_id"     AS "segmentId",
+         segment."name"            AS "segmentName",
+         segment."archived_at"     AS "segmentArchivedAt",
+         campaign."split_enabled"  AS "splitEnabled",
+         campaign."audience_size"  AS "audienceSize",
+         author."full_name"        AS "createdByName",
+         campaign."created_at"     AS "createdAt",
+         campaign."updated_at"     AS "updatedAt",
+         campaign."launched_at"    AS "launchedAt",
+         half_a."starts_at"        AS "halfAStartsAt",
+         half_a."ends_at"          AS "halfAEndsAt",
+         ${startsOnSql(Prisma.sql`half_a."starts_at"`)} AS "halfAStartsOn",
+         ${endsOnSql(Prisma.sql`half_a."ends_at"`)}     AS "halfAEndsOn",
+         (half_b."campaign_id" IS NOT NULL)             AS "hasHalfB",
+         half_b."starts_at"        AS "halfBStartsAt",
+         half_b."ends_at"          AS "halfBEndsAt",
+         ${startsOnSql(Prisma.sql`half_b."starts_at"`)} AS "halfBStartsOn",
+         ${endsOnSql(Prisma.sql`half_b."ends_at"`)}     AS "halfBEndsOn"
+    FROM xb.campaigns AS campaign
+    JOIN xb.employees AS author ON author."id" = campaign."created_by_id"
+    LEFT JOIN xb.segments AS segment ON segment."id" = campaign."segment_id"
+    LEFT JOIN xb.campaign_halves AS half_a
+           ON half_a."campaign_id" = campaign."id" AND half_a."half" = 'a'
+    LEFT JOIN xb.campaign_halves AS half_b
+           ON half_b."campaign_id" = campaign."id" AND half_b."half" = 'b'
+`;
+
+const toCampaignRow = (row: CampaignFlatRow): CampaignRow => ({
+  id: row.id,
+  slug: row.slug,
+  title: row.title,
+  status: row.status,
+  segmentId: row.segmentId,
+  segmentName: row.segmentName,
+  segmentArchivedAt: row.segmentArchivedAt,
+  splitEnabled: row.splitEnabled,
+  audienceSize: row.audienceSize,
+  createdByName: row.createdByName,
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
+  launchedAt: row.launchedAt,
+  halfA: {
+    startsAt: row.halfAStartsAt,
+    endsAt: row.halfAEndsAt,
+    startsOn: row.halfAStartsOn,
+    endsOn: row.halfAEndsOn,
+  },
+  halfB: row.hasHalfB
+    ? {
+        startsAt: row.halfBStartsAt,
+        endsAt: row.halfBEndsAt,
+        startsOn: row.halfBStartsOn,
+        endsOn: row.halfBEndsOn,
+      }
+    : null,
+});
+
+/** Все акции, свежие первыми. Их единицы, страниц не нужно. */
+export const listCampaigns = async (client: Executor = db): Promise<CampaignRow[]> => {
+  const rows = await client.$queryRaw<CampaignFlatRow[]>`
+    ${CAMPAIGN_SELECT}
+     ORDER BY campaign."created_at" DESC
+  `;
+
+  return rows.map(toCampaignRow);
+};
+
+export const findCampaign = async (
+  campaignId: string,
+  client: Executor = db,
+): Promise<CampaignRow | null> => {
+  const rows = await client.$queryRaw<CampaignFlatRow[]>`
+    ${CAMPAIGN_SELECT}
+     WHERE campaign."id" = ${campaignId}::uuid
+  `;
+
+  const row = rows[0];
+
+  return row ? toCampaignRow(row) : null;
+};
+
+/**
+ * Статус акции под блокировкой строки — до конца транзакции. Два запуска подряд так идут
+ * по очереди: второй увидит уже запущенную, а не снимет второй снимок рядом с первым.
+ */
+export const lockCampaignStatus = async (
+  campaignId: string,
+  client: Executor,
+): Promise<CampaignStatus | null> => {
+  const rows = await client.$queryRaw<{ status: CampaignStatus }[]>`
+    SELECT "status" FROM xb.campaigns WHERE "id" = ${campaignId}::uuid FOR UPDATE
+  `;
+
+  return rows[0]?.status ?? null;
+};
+
+export type CampaignDraftFields = {
+  title: string | null;
+  slug: string | null;
+  segmentId: string | null;
+  splitEnabled: boolean;
+};
+
+/** Окно датами `YYYY-MM-DD`: первый и последний день включительно. */
+export type CampaignWindowDays = {
+  startsOn: string | null;
+  endsOn: string | null;
+};
+
+/** Метка начала окна: 05:00 первого дня. */
+const windowStartSql = (startsOn: string | null): Prisma.Sql =>
+  Prisma.sql`CASE WHEN ${startsOn}::date IS NULL THEN NULL
+                  ELSE ${parkDayStartSql(Prisma.sql`${startsOn}::date`)} END`;
+
+/** Метка конца окна: 05:00 дня, следующего за последним. */
+const windowEndSql = (endsOn: string | null): Prisma.Sql =>
+  Prisma.sql`CASE WHEN ${endsOn}::date IS NULL THEN NULL
+                  ELSE ${parkDayStartSql(Prisma.sql`${endsOn}::date + 1`)} END`;
+
+/** Заводит черновик. Строку окна половины А ставит сервис в той же транзакции. */
+export const insertDraftCampaign = async (
+  input: CampaignDraftFields & { createdById: string },
+  client: Executor = db,
+): Promise<string> => {
+  const rows = await client.$queryRaw<{ id: string }[]>`
+    INSERT INTO xb.campaigns ("title", "slug", "segment_id", "split_enabled", "status", "created_by_id")
+    VALUES (
+      ${input.title},
+      ${input.slug},
+      ${input.segmentId}::uuid,
+      ${input.splitEnabled},
+      'draft'::xb.campaign_status,
+      ${input.createdById}::uuid
+    )
+    RETURNING "id"
+  `;
+
+  const row = rows[0];
+
+  if (!row) {
+    throw new Error('вставка акции не вернула строку');
+  }
+
+  return row.id;
+};
+
+/** Правка черновика. `false` — строки нет или она уже не черновик: запущенную не правят. */
+export const updateDraftCampaign = async (
+  campaignId: string,
+  input: CampaignDraftFields,
+  client: Executor = db,
+): Promise<boolean> => {
+  const updated = await client.$executeRaw`
+    UPDATE xb.campaigns
+       SET "title"         = ${input.title},
+           "slug"          = ${input.slug},
+           "segment_id"    = ${input.segmentId}::uuid,
+           "split_enabled" = ${input.splitEnabled},
+           "updated_at"    = now()
+     WHERE "id" = ${campaignId}::uuid
+       AND "status" = 'draft'
+  `;
+
+  return updated > 0;
+};
+
+/**
+ * Заводит строку окна половины. Повтор второй строки не заводит: пара «акция + половина» —
+ * первичный ключ. `false` — строка уже была.
+ */
+export const insertCampaignHalf = async (
+  campaignId: string,
+  half: CampaignHalfCode,
+  window: CampaignWindowDays,
+  client: Executor = db,
+): Promise<boolean> => {
+  const inserted = await client.$executeRaw`
+    INSERT INTO xb.campaign_halves ("campaign_id", "half", "starts_at", "ends_at")
+    VALUES (
+      ${campaignId}::uuid,
+      ${half}::xb.campaign_half,
+      ${windowStartSql(window.startsOn)},
+      ${windowEndSql(window.endsOn)}
+    )
+    ON CONFLICT ("campaign_id", "half") DO NOTHING
+  `;
+
+  return inserted > 0;
+};
+
+/** Окно половины А черновика. `false` — акция уже не черновик. */
+export const updateDraftCampaignFirstHalf = async (
+  campaignId: string,
+  window: CampaignWindowDays,
+  client: Executor = db,
+): Promise<boolean> => {
+  const updated = await client.$executeRaw`
+    UPDATE xb.campaign_halves AS half
+       SET "starts_at" = ${windowStartSql(window.startsOn)},
+           "ends_at"   = ${windowEndSql(window.endsOn)}
+      FROM xb.campaigns AS campaign
+     WHERE campaign."id" = half."campaign_id"
+       AND half."campaign_id" = ${campaignId}::uuid
+       AND half."half" = 'a'
+       AND campaign."status" = 'draft'
+  `;
+
+  return updated > 0;
+};
+
+/**
+ * Окно половины Б идущей акции. Назначается один раз: только пока обе даты пусты.
+ * `false` — акции нет, она не идёт, деления не было или окно уже назначено; какая
+ * из причин — разбирает сервис.
+ */
+export const setCampaignSecondHalfWindow = async (
+  campaignId: string,
+  window: { startsOn: string; endsOn: string },
+  client: Executor = db,
+): Promise<boolean> => {
+  const updated = await client.$executeRaw`
+    UPDATE xb.campaign_halves AS half
+       SET "starts_at" = ${windowStartSql(window.startsOn)},
+           "ends_at"   = ${windowEndSql(window.endsOn)}
+      FROM xb.campaigns AS campaign
+     WHERE campaign."id" = half."campaign_id"
+       AND half."campaign_id" = ${campaignId}::uuid
+       AND half."half" = 'b'
+       AND half."starts_at" IS NULL
+       AND half."ends_at" IS NULL
+       AND campaign."status" = 'running'
+       AND campaign."split_enabled"
+  `;
+
+  return updated > 0;
+};
+
+/**
+ * Снимок состава. Берёт людей построителем сегментов — тем же, которым считается
+ * предпросмотр (`segmentMembersSql`): второй запрос по тем же условиям разошёлся бы с числом,
+ * которое сотрудник видел перед запуском.
+ *
+ * При делении половины режет `ntile(2)` над случайным порядком: они получаются равными,
+ * а не примерно равными, и при нечётном числе в А на одного больше — `ntile` отдаёт лишнего
+ * первой группе. Без деления всем `a`.
+ *
+ * Повтор вторых строк не заводит: пара «акция + человек» — первичный ключ.
+ */
+export const insertCampaignParticipants = async (
+  campaignId: string,
+  conditions: SegmentConditions,
+  splitEnabled: boolean,
+  client: Executor,
+): Promise<number> =>
+  client.$executeRaw`
+    INSERT INTO xb.campaign_participants ("campaign_id", "person_id", "half", "state")
+    SELECT ${campaignId}::uuid,
+           member."personId",
+           CASE WHEN ${splitEnabled}::boolean AND ntile(2) OVER (ORDER BY random()) = 2
+                THEN 'b'::xb.campaign_half
+                ELSE 'a'::xb.campaign_half
+           END,
+           'invited'::xb.campaign_participant_state
+      FROM (${segmentMembersSql(conditions)}) AS member
+    ON CONFLICT ("campaign_id", "person_id") DO NOTHING
+  `;
+
+/**
+ * Черновик → идёт, с размером снимка. Одним `UPDATE`: у идущей размер снимка есть всегда —
+ * проверкой `campaigns_status_check`. `false` — строка уже не черновик.
+ */
+export const markCampaignRunning = async (
+  campaignId: string,
+  audienceSize: number,
+  client: Executor,
+): Promise<boolean> => {
+  const updated = await client.$executeRaw`
+    UPDATE xb.campaigns
+       SET "status"        = 'running'::xb.campaign_status,
+           "audience_size" = ${audienceSize}::int,
+           "launched_at"   = now(),
+           "updated_at"    = now()
+     WHERE "id" = ${campaignId}::uuid
+       AND "status" = 'draft'
+  `;
+
+  return updated > 0;
+};
+
+export type CampaignStateCountRow = {
+  half: CampaignHalfCode;
+  state: CampaignParticipantState;
+  total: number;
+};
+
+/** Сколько участников в каждом состоянии на каждой половине. Пустых сочетаний в ответе нет. */
+export const countCampaignParticipantStates = async (
+  campaignId: string,
+  client: Executor = db,
+): Promise<CampaignStateCountRow[]> =>
+  client.$queryRaw<CampaignStateCountRow[]>`
+    SELECT "half", "state", count(*)::int AS "total"
+      FROM xb.campaign_participants
+     WHERE "campaign_id" = ${campaignId}::uuid
+     GROUP BY "half", "state"
+     ORDER BY "half", "state"
+  `;
+
+export type CampaignParticipantFilter = {
+  half: CampaignHalfCode | null;
+  state: CampaignParticipantState | null;
+};
+
+const participantFilterSql = (campaignId: string, filter: CampaignParticipantFilter): Prisma.Sql =>
+  Prisma.sql`
+    participant."campaign_id" = ${campaignId}::uuid
+    AND (${filter.half}::xb.campaign_half IS NULL
+         OR participant."half" = ${filter.half}::xb.campaign_half)
+    AND (${filter.state}::xb.campaign_participant_state IS NULL
+         OR participant."state" = ${filter.state}::xb.campaign_participant_state)
+  `;
+
+export const countCampaignParticipants = async (
+  campaignId: string,
+  filter: CampaignParticipantFilter,
+  client: Executor = db,
+): Promise<number> => {
+  const rows = await client.$queryRaw<{ total: number }[]>`
+    SELECT count(*)::int AS "total"
+      FROM xb.campaign_participants AS participant
+     WHERE ${participantFilterSql(campaignId, filter)}
+  `;
+
+  return rows[0]?.total ?? 0;
+};
+
+export type CampaignParticipantRow = {
+  personId: string;
+  lastName: string | null;
+  firstName: string | null;
+  middleName: string | null;
+  callsigns: string[];
+  half: CampaignHalfCode;
+  state: CampaignParticipantState;
+  changedAt: Date;
+};
+
+/**
+ * Страница участников. «Когда сменилось» — отметка текущего состояния: конечные важнее
+ * «открыл», у приглашённого — время снимка.
+ *
+ * Порядок — по фамилии, затем идентификатором человека: без него две страницы могут показать
+ * одну строку дважды. Профиль для показа — как в поиске и сегментах: работающий важнее
+ * уволенного, среди равных свежий.
+ */
+export const listCampaignParticipantsPage = async (
+  campaignId: string,
+  filter: CampaignParticipantFilter,
+  limit: number,
+  offset: number,
+  client: Executor = db,
+): Promise<CampaignParticipantRow[]> =>
+  client.$queryRaw<CampaignParticipantRow[]>`
+    SELECT participant."person_id" AS "personId",
+           profile."lastName",
+           profile."firstName",
+           profile."middleName",
+           profiles."callsigns",
+           participant."half",
+           participant."state",
+           coalesce(participant."declined_at", participant."joined_at",
+                    participant."opened_at", participant."created_at") AS "changedAt"
+      FROM xb.campaign_participants AS participant
+      LEFT JOIN LATERAL (
+        SELECT candidate."last_name"   AS "lastName",
+               candidate."first_name"  AS "firstName",
+               candidate."middle_name" AS "middleName"
+          FROM xb.park_profiles AS candidate
+         WHERE candidate."person_id" = participant."person_id"
+         ORDER BY (candidate."work_status" = 'working') DESC, candidate."api_updated_at" DESC
+         LIMIT 1
+      ) AS profile ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT coalesce(
+                 array_agg(DISTINCT candidate."callsign")
+                   FILTER (WHERE candidate."callsign" IS NOT NULL),
+                 ARRAY[]::text[]
+               ) AS "callsigns"
+          FROM xb.park_profiles AS candidate
+         WHERE candidate."person_id" = participant."person_id"
+      ) AS profiles ON TRUE
+     WHERE ${participantFilterSql(campaignId, filter)}
+     ORDER BY profile."lastName" ASC NULLS LAST,
+              profile."firstName" ASC NULLS LAST,
+              participant."person_id" ASC
+     LIMIT ${limit} OFFSET ${offset}
+  `;
+
+// ---------------------------------------------------------------------------
+// Участие водителя
+// ---------------------------------------------------------------------------
+
+export type MemberCampaignRow = {
+  campaignId: string;
+  title: string;
+  state: CampaignParticipantState;
+  startsOn: string;
+  endsOn: string;
+};
+
+/**
+ * Акция, которая видна водителю в этот момент: он в снимке идущей акции, и окно его половины
+ * уже началось и ещё не кончилось. Начало входит в окно, конец — нет.
+ *
+ * Половина Б до начала своего окна акции не видит вовсе: у неё окна нет, пока его
+ * не назначили, а назначенное ещё не началось. Она контроль, и показать ей акцию значило бы
+ * испортить замер.
+ *
+ * Если окон сразу несколько, берётся запущенная последней. «Сейчас» приходит параметром:
+ * граница окна проверяется тестом на заданном часе, а не ожиданием утра восьмого числа.
+ */
+export const findMemberCampaign = async (
+  personId: string,
+  now: Date,
+  client: Executor = db,
+): Promise<MemberCampaignRow | null> => {
+  const rows = await client.$queryRaw<MemberCampaignRow[]>`
+    SELECT campaign."id"    AS "campaignId",
+           campaign."title",
+           participant."state",
+           ${startsOnSql(Prisma.sql`half."starts_at"`)} AS "startsOn",
+           ${endsOnSql(Prisma.sql`half."ends_at"`)}     AS "endsOn"
+      FROM xb.campaign_participants AS participant
+      JOIN xb.campaigns AS campaign ON campaign."id" = participant."campaign_id"
+      JOIN xb.campaign_halves AS half
+        ON half."campaign_id" = participant."campaign_id"
+       AND half."half" = participant."half"
+     WHERE participant."person_id" = ${personId}::uuid
+       AND campaign."status" = 'running'
+       AND half."starts_at" <= ${now}::timestamptz
+       AND half."ends_at" > ${now}::timestamptz
+     ORDER BY campaign."launched_at" DESC
+     LIMIT 1
+  `;
+
+  return rows[0] ?? null;
+};
+
+/**
+ * Переход состояния участника — только из перечисленных. Назад состояния не ходят, и повтор
+ * того же нажатия строку не трогает. `false` — перехода не было.
+ */
+const moveParticipantState = async (
+  campaignId: string,
+  personId: string,
+  to: CampaignParticipantState,
+  from: CampaignParticipantState[],
+  client: Executor,
+): Promise<boolean> => {
+  const updated = await client.$executeRaw`
+    UPDATE xb.campaign_participants
+       SET "state"       = ${to}::xb.campaign_participant_state,
+           "opened_at"   = CASE WHEN ${to} = 'opened'   THEN now() ELSE "opened_at" END,
+           "joined_at"   = CASE WHEN ${to} = 'joined'   THEN now() ELSE "joined_at" END,
+           "declined_at" = CASE WHEN ${to} = 'declined' THEN now() ELSE "declined_at" END,
+           "updated_at"  = now()
+     WHERE "campaign_id" = ${campaignId}::uuid
+       AND "person_id" = ${personId}::uuid
+       AND "state"::text = ANY(${from}::text[])
+  `;
+
+  return updated > 0;
+};
+
+/** Приглашённый открыл экран акции. */
+export const markParticipantOpened = (
+  campaignId: string,
+  personId: string,
+  client: Executor = db,
+): Promise<boolean> => moveParticipantState(campaignId, personId, 'opened', ['invited'], client);
+
+/** «Участвовать». */
+export const markParticipantJoined = (
+  campaignId: string,
+  personId: string,
+  client: Executor = db,
+): Promise<boolean> =>
+  moveParticipantState(campaignId, personId, 'joined', ['invited', 'opened'], client);
+
+/** «Отказаться». */
+export const markParticipantDeclined = (
+  campaignId: string,
+  personId: string,
+  client: Executor = db,
+): Promise<boolean> =>
+  moveParticipantState(campaignId, personId, 'declined', ['invited', 'opened'], client);

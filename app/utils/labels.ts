@@ -5,6 +5,7 @@ import type {
   DriverOperationCounterparty,
   DriverTelegramLink,
 } from '#shared/types/driver';
+import type { Campaign, CampaignParticipantState } from '#shared/types/campaign';
 import type { EmployeeAccount } from '#shared/types/employee';
 import type { Mailing } from '#shared/types/mailing';
 import type { OfficeOrder } from '#shared/types/orders';
@@ -250,3 +251,41 @@ const EMPLOYEE_ROLE_LABELS: Record<EmployeeAccount['role'], string> = {
 
 export const employeeRoleLabel = (role: EmployeeAccount['role']): string =>
   EMPLOYEE_ROLE_LABELS[role];
+
+/**
+ * Подписи акций. Полным `Record` — новый статус или состояние обязаны уронить проверку типов
+ * здесь, а не показаться на экране латинским словом.
+ */
+
+const CAMPAIGN_STATUS_LABELS: Record<Campaign['status'], string> = {
+  draft: 'черновик',
+  running: 'идёт',
+  finished: 'окончена',
+};
+
+export const campaignStatusLabel = (status: Campaign['status']): string =>
+  CAMPAIGN_STATUS_LABELS[status];
+
+/** Идущая — предупреждение: водители видят её прямо сейчас. Оконченная — прошлое. */
+const CAMPAIGN_STATUS_TONES: Record<Campaign['status'], 'ok' | 'warn' | 'muted'> = {
+  draft: 'muted',
+  running: 'warn',
+  finished: 'ok',
+};
+
+export const campaignStatusTone = (status: Campaign['status']): 'ok' | 'warn' | 'muted' =>
+  CAMPAIGN_STATUS_TONES[status];
+
+const PARTICIPANT_STATE_LABELS: Record<CampaignParticipantState, string> = {
+  invited: 'приглашён',
+  opened: 'открыл',
+  joined: 'в деле',
+  declined: 'отказался',
+};
+
+export const participantStateLabel = (state: CampaignParticipantState): string =>
+  PARTICIPANT_STATE_LABELS[state];
+
+/** Половина Б при делении — контроль: подпись говорит это, чтобы её нули не читались провалом. */
+export const campaignHalfLabel = (half: 'a' | 'b'): string =>
+  half === 'a' ? 'Половина А' : 'Половина Б — контроль';

@@ -11,6 +11,7 @@ import {
   type RegistrationScreenTexts,
 } from '#shared/types/miniapp';
 import { useEmployeePassword } from '~/composables/useEmployeePassword';
+import { useMemberCampaign } from '~/composables/useMemberCampaign';
 import { useMemberHistory } from '~/composables/useMemberHistory';
 import { useMemberOrders } from '~/composables/useMemberOrders';
 import { useOfficeOrderDesk } from '~/composables/useOfficeOrderDesk';
@@ -127,6 +128,15 @@ const memberHistory = useMemberHistory(() => initData);
  * экрана участника: к моменту первого запроса витрины они уже загружены.
  */
 const memberOrders = useMemberOrders(
+  () => initData,
+  () => member.value?.orderTexts.requestFailed ?? LOAD_FAILED,
+);
+
+/**
+ * Акция участника (issue #166). Читается вместе с экраном участника: первое чтение и есть
+ * «открыл экран акции». Запасной текст отказа — тот же, что у витрины.
+ */
+const memberCampaign = useMemberCampaign(
   () => initData,
   () => member.value?.orderTexts.requestFailed ?? LOAD_FAILED,
 );
@@ -505,8 +515,9 @@ const loadState = async (): Promise<void> => {
 
     if (state.screen === 'member') {
       // История догружается следом, своим состоянием: её отказ гасит список, а не экран
-      // с балансом — баланс уже прочитан и врать о нём нечему.
+      // с балансом — баланс уже прочитан и врать о нём нечему. Акция — так же.
       void memberHistory.loadFirstPage();
+      void memberCampaign.load();
     }
   } catch (error) {
     // Текст на экране прежний — причина отказа водителю ничего не чинит. Но в консоли
@@ -545,7 +556,8 @@ const refresh = async (): Promise<void> => {
     if (state.screen === 'member') {
       // Тихо: строки истории стоят на экране, пока не пришли новые. Кнопка крутится,
       // и этого признака довольно — мигание списка им никогда не было (issue #107).
-      await memberHistory.reloadFirstPage();
+      // Акция перечитывается рядом: окно могло открыться или кончиться, пока экран лежал.
+      await Promise.all([memberHistory.reloadFirstPage(), memberCampaign.load()]);
     }
 
     refreshFailed.value = false;
@@ -731,6 +743,15 @@ const share = (): void => {
 
   <div v-else-if="stage === 'member' && member" class="flex flex-col gap-2">
     <template v-if="currentScreen === 'home'">
+      <OrganismsMemberCampaign
+        v-if="memberCampaign.campaign.value"
+        :campaign="memberCampaign.campaign.value"
+        :acting="memberCampaign.acting.value"
+        :error="memberCampaign.error.value"
+        @join="memberCampaign.join"
+        @decline="memberCampaign.decline"
+      />
+
       <OrganismsMemberSummary
         :balance-title="member.texts.balanceTitle"
         :balance="member.balance"

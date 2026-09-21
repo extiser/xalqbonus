@@ -207,3 +207,17 @@ export const formatMomentDate = (value: string | null): string => {
     year: 'numeric',
   });
 };
+
+/**
+ * Окно датами: «01.10.2026 — 07.10.2026», последний день включительно. Не назначено — прочерк.
+ *
+ * Даты — строки `YYYY-MM-DD`, как их вводил сотрудник: окно акции задаётся днями, и зона
+ * показа сдвигать их не должна.
+ */
+export const formatDayRange = (from: string | null, to: string | null): string => {
+  if (!from && !to) {
+    return DASH;
+  }
+
+  return `${formatCalendarDate(from)} — ${formatCalendarDate(to)}`;
+};

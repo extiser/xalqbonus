@@ -284,6 +284,46 @@ enum MailingRecipientOutcome {
   @@schema("xb")
 }
 
+/// Состояние акции. Путь один и в одну сторону: черновик → идёт → окончена. Запущенная
+/// не правится и не отменяется: окно кончается само (issue #166).
+enum CampaignStatus {
+  draft
+  running
+  finished
+
+  @@map("campaign_status")
+  @@schema("xb")
+}
+
+/// Половина состава акции. Без деления у всех `a`, а был ли контроль, отвечает
+/// `campaigns.split_enabled`, а не пустая колонка.
+enum CampaignHalfCode {
+  a
+  b
+
+  @@map("campaign_half")
+  @@schema("xb")
+}
+
+/// Где водитель в акции — только то, что он меняет сам. Исходы окна («вернулся»,
+/// «не дотянул»…) сюда не входят: их ставит итог окна, а он считается от зачётного дня.
+///
+/// Назад состояния не ходят: `joined` и `declined` — конечные.
+enum CampaignParticipantState {
+  /// Попал в снимок. Начальное у всех.
+  invited
+  /// Открыл экран акции в Mini App.
+  opened
+  /// Нажал «Участвовать».
+  joined
+  /// Нажал «Отказаться». Своим состоянием, хотя в итоге окна сольётся с «посмотрел
+  /// и не вступил»: пока открыт вопрос «позже всё же вступил», явный отказ нужно видеть.
+  declined
+
+  @@map("campaign_participant_state")
+  @@schema("xb")
+}
+
 // ---------------------------------------------------------------------------
 // Люди и учётки
 // ---------------------------------------------------------------------------
@@ -307,6 +347,7 @@ model Person {
   legacyRecords LegacyDriverMap[]
   orders        Order[]
   mailings      MailingRecipient[]
+  campaigns     CampaignParticipant[]
 
   @@map("persons")
   @@schema("xb")
@@ -568,6 +609,7 @@ model Employee {
   stockMovements  StockMovement[]
   mailings        Mailing[]
   segments        Segment[]
+  campaigns       Campaign[]
 
   @@map("employees")
   @@schema("xb")
@@ -1393,8 +1435,107 @@ model Segment {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  createdBy Employee @relation(fields: [createdById], references: [id])
+  createdBy Employee   @relation(fields: [createdById], references: [id])
+  campaigns Campaign[]
 
   @@map("segments")
+  @@schema("xb")
+}
+
+// ---------------------------------------------------------------------------
+// Акции
+// ---------------------------------------------------------------------------
+
+/// Акция: окно, в котором снимок участников из сегмента играет по механике (issue #166).
+///
+/// Состав снимается из сегмента один раз, при запуске, и больше не пересчитывается ничем:
+/// давность «20–90 дней» ползёт каждый день, и без заморозки к концу окна в волне оказались
+/// бы другие люди. Снимок — строки `campaign_participants`.
+///
+/// Согласованность статуса с полями держится проверкой в миграции: у запущенной есть
+/// название, `slug`, сегмент, время запуска и размер снимка; у черновика последних двух нет.
+model Campaign {
+  id           String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// Короткое латинское имя, `comeback-wave-1`. От него строится ключ идемпотентности
+  /// массовых операций акции (docs/points.md → `campaign:<slug>:<persons.id>`), поэтому
+  /// уникально и после запуска не меняется. Пусто только у черновика.
+  slug         String?        @unique
+  /// Название для людей. Пусто только у черновика.
+  title        String?
+  status       CampaignStatus
+  /// Сегмент, из которого снят состав. Обязателен у запущенной.
+  segmentId    String?        @map("segment_id") @db.Uuid
+  /// Делили ли состав на половины: половина Б — контроль, её приглашают позже своим окном.
+  splitEnabled Boolean        @default(false) @map("split_enabled")
+  /// Сколько человек попало в снимок. Факт на дату запуска, а не счётчик: по нему видно,
+  /// с чего волна начиналась. Пусто у черновика.
+  audienceSize Int?           @map("audience_size")
+  createdById  String         @map("created_by_id") @db.Uuid
+  launchedAt   DateTime?      @map("launched_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  /// `Restrict`, а не умолчание `SetNull` у необязательной связи: сегмент не удаляется
+  /// (архив), а удалённый не должен молча стирать ответ «из кого снят состав».
+  segment      Segment?              @relation(fields: [segmentId], references: [id], onDelete: Restrict)
+  createdBy    Employee              @relation(fields: [createdById], references: [id])
+  halves       CampaignHalf[]
+  participants CampaignParticipant[]
+
+  @@index([createdAt(sort: Desc)])
+  @@map("campaigns")
+  @@schema("xb")
+}
+
+/// Окно половины. Стоит на половине, а не на акции: половины стартуют с разницей в неделю,
+/// и одной пары дат на акцию не хватает.
+///
+/// Сотрудник вводит даты, храним метки: сутки механики идут с 05:00 до 05:00 по Ташкенту,
+/// и окно «1–7 октября» — это `01.10 05:00` … `08.10 05:00` (`server/utils/parkDaySql.ts`).
+/// Начало входит в окно, конец — нет.
+///
+/// Строка `a` есть у каждой акции с заведения. Строка `b` — только при делении, и её даты
+/// пусты, пока до половины не дошла очередь.
+model CampaignHalf {
+  campaignId String           @map("campaign_id") @db.Uuid
+  half       CampaignHalfCode
+  startsAt   DateTime?        @map("starts_at") @db.Timestamptz(6)
+  endsAt     DateTime?        @map("ends_at") @db.Timestamptz(6)
+
+  campaign Campaign @relation(fields: [campaignId], references: [id])
+
+  @@id([campaignId, half])
+  @@map("campaign_halves")
+  @@schema("xb")
+}
+
+/// Снимок состава и состояние водителя в акции.
+///
+/// Пара «акция + человек» — первичный ключ, и это защита от второго снимка: повтор запуска
+/// вторых строк не заведёт, ровно как у `mailing_recipients`. Переходы состояния пишутся
+/// условием на прежнее состояние внутри `UPDATE`.
+model CampaignParticipant {
+  campaignId String                   @map("campaign_id") @db.Uuid
+  personId   String                   @map("person_id") @db.Uuid
+  /// Заполнена всегда. Без деления — `a` у всех.
+  half       CampaignHalfCode
+  state      CampaignParticipantState
+  openedAt   DateTime?                @map("opened_at") @db.Timestamptz(6)
+  joinedAt   DateTime?                @map("joined_at") @db.Timestamptz(6)
+  declinedAt DateTime?                @map("declined_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  campaign Campaign @relation(fields: [campaignId], references: [id])
+  person   Person   @relation(fields: [personId], references: [id])
+
+  @@id([campaignId, personId])
+  /// Разбивка по состояниям и половинам на карточке акции.
+  @@index([campaignId, half, state])
+  /// Что у водителя с акцией — при каждом открытии Mini App.
+  @@index([personId])
+  @@map("campaign_participants")
   @@schema("xb")
 }

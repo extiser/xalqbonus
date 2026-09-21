@@ -1,5 +1,6 @@
 import {
   ALL_EMPLOYEE_ROLES,
+  CAMPAIGN_ROLES,
   CATALOG_ROLES,
   MAILING_ROLES,
   ORDER_ROLES,
@@ -36,6 +37,7 @@ const SERVICE_NAVIGATION: NavigationItem[] = [
   // другая работа, и следом за ним идёт рассылка (issue #165).
   { title: 'Сегменты', path: '/segments', roles: SEGMENT_ROLES },
   { title: 'Рассылки', path: '/mailings', roles: MAILING_ROLES },
+  { title: 'Акции', path: '/campaigns', roles: CAMPAIGN_ROLES },
   { title: 'Сотрудники', path: '/employees', roles: STAFF_ROLES },
   { title: 'Синхронизация', path: '/sync', roles: SYNC_ROLES },
 ];
