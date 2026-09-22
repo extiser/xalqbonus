@@ -1,4 +1,6 @@
 import { plainText, type TextKey } from '#server/bot/texts';
+import { db } from '#server/db';
+import type { Prisma } from '#server/generated/prisma/client';
 import type { CampaignParticipantState, Language } from '#server/generated/prisma/enums';
 import { listOpenedChests } from '#server/repositories/campaignChests';
 import { readParticipantDayTrips, type MemberCampaignRow } from '#server/repositories/campaigns';
@@ -43,18 +45,19 @@ const readMemberProgress = async (
   row: MemberCampaignRow,
   personId: string,
   language: Language,
+  client: Prisma.TransactionClient,
 ): Promise<MemberCampaignProgress | null> => {
   if (row.joinedAt === null) {
     return null;
   }
 
-  const opened = await listOpenedChests(row.campaignId, personId);
+  const opened = await listOpenedChests(row.campaignId, personId, client);
 
   if (row.outcome !== null) {
     return describeFrozenProgress({ ...row, outcome: row.outcome }, opened, language);
   }
 
-  const dayTrips = await readParticipantDayTrips(row.campaignId, personId);
+  const dayTrips = await readParticipantDayTrips(row.campaignId, personId, client);
 
   return describeLiveProgress(row, dayTrips, opened, language);
 };
@@ -77,10 +80,14 @@ const describeMemberCampaign = (
   progress,
 });
 
-/** Экран акции водителя: строка участия на его языке и прогресс недели. */
+/**
+ * Экран акции водителя: строка участия на его языке и прогресс недели. `client` — транзакция
+ * открытия сундука: экран после открытия читается внутри неё и видит только что записанное.
+ */
 export const presentMemberCampaign = async (
   row: MemberCampaignRow,
   personId: string,
   language: Language,
+  client: Prisma.TransactionClient = db,
 ): Promise<MemberCampaign> =>
-  describeMemberCampaign(row, language, await readMemberProgress(row, personId, language));
+  describeMemberCampaign(row, language, await readMemberProgress(row, personId, language, client));

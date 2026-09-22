@@ -1,5 +1,3 @@
-import { randomInt } from 'node:crypto';
-
 import { consola } from 'consola';
 import { plainText } from '#server/bot/texts';
 import { db } from '#server/db';
@@ -26,6 +24,7 @@ import {
 } from '#server/services/campaigns/errors';
 import { presentMemberCampaign } from '#server/services/campaigns/memberCampaignScreen';
 import { chestPrizeText, frozenFigures } from '#server/services/campaigns/memberProgress';
+import { drawPrize } from '#server/services/campaigns/prizeDraw';
 import { chestLadder, weekFigures, type ChestLadder } from '#server/services/campaigns/weekProgress';
 import type { LinkedDriver } from '#server/services/drivers/readLinkedDriver';
 import {
@@ -107,7 +106,8 @@ const refusalOf = (ladder: ChestLadder, chest: CampaignChestRef): CampaignChestR
   if (chest.kind !== 'day') {
     const state = chest.kind === 'three_days' ? ladder.threeDays : ladder.week;
 
-    // Открытый сюда не доходит: его строку нашли раньше.
+    // `opened` отсюда не приходит: лестница считается без открытых сундуков, а открытый
+    // нашёлся по своей строке раньше. Ветка держит тип — отказа «открыт» нет.
     return state === 'to_open' || state === 'opened' ? null : state;
   }
 
@@ -117,34 +117,8 @@ const refusalOf = (ladder: ChestLadder, chest: CampaignChestRef): CampaignChestR
     return 'day_invalid';
   }
 
+  // `opened` — тем же доводом, что у ступеней.
   return day.state === 'to_open' || day.state === 'opened' ? null : day.state;
-};
-
-/**
- * Вариант по весам: доля варианта — вес, делённый на сумму весов ступени. `roll` — целое
- * в `[0, сумма)`. Порядок вариантов тот, что отдал репозиторий, — от него доли не зависят.
- */
-export const pickPrizeByWeight = (
-  prizes: readonly CampaignPrizeRow[],
-  roll: number,
-): CampaignPrizeRow | null => {
-  let threshold = 0;
-
-  for (const prize of prizes) {
-    threshold += prize.weight;
-
-    if (roll < threshold) {
-      return prize;
-    }
-  }
-
-  return null;
-};
-
-const drawPrize = (prizes: readonly CampaignPrizeRow[]): CampaignPrizeRow | null => {
-  const total = prizes.reduce((sum, prize) => sum + prize.weight, 0);
-
-  return total > 0 ? pickPrizeByWeight(prizes, randomInt(total)) : null;
 };
 
 type CampaignRewardSettings = {
@@ -339,14 +313,26 @@ const openInTransaction = async (
   };
 };
 
+/**
+ * Экран после открытия читается в той же транзакции: он обязан показать ровно то, что записано,
+ * а не то, что успело поменяться между коммитом и чтением.
+ */
 export const openCampaignChest = async (
   driver: LinkedDriver,
   chest: CampaignChestRef,
   now: Date,
 ): Promise<MiniAppOpenChestResponse> => {
-  const outcome = await db.$transaction((transaction) =>
-    openInTransaction(transaction, driver.personId, chest, now),
-  );
+  const outcome = await db.$transaction(async (transaction) => {
+    const opened = await openInTransaction(transaction, driver.personId, chest, now);
+    const after = await findMemberCampaign(driver.personId, now, transaction);
+
+    return {
+      ...opened,
+      campaign: after
+        ? await presentMemberCampaign(after, driver.personId, driver.language, transaction)
+        : null,
+    };
+  });
 
   log.info(outcome.replay ? 'сундук уже был открыт — отдана прежняя награда' : 'сундук открыт', {
     campaignId: outcome.campaignId,
@@ -357,10 +343,8 @@ export const openCampaignChest = async (
     rewardKind: outcome.prize.rewardKind,
   });
 
-  const after = await findMemberCampaign(driver.personId, now);
-
   return {
-    campaign: after ? await presentMemberCampaign(after, driver.personId, driver.language) : null,
+    campaign: outcome.campaign,
     prizeText: plainText('campaign_chest_prize', driver.language, {
       prize: chestPrizeText(outcome.prize, driver.language),
     }),
