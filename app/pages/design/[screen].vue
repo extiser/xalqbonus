@@ -26,6 +26,7 @@ import {
   orderIssuedMock,
   orderMock,
   profileMock,
+  promoHeroMock,
 } from '~/design/mocks';
 import { findDesignScreen } from '~/design/screens';
 import type { MemberLanguage } from '~/types/memberView';
@@ -176,6 +177,13 @@ function go(target: string): void {
         @reset="profileSheet = 'none'"
         @close="profileSheet = 'none'"
         @save="saveLanguage"
+      />
+
+      <OrganismsNextMemberPromoHero
+        v-else-if="slug === 'promo'"
+        v-bind="promoHeroMock"
+        @accept="go('campaign')"
+        @decline="go('home-invite')"
       />
     </div>
   </div>

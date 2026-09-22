@@ -131,3 +131,25 @@ export interface MemberLanguageOptionView {
   language: MemberLanguage;
   label: string;
 }
+
+/** Сундук акции — какой картинкой он рисуется. */
+export type MemberChestKind = 'day' | '3days' | 'week';
+
+/**
+ * Кусок строки с выделением — правила акции пишутся фразой, где часть слов жирная
+ * или золотая. `plain` — обычный текст правила, `action` — действие водителя,
+ * `strong` — число и срок, `gold` — название сундука.
+ */
+export interface MemberTextPart {
+  text: string;
+  emphasis: 'plain' | 'action' | 'strong' | 'gold';
+}
+
+/** Строка правила акции на экране приглашения: сундук и фраза в несколько строк. */
+export interface MemberPromoRuleView {
+  id: string;
+  chest: MemberChestKind;
+  /** Главная награда недели — золотой подсветкой. */
+  highlighted: boolean;
+  lines: MemberTextPart[][];
+}

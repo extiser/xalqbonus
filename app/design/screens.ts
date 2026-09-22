@@ -73,6 +73,10 @@ export const DESIGN_GROUPS: DesignGroup[] = [
       { slug: 'profile-reset', title: 'Открыта шторка сброса', source: 'app/profile-screen.html' },
     ],
   },
+  {
+    title: 'Акция «Неделя возвращения»',
+    screens: [{ slug: 'promo', title: 'Экран приглашения', source: 'comeback/02-promo-hero.html' }],
+  },
 ];
 
 export function findDesignScreen(slug: string): DesignScreen | undefined {

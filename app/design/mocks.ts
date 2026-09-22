@@ -5,6 +5,7 @@ import type {
   MemberLanguageOptionView,
   MemberOrderRowView,
   MemberProfileFieldView,
+  MemberPromoRuleView,
   MemberRewardView,
 } from '~/types/memberView';
 
@@ -565,3 +566,69 @@ export function profileMock(language: MemberLanguage) {
     texts: PROFILE_TEXTS[language],
   };
 }
+
+// ---------------------------------------------------------------- экран приглашения
+
+const PROMO_RULES: MemberPromoRuleView[] = [
+  {
+    id: 'day',
+    chest: 'day',
+    highlighted: false,
+    lines: [
+      [{ text: 'Совершите', emphasis: 'plain' }],
+      [{ text: '5 поездок за день\u00A0—', emphasis: 'action' }],
+      [
+        { text: 'откройте ', emphasis: 'plain' },
+        { text: 'сундук дня', emphasis: 'gold' },
+      ],
+    ],
+  },
+  {
+    id: 'week',
+    chest: 'week',
+    highlighted: true,
+    lines: [
+      [
+        { text: 'Всего ', emphasis: 'plain' },
+        { text: '5 таких дней', emphasis: 'strong' },
+      ],
+      [{ text: 'до конца недели —', emphasis: 'strong' }],
+      [
+        { text: 'откройте ', emphasis: 'plain' },
+        { text: 'сундук недели', emphasis: 'gold' },
+      ],
+    ],
+  },
+  {
+    id: '3days',
+    chest: '3days',
+    highlighted: false,
+    lines: [
+      [
+        { text: 'Всего ', emphasis: 'plain' },
+        { text: '3 таких дня', emphasis: 'strong' },
+        { text: ' —', emphasis: 'plain' },
+      ],
+      [
+        { text: 'и ', emphasis: 'plain' },
+        { text: 'сразу', emphasis: 'strong' },
+        { text: ' откройте', emphasis: 'plain' },
+      ],
+      [{ text: 'сундук трёх дней', emphasis: 'gold' }],
+    ],
+  },
+];
+
+export const promoHeroMock = {
+  hello: 'Здравствуйте, Бахтиёр!',
+  title: 'Ваша неделя\nвозвращения',
+  invite: 'ждем вас на линии',
+  period: 'c 1 по 7 октября',
+  rules: PROMO_RULES,
+  texts: {
+    ask: 'Готовы вернуться на линию?',
+    accept: 'Участвовать',
+    consent: 'Нажимая «Участвовать», вы соглашаетесь с правилами акции и сообщениями о ней в этом боте',
+    decline: 'Отказаться',
+  },
+};
