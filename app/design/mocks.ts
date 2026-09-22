@@ -1,5 +1,6 @@
 import type {
   MemberOperationDayView,
+  MemberOrderDetailView,
   MemberOrderRowView,
   MemberRewardView,
 } from '~/types/memberView';
@@ -389,3 +390,91 @@ const ORDERS_PAST: MemberOrderRowView[] = [
 export const ordersMock = { state: 'ready' as const, pending: ORDERS_PENDING, past: ORDERS_PAST, texts: ORDERS_TEXTS };
 export const ordersEmptyMock = { ...ordersMock, state: 'empty' as const, pending: [], past: [] };
 export const ordersErrorMock = { ...ordersMock, state: 'error' as const, pending: [], past: [] };
+
+// ---------------------------------------------------------------------- экран заказа
+
+const ORDER_TEXTS = {
+  back: BACK,
+  codeTitle: 'Код для выдачи — назовите его в офисе',
+  officeTitle: 'Где забрать',
+  map: 'Открыть в Яндекс Картах',
+  linesTitle: 'Состав заказа',
+  total: 'Итого',
+  cancel: 'Отменить заказ',
+};
+
+/** Живой заказ: код, офис, состав и отмена. */
+const ORDER_PENDING: MemberOrderDetailView = {
+  title: 'Заказ № 1042',
+  status: 'pending',
+  state: 'Ждёт выдачи',
+  hint: 'заберите до 23.09, 14:32',
+  amount: '900 баллов',
+  code: '31724',
+  officeCard: {
+    name: 'Офис · Чиланзар',
+    address: 'ул. Бунёдкор, 12',
+    hours: 'Ежедневно, 09:00 — 20:00',
+    phone: '+998 71 200-70-07',
+  },
+  lines: [
+    { id: 'aroma', title: 'Ароматизатор «Гранат»', detail: '2 шт. · 150 баллов за штуку', cost: '300' },
+    { id: 'tire', title: 'Чернитель шин', detail: '1 шт. · 400 баллов', cost: '400' },
+    { id: 'cloth', title: 'Салфетки из микрофибры', detail: '1 шт. · 200 баллов', cost: '200' },
+  ],
+  total: '900',
+  cancellable: true,
+};
+
+/** Выдан: единственное закрытие, в котором баллы остались списанными. */
+const ORDER_ISSUED: MemberOrderDetailView = {
+  title: 'Заказ № 1039',
+  status: 'issued',
+  state: 'Выдан',
+  hint: '20.09.2026, 16:10',
+  office: 'Офис · Чиланзар',
+  amount: '−450 баллов',
+  amountCaption: 'списано со счёта',
+  lines: [
+    { id: 'tire', title: 'Чернитель шин', detail: '1 шт. · 400 баллов', cost: '400' },
+    { id: 'cloth', title: 'Салфетки из микрофибры', detail: '1 шт. · 50 баллов', cost: '50' },
+  ],
+  total: '450',
+  cancellable: false,
+};
+
+/** Отменён водителем. */
+const ORDER_CANCELLED: MemberOrderDetailView = {
+  title: 'Заказ № 1031',
+  status: 'cancelled',
+  state: 'Отменён',
+  hint: '18.09.2026, 09:40',
+  reason: 'Вы отменили заказ',
+  amount: '1 200 баллов',
+  amountCaption: 'вернулось на счёт',
+  lines: [
+    { id: 'shine', title: 'Автохимия «Блеск»', detail: '2 шт. · 400 баллов за штуку', cost: '800' },
+    { id: 'brush', title: 'Щётка для стёкол', detail: '1 шт. · 400 баллов', cost: '400' },
+  ],
+  total: '1 200',
+  cancellable: false,
+};
+
+/** Не забран за сутки — отменила просрочка, а не человек. */
+const ORDER_EXPIRED: MemberOrderDetailView = {
+  title: 'Заказ № 1024',
+  status: 'cancelled',
+  state: 'Отменён',
+  hint: '14.09.2026, 10:00',
+  reason: 'Не забрали за сутки',
+  amount: '300 баллов',
+  amountCaption: 'вернулось на счёт',
+  lines: [{ id: 'aroma', title: 'Ароматизатор «Гранат»', detail: '2 шт. · 150 баллов за штуку', cost: '300' }],
+  total: '300',
+  cancellable: false,
+};
+
+export const orderMock = { order: ORDER_PENDING, texts: ORDER_TEXTS };
+export const orderIssuedMock = { order: ORDER_ISSUED, texts: ORDER_TEXTS };
+export const orderCancelledMock = { order: ORDER_CANCELLED, texts: ORDER_TEXTS };
+export const orderExpiredMock = { order: ORDER_EXPIRED, texts: ORDER_TEXTS };

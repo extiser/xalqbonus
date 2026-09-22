@@ -21,6 +21,10 @@ import {
   ordersEmptyMock,
   ordersErrorMock,
   ordersMock,
+  orderCancelledMock,
+  orderExpiredMock,
+  orderIssuedMock,
+  orderMock,
 } from '~/design/mocks';
 import { findDesignScreen } from '~/design/screens';
 
@@ -94,6 +98,15 @@ const orders = computed(() =>
   }),
 );
 
+const order = computed(() =>
+  pick({
+    order: orderMock,
+    'order-issued': orderIssuedMock,
+    'order-cancelled': orderCancelledMock,
+    'order-expired': orderExpiredMock,
+  }),
+);
+
 /** Экран заказа по номеру: у каждого нарисованного заказа своё состояние экрана. */
 const ORDER_SCREENS: Record<string, string> = {
   '1042': 'order',
@@ -132,6 +145,8 @@ function go(target: string): void {
       <OrganismsNextMemberRewardsScreen v-else-if="rewards" v-bind="rewards" @back="go('home')" />
 
       <OrganismsNextMemberOrdersScreen v-else-if="orders" v-bind="orders" @back="go('home')" @open="openOrder" />
+
+      <OrganismsNextMemberOrderScreen v-else-if="order" v-bind="order" @back="go('orders')" />
     </div>
   </div>
 </template>
