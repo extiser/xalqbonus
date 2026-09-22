@@ -167,3 +167,100 @@ export const homeLoadingMock = {
 };
 
 export const sharedTexts = { back: BACK, retry: RETRY };
+
+// ------------------------------------------------------------------- история баллов
+
+/** Строка истории короче: время, что, сумма. Знак суммы решает направление. */
+function operation(id: string, time: string, title: string, amount: string): MemberOperationDayView['operations'][number] {
+  return { id, time, title, amount, direction: amount.startsWith('−') ? 'minus' : 'plus' };
+}
+
+const HISTORY_TEXTS = {
+  title: 'История баллов',
+  back: BACK,
+  synced: 'Поездки учтены до 22.09, 14:31',
+  more: 'Показать ещё',
+  empty: 'Здесь будет история начислений',
+  error: 'Не удалось загрузить историю. Попробуйте ещё раз.',
+  retry: RETRY,
+};
+
+/** Ровно 25 строк за четыре дня — столько отдаёт одна страница. */
+const HISTORY_DAYS: MemberOperationDayView[] = [
+  {
+    id: 'today',
+    label: 'Сегодня',
+    operations: [
+      operation('s1', '14:26', 'Поездка', '+1'),
+      operation('s2', '13:58', 'Поездка', '+1'),
+      operation('s3', '12:04', 'Обмен на товар · #1042', '−900'),
+      operation('s4', '11:40', 'Поездка', '+1'),
+      operation('s5', '10:22', 'Поездка', '+1'),
+      operation('s6', '09:15', 'Поездка', '+1'),
+      operation('s7', '08:02', 'Поездка', '+1'),
+    ],
+  },
+  {
+    id: 'yesterday',
+    label: 'Вчера',
+    operations: [
+      operation('s8', '23:41', 'Поездка', '+1'),
+      operation('s9', '22:10', 'Акция', '+150'),
+      operation('s10', '21:10', 'Поездка', '+1'),
+      operation('s11', '19:55', 'Поездка', '+1'),
+      operation('s12', '18:33', 'Поездка', '+1'),
+      operation('s13', '16:20', 'Поездка', '+1'),
+      operation('s14', '14:08', 'Начислено сотрудником', '+50'),
+      operation('s15', '09:30', 'Поездка', '+1'),
+    ],
+  },
+  {
+    id: '2026-09-20',
+    label: '20 сентября',
+    operations: [
+      operation('s16', '22:15', 'Поездка', '+1'),
+      operation('s17', '20:40', 'Розыгрыш', '+500'),
+      operation('s18', '18:12', 'Поездка', '+1'),
+      operation('s19', '15:33', 'Возврат заказа · #1039', '+900'),
+      operation('s20', '12:50', 'Обмен на товар · #1039', '−900'),
+      operation('s21', '09:05', 'Поездка', '+1'),
+    ],
+  },
+  {
+    id: '2026-09-19',
+    label: '19 сентября',
+    operations: [
+      operation('s22', '21:02', 'Поездка', '+1'),
+      operation('s23', '17:44', 'Поездка', '+1'),
+      operation('s24', '13:26', 'Корректировка', '−12'),
+      operation('s25', '10:11', 'Поездка', '+1'),
+    ],
+  },
+];
+
+/** Все одиннадцать причин по одной строке — лист `artboard/history-block.html`, сцена 2. */
+const HISTORY_ALL_REASONS: MemberOperationDayView[] = [
+  {
+    id: 'today',
+    label: 'Сегодня',
+    operations: [
+      operation('r1', '14:26', 'Поездка', '+1'),
+      operation('r2', '14:20', 'Бонус за первые поездки', '+100'),
+      operation('r3', '14:15', 'Перенос баланса', '+1 450'),
+      operation('r4', '13:40', 'Обмен на товар · #1042', '−900'),
+      operation('r5', '13:02', 'Возврат заказа · #1042', '+900'),
+      operation('r6', '12:30', 'Начислено сотрудником', '+50'),
+      operation('r7', '12:11', 'Списано сотрудником', '−50'),
+      operation('r8', '11:45', 'Розыгрыш', '+500'),
+      operation('r9', '11:20', 'Акция', '+150'),
+      operation('r10', '10:05', 'Сгорание баллов', '−300'),
+      operation('r11', '09:30', 'Корректировка', '−12'),
+    ],
+  },
+];
+
+export const historyMock = { state: 'ready' as const, days: HISTORY_DAYS, hasMore: true, texts: HISTORY_TEXTS };
+export const historyReasonsMock = { ...historyMock, days: HISTORY_ALL_REASONS, hasMore: false };
+export const historyEmptyMock = { ...historyMock, state: 'empty' as const, days: [], hasMore: false };
+export const historyErrorMock = { ...historyMock, state: 'error' as const, days: [], hasMore: false };
+export const historyLoadingMock = { ...historyMock, state: 'loading' as const, days: [], hasMore: false };

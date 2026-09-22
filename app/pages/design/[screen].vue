@@ -9,6 +9,11 @@ import {
   homeNewcomerMock,
   homeQuietMock,
   homeSeveralMock,
+  historyEmptyMock,
+  historyErrorMock,
+  historyLoadingMock,
+  historyMock,
+  historyReasonsMock,
 } from '~/design/mocks';
 import { findDesignScreen } from '~/design/screens';
 
@@ -38,24 +43,32 @@ if (!screen.value) {
 
 useHead({ title: () => screen.value?.title ?? 'Макеты Mini App' });
 
-/** Моки главной по адресу: у каждого состояния свой объект. */
-const HOME_MOCKS = {
-  home: homeMock,
-  'home-invite': homeInviteMock,
-  'home-several': homeSeveralMock,
-  'home-quiet': homeQuietMock,
-  'home-newcomer': homeNewcomerMock,
-  'home-loading': homeLoadingMock,
-  'home-errors': homeErrorsMock,
-} as const;
-
-type HomeSlug = keyof typeof HOME_MOCKS;
-
-function isHomeSlug(value: string): value is HomeSlug {
-  return value in HOME_MOCKS;
+/** Заглушка по адресу из набора одного экрана; адрес чужого экрана — ничего. */
+function pick<Mock>(mocks: Record<string, Mock>): Mock | undefined {
+  return Object.hasOwn(mocks, slug.value) ? mocks[slug.value] : undefined;
 }
 
-const home = computed(() => (isHomeSlug(slug.value) ? HOME_MOCKS[slug.value] : undefined));
+const home = computed(() =>
+  pick({
+    home: homeMock,
+    'home-invite': homeInviteMock,
+    'home-several': homeSeveralMock,
+    'home-quiet': homeQuietMock,
+    'home-newcomer': homeNewcomerMock,
+    'home-loading': homeLoadingMock,
+    'home-errors': homeErrorsMock,
+  }),
+);
+
+const history = computed(() =>
+  pick({
+    history: historyMock,
+    'history-reasons': historyReasonsMock,
+    'history-empty': historyEmptyMock,
+    'history-error': historyErrorMock,
+    'history-loading': historyLoadingMock,
+  }),
+);
 
 function go(target: string): void {
   void navigateTo(`/design/${target}`);
@@ -77,6 +90,8 @@ function go(target: string): void {
         @invite="go('promo')"
         @promo="go('campaign')"
       />
+
+      <OrganismsNextMemberHistoryScreen v-else-if="history" v-bind="history" @back="go('home')" />
     </div>
   </div>
 </template>

@@ -29,6 +29,16 @@ export const DESIGN_GROUPS: DesignGroup[] = [
       { slug: 'home-errors', title: 'Не загрузилось', source: 'artboard/*-block.html' },
     ],
   },
+  {
+    title: 'История баллов',
+    screens: [
+      { slug: 'history', title: 'Страница 25 строк и «Показать ещё»', source: 'app/history-screen.html' },
+      { slug: 'history-reasons', title: 'Все одиннадцать причин', source: 'artboard/history-block.html' },
+      { slug: 'history-empty', title: 'Пусто', source: 'artboard/history-block.html' },
+      { slug: 'history-error', title: 'Не загрузилось', source: 'artboard/history-block.html' },
+      { slug: 'history-loading', title: 'Ждём ответа', source: 'artboard/history-block.html' },
+    ],
+  },
 ];
 
 export function findDesignScreen(slug: string): DesignScreen | undefined {
