@@ -288,10 +288,18 @@ const filledChests = computed(() =>
   (prizes.value?.chests ?? []).flatMap((chest) => (chest.prizes.length > 0 ? [chest.chest] : [])),
 );
 
+/** Сундуки с товаром, который больше не выдаётся: запуск по ним отказывает, называя сундук. */
+const unavailablePrizeChests = computed(() =>
+  (prizes.value?.chests ?? []).flatMap((chest) =>
+    chest.prizes.some((prize) => prize.productUnavailable) ? [chest.chest] : [],
+  ),
+);
+
 const launchProblems = computed(() => {
   const problems = campaignLaunchProblems({
     ...fields.value,
     filledChests: filledChests.value,
+    unavailablePrizeChests: unavailablePrizeChests.value,
   }).map(campaignLaunchProblemText);
 
   if (segmentArchived.value) {

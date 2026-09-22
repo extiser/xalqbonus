@@ -1,14 +1,37 @@
 import type { CampaignChestKind, RewardKind } from '#server/generated/prisma/enums';
 import type { CampaignPrizeInput, CampaignPrizeRow } from '#server/repositories/campaignPrizes';
 import { InvalidCampaignPrizesError } from '#server/services/campaigns/errors';
+import { isGrantableProduct } from '#server/services/rewards/grantableProduct';
 import { readUuid } from '#server/utils/query';
-import { CAMPAIGN_CHESTS, isDrawnChest } from '#shared/campaign';
+import { CAMPAIGN_CHESTS, CAMPAIGN_PRIZES_LIMIT, isDrawnChest } from '#shared/campaign';
 import type { CampaignChestPrizes } from '#shared/types/campaign';
 
 /**
  * Перевод набора призов между строкой базы, контрактом ручки и телом запроса (issue #180).
  * Операцией не является: нужен обеим ручкам призов.
  */
+
+/**
+ * Товар варианта больше не выдаётся. Правило то же, что у выдачи награды: приз, который она
+ * отобьёт, не должен пройти запуск. У вариантов без товара — `false`.
+ */
+const isUnavailablePrize = (row: CampaignPrizeRow): boolean =>
+  row.productId !== null &&
+  !isGrantableProduct({
+    publishedAt: row.productPublishedAt,
+    archivedAt: row.productArchivedAt,
+    name: row.productName,
+  });
+
+/** Сундуки, у которых заведён хоть один вариант. */
+export const filledChestsOf = (rows: CampaignPrizeRow[]): CampaignChestKind[] =>
+  CAMPAIGN_CHESTS.filter((chest) => rows.some((row) => row.chest === chest));
+
+/** Сундуки, где у варианта товар, который наградой уже не выдаётся. */
+export const unavailablePrizeChestsOf = (rows: CampaignPrizeRow[]): CampaignChestKind[] =>
+  CAMPAIGN_CHESTS.filter((chest) =>
+    rows.some((row) => row.chest === chest && isUnavailablePrize(row)),
+  );
 
 /** Сундуки по ступеням, каждый — даже пустой: пустой сундук экран обязан показать пустым. */
 export const toChestPrizes = (rows: CampaignPrizeRow[]): CampaignChestPrizes[] =>
@@ -23,7 +46,7 @@ export const toChestPrizes = (rows: CampaignPrizeRow[]): CampaignChestPrizes[] =
         points: row.points,
         productId: row.productId,
         productName: row.productName,
-        productArchived: row.productArchivedAt !== null,
+        productUnavailable: isUnavailablePrize(row),
         title: row.title,
       })),
   }));
@@ -120,6 +143,10 @@ export const readCampaignPrizeFields = (
 
   if (!Array.isArray(rows)) {
     throw new InvalidCampaignPrizesError('prizes_malformed', null);
+  }
+
+  if (rows.length > CAMPAIGN_PRIZES_LIMIT) {
+    throw new InvalidCampaignPrizesError('prizes_too_many', null);
   }
 
   const prizes = rows.map((row: unknown) => {

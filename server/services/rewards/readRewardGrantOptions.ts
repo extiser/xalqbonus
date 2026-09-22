@@ -1,5 +1,6 @@
 import { listActiveOffices } from '#server/repositories/offices';
 import { listProducts } from '#server/repositories/products';
+import { isGrantableProduct } from '#server/services/rewards/grantableProduct';
 import type { RewardGrantOptionsResponse } from '#shared/types/rewards';
 
 /**
@@ -16,7 +17,7 @@ export const readRewardGrantOptions = async (): Promise<RewardGrantOptionsRespon
     offices: offices.map((office) => ({ officeId: office.id, name: office.name })),
     products: products
       .flatMap((product) =>
-        product.publishedAt !== null && product.archivedAt === null && product.name !== null
+        isGrantableProduct(product) && product.name !== null
           ? [{ productId: product.id, name: product.name, promo: product.promo }]
           : [],
       )

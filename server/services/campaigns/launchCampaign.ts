@@ -7,7 +7,7 @@ import {
   lockCampaignStatus,
   markCampaignRunning,
 } from '#server/repositories/campaigns';
-import { listFilledChests } from '#server/repositories/campaignPrizes';
+import { listCampaignPrizes } from '#server/repositories/campaignPrizes';
 import { findSegment } from '#server/repositories/segments';
 import {
   CampaignAudienceEmptyError,
@@ -17,6 +17,7 @@ import {
   CampaignStatusMismatchError,
   UnknownCampaignError,
 } from '#server/services/campaigns/errors';
+import { filledChestsOf, unavailablePrizeChestsOf } from '#server/services/campaigns/prizeFields';
 import { readCampaign } from '#server/services/campaigns/readCampaign';
 import { toSegmentConditions } from '#server/services/segments/fields';
 import { campaignLaunchProblems } from '#shared/campaign';
@@ -54,6 +55,11 @@ export const launchCampaign = async (campaignId: string): Promise<CampaignRespon
       throw new UnknownCampaignError(campaignId);
     }
 
+    // Набор — под той же блокировкой, что берёт его замена: он не сменится до конца запуска.
+    // Товары проверяются здесь, а не только при заведении: между сохранением набора и запуском
+    // товар мог уйти в архив, и открытый сундук остался бы без приза.
+    const prizes = await listCampaignPrizes(campaignId, transaction);
+
     const problems = campaignLaunchProblems({
       title: campaign.title,
       slug: campaign.slug,
@@ -63,8 +69,8 @@ export const launchCampaign = async (campaignId: string): Promise<CampaignRespon
       officeId: campaign.officeId,
       rewardLifetimeDays:
         campaign.rewardLifetimeDays === null ? null : String(campaign.rewardLifetimeDays),
-      // Под той же блокировкой, что берёт замена набора: набор не сменится до конца запуска.
-      filledChests: await listFilledChests(campaignId, transaction),
+      filledChests: filledChestsOf(prizes),
+      unavailablePrizeChests: unavailablePrizeChestsOf(prizes),
     });
 
     if (problems.length > 0 || campaign.segmentId === null) {

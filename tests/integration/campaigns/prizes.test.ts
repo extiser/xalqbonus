@@ -11,15 +11,18 @@ import {
 import type { CampaignFields } from '#server/services/campaigns/fields';
 import { launchCampaign } from '#server/services/campaigns/launchCampaign';
 import { readCampaignPrizeFields } from '#server/services/campaigns/prizeFields';
+import { readCampaign } from '#server/services/campaigns/readCampaign';
 import { readCampaignPrizes } from '#server/services/campaigns/readCampaignPrizes';
 import { replaceCampaignPrizes } from '#server/services/campaigns/replaceCampaignPrizes';
 import { createProduct } from '#server/services/products/createProduct';
+import { setProductArchived } from '#server/services/products/setProductArchived';
 import { createSegment } from '#server/services/segments/createSegment';
 import {
   CHECK_VIOLATION,
   isConstraintViolation,
   UNIQUE_VIOLATION,
 } from '#server/utils/postgresErrors';
+import { CAMPAIGN_PRIZES_LIMIT } from '#shared/campaign';
 import { EMPTY_SEGMENT_CONDITIONS } from '#shared/segment';
 import {
   cleanupTestCampaigns,
@@ -150,7 +153,7 @@ describe('призы акции', () => {
       kind: 'product',
       productId: catalogProductId,
       productName: 'Тестовый товар',
-      productArchived: false,
+      productUnavailable: false,
     });
     expect(threeDays?.prizes).toHaveLength(1);
     expect(week?.prizes[0]).toMatchObject({ kind: 'custom', title: 'Мойка', weight: 1 });
@@ -281,6 +284,44 @@ describe('призы акции', () => {
       'office_missing',
       'prizes_missing',
     ]);
+  });
+
+  it('товар приза ушёл в архив после сохранения — акция не запускается и называет сундук', async () => {
+    const context = await setup();
+    const campaignId = await createDraft(context, { officeId: null });
+    const productId = await createTestProduct({ pricePoints: 40 });
+
+    await replaceCampaignPrizes(campaignId, [
+      { chest: 'day', kind: 'points', weight: 9, points: 30, productId: null, title: null },
+      { chest: 'day', kind: 'product', weight: 1, points: null, productId, title: null },
+      ...fixedPrizes(),
+    ]);
+    await setProductArchived(productId, true);
+
+    const failure = await failureOf(launchCampaign(campaignId));
+
+    expect(failure).toBeInstanceOf(CampaignNotLaunchableError);
+    // В общем списке, рядом с остальными причинами, а не отдельным отказом.
+    expect((failure as CampaignNotLaunchableError).problems).toEqual([
+      'office_missing',
+      'prize_unavailable_day',
+    ]);
+    expect((await readCampaign(campaignId)).campaign.status).toBe('draft');
+
+    const [day] = (await readCampaignPrizes(campaignId)).chests;
+
+    expect(day?.prizes.find((prize) => prize.productId === productId)?.productUnavailable).toBe(true);
+  });
+
+  it('набор длиннее предела не разбирается', () => {
+    const row = { chest: 'day', kind: 'points', weight: '1', points: '10', productId: '', title: '' };
+
+    expect(() =>
+      readCampaignPrizeFields({ prizes: Array.from({ length: CAMPAIGN_PRIZES_LIMIT + 1 }, () => row) }),
+    ).toThrow(InvalidCampaignPrizesError);
+    expect(
+      readCampaignPrizeFields({ prizes: Array.from({ length: CAMPAIGN_PRIZES_LIMIT }, () => row) }),
+    ).toHaveLength(CAMPAIGN_PRIZES_LIMIT);
   });
 
   it('у запущенной акции призы только читаются', async () => {

@@ -12,6 +12,7 @@ import { DriverAccountMissingError } from '#server/services/points/errors';
 import { getSystemAccount } from '#server/services/points/getSystemAccount';
 import type { IdempotencyKey } from '#server/services/points/idempotencyKey';
 import { transferPoints } from '#server/services/points/transfer';
+import { isGrantableProduct } from '#server/services/rewards/grantableProduct';
 import {
   RewardCodeCollisionError,
   RewardOfficeUnavailableError,
@@ -185,9 +186,9 @@ const grantProduct = async (
 
   const product = await findProduct(gift.productId, transaction);
 
-  // Черновик и архивный наградой не выдаются, как и не заказываются. Признак «для акции»
-  // не обязателен: вручить можно и товар каталога.
-  if (!product || product.publishedAt === null || product.archivedAt !== null || !product.name) {
+  // Черновик и архивный наградой не выдаются — правило `isGrantableProduct`, общее с запуском
+  // акции. Название проверяется ещё раз ради типа: дальше оно уходит в награду строкой.
+  if (!product || !isGrantableProduct(product) || !product.name) {
     throw new RewardProductUnavailableError(gift.productId);
   }
 

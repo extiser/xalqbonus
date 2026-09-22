@@ -1,6 +1,7 @@
 import { db } from '#server/db';
 import { lockCampaignStatus } from '#server/repositories/campaigns';
 import {
+  listCampaignPrizes,
   replaceCampaignPrizeRows,
   type CampaignPrizeInput,
 } from '#server/repositories/campaignPrizes';
@@ -10,7 +11,8 @@ import {
   CampaignPrizesLockedError,
   UnknownCampaignError,
 } from '#server/services/campaigns/errors';
-import { readCampaignPrizes } from '#server/services/campaigns/readCampaignPrizes';
+import { toChestPrizes } from '#server/services/campaigns/prizeFields';
+import { isGrantableProduct } from '#server/services/rewards/grantableProduct';
 import type { CampaignPrizesResponse } from '#shared/types/campaign';
 
 /**
@@ -20,15 +22,18 @@ import type { CampaignPrizesResponse } from '#shared/types/campaign';
  * по очереди, и запуск не увидит набор наполовину, а замена не пройдёт у только что
  * запущенной акции.
  *
- * Товар варианта — опубликованный и не архивный, как в `grantReward`. Признак «для акции»
- * не обязателен: разыграть можно и товар каталога. Остаток не проверяется: резерв случается
- * в момент выдачи, и склад к открытию сундука всё равно изменится.
+ * Товар варианта — опубликованный и не архивный, правилом `isGrantableProduct`, как в
+ * `grantReward`. Признак «для акции» не обязателен: разыграть можно и товар каталога. Остаток
+ * не проверяется: резерв случается в момент выдачи, и склад к открытию сундука всё равно
+ * изменится.
+ *
+ * Ответ читается в той же транзакции: на экран уходит ровно записанный набор.
  */
 export const replaceCampaignPrizes = async (
   campaignId: string,
   prizes: CampaignPrizeInput[],
 ): Promise<CampaignPrizesResponse> => {
-  await db.$transaction(async (transaction) => {
+  return db.$transaction(async (transaction) => {
     const status = await lockCampaignStatus(campaignId, transaction);
 
     if (status === null) {
@@ -51,13 +56,17 @@ export const replaceCampaignPrizes = async (
 
       const product = products.find((candidate) => candidate.id === prize.productId);
 
-      if (!product || product.publishedAt === null || product.archivedAt !== null || !product.name) {
+      if (!product || !isGrantableProduct(product)) {
         throw new CampaignPrizeProductUnavailableError(prize.productId, prize.chest);
       }
     }
 
     await replaceCampaignPrizeRows(campaignId, prizes, transaction);
-  });
 
-  return readCampaignPrizes(campaignId);
+    // Черновик под блокировкой строки: набор правится, пока транзакция её держит.
+    return {
+      editable: true,
+      chests: toChestPrizes(await listCampaignPrizes(campaignId, transaction)),
+    };
+  });
 };

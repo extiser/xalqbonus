@@ -22,6 +22,7 @@ export type CampaignPrizeRow = {
   points: number | null;
   productId: string | null;
   productName: string | null;
+  productPublishedAt: Date | null;
   productArchivedAt: Date | null;
   title: string | null;
 };
@@ -42,6 +43,7 @@ export const listCampaignPrizes = async (
            prize."points",
            prize."product_id"    AS "productId",
            product."name"        AS "productName",
+           product."published_at" AS "productPublishedAt",
            product."archived_at" AS "productArchivedAt",
            prize."title"
       FROM xb.campaign_prizes AS prize
@@ -49,20 +51,6 @@ export const listCampaignPrizes = async (
      WHERE prize."campaign_id" = ${campaignId}::uuid
      ORDER BY prize."chest", prize."weight" DESC, prize."id"
   `;
-
-/** Сундуки, у которых заведён хоть один вариант. Нужен запуску. */
-export const listFilledChests = async (
-  campaignId: string,
-  client: Executor = db,
-): Promise<CampaignChestKind[]> => {
-  const rows = await client.$queryRaw<{ chest: CampaignChestKind }[]>`
-    SELECT DISTINCT "chest"
-      FROM xb.campaign_prizes
-     WHERE "campaign_id" = ${campaignId}::uuid
-  `;
-
-  return rows.map((row) => row.chest);
-};
 
 export type CampaignPrizeInput = {
   chest: CampaignChestKind;

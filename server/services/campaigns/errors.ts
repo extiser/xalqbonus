@@ -126,6 +126,8 @@ export class CampaignPrizesLockedError extends CampaignError {
 export type CampaignPrizeProblem =
   /** Тело не набор строк, или у строки неизвестный сундук или вид. */
   | 'prizes_malformed'
+  /** Вариантов больше предела `CAMPAIGN_PRIZES_LIMIT`. */
+  | 'prizes_too_many'
   /** Вес — не целое число больше нуля. */
   | 'weight_invalid'
   /** Сумма баллов — не целое число больше нуля. */

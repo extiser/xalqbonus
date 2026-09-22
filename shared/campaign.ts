@@ -44,6 +44,12 @@ export const isCalendarDay = (value: string): boolean => {
   );
 };
 
+/**
+ * Сколько вариантов приза в наборе акции, на все сундуки. Предел от испорченного запроса,
+ * а не продуктовое правило: расчёт волны держит четыре варианта в сундуке дня.
+ */
+export const CAMPAIGN_PRIZES_LIMIT = 50;
+
 /** Сундуки акции в порядке ступеней: дня, трёх дней, недели. */
 export const CAMPAIGN_CHESTS: readonly CampaignChestKind[] = ['day', 'three_days', 'week'];
 
@@ -70,7 +76,12 @@ export type CampaignLaunchProblem =
   | 'office_missing'
   | 'reward_lifetime_missing'
   /** У какого-то сундука нет ни одного варианта приза (issue #180). */
-  | 'prizes_missing';
+  | 'prizes_missing'
+  /**
+   * В сундуке есть товар, который больше не выдаётся. По значению на сундук: причина обязана
+   * назвать, какой сундук чинить, а текст к причине — строка словаря, а не сборка на месте.
+   */
+  | `prize_unavailable_${CampaignChestKind}`;
 
 /** Поля, по которым судит запуск: что на экране у формы и что в базе у сервера. */
 export type CampaignLaunchFields = {
@@ -88,6 +99,8 @@ export type CampaignLaunchFields = {
    * читает базу, а не экран.
    */
   filledChests: readonly CampaignChestKind[];
+  /** Сундуки, где у варианта товар, который наградой уже не выдаётся. */
+  unavailablePrizeChests: readonly CampaignChestKind[];
 };
 
 const present = (value: string | null): boolean => value !== null && value.trim() !== '';
@@ -124,6 +137,14 @@ export const campaignLaunchProblems = (fields: CampaignLaunchFields): CampaignLa
     problems.push('prizes_missing');
   }
 
+  // Товар приза ушёл в архив после заведения — открытый сундук отдал бы пустоту: выдача
+  // отбивает такой товар.
+  for (const chest of CAMPAIGN_CHESTS) {
+    if (fields.unavailablePrizeChests.includes(chest)) {
+      problems.push(`prize_unavailable_${chest}`);
+    }
+  }
+
   return problems;
 };
 
@@ -135,6 +156,12 @@ const LAUNCH_PROBLEM_TEXT: Record<CampaignLaunchProblem, string> = {
   office_missing: 'Нужно выбрать офис выдачи наград.',
   reward_lifetime_missing: 'Нужен срок, через который сгорает неполученная награда.',
   prizes_missing: 'Нужны призы во всех трёх сундуках — дня, трёх дней и недели.',
+  prize_unavailable_day:
+    'В сундуке дня есть товар, который больше не выдаётся, — замените его в разделе «Призы».',
+  prize_unavailable_three_days:
+    'В сундуке трёх дней есть товар, который больше не выдаётся, — замените его в разделе «Призы».',
+  prize_unavailable_week:
+    'В сундуке недели есть товар, который больше не выдаётся, — замените его в разделе «Призы».',
 };
 
 export const campaignLaunchProblemText = (problem: CampaignLaunchProblem): string =>

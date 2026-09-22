@@ -163,8 +163,11 @@ export type CampaignPrize = {
   productId: string | null;
   /** Название товара на сейчас — для экрана. */
   productName: string | null;
-  /** Товар ушёл в архив после заведения варианта: выдать его не выйдет. */
-  productArchived: boolean;
+  /**
+   * Товар варианта больше не выдаётся — ушёл в архив после заведения. С таким призом акция
+   * не запускается. У баллов и своей награды всегда `false`.
+   */
+  productUnavailable: boolean;
   title: string | null;
 };
 

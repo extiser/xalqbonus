@@ -167,7 +167,7 @@ const prizeValue = (prize: CampaignPrize): string => {
   if (prize.kind === 'product') {
     const name = prize.productName ?? DASH;
 
-    return prize.productArchived ? `${name} (в архиве)` : name;
+    return prize.productUnavailable ? `${name} (не выдаётся)` : name;
   }
 
   return prize.title ?? DASH;

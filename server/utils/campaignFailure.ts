@@ -18,6 +18,7 @@ import {
 } from '#server/services/campaigns/errors';
 import {
   CAMPAIGN_AUDIENCE_EMPTY_TEXT,
+  CAMPAIGN_PRIZES_LIMIT,
   CAMPAIGN_PRIZES_LOCKED_TEXT,
   CAMPAIGN_SEGMENT_ARCHIVED_TEXT,
   campaignChestLabel,
@@ -57,6 +58,7 @@ const FIELD_PROBLEM_TEXT: Record<CampaignFieldProblem, string> = {
 
 const PRIZE_PROBLEM_TEXT: Record<CampaignPrizeProblem, string> = {
   prizes_malformed: 'Набор призов не читается — обновите страницу и наберите его заново.',
+  prizes_too_many: `Вариантов приза больше ${CAMPAIGN_PRIZES_LIMIT} на акцию — столько набор не держит.`,
   weight_invalid: 'вес — целое число больше нуля. Вариант, который не должен выпадать, удалите.',
   points_invalid: 'сумма баллов — целое число больше нуля.',
   product_invalid: 'товар не выбран — выберите его из списка.',
