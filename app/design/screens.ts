@@ -48,6 +48,14 @@ export const DESIGN_GROUPS: DesignGroup[] = [
       { slug: 'rewards-error', title: 'Не загрузилось', source: 'artboard/rewards-block.html' },
     ],
   },
+  {
+    title: 'Мои заказы',
+    screens: [
+      { slug: 'orders', title: 'Ждут выдачи и история', source: 'app/orders-screen.html' },
+      { slug: 'orders-empty', title: 'Заказов не было', source: 'server/bot/texts.ts → orders_empty' },
+      { slug: 'orders-error', title: 'Не загрузилось', source: 'artboard/orders-block.html' },
+    ],
+  },
 ];
 
 export function findDesignScreen(slug: string): DesignScreen | undefined {

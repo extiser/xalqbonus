@@ -18,6 +18,9 @@ import {
   rewardsErrorMock,
   rewardsMock,
   rewardsNothingToPickMock,
+  ordersEmptyMock,
+  ordersErrorMock,
+  ordersMock,
 } from '~/design/mocks';
 import { findDesignScreen } from '~/design/screens';
 
@@ -83,6 +86,26 @@ const rewards = computed(() =>
   }),
 );
 
+const orders = computed(() =>
+  pick({
+    orders: ordersMock,
+    'orders-empty': ordersEmptyMock,
+    'orders-error': ordersErrorMock,
+  }),
+);
+
+/** Экран заказа по номеру: у каждого нарисованного заказа своё состояние экрана. */
+const ORDER_SCREENS: Record<string, string> = {
+  '1042': 'order',
+  '1039': 'order-issued',
+  '1031': 'order-cancelled',
+  '1024': 'order-expired',
+};
+
+function openOrder(orderId: string): void {
+  go(ORDER_SCREENS[orderId] ?? 'order');
+}
+
 function go(target: string): void {
   void navigateTo(`/design/${target}`);
 }
@@ -98,7 +121,7 @@ function go(target: string): void {
         @rewards="go('rewards')"
         @reward="go('rewards')"
         @orders="go('orders')"
-        @order="go('order')"
+        @order="openOrder"
         @profile="go('profile')"
         @invite="go('promo')"
         @promo="go('campaign')"
@@ -107,6 +130,8 @@ function go(target: string): void {
       <OrganismsNextMemberHistoryScreen v-else-if="history" v-bind="history" @back="go('home')" />
 
       <OrganismsNextMemberRewardsScreen v-else-if="rewards" v-bind="rewards" @back="go('home')" />
+
+      <OrganismsNextMemberOrdersScreen v-else-if="orders" v-bind="orders" @back="go('home')" @open="openOrder" />
     </div>
   </div>
 </template>

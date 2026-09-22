@@ -324,3 +324,68 @@ export const rewardsMock = { state: 'ready' as const, awaiting: REWARDS_AWAITING
 export const rewardsNothingToPickMock = { ...rewardsMock, awaiting: [] };
 export const rewardsEmptyMock = { ...rewardsMock, state: 'empty' as const, awaiting: [], past: [] };
 export const rewardsErrorMock = { ...rewardsMock, state: 'error' as const, awaiting: [], past: [] };
+
+// ----------------------------------------------------------------------- мои заказы
+
+const ORDERS_TEXTS = {
+  title: 'Мои заказы',
+  back: BACK,
+  pendingGroup: 'Ждут выдачи',
+  pastGroup: 'История заказов',
+  empty: 'Заказов пока нет.',
+  error: 'Не удалось загрузить заказы. Попробуйте ещё раз.',
+  retry: RETRY,
+};
+
+const ORDERS_PENDING: MemberOrderRowView[] = [
+  {
+    id: '1042',
+    title: 'Заказ № 1042',
+    status: 'pending',
+    state: 'Ждёт выдачи',
+    hint: 'заберите до 23.09, 14:32',
+    amount: '900 баллов',
+    office: 'Офис · Чиланзар',
+    actionLabel: 'Код для выдачи — внутри',
+  },
+];
+
+const ORDERS_PAST: MemberOrderRowView[] = [
+  {
+    id: '1039',
+    title: 'Заказ № 1039',
+    status: 'issued',
+    state: 'Выдан',
+    hint: '20.09.2026, 16:10',
+    amount: '−450 баллов',
+    amountCaption: 'списано со счёта',
+    office: 'Офис · Чиланзар',
+    actionLabel: 'Просмотреть',
+  },
+  {
+    id: '1031',
+    title: 'Заказ № 1031',
+    status: 'cancelled',
+    state: 'Отменён',
+    hint: '18.09.2026, 09:40',
+    reason: 'Вы отменили заказ',
+    amount: '1 200 баллов',
+    amountCaption: 'вернулось на счёт',
+    actionLabel: 'Просмотреть',
+  },
+  {
+    id: '1024',
+    title: 'Заказ № 1024',
+    status: 'cancelled',
+    state: 'Отменён',
+    hint: '14.09.2026, 10:00',
+    reason: 'Не забрали за сутки',
+    amount: '300 баллов',
+    amountCaption: 'вернулось на счёт',
+    actionLabel: 'Просмотреть',
+  },
+];
+
+export const ordersMock = { state: 'ready' as const, pending: ORDERS_PENDING, past: ORDERS_PAST, texts: ORDERS_TEXTS };
+export const ordersEmptyMock = { ...ordersMock, state: 'empty' as const, pending: [], past: [] };
+export const ordersErrorMock = { ...ordersMock, state: 'error' as const, pending: [], past: [] };
