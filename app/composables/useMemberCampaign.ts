@@ -3,8 +3,16 @@ import {
   INIT_DATA_HEADER,
   type MemberCampaign,
   type MiniAppCampaignResponse,
+  type MiniAppOpenChestRequestBody,
+  type MiniAppOpenChestResponse,
 } from '#shared/types/miniapp';
 import { failureMessage } from '~/utils/requestError';
+
+/** Что выпало из только что открытого сундука — пока водитель не закрыл сообщение. */
+export type OpenedChestPrize = {
+  prizeText: string;
+  rewardsHint: string;
+};
 
 /**
  * Акция на экране участника: что у водителя с ней, «Участвовать» и «Отказаться» (issue #166).
@@ -15,11 +23,15 @@ import { failureMessage } from '~/utils/requestError';
  *
  * Акции нет — блока нет: для большинства участников это обычное состояние, а не пустое место,
  * которое надо объяснять.
+ *
+ * Открытие сундука (issue #181) — здесь же: ответ несёт экран акции с уже открытым сундуком
+ * и то, что выпало.
  */
 export const useMemberCampaign = (readInitData: () => string, readFallbackText: () => string) => {
   const campaign = ref<MemberCampaign | null>(null);
   const acting = ref(false);
   const error = ref<string | null>(null);
+  const prize = ref<OpenedChestPrize | null>(null);
 
   const headers = (): Record<string, string> => ({ [INIT_DATA_HEADER]: readInitData() });
 
@@ -65,11 +77,45 @@ export const useMemberCampaign = (readInitData: () => string, readFallbackText: 
     }
   };
 
+  /**
+   * Открытие сундука. Кнопки гаснут на время ответа тем же `acting`: второе нажатие вдогонку
+   * сервер отбил бы повтором, но водителю незачем видеть приз дважды.
+   */
+  const openChest = async (chest: MiniAppOpenChestRequestBody): Promise<void> => {
+    if (acting.value) {
+      return;
+    }
+
+    acting.value = true;
+    error.value = null;
+    prize.value = null;
+
+    try {
+      const response = await $fetch<MiniAppOpenChestResponse>('/api/miniapp/campaign/chests/open', {
+        method: 'POST',
+        headers: headers(),
+        body: chest,
+      });
+
+      campaign.value = response.campaign;
+      prize.value = { prizeText: response.prizeText, rewardsHint: response.rewardsHint };
+    } catch (failure) {
+      error.value = failureMessage(failure) ?? readFallbackText();
+    } finally {
+      acting.value = false;
+    }
+  };
+
   return {
     campaign,
     acting,
     error,
+    prize,
     load,
+    openChest,
+    dismissPrize: (): void => {
+      prize.value = null;
+    },
     join: (): Promise<void> => respond('join'),
     decline: (): Promise<void> => respond('decline'),
   };

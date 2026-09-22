@@ -96,24 +96,72 @@ export const buildOrderSpendIdempotencyKey = (orderId: string): IdempotencyKey =
 export const buildManualIdempotencyKey = (operationId: string): IdempotencyKey =>
   buildKey('manual', operationId);
 
+/** Сундук акции в хвосте ключа: сундук дня — с номером дня окна. */
+export type CampaignChestRef =
+  | { kind: 'day'; dayNumber: number }
+  | { kind: 'three_days' }
+  | { kind: 'week' };
+
+const campaignChestTail = (chest: CampaignChestRef): string => {
+  switch (chest.kind) {
+    case 'day': {
+      // Номер вне окна дал бы ключ, которого нет в таблице docs/points.md.
+      if (!Number.isInteger(chest.dayNumber) || chest.dayNumber < 1) {
+        throw new Error(`ключ сундука акции: день ${chest.dayNumber} — не день окна`);
+      }
+
+      return `day-${chest.dayNumber}`;
+    }
+    case 'three_days':
+      return 'three-days';
+    case 'week':
+      return 'week';
+  }
+};
+
 /**
- * Читает метку кампании из ключа массового начисления: `campaign:<slug>:<persons.id>`.
+ * Приз сундука акции: `campaign:<slug>:<persons.id>:<chest>`, хвост — `day-1` … `day-7`,
+ * `three-days`, `week`.
+ *
+ * На одну часть длиннее массового начисления: у участника до девяти сундуков в акции, и общий
+ * ключ вернул бы приз второго сундука как повтор первого (docs/points.md). Хвост именуется,
+ * а не берётся из `campaign_chests.id`: строка сундука рождается в той же транзакции, и ключ
+ * обязан собираться одинаково при нажатии водителя и при вскрытии по таймеру.
+ */
+export const buildCampaignChestIdempotencyKey = (
+  slug: string,
+  personId: string,
+  chest: CampaignChestRef,
+): IdempotencyKey => {
+  const trimmedSlug = slug.trim();
+  const trimmedPerson = personId.trim();
+
+  // Пустая часть посередине дала бы ключ, общий для всех акций или всех людей сразу.
+  if (trimmedSlug.length === 0 || trimmedPerson.length === 0) {
+    throw new Error('ключ сундука акции: метка или человек пусты');
+  }
+
+  return buildKey('campaign', `${trimmedSlug}:${trimmedPerson}:${campaignChestTail(chest)}`);
+};
+
+/**
+ * Читает метку кампании из ключа массового начисления `campaign:<slug>:<persons.id>`
+ * и приза сундука `campaign:<slug>:<persons.id>:<chest>`.
  *
  * Читается из ключа, а не из колонки: отдельной сущности «кампания» в базе нет — пока
  * `slug` в ключе отвечает на все вопросы, заводить её незачем (docs/points.md). Экрану
  * карточки метка нужна, чтобы праздничная раздача на три тысячи человек отличалась
  * от трёх тысяч независимых решений оператора.
  *
- * Разбор идёт по префиксу ключа, а не по причине операции: причина `campaign` появляется
- * в `xb.point_reason` вместе с первой раздачей (issue #37), а формат ключа зафиксирован
- * таблицей уже сейчас, и он же — единственное место, где метка хранится.
+ * Разбор идёт по префиксу ключа, а не по причине операции: причина говорит, что это акция,
+ * а какая — знает только ключ, и он же — единственное место, где метка хранится.
  */
 export const readCampaignSlug = (idempotencyKey: string): string | null => {
   const parts = idempotencyKey.split(':');
 
-  // Ровно три части: `campaign`, метка, человек. Ключ другой длины меткой не считается —
-  // угадывать в ключе идемпотентности нечего.
-  if (parts.length !== 3 || parts[0] !== 'campaign') {
+  // Три части — `campaign`, метка, человек — или четыре, с сундуком в хвосте. Ключ другой
+  // длины меткой не считается — угадывать в ключе идемпотентности нечего.
+  if ((parts.length !== 3 && parts.length !== 4) || parts[0] !== 'campaign') {
     return null;
   }
 

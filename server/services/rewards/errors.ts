@@ -44,7 +44,8 @@ export class RewardStockShortError extends RewardsError {
 
 /**
  * Перевод баллов по этому ключу уже был: повтор вызова не заводит вторую награду рядом
- * с единственным начислением. Для ручной выдачи недостижимо — ключ выдаётся на запрос.
+ * с единственным начислением. Для ручной выдачи недостижимо — ключ выдаётся на запрос;
+ * для сундука акции тоже — повтор отсекается строкой сундука раньше, чем дело дойдёт до перевода.
  */
 export class RewardPointsAlreadyCreditedError extends RewardsError {
   constructor(public readonly idempotencyKey: string) {

@@ -158,3 +158,61 @@ export class CampaignPrizeProductUnavailableError extends CampaignError {
     super(`товар ${productId} не годится в приз: не опубликован или в архиве`);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Открытие сундука (issue #181)
+// ---------------------------------------------------------------------------
+
+/**
+ * Акции водителю сейчас не видно: он не в составе или окно его половины кончилось, пока
+ * экран был открыт. Не то же, что «сундук не заработан»: открывать тут нечего вовсе.
+ */
+export class MemberCampaignUnavailableError extends CampaignError {
+  constructor(public readonly personId: string) {
+    super(`водителю ${personId} акция сейчас не видна`);
+  }
+}
+
+/** Почему сундук не открывается. Для лога и тестов: водителю все причины звучат одинаково. */
+export type CampaignChestRefusal =
+  /** Не вступил — сундуков у него нет. */
+  | 'not_joined'
+  /** Номер дня вне окна или не передан у сундука дня. */
+  | 'day_invalid'
+  /** Окно до этого дня ещё не дошло. */
+  | 'ahead'
+  /** День идёт, цель не взята. */
+  | 'today'
+  /** День прошёл без цели. */
+  | 'missed'
+  /** Ступень достижима, но ещё не заработана. */
+  | 'reachable'
+  /** Ступень уже не собрать. */
+  | 'unreachable';
+
+export class CampaignChestNotEarnedError extends CampaignError {
+  constructor(
+    public readonly personId: string,
+    public readonly chest: CampaignChestKind,
+    public readonly dayNumber: number | null,
+    public readonly refusal: CampaignChestRefusal,
+  ) {
+    super(
+      `сундук ${chest}${dayNumber === null ? '' : ` дня ${dayNumber}`} водителя ${personId} не открывается: ${refusal}`,
+    );
+  }
+}
+
+/**
+ * Выпавший приз не выдать: товара нет на полке, товар снят или офис акции закрыт. Сундук
+ * остаётся закрытым и заработанным, не записывается ничего — ни награды, ни строки сундука.
+ */
+export class CampaignChestPrizeUnavailableError extends CampaignError {
+  constructor(
+    public readonly campaignId: string,
+    public readonly chest: CampaignChestKind,
+    public readonly failure: 'stock_short' | 'product_unavailable' | 'office_unavailable',
+  ) {
+    super(`приз сундука ${chest} акции ${campaignId} не выдать: ${failure}`);
+  }
+}

@@ -1,4 +1,8 @@
-import type { CampaignParticipantOutcome, CampaignParticipantState } from '#server/generated/prisma/enums';
+import type {
+  CampaignChestKind,
+  CampaignParticipantOutcome,
+  CampaignParticipantState,
+} from '#server/generated/prisma/enums';
 
 /**
  * Неделя участника акции — числа и выбор строк блока недели (issue #168).
@@ -17,8 +21,11 @@ import type { CampaignParticipantOutcome, CampaignParticipantState } from '#serv
 /** Поездок за сутки, чтобы день зачёлся. */
 export const DAY_GOAL_TRIPS = 5;
 
-/** Зачётных дней, нужных за окно, — `N` эталона. */
+/** Зачётных дней, нужных за окно, — `N` эталона. Он же порог сундука недели. */
 export const REQUIRED_DAYS = 5;
+
+/** Зачётных дней до сундука трёх дней (issue #181). */
+export const THREE_DAYS_REQUIRED = 3;
 
 /**
  * Числа недели. `W` — длина окна половины в сутках парка: эталон построен для семи, но окно
@@ -171,6 +178,138 @@ export const dayKind = (dayNumber: number, today: number): WeekDayKind => {
   }
 
   return dayNumber === today ? 'today' : 'future';
+};
+
+// ---------------------------------------------------------------------------
+// Лестница сундуков (issue #181)
+// ---------------------------------------------------------------------------
+//
+// Лестница — не второй счёт зачётных дней, а продолжение чисел недели: всё берётся из `done`
+// и `chestDays`. Сундук открывается сразу, как заработан, — правило одно на все три ступени
+// (docs/decisions.md → «Сундук открывается сразу, как заработан»).
+
+/**
+ * Ступень на `required` дней уже не собрать: дней, в которых ещё можно взять цель, меньше,
+ * чем нужно добрать. `chestDays` сегодняшний день со взятой целью уже не считает — он зачтён
+ * и сидит в `done`. Для пятёрки это тот же расчёт, что `slack < 0`.
+ */
+export const isStepUnreachable = (figures: WeekFigures, required: number): boolean =>
+  figures.chestDays < required - figures.done;
+
+/** Состояние ступени трёх дней или недели. */
+export type ChestStepState =
+  /** Ещё не заработана и достижима. */
+  | 'reachable'
+  /** Заработана и ждёт открытия. */
+  | 'to_open'
+  | 'opened'
+  /** Уже не собрать. Со строки не убирается: пропавшая награда выглядит как обман. */
+  | 'unreachable';
+
+/**
+ * Открытая ступень остаётся открытой, что бы ни случилось с числами; заработанная — не гаснет:
+ * взятый день необратим, и проверка заработка идёт раньше проверки недостижимости.
+ */
+export const chestStepState = (
+  figures: WeekFigures,
+  required: number,
+  opened: boolean,
+): ChestStepState => {
+  if (opened) {
+    return 'opened';
+  }
+
+  if (figures.done >= required) {
+    return 'to_open';
+  }
+
+  return isStepUnreachable(figures, required) ? 'unreachable' : 'reachable';
+};
+
+/** Сколько зачётных дней ещё нужно до ступени. Ноль — ступень заработана. */
+export const stepDaysLeft = (figures: WeekFigures, required: number): number =>
+  Math.max(required - figures.done, 0);
+
+/** Состояние карточки сундука дня — пять, по `04-day-chests-sheet.md`. */
+export type DayChestState =
+  /** День ещё не наступил. */
+  | 'ahead'
+  /** День идёт, цель не взята. */
+  | 'today'
+  /** День зачтён, сундук ждёт. Сегодняшний со взятой целью — тоже здесь, а не «сегодня». */
+  | 'to_open'
+  | 'opened'
+  /** День прошёл без цели. */
+  | 'missed';
+
+/**
+ * Карточка дня: сначала открытость, потом зачёт, потом место дня относительно сегодняшнего.
+ * «К открытию» сильнее «сегодня»: пятая поездка закрывает сегодняшний день посреди смены.
+ */
+export const dayChestState = (
+  dayNumber: number,
+  today: number,
+  trips: number,
+  opened: boolean,
+): DayChestState => {
+  if (opened) {
+    return 'opened';
+  }
+
+  if (dayNumber > today) {
+    return 'ahead';
+  }
+
+  if (isQualifyingDay(trips)) {
+    return 'to_open';
+  }
+
+  return dayNumber === today ? 'today' : 'missed';
+};
+
+/** Открытый сундук — из строки `campaign_chests`: ступень и день окна у сундука дня. */
+export type OpenedChestRef = {
+  kind: CampaignChestKind;
+  dayNumber: number | null;
+};
+
+export type DayChest = {
+  day: number;
+  trips: number;
+  state: DayChestState;
+};
+
+/** Лестница целиком: карточка на каждый день окна и две ступени. */
+export type ChestLadder = {
+  days: DayChest[];
+  threeDays: ChestStepState;
+  week: ChestStepState;
+};
+
+/**
+ * Лестница от чисел недели, поездок по дням и открытых сундуков. Сегодняшний день — `figures.day`:
+ * у замершей недели это день после окна, и все карточки оказываются в прошлом.
+ */
+export const chestLadder = (
+  figures: WeekFigures,
+  dayTrips: readonly number[],
+  opened: readonly OpenedChestRef[],
+): ChestLadder => {
+  const openedDays = new Set(
+    opened.filter((chest) => chest.kind === 'day').map((chest) => chest.dayNumber),
+  );
+  const isOpened = (kind: CampaignChestKind): boolean => opened.some((chest) => chest.kind === kind);
+
+  return {
+    days: Array.from({ length: figures.windowDays }, (_unused, index) => {
+      const day = index + 1;
+      const trips = dayTrips[index] ?? 0;
+
+      return { day, trips, state: dayChestState(day, figures.day, trips, openedDays.has(day)) };
+    }),
+    threeDays: chestStepState(figures, THREE_DAYS_REQUIRED, isOpened('three_days')),
+    week: chestStepState(figures, REQUIRED_DAYS, isOpened('week')),
+  };
 };
 
 /**

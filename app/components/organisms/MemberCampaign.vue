@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import type { MemberCampaign, MemberWeekDay, MemberWeekLineTone } from '#shared/types/miniapp';
+import type {
+  MemberCampaign,
+  MemberWeekDay,
+  MemberWeekLineTone,
+  MiniAppOpenChestRequestBody,
+} from '#shared/types/miniapp';
+import type { OpenedChestPrize } from '~/composables/useMemberCampaign';
 
 /**
  * Акция на экране участника — рабочий минимум (issue #166): название, сроки, состояние
@@ -12,15 +18,24 @@ import type { MemberCampaign, MemberWeekDay, MemberWeekLineTone } from '#shared/
  * У вступившего под этим — неделя (issue #168): день окна, клетки дней, счётчик зачётных дней,
  * строки срока и запаса и сегодняшняя цель. Какую строку показать и каким видом, решил сервер;
  * здесь только раскраска вида. Без оформления, анимации и нагрева фона.
+ *
+ * Под неделей — лестница сундуков (issue #181) и то, что выпало из только что открытого.
  */
 defineProps<{
   campaign: MemberCampaign;
   /** Ответ в пути: кнопки гаснут, чтобы второе нажатие не ушло вдогонку. */
   acting: boolean;
   error: string | null;
+  /** Что выпало из только что открытого сундука. */
+  prize: OpenedChestPrize | null;
 }>();
 
-defineEmits<{ join: []; decline: [] }>();
+defineEmits<{
+  join: [];
+  decline: [];
+  openChest: [chest: MiniAppOpenChestRequestBody];
+  dismissPrize: [];
+}>();
 
 const TONE_CLASSES: Record<MemberWeekLineTone, string> = {
   gold: 'text-sm font-semibold text-amber-600',
@@ -103,6 +118,28 @@ const CELL_CLASSES: Record<MemberWeekDay['kind'], string> = {
           {{ campaign.progress.weekBottom.text }}
         </p>
       </div>
+
+      <div
+        v-if="prize"
+        class="flex flex-col gap-1 rounded-xl border-2 border-amber-400 bg-white p-3"
+        role="status"
+      >
+        <p class="text-base font-semibold text-slate-900">{{ prize.prizeText }}</p>
+        <p class="text-xs text-slate-600">{{ prize.rewardsHint }}</p>
+        <button
+          type="button"
+          class="self-end rounded-md px-2 py-1 text-sm text-slate-500 hover:text-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
+          @click="$emit('dismissPrize')"
+        >
+          ✕
+        </button>
+      </div>
+
+      <OrganismsMemberChestLadder
+        :chests="campaign.progress.chests"
+        :acting="acting"
+        @open="$emit('openChest', $event)"
+      />
     </div>
 
     <p v-if="error" class="text-sm text-red-700">{{ error }}</p>

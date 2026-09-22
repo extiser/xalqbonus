@@ -30,7 +30,7 @@ enum AccountType {
   @@schema("xb")
 }
 
-/// Ровно десять причин из таблицы ключей идемпотентности в docs/points.md.
+/// Причины из таблицы ключей идемпотентности в docs/points.md.
 /// Новая причина заводится сначала там, потом здесь.
 enum PointReason {
   opening
@@ -43,6 +43,8 @@ enum PointReason {
   expire
   merge
   raffle
+  /// Массовое начисление по кампании и приз сундука акции (issue #181).
+  campaign
 
   @@map("point_reason")
   @@schema("xb")
@@ -400,6 +402,18 @@ enum CampaignChestKind {
   week
 
   @@map("campaign_chest_kind")
+  @@schema("xb")
+}
+
+/// Чем открыт сундук акции (issue #181). `timer` заводится сразу, хотя пишет его следующая
+/// задача: колонка со вторым значением задним числом у уже открытых сундуков не появится.
+enum CampaignChestOpenSource {
+  /// Водитель нажал на заработанный сундук.
+  driver
+  /// Неоткрытый вскрыт сам в 21:00 дня, которым кончилось окно.
+  timer
+
+  @@map("campaign_chest_open_source")
   @@schema("xb")
 }
 
@@ -1652,6 +1666,7 @@ model CampaignParticipant {
   /// нет в `campaign_halves`, выпал бы из каждого соединения с окном — акции не видел бы,
   /// а в админке числился бы обычным приглашённым (ревью #170).
   window   CampaignHalf @relation(fields: [campaignId, half], references: [campaignId, half], onDelete: Restrict, onUpdate: Cascade)
+  chests   CampaignChest[]
 
   @@id([campaignId, personId])
   /// Разбивка по состояниям и половинам на карточке акции.
@@ -1661,6 +1676,35 @@ model CampaignParticipant {
   /// Что у водителя с акцией — при каждом открытии Mini App.
   @@index([personId])
   @@map("campaign_participants")
+  @@schema("xb")
+}
+
+/// Открытый сундук акции (issue #181) — строка на открытие, а не на заработанный сундук.
+///
+/// Заработан ли сундук, не хранится: это считается от журнала поездок, как зачётный день, —
+/// опоздавшая из Fleet API поездка дозачтёт вчерашний день и его сундук сама.
+///
+/// Сундук принадлежит участию, а не человеку вообще: внешний ключ на пару «акция + человек».
+/// Второе открытие держит база, а не проверка в коде: частичные уникальные индексы в миграции —
+/// день окна у сундука дня, ступень у остальных. `day_number` заполнен только у сундука дня —
+/// проверкой там же.
+model CampaignChest {
+  id         String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campaignId String                  @map("campaign_id") @db.Uuid
+  personId   String                  @map("person_id") @db.Uuid
+  kind       CampaignChestKind
+  /// Номер дня окна, с единицы. Только у сундука дня.
+  dayNumber  Int?                    @map("day_number")
+  openedAt   DateTime                @default(now()) @map("opened_at") @db.Timestamptz(6)
+  openedBy   CampaignChestOpenSource @map("opened_by")
+  /// Что выпало. У сундука награда одна, и одна награда — не больше чем из одного сундука.
+  rewardId   String                  @unique @map("reward_id") @db.Uuid
+
+  participant CampaignParticipant @relation(fields: [campaignId, personId], references: [campaignId, personId], onDelete: Restrict)
+  /// `Restrict`, как у остальных ссылок на награду: удалённая награда стёрла бы ответ «что выпало».
+  reward      Reward              @relation(fields: [rewardId], references: [id], onDelete: Restrict)
+
+  @@map("campaign_chests")
   @@schema("xb")
 }
 
@@ -1748,8 +1792,9 @@ model Reward {
   source     RewardSource
   /// Акция, если источник `campaign`.
   campaignId String?      @map("campaign_id") @db.Uuid
-  /// Откуда внутри источника: «сундук дня, третий день». Текстом: сундуков ещё нет,
-  /// а карточка стойки обязана объяснять уже сейчас.
+  /// Откуда внутри источника: «Сундук дня, день 3». Текстом, а не ссылкой на сундук: карточка
+  /// стойки читает его как есть, у ручной выдачи сундука нет, а связь с сундуком держит
+  /// `campaign_chests.reward_id`.
   sourceNote String?      @map("source_note")
   /// Кто вручил — у источника `manual`.
   grantedByEmployeeId String? @map("granted_by_employee_id") @db.Uuid
@@ -1767,6 +1812,7 @@ model Reward {
   grantedByEmployee Employee? @relation("reward_granted_by", fields: [grantedByEmployeeId], references: [id])
 
   movements StockMovement[]
+  chest     CampaignChest?
 
   /// Список водителя, свежие первыми.
   @@index([personId, createdAt(sort: Desc)])

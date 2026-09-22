@@ -23,13 +23,14 @@ import {
 
 /**
  * Рождение награды — **единственная дверь**, через которую награда появляется (issue #172).
- * Зовут её ручная выдача из админки и — следующей задачей — открытие сундука.
+ * Зовут её ручная выдача из админки (`grantReward`) и открытие сундука
+ * (`grantRewardInTransaction` — внутри транзакции открытия, issue #181).
  *
  * Всё одной транзакцией, по виду награды:
  *
  * - **баллы** — перевод `emission` → водитель и строка `credited`. Причина и ключ
  *   идемпотентности приходят параметрами, а не выбираются здесь: у ручной выдачи это `manual`
- *   с ключом `manual:<uuid>`, у акции будет своя причина, и заводит её та задача
+ *   с ключом `manual:<uuid>`, у сундука акции — `campaign` с ключом сундука
  * - **товар** — резерв штуки в офисе движением `reward_reserve` и строка `awaiting` с кодом
  *   и сроком. Резерв обязателен: без него товар обещан водителю, а на полке числится свободным
  *   и уедет другому. Свободного нет — `RewardStockShortError`, награда не заводится
@@ -56,7 +57,7 @@ export type RewardGift =
   | {
       kind: 'points';
       points: number;
-      /** Причина перевода — решает вызывающий: у ручной выдачи `manual`. */
+      /** Причина перевода — решает вызывающий: у ручной выдачи `manual`, у сундука `campaign`. */
       reason: PointReason;
       idempotencyKey: IdempotencyKey;
     }
@@ -242,26 +243,42 @@ const grantCustom = async (
   });
 };
 
+/**
+ * Рождение награды внутри чужой транзакции. Нужна тому, кому награда и его собственная запись
+ * обязаны появиться вместе: открытие сундука вставляет строку сундука в той же транзакции —
+ * награда без неё дала бы второй розыгрыш, строка без награды — открытый сундук без приза.
+ *
+ * Лог «награда выдана» здесь не пишется: транзакция ещё может откатиться. Пишет вызывающий,
+ * когда она закрылась.
+ */
+export const grantRewardInTransaction = async (
+  transaction: Transaction,
+  input: GrantRewardInput,
+): Promise<RewardRow> => {
+  const driverAccount = await findDriverAccountByPerson(input.personId, transaction);
+
+  if (!driverAccount) {
+    throw new DriverAccountMissingError(input.personId);
+  }
+
+  const { gift } = input;
+
+  if (gift.kind === 'points') {
+    return grantPoints(transaction, input, gift, driverAccount.id);
+  }
+
+  if (gift.kind === 'product') {
+    return grantProduct(transaction, input, gift);
+  }
+
+  return grantCustom(transaction, input, gift);
+};
+
+/** Рождение награды своей транзакцией — для ручной выдачи. */
 export const grantReward = async (input: GrantRewardInput): Promise<RewardRow> => {
-  const reward = await db.$transaction(async (transaction) => {
-    const driverAccount = await findDriverAccountByPerson(input.personId, transaction);
-
-    if (!driverAccount) {
-      throw new DriverAccountMissingError(input.personId);
-    }
-
-    const { gift } = input;
-
-    if (gift.kind === 'points') {
-      return grantPoints(transaction, input, gift, driverAccount.id);
-    }
-
-    if (gift.kind === 'product') {
-      return grantProduct(transaction, input, gift);
-    }
-
-    return grantCustom(transaction, input, gift);
-  });
+  const reward = await db.$transaction((transaction) =>
+    grantRewardInTransaction(transaction, input),
+  );
 
   log.info('награда выдана', {
     rewardId: reward.id,
