@@ -150,6 +150,15 @@ export type TextKey =
   | 'campaign_chest_denied_campaign'
   | 'campaign_chest_denied_not_earned'
   | 'campaign_chest_denied_prize'
+  | 'campaign_finish_awaiting_title'
+  | 'campaign_finish_awaiting'
+  | 'campaign_finish_open_chests_title'
+  | 'campaign_finish_open_chests'
+  | 'campaign_finish_completed_title'
+  | 'campaign_finish_thanks_title'
+  | 'campaign_finish_collected'
+  | 'campaign_finish_three_days'
+  | 'campaign_finish_week'
   | 'not_in_registry'
   | 'not_in_park'
   | 'profile_fired'
@@ -160,6 +169,14 @@ export type TextKey =
   | 'employee_account'
   | 'check_unavailable'
   | 'notification_welcome_bonus'
+  | 'notification_campaign_finished_chests'
+  | 'notification_campaign_finished_returned'
+  | 'notification_campaign_finished_joined'
+  | 'notification_campaign_finished_not_joined'
+  | 'notification_campaign_chests_revealed'
+  | 'notification_revealed_points_line'
+  | 'notification_revealed_office_line'
+  | 'notification_revealed_pickup'
   | 'invite_ask_contact'
   | 'invite_accepted'
   | 'invite_not_found'
@@ -770,7 +787,10 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Посмотреть награду можно в разделе «Мои награды и призы»',
     uz: "Mukofotni «Mukofotlarim va sovg'alarim» bo'limida ko'rish mumkin",
   },
-  /** Акция водителю уже не видна: окно кончилось, пока экран был открыт. */
+  /**
+   * Акция водителю уже не видна: сундуки вскрыты в 21:00, пока экран был открыт, или окно
+   * кончилось у не вступившего.
+   */
   campaign_chest_denied_campaign: {
     ru: 'Акция сейчас недоступна',
     uz: 'Aksiya hozir mavjud emas',
@@ -786,6 +806,50 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   campaign_chest_denied_prize: {
     ru: 'Приз сейчас недоступен, попробуйте позже или подойдите в офис',
     uz: "Sovg'a hozir mavjud emas, keyinroq urinib ko'ring yoki ofisga murojaat qiling",
+  },
+  // Завершённая акция (issue #182) — рабочий минимум строками; макет — планировочная T50.
+  // Какое состояние когда — `describeCampaignFinish` в `memberProgress.ts`.
+  /**
+   * Не дотянул, итог не подведён. Итог не объявляется: опоздавшая поездка ещё может дозачесть
+   * прошлый день, и «не дотянули», отменённое через минуту, хуже молчания.
+   */
+  campaign_finish_awaiting_title: {
+    ru: 'Акция для вас завершена',
+    uz: 'Aksiya siz uchun yakunlandi',
+  },
+  campaign_finish_awaiting: {
+    ru: 'Итоги подводятся утром — загляните после 09:00.',
+    uz: "Natijalar ertalab chiqariladi — soat 09:00 dan keyin qarang.",
+  },
+  campaign_finish_open_chests_title: {
+    ru: 'Акция закончена',
+    uz: 'Aksiya tugadi',
+  },
+  /** Неоткрытое вскроется само в 21:00, и сказать об этом — честнее, чем торопить молча. */
+  campaign_finish_open_chests: {
+    ru: 'Откройте сундуки и заберите подарки. В 21:00 неоткрытые откроются сами.',
+    uz: "Sandiqlarni oching va sovg'alaringizni oling. Soat 21:00 da ochilmaganlari o'zi ochiladi.",
+  },
+  campaign_finish_completed_title: {
+    ru: 'Поздравляем, {name}! Ваша акция завершена',
+    uz: 'Tabriklaymiz, {name}! Aksiyangiz yakunlandi',
+  },
+  /** Завершил, не собрав ни одного сундука: поздравлять не с чем. */
+  campaign_finish_thanks_title: {
+    ru: 'Акция завершена. Спасибо за участие, {name}!',
+    uz: 'Aksiya yakunlandi. Ishtirokingiz uchun rahmat, {name}!',
+  },
+  campaign_finish_collected: {
+    ru: 'Собрано: {list}',
+    uz: "To'plandi: {list}",
+  },
+  campaign_finish_three_days: {
+    ru: 'сундук трёх дней',
+    uz: "uch kun sandig'i",
+  },
+  campaign_finish_week: {
+    ru: 'сундук недели',
+    uz: "hafta sandig'i",
   },
   not_in_registry: {
     ru: 'Не получилось привязать номер автоматически — в данных таксопарка чего-то не хватает. Это чинится только в офисе: подойдите в любой офис Xalq Taxi с водительским удостоверением.',
@@ -867,6 +931,43 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   notification_welcome_bonus: {
     ru: '🎁 Вам начислено {points} баллов за первые 5 поездок! Обменять их на подарки можно в любом офисе Xalq Taxi.',
     uz: "🎁 Birinchi 5 ta safaringiz uchun sizga {points} ball hisoblandi! Ularni Xalq Taxi'ning istalgan ofisida sovg'alarga almashtirishingiz mumkin.",
+  },
+
+  // Итог и вскрытие акции (issue #182). Обе точки стоят на границах окна отправки 09:00–21:00.
+  /** 09:00, у вступившего остались неоткрытые. `{chests}` — «2 неоткрытых сундука». */
+  notification_campaign_finished_chests: {
+    ru: '🎁 Акция «{title}» закончена. У вас {chests} — откройте их сегодня в приложении. В 21:00 неоткрытые откроются сами.',
+    uz: "🎁 «{title}» aksiyasi tugadi. Sizda {chests} bor — bugun ilovada oching. Soat 21:00 da ochilmaganlari o'zi ochiladi.",
+  },
+  notification_campaign_finished_returned: {
+    ru: '🏆 Акция «{title}» закончена: вы взяли цель в {done} из {total} дней. Спасибо, что были с нами!',
+    uz: "🏆 «{title}» aksiyasi tugadi: siz {total} kundan {done} kunida maqsadga erishdingiz. Biz bilan bo'lganingiz uchun rahmat!",
+  },
+  notification_campaign_finished_joined: {
+    ru: 'Акция «{title}» закончена. Спасибо за участие!',
+    uz: '«{title}» aksiyasi tugadi. Ishtirokingiz uchun rahmat!',
+  },
+  notification_campaign_finished_not_joined: {
+    ru: 'Акция «{title}» закончилась.',
+    uz: '«{title}» aksiyasi tugadi.',
+  },
+  /** 21:00. Под ним — строка на каждый вскрытый сундук и, если есть что забирать, где и до когда. */
+  notification_campaign_chests_revealed: {
+    ru: '🎁 Неоткрытые сундуки акции «{title}» открылись. Вам выпало:',
+    uz: "🎁 «{title}» aksiyasining ochilmagan sandiqlari ochildi. Sizga tushdi:",
+  },
+  notification_revealed_points_line: {
+    ru: '• {prize} — уже на балансе',
+    uz: '• {prize} — allaqachon hisobingizda',
+  },
+  notification_revealed_office_line: {
+    ru: '• {prize} — ждёт в офисе',
+    uz: '• {prize} — ofisda kutmoqda',
+  },
+  /** Где забирать — ровно тот вопрос, с которым водитель иначе позвонит. */
+  notification_revealed_pickup: {
+    ru: 'Заберите подарки в офисе «{office}» до {date}: покажите код из раздела «Мои награды и призы».',
+    uz: "Sovg'alarni «{office}» ofisidan {date} gacha olib keting: «Mukofotlarim va sovg'alarim» bo'limidagi kodni ko'rsating.",
   },
 
   // Приглашение сотрудника. Отказы разведены по причинам все до одного: учётка заводится
@@ -1012,7 +1113,9 @@ export type CountedTextKey =
   | 'campaign_today_trips'
   | 'campaign_today_goal_waiting'
   | 'campaign_chest_three_days_condition'
-  | 'campaign_chest_days_left';
+  | 'campaign_chest_days_left'
+  | 'campaign_finish_day_chests'
+  | 'notification_unopened_chests';
 
 const COUNTED_TEXTS: Readonly<Record<CountedTextKey, Readonly<Record<Language, CountedForms>>>> = {
   /** Награда баллами в разделе «Мои награды»: «300 баллов». */
@@ -1134,6 +1237,32 @@ const COUNTED_TEXTS: Readonly<Record<CountedTextKey, Readonly<Record<Language, C
       one: 'yana {count} kun — va u sizniki',
       few: 'yana {count} kun — va u sizniki',
       many: 'yana {count} kun — va u sizniki',
+    },
+  },
+  /** Перечень собранного в блоке завершённой акции. */
+  campaign_finish_day_chests: {
+    ru: {
+      one: '{count} сундук дня',
+      few: '{count} сундука дня',
+      many: '{count} сундуков дня',
+    },
+    uz: {
+      one: "{count} ta kun sandig'i",
+      few: "{count} ta kun sandig'i",
+      many: "{count} ta kun sandig'i",
+    },
+  },
+  /** Сообщение об итоге: «У вас 2 неоткрытых сундука». */
+  notification_unopened_chests: {
+    ru: {
+      one: '{count} неоткрытый сундук',
+      few: '{count} неоткрытых сундука',
+      many: '{count} неоткрытых сундуков',
+    },
+    uz: {
+      one: '{count} ta ochilmagan sandiq',
+      few: '{count} ta ochilmagan sandiq',
+      many: '{count} ta ochilmagan sandiq',
     },
   },
 };

@@ -1,5 +1,6 @@
-import type { Language } from '#server/generated/prisma/enums';
-import { formatPoints, text } from '#server/bot/texts';
+import type { CampaignParticipantOutcome, Language } from '#server/generated/prisma/enums';
+import { countedPlainText, formatPoints, text } from '#server/bot/texts';
+import { formatCalendarDate } from '#server/utils/parkTime';
 
 /**
  * Уведомления водителю: что именно система умеет ему написать сама.
@@ -17,19 +18,118 @@ import { formatPoints, text } from '#server/bot/texts';
 /**
  * Одно уведомление: имя шаблона и его параметры, размеченные типом.
  *
+ * Строки со счётом подставляются в текст через `text`, и экранирование накрывает их вместе
+ * с названием акции, офиса и приза — чужими строками, которые вводит сотрудник.
+ *
  * Размеченное объединение, а не свободный словарь: новый шаблон дописывается сюда вместе
  * со своими параметрами, и сборщик текста обязан его разобрать — забыть половину не выйдет.
  */
-export type Notification = {
-  template: 'welcome_bonus';
-  params: {
-    /** Сколько баллов начислено. Числом: человеческий вид числа — забота текста. */
-    points: number;
-  };
-};
+export type Notification =
+  | {
+      template: 'welcome_bonus';
+      params: {
+        /** Сколько баллов начислено. Числом: человеческий вид числа — забота текста. */
+        points: number;
+      };
+    }
+  | {
+      /** Итог акции в 09:00 дня после конца окна (issue #182). */
+      template: 'campaign_finished';
+      params: {
+        /** Название акции. Правится только у черновика, поэтому в задании оно не устареет. */
+        title: string;
+        outcome: CampaignParticipantOutcome;
+        /** Зачётных дней по снимку итога. */
+        qualifiedDays: number;
+        /** Дней в окне половины. */
+        windowDays: number;
+        /** Заработанных и неоткрытых сундуков на момент итога. */
+        unopenedChests: number;
+      };
+    }
+  | {
+      /** Вскрытие неоткрытых сундуков в 21:00 того же дня (issue #182). */
+      template: 'campaign_chests_revealed';
+      params: {
+        title: string;
+        /** Что выпало — по строке на вскрытый сундук, в порядке вскрытия. */
+        prizes: RevealedPrize[];
+        /** Офис акции — там ждут товарные и произвольные призы. */
+        officeName: string | null;
+        /** До какого момента их забрать, ISO-строкой. Пусто, если все призы — баллы. */
+        expiresAt: string | null;
+      };
+    };
+
+/** Приз вскрытого сундука: баллы уже на балансе, товар или произвольный ждёт в офисе. */
+export type RevealedPrize = { kind: 'points'; points: number } | { kind: 'office'; title: string };
 
 /** Имя шаблона отдельным типом — им размечаются строки лога. */
 export type NotificationTemplate = Notification['template'];
+
+/**
+ * Итог акции: вступившему с неоткрытыми — их число и зов открыть; вступившему без них — итог
+ * без зова; не вступившему — коротко, что акция закончилась.
+ */
+const renderCampaignFinished = (
+  params: Extract<Notification, { template: 'campaign_finished' }>['params'],
+  language: Language,
+): string => {
+  const { title } = params;
+
+  switch (params.outcome) {
+    case 'no_response':
+    case 'seen_not_joined':
+      return text('notification_campaign_finished_not_joined', language, { title });
+    case 'returned':
+    case 'short':
+    case 'joined_no_trips':
+      if (params.unopenedChests > 0) {
+        return text('notification_campaign_finished_chests', language, {
+          title,
+          chests: countedPlainText('notification_unopened_chests', language, params.unopenedChests),
+        });
+      }
+
+      return params.outcome === 'returned'
+        ? text('notification_campaign_finished_returned', language, {
+            title,
+            done: String(params.qualifiedDays),
+            total: String(params.windowDays),
+          })
+        : text('notification_campaign_finished_joined', language, { title });
+  }
+};
+
+/** Вскрытие: что выпало построчно и где забирать то, что лежит в офисе. */
+const renderChestsRevealed = (
+  params: Extract<Notification, { template: 'campaign_chests_revealed' }>['params'],
+  language: Language,
+): string => {
+  const lines = params.prizes.map((prize) =>
+    prize.kind === 'points'
+      ? text('notification_revealed_points_line', language, {
+          prize: countedPlainText('reward_points', language, prize.points),
+        })
+      : text('notification_revealed_office_line', language, { prize: prize.title }),
+  );
+  const hasOfficePrizes = params.prizes.some((prize) => prize.kind === 'office');
+  const pickup =
+    hasOfficePrizes && params.officeName && params.expiresAt
+      ? [
+          text('notification_revealed_pickup', language, {
+            office: params.officeName,
+            date: formatCalendarDate(new Date(params.expiresAt)),
+          }),
+        ]
+      : [];
+
+  return [
+    text('notification_campaign_chests_revealed', language, { title: params.title }),
+    lines.join('\n'),
+    ...pickup,
+  ].join('\n\n');
+};
 
 /** Собирает текст уведомления на языке получателя. */
 export const renderNotification = (notification: Notification, language: Language): string => {
@@ -38,5 +138,9 @@ export const renderNotification = (notification: Notification, language: Languag
       return text('notification_welcome_bonus', language, {
         points: formatPoints(BigInt(notification.params.points)),
       });
+    case 'campaign_finished':
+      return renderCampaignFinished(notification.params, language);
+    case 'campaign_chests_revealed':
+      return renderChestsRevealed(notification.params, language);
   }
 };

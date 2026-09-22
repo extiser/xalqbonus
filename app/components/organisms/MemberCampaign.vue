@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type {
   MemberCampaign,
+  MemberCampaignFinish,
   MemberWeekDay,
   MemberWeekLineTone,
   MiniAppOpenChestRequestBody,
@@ -20,6 +21,9 @@ import type { OpenedChestPrize } from '~/composables/useMemberCampaign';
  * здесь только раскраска вида. Без оформления, анимации и нагрева фона.
  *
  * Под неделей — лестница сундуков (issue #181) и то, что выпало из только что открытого.
+ *
+ * Над неделей — блок завершённой акции (issue #182): поздравление, зов открыть оставшееся
+ * или «итоги утром». Какой из трёх, решил сервер; макет — планировочная T50.
  */
 defineProps<{
   campaign: MemberCampaign;
@@ -55,6 +59,12 @@ const cellText = (day: MemberWeekDay): string => {
   return day.kind === 'past' ? `${day.trips}/5` : '';
 };
 
+const FINISH_CLASSES: Record<MemberCampaignFinish['kind'], string> = {
+  completed: 'border-amber-400',
+  open_chests: 'border-rose-700',
+  awaiting_outcome: 'border-slate-300',
+};
+
 const CELL_CLASSES: Record<MemberWeekDay['kind'], string> = {
   past: 'border-slate-200',
   today: 'border-rose-700',
@@ -81,6 +91,15 @@ const CELL_CLASSES: Record<MemberWeekDay['kind'], string> = {
         {{ campaign.declineLabel }}
       </button>
     </template>
+
+    <div
+      v-if="campaign.finish"
+      class="flex flex-col gap-1 rounded-xl border-2 bg-white p-3"
+      :class="FINISH_CLASSES[campaign.finish.kind]"
+    >
+      <p class="text-base font-semibold text-slate-900">{{ campaign.finish.title }}</p>
+      <p v-if="campaign.finish.text" class="text-sm text-slate-700">{{ campaign.finish.text }}</p>
+    </div>
 
     <div v-if="campaign.progress" class="flex flex-col gap-3">
       <div v-if="campaign.progress.today" class="flex flex-col gap-1 rounded-xl bg-white p-3">

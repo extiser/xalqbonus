@@ -5,9 +5,11 @@ import type { CampaignParticipantState, Language } from '#server/generated/prism
 import { listOpenedChests } from '#server/repositories/campaignChests';
 import { readParticipantDayTrips, type MemberCampaignRow } from '#server/repositories/campaigns';
 import {
+  describeCampaignFinish,
   describeFrozenProgress,
   describeLiveProgress,
 } from '#server/services/campaigns/memberProgress';
+import type { LinkedDriver } from '#server/services/drivers/readLinkedDriver';
 import type { MemberCampaign, MemberCampaignProgress } from '#shared/types/miniapp';
 
 /**
@@ -62,32 +64,39 @@ const readMemberProgress = async (
   return describeLiveProgress(row, dayTrips, opened, language);
 };
 
+/** Кому показывается экран: имя — для поздравления в блоке завершения. */
+export type CampaignViewer = Pick<LinkedDriver, 'personId' | 'name' | 'language'>;
+
 const describeMemberCampaign = (
   row: MemberCampaignRow,
-  language: Language,
+  viewer: CampaignViewer,
   progress: MemberCampaignProgress | null,
 ): MemberCampaign => ({
   title: row.title,
-  window: plainText('campaign_window', language, {
+  window: plainText('campaign_window', viewer.language, {
     from: formatWindowDay(row.startsOn),
     to: formatWindowDay(row.endsOn),
   }),
   state: row.state,
-  stateText: plainText(STATE_KEYS[row.state], language),
+  stateText: plainText(STATE_KEYS[row.state], viewer.language),
   canRespond: row.state === 'invited' || row.state === 'opened',
-  joinLabel: plainText('button_campaign_join', language),
-  declineLabel: plainText('campaign_decline', language),
+  joinLabel: plainText('button_campaign_join', viewer.language),
+  declineLabel: plainText('campaign_decline', viewer.language),
   progress,
+  finish: progress ? describeCampaignFinish(row, progress, viewer.name, viewer.language) : null,
 });
 
 /**
- * Экран акции водителя: строка участия на его языке и прогресс недели. `client` — транзакция
- * открытия сундука: экран после открытия читается внутри неё и видит только что записанное.
+ * Экран акции водителя: строка участия на его языке, прогресс недели и блок завершения. `client` —
+ * транзакция открытия сундука: экран после открытия читается внутри неё и видит только что записанное.
  */
 export const presentMemberCampaign = async (
   row: MemberCampaignRow,
-  personId: string,
-  language: Language,
+  viewer: CampaignViewer,
   client: Prisma.TransactionClient = db,
 ): Promise<MemberCampaign> =>
-  describeMemberCampaign(row, language, await readMemberProgress(row, personId, language, client));
+  describeMemberCampaign(
+    row,
+    viewer,
+    await readMemberProgress(row, viewer.personId, viewer.language, client),
+  );

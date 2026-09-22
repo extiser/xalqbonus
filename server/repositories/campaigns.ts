@@ -620,8 +620,14 @@ const dayTripsSql = (participant: Prisma.Sql, half: Prisma.Sql): Prisma.Sql => P
 `;
 
 /**
- * Акция, которая видна водителю в этот момент: он в снимке идущей акции, и окно его половины
- * уже началось и ещё не кончилось. Начало входит в окно, конец — нет.
+ * Акция, которая видна водителю в этот момент: он в снимке идущей акции, окно его половины
+ * уже началось, и экран ещё жив. Начало входит в окно, конец — нет.
+ *
+ * Экран живёт дольше окна (issue #182, docs/decisions.md → «Сундук открывается сразу, как
+ * заработан»): вступившему — до вскрытия неоткрытых сундуков, `revealAfterHours` после метки
+ * конца окна, то есть до 21:00 суток, следующих за последним днём. Не вступившему — до конца
+ * окна, как раньше: забирать ему нечего, а экран приглашения после конца акции звал бы
+ * вступить в то, что кончилось.
  *
  * Половина Б до начала своего окна акции не видит вовсе: у неё окна нет, пока его
  * не назначили, а назначенное ещё не началось. Она контроль, и показать ей акцию значило бы
@@ -630,11 +636,12 @@ const dayTripsSql = (participant: Prisma.Sql, half: Prisma.Sql): Prisma.Sql => P
  * Если окон сразу несколько, берётся запущенная последней. «Сейчас» приходит параметром:
  * граница окна проверяется тестом на заданном часе, а не ожиданием утра восьмого числа.
  * От него же считается день окна: сутки парка «сейчас» минус сутки начала, плюс единица, —
- * в 04:50 это ещё вчерашний день.
+ * в 04:50 это ещё вчерашний день, а после конца окна день на единицу больше его длины.
  */
 export const findMemberCampaign = async (
   personId: string,
   now: Date,
+  revealAfterHours: number,
   client: Executor = db,
 ): Promise<MemberCampaignRow | null> => {
   const rows = await client.$queryRaw<MemberCampaignRow[]>`
@@ -662,7 +669,13 @@ export const findMemberCampaign = async (
      WHERE participant."person_id" = ${personId}::uuid
        AND campaign."status" = 'running'
        AND half."starts_at" <= ${now}::timestamptz
-       AND half."ends_at" > ${now}::timestamptz
+       AND (
+             half."ends_at" > ${now}::timestamptz
+             OR (
+               participant."joined_at" IS NOT NULL
+               AND half."ends_at" + make_interval(hours => ${revealAfterHours}::int) > ${now}::timestamptz
+             )
+           )
      ORDER BY campaign."launched_at" DESC
      LIMIT 1
   `;
@@ -763,8 +776,8 @@ export type ParticipantOutcomeInput = {
 /**
  * Пишет исходы со снимком. Только туда, где исхода ещё нет, — условием в `UPDATE`, а не
  * проверкой перед ним: повторный прогон, перезапуск воркера и две одновременные попытки
- * не переписывают ничего. Задним числом исход не пересматривается. Возвращает, сколько
- * строк получило исход сейчас.
+ * не переписывают ничего. Задним числом исход не пересматривается. Возвращает людей,
+ * получивших исход сейчас, — по ним и только по ним уходит сообщение об итоге (issue #182).
  *
  * Пачка уезжает строкой JSON: массив поездок по дням у каждой строки свой, а `unnest`
  * двумерный массив разворачивает по элементам, а не по строкам.
@@ -773,12 +786,12 @@ export const writeParticipantOutcomes = async (
   campaignId: string,
   rows: readonly ParticipantOutcomeInput[],
   client: Executor = db,
-): Promise<number> => {
+): Promise<string[]> => {
   if (rows.length === 0) {
-    return 0;
+    return [];
   }
 
-  return client.$executeRaw`
+  const written = await client.$queryRaw<{ personId: string }[]>`
     UPDATE xb.campaign_participants AS participant
        SET "outcome"        = decided."outcome"::xb.campaign_participant_outcome,
            "outcome_at"     = now(),
@@ -790,17 +803,86 @@ export const writeParticipantOutcomes = async (
      WHERE participant."campaign_id" = ${campaignId}::uuid
        AND participant."person_id" = decided."personId"
        AND participant."outcome" IS NULL
+    RETURNING participant."person_id" AS "personId"
   `;
+
+  return written.map((row) => row.personId);
 };
 
 /**
- * Идёт → окончена — у каждой идущей акции, где исход получили все участники обеих половин.
+ * Пороги лестницы сундуков — числами из `weekProgress.ts`. Приходят параметром, а не живут
+ * здесь второй копией: правило «что заработано» одно на экран, открытие и таймер.
+ */
+export type ChestThresholds = {
+  /** Поездок за сутки, чтобы день зачёлся. */
+  dayGoalTrips: number;
+  /** Зачётных дней до сундука трёх дней. */
+  threeDaysRequired: number;
+  /** Зачётных дней до сундука недели. */
+  weekRequired: number;
+};
+
+/** Нет строки открытого сундука этой ступени (и этого дня — у сундука дня). */
+const chestMissingSql = (
+  participant: Prisma.Sql,
+  kind: 'day' | 'three_days' | 'week',
+  dayNumber: Prisma.Sql | null,
+): Prisma.Sql => Prisma.sql`
+  NOT EXISTS (
+    SELECT 1
+      FROM xb.campaign_chests AS chest
+     WHERE chest."campaign_id" = ${participant}."campaign_id"
+       AND chest."person_id" = ${participant}."person_id"
+       AND chest."kind" = ${kind}::xb.campaign_chest_kind
+       AND ${dayNumber === null ? Prisma.sql`TRUE` : Prisma.sql`chest."day_number" = ${dayNumber}`}
+  )
+`;
+
+/**
+ * У участника есть заработанный и неоткрытый сундук — по снимку итога, а не по журналу
+ * (issue #182): исход объявлен, и вскрытие обязано выдать ровно то, что объявлено. Тот же
+ * счёт, что у `chestLadder` над замершей неделей: день зачтён — сундук дня этого дня,
+ * зачётных дней хватает — ступень.
+ *
+ * `day_trips` индексируется с единицы, как и номер дня окна, — индекс и есть `day_number`.
+ */
+const earnedUnopenedChestSql = (participant: Prisma.Sql, thresholds: ChestThresholds): Prisma.Sql =>
+  Prisma.sql`(
+    ${participant}."outcome" IS NOT NULL
+    AND ${participant}."joined_at" IS NOT NULL
+    AND (
+      EXISTS (
+        SELECT 1
+          FROM generate_subscripts(${participant}."day_trips", 1) AS window_day("number")
+         WHERE ${participant}."day_trips"[window_day."number"] >= ${thresholds.dayGoalTrips}::int
+           AND ${chestMissingSql(participant, 'day', Prisma.sql`window_day."number"`)}
+      )
+      OR (
+        ${participant}."qualified_days" >= ${thresholds.threeDaysRequired}::int
+        AND ${chestMissingSql(participant, 'three_days', null)}
+      )
+      OR (
+        ${participant}."qualified_days" >= ${thresholds.weekRequired}::int
+        AND ${chestMissingSql(participant, 'week', null)}
+      )
+    )
+  )`;
+
+/**
+ * Идёт → окончена — у каждой идущей акции, где исход получили все участники обеих половин
+ * **и** не осталось заработанных неоткрытых сундуков (issue #182). Второе условие держит акцию
+ * идущей до вскрытия в 21:00: экран виден только у идущей, и перевод в `finished` в 09:00
+ * снял бы его за полдня до вскрытия.
+ *
  * Условием в `UPDATE`: у половины Б без назначенного окна исходов нет, и акция ждёт её итога.
  * По всем идущим, а не по только что подведённым: прогон, упавший между исходами и этим шагом,
  * иначе оставил бы акцию идущей навсегда — следующему прогону подводить уже нечего.
  * Возвращает идентификаторы оконченных сейчас.
  */
-export const finishSettledCampaigns = async (client: Executor = db): Promise<string[]> => {
+export const finishSettledCampaigns = async (
+  thresholds: ChestThresholds,
+  client: Executor = db,
+): Promise<string[]> => {
   const rows = await client.$queryRaw<{ id: string }[]>`
     UPDATE xb.campaigns AS campaign
        SET "status"     = 'finished'::xb.campaign_status,
@@ -810,13 +892,77 @@ export const finishSettledCampaigns = async (client: Executor = db): Promise<str
              SELECT 1
                FROM xb.campaign_participants AS participant
               WHERE participant."campaign_id" = campaign."id"
-                AND participant."outcome" IS NULL
+                AND (
+                      participant."outcome" IS NULL
+                      OR ${earnedUnopenedChestSql(Prisma.sql`participant`, thresholds)}
+                    )
            )
     RETURNING campaign."id"
   `;
 
   return rows.map((row) => row.id);
 };
+
+// ---------------------------------------------------------------------------
+// Вскрытие неоткрытых сундуков (issue #182)
+// ---------------------------------------------------------------------------
+
+/**
+ * Половины идущих акций, у которых наступило вскрытие — `revealAfterHours` после метки конца
+ * окна, — и у которых остались участники с заработанными неоткрытыми сундуками.
+ */
+export const listHalvesDueForReveal = async (
+  now: Date,
+  revealAfterHours: number,
+  thresholds: ChestThresholds,
+  client: Executor = db,
+): Promise<CampaignHalfRef[]> =>
+  client.$queryRaw<CampaignHalfRef[]>`
+    SELECT half."campaign_id" AS "campaignId", half."half"
+      FROM xb.campaign_halves AS half
+      JOIN xb.campaigns AS campaign ON campaign."id" = half."campaign_id"
+     WHERE campaign."status" = 'running'
+       AND half."ends_at" + make_interval(hours => ${revealAfterHours}::int) <= ${now}::timestamptz
+       AND EXISTS (
+             SELECT 1
+               FROM xb.campaign_participants AS participant
+              WHERE participant."campaign_id" = half."campaign_id"
+                AND participant."half" = half."half"
+                AND ${earnedUnopenedChestSql(Prisma.sql`participant`, thresholds)}
+           )
+     ORDER BY half."ends_at", half."campaign_id", half."half"
+  `;
+
+export type ParticipantDueForRevealRow = {
+  personId: string;
+  /** Длина окна половины — `W`. */
+  windowDays: number;
+  qualifiedDays: number | null;
+  /** Снимок поездок по дням на момент итога. */
+  outcomeDayTrips: number[] | null;
+};
+
+/** Участники половины с заработанными неоткрытыми сундуками — со снимком итога. */
+export const listParticipantsDueForReveal = async (
+  campaignId: string,
+  half: CampaignHalfCode,
+  thresholds: ChestThresholds,
+  client: Executor = db,
+): Promise<ParticipantDueForRevealRow[]> =>
+  client.$queryRaw<ParticipantDueForRevealRow[]>`
+    SELECT participant."person_id"                        AS "personId",
+           ${windowDaysSql(Prisma.sql`half`)}::int         AS "windowDays",
+           participant."qualified_days"                   AS "qualifiedDays",
+           participant."day_trips"                        AS "outcomeDayTrips"
+      FROM xb.campaign_participants AS participant
+      JOIN xb.campaign_halves AS half
+        ON half."campaign_id" = participant."campaign_id"
+       AND half."half" = participant."half"
+     WHERE participant."campaign_id" = ${campaignId}::uuid
+       AND participant."half" = ${half}::xb.campaign_half
+       AND ${earnedUnopenedChestSql(Prisma.sql`participant`, thresholds)}
+     ORDER BY participant."person_id"
+  `;
 
 /**
  * Переход состояния участника — только из перечисленных. Назад состояния не ходят, и повтор

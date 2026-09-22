@@ -5,6 +5,7 @@ import { launchCampaign } from '#server/services/campaigns/launchCampaign';
 import { readCampaign } from '#server/services/campaigns/readCampaign';
 import { readCampaignParticipants } from '#server/services/campaigns/readCampaignParticipants';
 import { readMemberCampaign } from '#server/services/campaigns/readMemberCampaign';
+import { revealCampaignChests } from '#server/services/campaigns/revealCampaignChests';
 import { declineCampaign, joinCampaign } from '#server/services/campaigns/respondToCampaign';
 import { settleCampaignOutcomes } from '#server/services/campaigns/settleCampaignOutcomes';
 import type { LinkedDriver } from '#server/services/drivers/readLinkedDriver';
@@ -28,6 +29,7 @@ import {
 } from '../support/database';
 import { cleanupTestEmployees, createTestEmployee } from '../support/employees';
 import { grantPoints } from '../support/points';
+import { disconnectQueues } from '../support/queues';
 import { cleanupTestSegments, trackTestSegment } from '../support/segments';
 
 /**
@@ -167,6 +169,8 @@ describe('прогресс недели и итог окна', () => {
   });
 
   afterAll(async () => {
+    // Итог окна ставит сообщения в очередь (issue #182) — соединение закрывается за собой.
+    await disconnectQueues();
     await disconnectDatabase();
   });
 
@@ -370,7 +374,39 @@ describe('прогресс недели и итог окна', () => {
       dayTrips: [5, 5, 0, 5, 0, 5, 3],
     });
 
-    // Все участники получили исход — акция окончена.
+    // Сообщение об итоге — каждому, чей исход записан этим прогоном: вступившему с неоткрытыми
+    // сундуками — их число, не вступившему — коротко (issue #182).
+    const finishedNotices = new Map(
+      first.notifications.map((notification) => [notification.personId, notification]),
+    );
+
+    expect(finishedNotices.get(returned.personId)).toMatchObject({
+      template: 'campaign_finished',
+      params: { outcome: 'returned', qualifiedDays: 5, unopenedChests: 7 },
+    });
+    expect(finishedNotices.get(short.personId)).toMatchObject({
+      params: { outcome: 'short', unopenedChests: 5 },
+    });
+    expect(finishedNotices.get(idle.personId)).toMatchObject({
+      params: { outcome: 'joined_no_trips', unopenedChests: 0 },
+    });
+    expect(finishedNotices.get(silent.personId)).toMatchObject({
+      params: { outcome: 'no_response', unopenedChests: 0 },
+    });
+
+    // Исход у всех, но сундуки не открыты — акция идёт до вскрытия в 21:00: окончи её итог,
+    // экран вступивших погас бы за полдня до вскрытия.
+    expect((await readCampaign(campaignId)).campaign.status).toBe('running');
+
+    // Не вступивший после конца окна акцию не видит, вступивший — видит до вскрытия.
+    const afterWindow = tashkent('2026-10-08 10:00');
+
+    expect((await readMemberCampaign(asDriver(silent.personId), afterWindow)).campaign).toBeNull();
+    expect((await readMemberCampaign(asDriver(returned.personId), afterWindow)).campaign).not.toBeNull();
+
+    await revealCampaignChests(tashkent('2026-10-08 21:00'));
+
+    // Сундуки вскрыты — акция окончена.
     const card = await readCampaign(campaignId);
 
     expect(card.campaign.status).toBe('finished');
@@ -397,6 +433,7 @@ describe('прогресс недели и итог окна', () => {
     );
 
     expect(second.settled).toBe(0);
+    expect(second.notifications.filter((job) => finishedNotices.has(job.personId))).toEqual([]);
     expect(after.get(short.personId)).toEqual(outcomes.get(short.personId));
     expect(after.get(returned.personId)).toEqual(outcomes.get(returned.personId));
 
@@ -473,9 +510,8 @@ describe('прогресс недели и итог окна', () => {
     });
 
     // Служба, получив проставленный исход, рисует неделю из снимка и журнал не читает, сколько
-    // бы поездок ни доехало. Через ручку Mini App это сегодня не наблюдаемо: после окна акция
-    // водителю не видна, поэтому «сейчас» задано внутри окна.
-    const inside = tashkent('2026-10-07 21:00');
+    // бы поездок ни доехало. Вступивший видит акцию после конца окна до вскрытия (issue #182).
+    const inside = tashkent('2026-10-08 10:00');
     const frozen = await requireProgress(joined.personId, inside);
 
     expect(frozen).toMatchObject({
