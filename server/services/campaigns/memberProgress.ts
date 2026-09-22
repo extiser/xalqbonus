@@ -419,7 +419,8 @@ const toOpenCount = (chests: MemberChestLadder): number =>
  *    Опоздавшая поездка ещё может дозачесть прошлый день и поднять счёт с четырёх до пяти:
  *    «вы не дотянули», отменённое через минуту, — худшее, что экран может сказать;
  * 2. **окно кончилось, есть неоткрытое** — зов открыть сундуки;
- * 3. **остальное** — поздравление по имени и перечень собранного.
+ * 3. **остальное** — дотянувшему до недели поздравление по имени, недотянувшему — спасибо
+ *    за участие; перечень собранного второй строкой у обоих.
  */
 export const describeCampaignFinish = (
   row: MemberCampaignRow,
@@ -451,8 +452,11 @@ export const describeCampaignFinish = (
 
   return {
     kind: 'completed',
+    // Заголовок — по результату, а не по перечню: поздравление только дотянувшему до недели.
+    // Недотянувший с сундуками дня иначе читал бы «Поздравляем», а в сообщении об итоге —
+    // «Спасибо за участие».
     title: plainText(
-      collected ? 'campaign_finish_completed_title' : 'campaign_finish_thanks_title',
+      progress.done >= REQUIRED_DAYS ? 'campaign_finish_completed_title' : 'campaign_finish_thanks_title',
       language,
       { name },
     ),

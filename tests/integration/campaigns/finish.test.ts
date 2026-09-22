@@ -279,9 +279,10 @@ describe('завершение акции и вскрытие сундуков',
 
     const morning = await requireCampaign(scenario.personId, tashkent('2026-10-08 10:00'));
 
+    // Три зачётных дня из пяти — не дотянул: спасибо, а не поздравление.
     expect(morning.finish).toEqual({
       kind: 'completed',
-      title: 'Поздравляем, Тест! Ваша акция завершена',
+      title: 'Акция завершена. Спасибо за участие, Тест!',
       text: 'Собрано: 3 сундука дня, сундук трёх дней',
     });
 
@@ -295,6 +296,31 @@ describe('завершение акции и вскрытие сундуков',
     expect(notificationsOf(revealed.notifications, scenario.personId)).toEqual([]);
     expect((await readMemberCampaign(driver, reveal)).campaign).toBeNull();
     expect((await readCampaign(scenario.campaignId)).campaign.status).toBe('finished');
+  });
+
+  it('недотянувший, открывший всё заработанное, видит спасибо, а не поздравление, и перечень собранного', async () => {
+    const scenario = await launch();
+    const driver = asDriver(scenario.personId);
+
+    await qualifyDays(scenario.profileId, [1, 2, 3, 4]);
+
+    const evening = tashkent('2026-10-04 18:00');
+
+    for (const dayNumber of [1, 2, 3, 4]) {
+      await openCampaignChest(driver, { kind: 'day', dayNumber }, evening);
+    }
+
+    await openCampaignChest(driver, { kind: 'three_days' }, evening);
+    await settleCampaignOutcomes(tashkent('2026-10-08 09:00'));
+
+    const morning = await requireCampaign(scenario.personId, tashkent('2026-10-08 10:00'));
+
+    expect(morning.progress?.outcome).toBe('short');
+    expect(morning.finish).toEqual({
+      kind: 'completed',
+      title: 'Акция завершена. Спасибо за участие, Тест!',
+      text: 'Собрано: 4 сундука дня, сундук трёх дней',
+    });
   });
 
   it('невыдаваемый приз откатывает только свой сундук: остальные вскрыты, уведомление — о выданном', async () => {

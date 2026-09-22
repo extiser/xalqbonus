@@ -834,7 +834,7 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Поздравляем, {name}! Ваша акция завершена',
     uz: 'Tabriklaymiz, {name}! Aksiyangiz yakunlandi',
   },
-  /** Завершил, не собрав ни одного сундука: поздравлять не с чем. */
+  /** Не дотянул до недели: поздравлять не с чем, перечень собранного — второй строкой. */
   campaign_finish_thanks_title: {
     ru: 'Акция завершена. Спасибо за участие, {name}!',
     uz: 'Aksiya yakunlandi. Ishtirokingiz uchun rahmat, {name}!',
