@@ -4,6 +4,7 @@ import {
   markParticipantDeclined,
   markParticipantJoined,
 } from '#server/repositories/campaigns';
+import { CHEST_REVEAL_HOURS } from '#server/services/campaigns/campaignClock';
 import { presentMemberCampaign } from '#server/services/campaigns/memberCampaignScreen';
 import type { LinkedDriver } from '#server/services/drivers/readLinkedDriver';
 import type { MiniAppCampaignResponse } from '#shared/types/miniapp';
@@ -12,7 +13,8 @@ import type { MiniAppCampaignResponse } from '#shared/types/miniapp';
  * Ответ водителя на акцию — «Участвовать» или «Отказаться».
  *
  * Действует только на акцию, которая ему сейчас видна: вне окна и вне состава ответ тот же,
- * что у чтения экрана, — «акции нет», а не отказ.
+ * что у чтения экрана, — «акции нет», а не отказ. После конца окна не вступившему акция
+ * не видна, поэтому вступить в кончившуюся нельзя (issue #182).
  *
  * Назад состояния не ходят: из `joined` в `declined` и обратно — нет. Повтор той же кнопки
  * отвечает успехом и ничего не меняет — водитель нажимает дважды чаще, чем кажется. Переход
@@ -27,7 +29,7 @@ const respond = async (
   move: (campaignId: string, personId: string) => Promise<boolean>,
   action: 'joined' | 'declined',
 ): Promise<MiniAppCampaignResponse> => {
-  const visible = await findMemberCampaign(driver.personId, now);
+  const visible = await findMemberCampaign(driver.personId, now, CHEST_REVEAL_HOURS);
 
   if (!visible) {
     return { campaign: null };
@@ -41,10 +43,10 @@ const respond = async (
     });
   }
 
-  const after = await findMemberCampaign(driver.personId, now);
+  const after = await findMemberCampaign(driver.personId, now, CHEST_REVEAL_HOURS);
 
   return {
-    campaign: after ? await presentMemberCampaign(after, driver.personId, driver.language) : null,
+    campaign: after ? await presentMemberCampaign(after, driver) : null,
   };
 };
 

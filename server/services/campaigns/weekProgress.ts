@@ -3,6 +3,7 @@ import type {
   CampaignParticipantOutcome,
   CampaignParticipantState,
 } from '#server/generated/prisma/enums';
+import type { CampaignChestRef } from '#server/services/points/idempotencyKey';
 
 /**
  * Неделя участника акции — числа и выбор строк блока недели (issue #168).
@@ -311,6 +312,18 @@ export const chestLadder = (
     week: chestStepState(figures, REQUIRED_DAYS, isOpened('week')),
   };
 };
+
+/**
+ * Заработанные и неоткрытые сундуки лестницы — в порядке дней, потом ступени. Из них вскрытие
+ * в 21:00 открывает всё, а сообщение в 09:00 называет их число (issue #182).
+ */
+export const unopenedChests = (ladder: ChestLadder): CampaignChestRef[] => [
+  ...ladder.days
+    .filter((chest) => chest.state === 'to_open')
+    .map((chest): CampaignChestRef => ({ kind: 'day', dayNumber: chest.day })),
+  ...(ladder.threeDays === 'to_open' ? [{ kind: 'three_days' } as const] : []),
+  ...(ladder.week === 'to_open' ? [{ kind: 'week' } as const] : []),
+];
 
 /**
  * Ступень нагрева блока дневной цели: 0–1 поездка — холодно, 2–3 — гранат, 4 и больше — огонь.

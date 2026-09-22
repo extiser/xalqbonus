@@ -50,6 +50,29 @@ export const listOpenedChests = async (
      ORDER BY chest."kind", chest."day_number"
   `;
 
+/** Открытый сундук участника — без награды: для счёта неоткрытых по всей акции. */
+export type OpenedChestRefRow = {
+  personId: string;
+  kind: CampaignChestKind;
+  dayNumber: number | null;
+};
+
+/**
+ * Открытые сундуки всех участников акции разом — одним запросом на прогон итога, а не
+ * запросом на человека: сообщение об итоге называет число неоткрытых (issue #182).
+ */
+export const listCampaignOpenedChests = async (
+  campaignId: string,
+  client: Executor = db,
+): Promise<OpenedChestRefRow[]> =>
+  client.$queryRaw<OpenedChestRefRow[]>`
+    SELECT chest."person_id"  AS "personId",
+           chest."kind",
+           chest."day_number" AS "dayNumber"
+      FROM xb.campaign_chests AS chest
+     WHERE chest."campaign_id" = ${campaignId}::uuid
+  `;
+
 /**
  * Открытый сундук по ступени и дню. `dayNumber` — только у сундука дня; у остальных `null`,
  * и сравнение `IS NOT DISTINCT FROM` находит их строку, у которой дня нет.

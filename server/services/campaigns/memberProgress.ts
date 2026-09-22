@@ -23,6 +23,7 @@ import {
   type WeekTopLine,
 } from '#server/services/campaigns/weekProgress';
 import type {
+  MemberCampaignFinish,
   MemberCampaignProgress,
   MemberCampaignToday,
   MemberChestLadder,
@@ -280,22 +281,58 @@ export const describeChestLadder = (
   };
 };
 
+/** Снимок итога — то, из чего рисуется замершая неделя и считаются заработанные сундуки. */
+export type OutcomeSnapshot = {
+  windowDays: number;
+  qualifiedDays: number | null;
+  outcomeDayTrips: number[] | null;
+};
+
 /** Числа замершей недели: все дни прошли, «сегодня» — день после окна (`describeFrozenProgress`). */
 export const frozenFigures = (
-  row: MemberCampaignRow & { outcome: NonNullable<MemberCampaignRow['outcome']> },
+  snapshot: OutcomeSnapshot,
 ): { figures: WeekFigures; dayTrips: number[] } => {
-  const dayTrips = row.outcomeDayTrips ?? [];
-  const done = row.qualifiedDays ?? dayTrips.filter(isQualifyingDay).length;
+  const dayTrips = snapshot.outcomeDayTrips ?? [];
+  const done = snapshot.qualifiedDays ?? dayTrips.filter(isQualifyingDay).length;
 
   return {
-    figures: figuresFromCounts(row.windowDays, row.windowDays + 1, done, false),
+    figures: figuresFromCounts(snapshot.windowDays, snapshot.windowDays + 1, done, false),
     dayTrips,
   };
 };
 
 /**
- * Прогресс идущего окна — от поездок по дням, прочитанных из журнала сейчас. День окна `d`
- * пришёл из базы, посчитанный от «сейчас» резкой суток парка.
+ * Неделя, в которой все дни прошли: «сегодня» — день после окна, и в ней не осталось ни дня
+ * с сундуком. Строк правой части нет: они про идущее окно («осталось», «в запасе»), а после
+ * конца окна экран говорит блоком завершения (`describeCampaignFinish`).
+ */
+const describeClosedWeek = (
+  row: MemberCampaignRow,
+  figures: WeekFigures,
+  dayTrips: readonly number[],
+  opened: readonly OpenedChestRow[],
+  language: Language,
+): Omit<MemberCampaignProgress, 'frozen' | 'outcome'> => ({
+  day: row.windowDays,
+  windowDays: row.windowDays,
+  ...commonTexts(row, row.windowDays, figures.done, language),
+  days: describeDays(row, dayTrips, row.windowDays + 1),
+  done: clampedDone(figures.done),
+  need: figures.need,
+  slack: figures.slack,
+  chestDays: figures.chestDays,
+  today: null,
+  weekTop: null,
+  weekBottom: null,
+  chests: describeChestLadder(figures, dayTrips, opened, language),
+});
+
+/**
+ * Прогресс по журналу — от поездок по дням, прочитанных сейчас. День окна `d` пришёл из базы,
+ * посчитанный от «сейчас» резкой суток парка.
+ *
+ * Окно уже кончилось, а итог не подведён (05:00–09:00, issue #182), — неделя рисуется замершей,
+ * но от журнала: опоздавшая поездка ещё может дозачесть последний день, и прятать её незачем.
  */
 export const describeLiveProgress = (
   row: MemberCampaignRow,
@@ -304,6 +341,14 @@ export const describeLiveProgress = (
   language: Language,
 ): MemberCampaignProgress => {
   const figures = weekFigures(row.windowDays, row.day, dayTrips);
+
+  if (row.day > row.windowDays) {
+    return {
+      ...describeClosedWeek(row, figures, dayTrips, opened, language),
+      frozen: false,
+      outcome: null,
+    };
+  }
 
   return {
     day: row.day,
@@ -323,33 +368,98 @@ export const describeLiveProgress = (
   };
 };
 
-/**
- * Замершая неделя — из снимка итога, без журнала. Все дни прошли: считаем её так, будто
- * «сегодня» — день после окна, и в ней не осталось ни дня с сундуком. Строк правой части нет:
- * они про идущее окно («осталось», «в запасе»), а после итога экран показывает итог.
- */
+/** Замершая неделя — из снимка итога, без журнала. */
 export const describeFrozenProgress = (
   row: MemberCampaignRow & { outcome: NonNullable<MemberCampaignRow['outcome']> },
   opened: readonly OpenedChestRow[],
   language: Language,
 ): MemberCampaignProgress => {
   const { figures, dayTrips } = frozenFigures(row);
-  const { done } = figures;
 
   return {
-    day: row.windowDays,
-    windowDays: row.windowDays,
-    ...commonTexts(row, row.windowDays, done, language),
-    days: describeDays(row, dayTrips, row.windowDays + 1),
-    done: clampedDone(done),
-    need: figures.need,
-    slack: figures.slack,
-    chestDays: figures.chestDays,
-    today: null,
-    weekTop: null,
-    weekBottom: null,
+    ...describeClosedWeek(row, figures, dayTrips, opened, language),
     frozen: true,
     outcome: row.outcome,
-    chests: describeChestLadder(figures, dayTrips, opened, language),
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Завершённая акция (issue #182)
+// ---------------------------------------------------------------------------
+
+/** Что собрано: «2 сундука дня, сундук трёх дней». Открытые и ждущие открытия — вместе. */
+const collectedText = (chests: MemberChestLadder, language: Language): string | null => {
+  const isEarned = (state: string): boolean => state === 'to_open' || state === 'opened';
+  const dayChests = chests.days.filter((chest) => isEarned(chest.state)).length;
+  const parts = [
+    ...(dayChests > 0 ? [countedPlainText('campaign_finish_day_chests', language, dayChests)] : []),
+    ...(isEarned(chests.threeDays.state) ? [plainText('campaign_finish_three_days', language)] : []),
+    ...(isEarned(chests.week.state) ? [plainText('campaign_finish_week', language)] : []),
+  ];
+
+  return parts.length > 0
+    ? plainText('campaign_finish_collected', language, { list: parts.join(', ') })
+    : null;
+};
+
+/** Сколько заработанных сундуков ждёт открытия. */
+const toOpenCount = (chests: MemberChestLadder): number =>
+  chests.days.filter((chest) => chest.state === 'to_open').length +
+  (chests.threeDays.state === 'to_open' ? 1 : 0) +
+  (chests.week.state === 'to_open' ? 1 : 0);
+
+/**
+ * Блок завершённой акции. Акция завершается персонально, а не по календарю: в оставшихся днях
+ * окна сундука дня уже не взять — `chestDays == 0`. Водитель, взявший цель утром последнего дня,
+ * видит его сразу; заработанное открывается дальше лестницей под ним. `null` — акция идёт.
+ *
+ * Состояния по порядку:
+ *
+ * 1. **не дотянул, итог не подведён** — итог не объявляется, экран говорит, что он будет утром.
+ *    Опоздавшая поездка ещё может дозачесть прошлый день и поднять счёт с четырёх до пяти:
+ *    «вы не дотянули», отменённое через минуту, — худшее, что экран может сказать;
+ * 2. **окно кончилось, есть неоткрытое** — зов открыть сундуки;
+ * 3. **остальное** — дотянувшему до недели поздравление по имени, недотянувшему — спасибо
+ *    за участие; перечень собранного второй строкой у обоих.
+ */
+export const describeCampaignFinish = (
+  row: MemberCampaignRow,
+  progress: MemberCampaignProgress,
+  name: string,
+  language: Language,
+): MemberCampaignFinish | null => {
+  if (progress.chestDays > 0) {
+    return null;
+  }
+
+  if (progress.done < REQUIRED_DAYS && row.outcome === null) {
+    return {
+      kind: 'awaiting_outcome',
+      title: plainText('campaign_finish_awaiting_title', language),
+      text: plainText('campaign_finish_awaiting', language),
+    };
+  }
+
+  if (row.day > row.windowDays && toOpenCount(progress.chests) > 0) {
+    return {
+      kind: 'open_chests',
+      title: plainText('campaign_finish_open_chests_title', language),
+      text: plainText('campaign_finish_open_chests', language),
+    };
+  }
+
+  const collected = collectedText(progress.chests, language);
+
+  return {
+    kind: 'completed',
+    // Заголовок — по результату, а не по перечню: поздравление только дотянувшему до недели.
+    // Недотянувший с сундуками дня иначе читал бы «Поздравляем», а в сообщении об итоге —
+    // «Спасибо за участие».
+    title: plainText(
+      progress.done >= REQUIRED_DAYS ? 'campaign_finish_completed_title' : 'campaign_finish_thanks_title',
+      language,
+      { name },
+    ),
+    text: collected,
   };
 };
