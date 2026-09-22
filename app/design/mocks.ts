@@ -1,4 +1,7 @@
 import type {
+  MemberChestKind,
+  MemberChestRowView,
+  MemberHeatStage,
   MemberOperationDayView,
   MemberOrderDetailView,
   MemberLanguage,
@@ -7,6 +10,7 @@ import type {
   MemberProfileFieldView,
   MemberPromoRuleView,
   MemberRewardView,
+  MemberWeekDayView,
 } from '~/types/memberView';
 
 /**
@@ -632,3 +636,160 @@ export const promoHeroMock = {
     decline: 'Отказаться',
   },
 };
+
+// ------------------------------------------------------------------ экран участника
+
+const WEEKDAYS = ['чт', 'пт', 'сб', 'вс', 'пн', 'вт', 'ср'] as const;
+
+/**
+ * Неделя строкой: по знаку на день окна — `d` зачтён, `s3` недобран с тремя поездками,
+ * `f` впереди; `*` после знака — сегодняшний. «d,d,s3,f*,f,f,f» — снимок 4 октября.
+ */
+function week(pattern: string): MemberWeekDayView[] {
+  return pattern.split(',').map((cell, index) => {
+    const today = cell.endsWith('*');
+    const code = today ? cell.slice(0, -1) : cell;
+    const base = { id: `day-${index + 1}`, weekday: WEEKDAYS[index] ?? '', day: String(index + 1), today };
+
+    if (code === 'd') {
+      return { ...base, state: 'done' as const, fill: 1 };
+    }
+
+    if (code.startsWith('s')) {
+      const trips = Number(code.slice(1));
+
+      return { ...base, state: 'short' as const, fill: trips / 5, tally: `${trips}/5` };
+    }
+
+    return { ...base, state: 'future' as const, fill: 0 };
+  });
+}
+
+const CHEST_NAMES: Record<MemberChestKind, string> = {
+  day: 'Сундуки дня',
+  '3days': 'Сундук трёх дней',
+  week: 'Сундук недели',
+};
+
+function chest(
+  kind: MemberChestKind,
+  state: MemberChestRowView['state'],
+  image: MemberChestRowView['image'],
+  condition: string,
+  count?: string,
+): MemberChestRowView {
+  return { id: kind, kind, image, name: CHEST_NAMES[kind], condition, count, state, prize: kind === 'week' };
+}
+
+/** Строки сундуков по сценам листа `03-member-chests-states.html`. */
+const CHEST_SCENES: MemberChestRowView[][] = [
+  [
+    chest('day', 'idle', 'closed', 'по одному за взятый день'),
+    chest('3days', 'idle', 'closed', 'за 3 дня с целью'),
+    chest('week', 'idle', 'closed', 'за 5 дней из 7'),
+  ],
+  [
+    chest('day', 'hot', 'ajar', 'К открытию: 1'),
+    chest('3days', 'idle', 'closed', 'ещё 2 дня — и он ваш'),
+    chest('week', 'idle', 'closed', 'ещё 4 дня — и он ваш'),
+  ],
+  [
+    chest('day', 'hot', 'ajar', 'К открытию: 1'),
+    chest('3days', 'idle', 'closed', 'ещё 1 день — и он ваш'),
+    chest('week', 'idle', 'closed', 'ещё 3 дня — и он ваш'),
+  ],
+  [
+    chest('day', 'hot', 'ajar', 'К открытию: 1'),
+    chest('3days', 'hot', 'ajar', 'К открытию: 1'),
+    chest('week', 'idle', 'closed', 'ещё 2 дня — и он ваш'),
+  ],
+  [
+    chest('day', 'mine', 'open', 'открыты', '3'),
+    chest('3days', 'mine', 'open', 'открыт'),
+    chest('week', 'idle', 'closed', 'ещё 2 дня — и он ваш'),
+  ],
+  [
+    chest('day', 'mine', 'open', 'открыты', '5'),
+    chest('3days', 'mine', 'open', 'открыт'),
+    chest('week', 'mine', 'closed', 'ваш — откроется в конце недели'),
+  ],
+  [
+    chest('day', 'mine', 'open', 'открыты', '7'),
+    chest('3days', 'mine', 'open', 'открыт'),
+    chest('week', 'mine', 'closed', 'ваш — откроется в конце недели'),
+  ],
+  [
+    chest('day', 'hot', 'ajar', 'К открытию: 2'),
+    chest('3days', 'idle', 'closed', 'ещё 1 день — и он ваш'),
+    chest('week', 'cold', 'closed', 'не в этот раз'),
+  ],
+  [
+    chest('day', 'mine', 'open', 'открыты', '4'),
+    chest('3days', 'mine', 'open', 'открыт'),
+    chest('week', 'cold', 'closed', 'не в этот раз'),
+  ],
+  [
+    chest('day', 'mine', 'open', 'открыты', '5'),
+    chest('3days', 'mine', 'open', 'открыт'),
+    chest('week', 'hot', 'ajar', 'К открытию: 1'),
+  ],
+  [
+    chest('day', 'mine', 'open', 'открыты', '5'),
+    chest('3days', 'mine', 'open', 'открыт'),
+    chest('week', 'mine', 'open', 'открыт'),
+  ],
+];
+
+/** Недели по сценам листа `03-member-week-states.html`. */
+const WEEK_SCENES = [
+  { term: 'осталось 7 дней', urgent: false, days: week('f*,f,f,f,f,f,f'), collected: 0, skips: '2 пропуска в запасе' },
+  { term: 'осталось 4 дня', urgent: false, days: week('d,d,s3,f*,f,f,f'), collected: 2, skips: 'ещё 1 пропуск в запасе' },
+  { term: 'последние 3 дня', urgent: true, days: week('d,d,s3,s0,f*,f,f'), collected: 2, skips: 'пропусков не осталось' },
+  { term: 'последний день', urgent: true, days: week('d,d,s3,d,d,s1,f*'), collected: 4, skips: 'пропусков не осталось' },
+  { term: 'ещё 2 дня с сундуками', urgent: true, days: week('d,d,d,d,d,f*,f'), collected: 5, skips: 'призы в конце недели' },
+  { term: 'ещё 3 дня с сундуками', urgent: false, days: week('d,s2,s0,s0,f*,f,f'), collected: 1, skips: 'каждые 5 поездок — сундук' },
+  { term: 'осталось 5 дней', urgent: false, days: week('d,d,d*,f,f,f,f'), collected: 3, skips: 'ещё 2 пропуска в запасе' },
+];
+
+/** Дневная цель по ступеням листа `03-member-heat-scale.html`: поездки, ступень, фраза. */
+const HEAT_SCENES: { done: number; stage: MemberHeatStage; note: string }[] = [
+  { done: 0, stage: 1, note: 'Сундук дня ждёт: всего 5 поездок' },
+  { done: 1, stage: 1, note: 'Сундук дня ждёт: всего 4 поездки' },
+  { done: 2, stage: 2, note: 'Сундук дня ждёт: всего 3 поездки' },
+  { done: 3, stage: 2, note: 'Сундук дня ждёт: всего 2 поездки' },
+  { done: 4, stage: 3, note: 'Сундук дня рядом: всего 1 поездка' },
+  { done: 5, stage: 3, note: 'Ура! Сундук дня ваш!' },
+];
+
+const CAMPAIGN_TEXTS = {
+  profile: 'Профиль',
+  refresh: 'Обновить',
+  promo: 'Акция',
+  today: 'Сегодня',
+  unit: 'поездок',
+  take: 'Открыть сундук',
+  updated: 'Обновлено в 14:26',
+  weekTitle: 'Ваша неделя',
+  collectedRest: 'из 5 дней',
+};
+
+/**
+ * Экран участника: снимок 4 октября — два дня зачтены, в третий не добрал, сегодня три
+ * из пяти. Любую из трёх частей можно подменить сценой её листа.
+ */
+export function campaignMock(scene: { heat?: number; week?: number; chests?: number } = {}) {
+  const heat = HEAT_SCENES[scene.heat ?? 3] ?? HEAT_SCENES[3]!;
+
+  return {
+    name: 'Бахтиёр',
+    callsign: 'А-247',
+    balance: '1\u00A0450',
+    stage: heat.stage,
+    goal: { done: heat.done, target: 5, note: heat.note },
+    week: WEEK_SCENES[scene.week ?? 1] ?? WEEK_SCENES[1]!,
+    chests: CHEST_SCENES[scene.chests ?? 2] ?? CHEST_SCENES[2]!,
+    texts: CAMPAIGN_TEXTS,
+  };
+}
+
+export const CAMPAIGN_SCENE_COUNTS = { heat: HEAT_SCENES.length, week: WEEK_SCENES.length, chests: CHEST_SCENES.length };

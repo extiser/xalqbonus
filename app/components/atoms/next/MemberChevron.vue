@@ -6,7 +6,7 @@
  * Цвет у шеврона свой по смыслу строки, а не общий: зелёный зовёт за кодом, золотой
  * повторяет подарок, синий ведёт наружу, в карту. Значение `tone`, а не класс снаружи.
  */
-type ChevronTone = 'light' | 'grey' | 'dim' | 'green' | 'gold' | 'blue';
+type ChevronTone = 'light' | 'grey' | 'dim' | 'muted' | 'green' | 'gold' | 'amber' | 'blue';
 
 withDefaults(
   defineProps<{
@@ -20,8 +20,10 @@ const TONE_CLASSES: Record<ChevronTone, string> = {
   light: 'text-xb-light',
   grey: 'text-xb-grey',
   dim: 'text-[#6B7483]',
+  muted: 'text-[#626A77]',
   green: 'text-xb-green',
   gold: 'text-xb-gold-light',
+  amber: 'text-xb-gold',
   blue: 'text-xb-map',
 };
 </script>

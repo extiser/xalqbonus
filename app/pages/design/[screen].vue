@@ -27,6 +27,7 @@ import {
   orderMock,
   profileMock,
   promoHeroMock,
+  campaignMock,
 } from '~/design/mocks';
 import { findDesignScreen } from '~/design/screens';
 import type { MemberLanguage } from '~/types/memberView';
@@ -124,6 +125,24 @@ function saveLanguage(language: MemberLanguage): void {
   profileSheet.value = 'none';
 }
 
+/**
+ * Экран участника: `campaign` — снимок макета, `campaign-{heat|week|chests}-{N}` — тот же экран,
+ * где одна часть подменена сценой N своего листа.
+ */
+const campaign = computed(() => {
+  if (slug.value === 'campaign') {
+    return campaignMock();
+  }
+
+  const match = /^campaign-(heat|week|chests)-(\d+)$/.exec(slug.value);
+
+  if (!match?.[1] || !match[2]) {
+    return undefined;
+  }
+
+  return campaignMock({ [match[1]]: Number(match[2]) - 1 });
+});
+
 /** Экран заказа по номеру: у каждого нарисованного заказа своё состояние экрана. */
 const ORDER_SCREENS: Record<string, string> = {
   '1042': 'order',
@@ -185,6 +204,8 @@ function go(target: string): void {
         @accept="go('campaign')"
         @decline="go('home-invite')"
       />
+
+      <OrganismsNextMemberCampaignScreen v-else-if="campaign" v-bind="campaign" @profile="go('profile')" @chest="(chestId) => go(chestId === 'day' ? 'day-chests' : `big-chest-${chestId}`)" />
     </div>
   </div>
 </template>

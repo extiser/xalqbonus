@@ -5,12 +5,17 @@
  * Не шапка раздела: главная — витрина программы, а не раздел, и назад отсюда идти некуда.
  * Пилюля стоит, только пока водитель в акции: у невступившего прогресса не существует,
  * его зовёт плашка приглашения под балансом.
+ *
+ * Та же шапка стоит на экране участника акции, но там справа баланс: центр экрана занят
+ * дневной целью, и число переезжает в шапку.
  */
 defineProps<{
   name: string;
   callsign?: string;
   /** Прогресс акции. Нет — водитель не в акции, пилюли нет. */
   promo?: { done: number; total: number };
+  /** Баланс пилюлей — на экране акции, где центр занят дневной целью. */
+  balance?: string;
   texts: {
     profile: string;
     refresh: string;
@@ -42,6 +47,7 @@ defineEmits<{ profile: []; refresh: []; promo: [] }>();
         :label="texts.promo"
         @open="$emit('promo')"
       />
+      <AtomsNextMemberBalancePill v-if="balance" :points="balance" />
       <AtomsNextMemberIconButton :label="texts.refresh" size="l" @click="$emit('refresh')">
         <svg viewBox="0 0 24 24" width="19" height="19" fill="none" aria-hidden="true">
           <path d="M20 12a8 8 0 1 1-2.6-5.9" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />

@@ -153,3 +153,45 @@ export interface MemberPromoRuleView {
   highlighted: boolean;
   lines: MemberTextPart[][];
 }
+
+/** Ступень накала экрана участника: холодно, гранат, огонь — от взятых за день поездок. */
+export type MemberHeatStage = 1 | 2 | 3;
+
+/** Клетка дня в неделе акции. */
+export interface MemberWeekDayView {
+  id: string;
+  /** День недели капсом в клетке: «чт». */
+  weekday: string;
+  /** Число месяца: «1». */
+  day: string;
+  /**
+   * `done` — день зачтён, пять поездок взяты; `short` — выезжал и не добрал;
+   * `future` — день ещё не наступил или сегодня без поездок.
+   */
+  state: 'done' | 'short' | 'future';
+  /** Сегодняшний: обводка гранатом. Зачтённый сегодня остаётся и сегодняшним. */
+  today: boolean;
+  /** Доля взятых поездок от пяти — высота заливки, 0…1. */
+  fill: number;
+  /** Счёт в недобранном дне: «3/5». */
+  tally?: string;
+}
+
+/** Строка сундука на экране участника. */
+export interface MemberChestRowView {
+  id: string;
+  kind: MemberChestKind;
+  /** Картинка: закрыт с замком, приоткрыт — ждёт открытия, распахнут. */
+  image: 'closed' | 'ajar' | 'open';
+  name: string;
+  condition: string;
+  /** Сколько собрано — справа, когда открывать нечего. */
+  count?: string;
+  /**
+   * `idle` — ещё не ваш; `hot` — есть что открыть, золото; `mine` — ваш, гранатовой рамкой;
+   * `cold` — уже не набрать: гаснет, но остаётся на месте.
+   */
+  state: 'idle' | 'hot' | 'mine' | 'cold';
+  /** Главный приз недели — имя золотом. */
+  prize: boolean;
+}
