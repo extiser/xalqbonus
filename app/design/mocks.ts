@@ -1,7 +1,10 @@
 import type {
   MemberOperationDayView,
   MemberOrderDetailView,
+  MemberLanguage,
+  MemberLanguageOptionView,
   MemberOrderRowView,
+  MemberProfileFieldView,
   MemberRewardView,
 } from '~/types/memberView';
 
@@ -478,3 +481,87 @@ export const orderMock = { order: ORDER_PENDING, texts: ORDER_TEXTS };
 export const orderIssuedMock = { order: ORDER_ISSUED, texts: ORDER_TEXTS };
 export const orderCancelledMock = { order: ORDER_CANCELLED, texts: ORDER_TEXTS };
 export const orderExpiredMock = { order: ORDER_EXPIRED, texts: ORDER_TEXTS };
+
+// -------------------------------------------------------------------------- профиль
+
+/** Названия языков — на самих языках: узбекоговорящий найдёт «O'zbek» и на русском экране. */
+const LANGUAGE_OPTIONS: MemberLanguageOptionView[] = [
+  { language: 'ru', label: 'Русский' },
+  { language: 'uz', label: "O'zbek" },
+];
+
+/**
+ * Тексты профиля на обоих языках — шторка языка меняет экран на заглушках. Узбекские
+ * сняты с макета и там помечены черновыми: вычитывает переводчик перед выкатом.
+ */
+const PROFILE_TEXTS = {
+  ru: {
+    title: 'Профиль',
+    back: BACK,
+    settings: 'Настройки',
+    language: 'Язык',
+    notifications: 'Уведомления',
+    reset: 'Сбросить сессию',
+    licenseShow: 'Показать номер целиком',
+    licenseHide: 'Скрыть номер',
+    resetTitle: 'Сбросить сессию?',
+    resetSubtitle: [
+      'Приложение закроется, а бот пришлёт кнопку «Открыть приложение» — нажмите её, и всё загрузится заново.',
+      'Профиль и баллы не изменятся.',
+    ],
+    resetConfirm: 'Сбросить',
+    resetCancel: 'Отменить',
+    languageSubtitle: 'Приложение и уведомления бота — на этом языке',
+    save: 'Сохранить',
+    close: 'Закрыть',
+  },
+  uz: {
+    title: 'Profil',
+    back: 'Orqaga',
+    settings: 'Sozlamalar',
+    language: 'Til',
+    notifications: 'Bildirishnomalar',
+    reset: 'Seansni qayta boshlash',
+    // Подписей глазика и шторки сброса на узбекском в макете нет — стоят русские,
+    // придумывать перевод здесь некому.
+    licenseShow: 'Показать номер целиком',
+    licenseHide: 'Скрыть номер',
+    resetTitle: 'Сбросить сессию?',
+    resetSubtitle: [
+      'Приложение закроется, а бот пришлёт кнопку «Открыть приложение» — нажмите её, и всё загрузится заново.',
+      'Профиль и баллы не изменятся.',
+    ],
+    resetConfirm: 'Сбросить',
+    resetCancel: 'Отменить',
+    languageSubtitle: 'Ilova va bot bildirishnomalari — shu tilda',
+    save: 'Saqlash',
+    close: 'Yopish',
+  },
+};
+
+const PROFILE_FIELDS: Record<MemberLanguage, MemberProfileFieldView[]> = {
+  ru: [
+    { id: 'phone', label: 'Телефон', value: '+998 90 123-45-67' },
+    { id: 'telegram', label: 'Telegram ID', value: '5812345670' },
+    { id: 'callsign', label: 'Позывной', value: 'А-247' },
+  ],
+  uz: [
+    { id: 'phone', label: 'Telefon', value: '+998 90 123-45-67' },
+    { id: 'telegram', label: 'Telegram ID', value: '5812345670' },
+    { id: 'callsign', label: 'Pozivnoy', value: 'А-247' },
+  ],
+};
+
+/** Профиль на языке водителя: всё, кроме открытых шторок и глазика, — их держит страница. */
+export function profileMock(language: MemberLanguage) {
+  return {
+    lastName: 'Рахимов',
+    givenNames: 'Бахтиёр Умарович',
+    fields: PROFILE_FIELDS[language],
+    license: { label: language === 'ru' ? 'Номер ВУ' : 'Guvohnoma raqami', full: 'AF4471826', tail: '1826' },
+    language,
+    languageOptions: LANGUAGE_OPTIONS,
+    notificationsValue: language === 'ru' ? 'Включены' : 'Yoqilgan',
+    texts: PROFILE_TEXTS[language],
+  };
+}

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useDesignFonts } from '~/design/fonts';
 import {
   homeErrorsMock,
@@ -25,8 +25,10 @@ import {
   orderExpiredMock,
   orderIssuedMock,
   orderMock,
+  profileMock,
 } from '~/design/mocks';
 import { findDesignScreen } from '~/design/screens';
+import type { MemberLanguage } from '~/types/memberView';
 
 /**
  * Один экран служебной страницы `/design` — на заглушках, в колонке телефона.
@@ -107,6 +109,20 @@ const order = computed(() =>
   }),
 );
 
+// Профиль: глазик, открытая шторка и язык живут здесь, компонент только рисует их.
+const licenseRevealed = ref(false);
+const profileSheet = ref<'none' | 'reset' | 'language'>(
+  slug.value === 'profile-language' ? 'language' : slug.value === 'profile-reset' ? 'reset' : 'none',
+);
+const profileLanguage = ref<MemberLanguage>('ru');
+const isProfile = computed(() => slug.value.startsWith('profile'));
+const profile = computed(() => profileMock(profileLanguage.value));
+
+function saveLanguage(language: MemberLanguage): void {
+  profileLanguage.value = language;
+  profileSheet.value = 'none';
+}
+
 /** Экран заказа по номеру: у каждого нарисованного заказа своё состояние экрана. */
 const ORDER_SCREENS: Record<string, string> = {
   '1042': 'order',
@@ -147,6 +163,20 @@ function go(target: string): void {
       <OrganismsNextMemberOrdersScreen v-else-if="orders" v-bind="orders" @back="go('home')" @open="openOrder" />
 
       <OrganismsNextMemberOrderScreen v-else-if="order" v-bind="order" @back="go('orders')" />
+
+      <OrganismsNextMemberProfileScreen
+        v-else-if="isProfile"
+        v-bind="profile"
+        :license-revealed="licenseRevealed"
+        :sheet="profileSheet"
+        @back="go('home')"
+        @toggle-license="licenseRevealed = !licenseRevealed"
+        @open-language="profileSheet = 'language'"
+        @ask-reset="profileSheet = 'reset'"
+        @reset="profileSheet = 'none'"
+        @close="profileSheet = 'none'"
+        @save="saveLanguage"
+      />
     </div>
   </div>
 </template>

@@ -65,6 +65,14 @@ export const DESIGN_GROUPS: DesignGroup[] = [
       { slug: 'order-expired', title: 'Не забран за сутки', source: 'app/order-screen-states.html' },
     ],
   },
+  {
+    title: 'Профиль',
+    screens: [
+      { slug: 'profile', title: 'Профиль — глазик, шторки сброса и языка', source: 'app/profile-screen.html, artboard/language-sheet.html' },
+      { slug: 'profile-language', title: 'Открыта шторка языка', source: 'artboard/language-sheet.html' },
+      { slug: 'profile-reset', title: 'Открыта шторка сброса', source: 'app/profile-screen.html' },
+    ],
+  },
 ];
 
 export function findDesignScreen(slug: string): DesignScreen | undefined {
