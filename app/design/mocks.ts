@@ -177,7 +177,6 @@ export const homeLoadingMock = {
   history: { state: 'loading' as const, days: [] },
 };
 
-export const sharedTexts = { back: BACK, retry: RETRY };
 
 // ------------------------------------------------------------------- история баллов
 
@@ -794,7 +793,6 @@ export function campaignMock(scene: { heat?: number; week?: number; chests?: num
   };
 }
 
-export const CAMPAIGN_SCENE_COUNTS = { heat: HEAT_SCENES.length, week: WEEK_SCENES.length, chests: CHEST_SCENES.length };
 
 // ------------------------------------------------------------ шторка «Сундуки дня»
 
@@ -869,7 +867,6 @@ export function dayChestsMock(scene = 1) {
   };
 }
 
-export const DAY_CHEST_SCENE_COUNT = DAY_CHEST_SCENES.length;
 
 // --------------------------------------------------- шторки сундука трёх дней и недели
 
