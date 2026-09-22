@@ -29,6 +29,8 @@ import {
   promoHeroMock,
   campaignMock,
   dayChestsMock,
+  bigChestMock,
+  bigChestNote,
 } from '~/design/mocks';
 import { findDesignScreen } from '~/design/screens';
 import type { MemberChestCardView, MemberLanguage, MemberRewardTicketView } from '~/types/memberView';
@@ -157,6 +159,15 @@ function markOpened(cardId: string): void {
   );
 }
 
+// Шторка крупного сундука: после «Готово» сундук становится открытым — как после ответа сервера.
+const bigChestMatch = /^big-chest-(3days|week)(?:-(\d+))?$/.exec(slug.value);
+const bigChestKind = bigChestMatch?.[1] === 'week' ? 'week' : '3days';
+const bigChest = bigChestMatch ? bigChestMock(bigChestKind, bigChestMatch[2] ? Number(bigChestMatch[2]) - 1 : 3) : undefined;
+const bigChestState = ref(bigChest?.state ?? 'locked');
+const bigChestTexts = computed(() =>
+  bigChest ? { ...bigChest.texts, ...bigChestNote(bigChestKind, bigChestState.value) } : undefined,
+);
+
 /** Лист ступеней карточки награды — все четыре металла рядом. */
 const REWARD_TICKETS: MemberRewardTicketView[] = [
   { tier: 'steel', stub: 'Сундук дня', title: '+53 балла', subtitle: 'уже на балансе' },
@@ -236,6 +247,20 @@ function go(target: string): void {
           :texts="dayChests.texts"
           @close="sheetOpen = false"
           @done="markOpened"
+          @link="go('rewards')"
+        />
+      </template>
+
+      <template v-else-if="bigChest && bigChestTexts">
+        <OrganismsNextMemberCampaignScreen v-bind="campaignMock()" @chest="sheetOpen = true" />
+        <OrganismsNextMemberBigChestSheet
+          :open="sheetOpen"
+          :kind="bigChest.kind"
+          :state="bigChestState"
+          :ticket="bigChest.ticket"
+          :texts="bigChestTexts"
+          @close="sheetOpen = false"
+          @done="bigChestState = 'opened'"
           @link="go('rewards')"
         />
       </template>

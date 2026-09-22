@@ -870,3 +870,73 @@ export function dayChestsMock(scene = 1) {
 }
 
 export const DAY_CHEST_SCENE_COUNT = DAY_CHEST_SCENES.length;
+
+// --------------------------------------------------- шторки сундука трёх дней и недели
+
+type BigChestKind = '3days' | 'week';
+type BigChestState = 'locked' | 'ready' | 'opened' | 'lost';
+
+const BIG_CHEST = {
+  '3days': {
+    title: 'Сундук трёх дней',
+    subtitle: 'Всего 3 дня по 5 поездок — откройте сразу, конца акции ждать не нужно',
+    locked: ['Завершите 3 дня по 5 поездок', 'Завершите ещё 2 дня по 5 поездок', 'Завершите ещё 1 день по 5 поездок'],
+    prize: '+132 балла',
+  },
+  week: {
+    title: 'Сундук недели',
+    subtitle: 'Всего 5 дней по 5 поездок — главный сундук акции, в нём самая крупная награда',
+    locked: ['Завершите 5 дней по 5 поездок', 'Завершите ещё 3 дня по 5 поездок', 'Завершите ещё 1 день по 5 поездок'],
+    prize: '+553 балла',
+  },
+} as const;
+
+/**
+ * Сцены листов `05-*-chest-states.html`: три закрытых с убывающим счётом, заработан,
+ * открыт, упущен. Седьмая — сам вылет, он играется нажатием на заработанный.
+ */
+const BIG_CHEST_SCENES: { state: BigChestState; locked?: 0 | 1 | 2 }[] = [
+  { state: 'locked', locked: 0 },
+  { state: 'locked', locked: 1 },
+  { state: 'locked', locked: 2 },
+  { state: 'ready' },
+  { state: 'opened' },
+  { state: 'lost' },
+];
+
+export function bigChestNote(kind: BigChestKind, state: BigChestState, locked: 0 | 1 | 2 = 2): { note: string; noteLink?: string } {
+  if (state === 'ready') {
+    return { note: 'Нажмите, чтобы открыть' };
+  }
+
+  if (state === 'opened') {
+    return { note: 'Награда получена — она в разделе', noteLink: '«Мои награды и призы»' };
+  }
+
+  if (state === 'lost') {
+    return { note: 'Не в этот раз — окно закончилось' };
+  }
+
+  return { note: BIG_CHEST[kind].locked[locked] };
+}
+
+export function bigChestMock(kind: BigChestKind, scene = 3) {
+  const picked = BIG_CHEST_SCENES[scene] ?? BIG_CHEST_SCENES[3]!;
+  const chest = BIG_CHEST[kind];
+
+  return {
+    kind,
+    state: picked.state,
+    ticket: { tier: 'gold' as const, stub: chest.title, title: chest.prize, subtitle: 'уже на балансе' },
+    texts: {
+      title: chest.title,
+      titleDone: 'Награда получена!',
+      subtitle: chest.subtitle,
+      ...bigChestNote(kind, picked.state, picked.locked),
+      close: 'Закрыть',
+      done: 'Готово',
+      revealNote: 'Посмотреть награду можно в разделе',
+      link: '«Мои награды и призы»',
+    },
+  };
+}

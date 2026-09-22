@@ -120,6 +120,30 @@ export const DESIGN_GROUPS: DesignGroup[] = [
       { slug: 'reward-tickets', title: 'Карточки награды — четыре ступени', source: 'comeback/06-reward-card-sketch.html' },
     ],
   },
+  {
+    title: 'Шторка «Сундук трёх дней»',
+    screens: [
+      { slug: 'big-chest-3days', title: 'Эталон — заработан, открытие с вылетом награды', source: 'comeback/05-3days-chest-sheet.html' },
+      { slug: 'big-chest-3days-1', title: 'Сцена 1: Окно началось, дней нет — тап отказывает', source: 'comeback/05-3days-chest-states.html' },
+      { slug: 'big-chest-3days-2', title: 'Сцена 2: Один день взят', source: 'comeback/05-3days-chest-states.html' },
+      { slug: 'big-chest-3days-3', title: 'Сцена 3: До сундука один день', source: 'comeback/05-3days-chest-states.html' },
+      { slug: 'big-chest-3days-4', title: 'Сцена 4: Сундук заработан — нажмите, чтобы открыть', source: 'comeback/05-3days-chest-states.html' },
+      { slug: 'big-chest-3days-5', title: 'Сцена 5: Открыт', source: 'comeback/05-3days-chest-states.html' },
+      { slug: 'big-chest-3days-6', title: 'Сцена 6: Окно кончилось — упущен', source: 'comeback/05-3days-chest-states.html' },
+    ],
+  },
+  {
+    title: 'Шторка «Сундук недели»',
+    screens: [
+      { slug: 'big-chest-week', title: 'Эталон — заработан, открытие с вылетом награды', source: 'comeback/05-week-chest-sheet.html' },
+      { slug: 'big-chest-week-1', title: 'Сцена 1: Окно началось, дней нет — тап отказывает', source: 'comeback/05-week-chest-states.html' },
+      { slug: 'big-chest-week-2', title: 'Сцена 2: Один день взят', source: 'comeback/05-week-chest-states.html' },
+      { slug: 'big-chest-week-3', title: 'Сцена 3: До сундука один день', source: 'comeback/05-week-chest-states.html' },
+      { slug: 'big-chest-week-4', title: 'Сцена 4: Сундук заработан — нажмите, чтобы открыть', source: 'comeback/05-week-chest-states.html' },
+      { slug: 'big-chest-week-5', title: 'Сцена 5: Открыт', source: 'comeback/05-week-chest-states.html' },
+      { slug: 'big-chest-week-6', title: 'Сцена 6: Окно кончилось — упущен', source: 'comeback/05-week-chest-states.html' },
+    ],
+  },
 ];
 
 export function findDesignScreen(slug: string): DesignScreen | undefined {
