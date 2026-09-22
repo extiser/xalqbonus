@@ -39,6 +39,15 @@ export const DESIGN_GROUPS: DesignGroup[] = [
       { slug: 'history-loading', title: 'Ждём ответа', source: 'artboard/history-block.html' },
     ],
   },
+  {
+    title: 'Мои награды',
+    screens: [
+      { slug: 'rewards', title: 'Ждут в офисе и история', source: 'app/rewards-screen.html' },
+      { slug: 'rewards-nothing', title: 'Ждущих нет — только история', source: 'app/rewards-screen.md' },
+      { slug: 'rewards-empty', title: 'Наград не было', source: 'artboard/rewards-block.html' },
+      { slug: 'rewards-error', title: 'Не загрузилось', source: 'artboard/rewards-block.html' },
+    ],
+  },
 ];
 
 export function findDesignScreen(slug: string): DesignScreen | undefined {

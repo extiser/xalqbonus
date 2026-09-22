@@ -14,6 +14,10 @@ import {
   historyLoadingMock,
   historyMock,
   historyReasonsMock,
+  rewardsEmptyMock,
+  rewardsErrorMock,
+  rewardsMock,
+  rewardsNothingToPickMock,
 } from '~/design/mocks';
 import { findDesignScreen } from '~/design/screens';
 
@@ -70,6 +74,15 @@ const history = computed(() =>
   }),
 );
 
+const rewards = computed(() =>
+  pick({
+    rewards: rewardsMock,
+    'rewards-nothing': rewardsNothingToPickMock,
+    'rewards-empty': rewardsEmptyMock,
+    'rewards-error': rewardsErrorMock,
+  }),
+);
+
 function go(target: string): void {
   void navigateTo(`/design/${target}`);
 }
@@ -92,6 +105,8 @@ function go(target: string): void {
       />
 
       <OrganismsNextMemberHistoryScreen v-else-if="history" v-bind="history" @back="go('home')" />
+
+      <OrganismsNextMemberRewardsScreen v-else-if="rewards" v-bind="rewards" @back="go('home')" />
     </div>
   </div>
 </template>

@@ -264,3 +264,63 @@ export const historyReasonsMock = { ...historyMock, days: HISTORY_ALL_REASONS, h
 export const historyEmptyMock = { ...historyMock, state: 'empty' as const, days: [], hasMore: false };
 export const historyErrorMock = { ...historyMock, state: 'error' as const, days: [], hasMore: false };
 export const historyLoadingMock = { ...historyMock, state: 'loading' as const, days: [], hasMore: false };
+
+// ---------------------------------------------------------------------- мои награды
+
+const REWARDS_TEXTS = {
+  title: 'Мои награды',
+  back: BACK,
+  awaitingGroup: 'Ждут в офисе',
+  pastGroup: 'История наград',
+  codeTitle: 'Код для выдачи — покажите этот экран в офисе',
+  empty: 'Наград пока нет.',
+  error: 'Не удалось загрузить награды. Попробуйте ещё раз.',
+  retry: RETRY,
+};
+
+const REWARDS_AWAITING: MemberRewardView[] = [
+  {
+    id: 'reward-checker',
+    title: 'Шашка Taxi',
+    status: 'awaiting',
+    origin: 'Акция «Неделя возвращения» · сундук недели',
+    code: '73418',
+    state: 'Ждёт в офисе до 5 октября',
+    office: 'Офис на Чиланзаре, ул. Бунёдкор, 12',
+  },
+  {
+    id: 'reward-tire',
+    title: 'Чернитель шин',
+    status: 'awaiting',
+    origin: 'Акция «Неделя возвращения» · сундук трёх дней',
+    code: '58072',
+    state: 'Ждёт в офисе до 9 октября',
+    office: 'Офис на Чиланзаре, ул. Бунёдкор, 12',
+  },
+];
+
+const REWARDS_PAST: MemberRewardView[] = [
+  { id: 'reward-300', title: '300 баллов', status: 'credited', origin: 'Акция «Неделя возвращения» · сундук дня', state: 'На балансе' },
+  {
+    id: 'reward-freshener',
+    title: 'Освежитель «Вертолёт»',
+    status: 'issued',
+    origin: 'Вручил парк · за помощь на линии',
+    state: 'Получена 20 сентября',
+    office: 'Офис на Чиланзаре',
+  },
+  { id: 'reward-150', title: '150 баллов', status: 'credited', origin: 'Акция «Неделя возвращения» · сундук дня', state: 'На балансе' },
+  {
+    id: 'reward-aroma',
+    title: 'Ароматизатор «Гранат»',
+    status: 'expired',
+    origin: 'Акция «Неделя возвращения» · сундук дня',
+    state: 'Срок вышел 12 сентября — награда не получена',
+    office: 'Офис на Чиланзаре',
+  },
+];
+
+export const rewardsMock = { state: 'ready' as const, awaiting: REWARDS_AWAITING, past: REWARDS_PAST, texts: REWARDS_TEXTS };
+export const rewardsNothingToPickMock = { ...rewardsMock, awaiting: [] };
+export const rewardsEmptyMock = { ...rewardsMock, state: 'empty' as const, awaiting: [], past: [] };
+export const rewardsErrorMock = { ...rewardsMock, state: 'error' as const, awaiting: [], past: [] };
