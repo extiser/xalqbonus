@@ -107,6 +107,19 @@ export const DESIGN_GROUPS: DesignGroup[] = [
       { slug: 'campaign-chests-11', title: 'Сундуки 11: Всё открыто — акция закрыта', source: 'comeback/03-member-chests-states.html' },
     ],
   },
+  {
+    title: 'Шторка «Сундуки дня»',
+    screens: [
+      { slug: 'day-chests', title: 'Эталон — открытие сундука с вылетом награды', source: 'comeback/04-day-chests-sheet.html' },
+      { slug: 'day-chests-1', title: 'Сцена 1: День 1, первый заход', source: 'comeback/04-day-chests-sheet-states.html' },
+      { slug: 'day-chests-2', title: 'Сцена 2: Середина окна — эталон, нажмите золотой сундук', source: 'comeback/04-day-chests-sheet-states.html' },
+      { slug: 'day-chests-3', title: 'Сцена 3: Сегодня цель взята', source: 'comeback/04-day-chests-sheet-states.html' },
+      { slug: 'day-chests-4', title: 'Сцена 4: Семь из семи', source: 'comeback/04-day-chests-sheet-states.html' },
+      { slug: 'day-chests-5', title: 'Сцена 5: Окно кончилось, неоткрытые остались', source: 'comeback/04-day-chests-sheet-states.html' },
+      { slug: 'day-chests-6', title: 'Сцена 6: Сундуки вскрыты за водителя', source: 'comeback/04-day-chests-sheet-states.html' },
+      { slug: 'reward-tickets', title: 'Карточки награды — четыре ступени', source: 'comeback/06-reward-card-sketch.html' },
+    ],
+  },
 ];
 
 export function findDesignScreen(slug: string): DesignScreen | undefined {

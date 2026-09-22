@@ -1,4 +1,5 @@
 import type {
+  MemberChestCardView,
   MemberChestKind,
   MemberChestRowView,
   MemberHeatStage,
@@ -9,6 +10,7 @@ import type {
   MemberOrderRowView,
   MemberProfileFieldView,
   MemberPromoRuleView,
+  MemberRewardTicketView,
   MemberRewardView,
   MemberWeekDayView,
 } from '~/types/memberView';
@@ -793,3 +795,78 @@ export function campaignMock(scene: { heat?: number; week?: number; chests?: num
 }
 
 export const CAMPAIGN_SCENE_COUNTS = { heat: HEAT_SCENES.length, week: WEEK_SCENES.length, chests: CHEST_SCENES.length };
+
+// ------------------------------------------------------------ шторка «Сундуки дня»
+
+/**
+ * Карточки строкой: `o` открыт, `h` к открытию, `l3` упущен с тремя поездками,
+ * `t3` сегодня с тремя, `c` впереди. «o,h,l3,t3,c,c,c» — рабочая сцена эталона.
+ */
+function dayCards(pattern: string): MemberChestCardView[] {
+  return pattern.split(',').map((code, index) => {
+    const id = `day-${index + 1}`;
+
+    if (code === 'o') {
+      return { id, state: 'open' as const, label: 'открыт' };
+    }
+
+    if (code === 'h') {
+      return { id, state: 'hot' as const, label: 'открыть' };
+    }
+
+    if (code.startsWith('l')) {
+      return { id, state: 'lost' as const, tag: `${code.slice(1)} из 5`, label: 'упущен' };
+    }
+
+    if (code.startsWith('t')) {
+      const trips = Number(code.slice(1));
+
+      return { id, state: 'today' as const, tag: 'сегодня', label: `${trips} из 5`, fill: trips / 5 };
+    }
+
+    return { id, state: 'cold' as const, label: 'впереди' };
+  });
+}
+
+const DAY_CHESTS_SUBTITLE = 'Один сундук за каждый день, в котором вы завершили 5 поездок. Открыть можно в любой день до конца акции — он не пропадёт';
+
+/** Сцены листа `04-day-chests-sheet-states.html`; седьмая — сам вылет, он играется нажатием. */
+const DAY_CHEST_SCENES = [
+  { cards: dayCards('t0,c,c,c,c,c,c'), subtitle: DAY_CHESTS_SUBTITLE },
+  { cards: dayCards('o,h,l3,t3,c,c,c'), subtitle: DAY_CHESTS_SUBTITLE },
+  { cards: dayCards('o,l4,h,c,c,c,c'), subtitle: DAY_CHESTS_SUBTITLE },
+  { cards: dayCards('o,o,o,o,o,o,o'), subtitle: DAY_CHESTS_SUBTITLE },
+  {
+    cards: dayCards('o,h,l3,o,o,h,l0'),
+    subtitle: 'Акция закончилась. Неоткрытые сундуки вскроются сами завтра в 09:00 — награды придут в раздел «Мои награды и призы».',
+  },
+  { cards: dayCards('o,o,l3,o,o,o,l0'), subtitle: 'Сундуки вскрыты. Награды ждут в разделе «Мои награды и призы».' },
+];
+
+/** Награда из сундука дня — золотая ступень, сумма из эталона (заглушка: наполнение не решено). */
+const DAY_CHEST_TICKET: MemberRewardTicketView = {
+  tier: 'gold',
+  stub: 'Сундук дня',
+  title: '+36 баллов',
+  subtitle: 'уже на балансе',
+};
+
+export function dayChestsMock(scene = 1) {
+  const picked = DAY_CHEST_SCENES[scene] ?? DAY_CHEST_SCENES[1]!;
+
+  return {
+    cards: picked.cards,
+    ticket: DAY_CHEST_TICKET,
+    texts: {
+      title: 'Сундуки дня',
+      titleDone: 'Награда получена!',
+      subtitle: picked.subtitle,
+      close: 'Закрыть',
+      done: 'Готово',
+      note: 'Посмотреть награду можно в разделе',
+      link: '«Мои награды и призы»',
+    },
+  };
+}
+
+export const DAY_CHEST_SCENE_COUNT = DAY_CHEST_SCENES.length;

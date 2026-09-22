@@ -19,6 +19,12 @@ const props = defineProps<{
   title: string;
   /** Подпись под заголовком. Несколько абзацев — массивом, каждый своей строкой. */
   subtitle?: string | readonly string[];
+  /**
+   * Подпись схлопывается — когда над наградой правило больше ничего не добавляет.
+   * Схлопывается плавно, теми же 0.9 с, что сундук разгоняется: иначе шторку гнало бы
+   * то вверх, то вниз.
+   */
+  subtitleHidden?: boolean;
 }>();
 
 const emit = defineEmits<{ close: [] }>();
@@ -57,13 +63,17 @@ const subtitleLines = computed((): readonly string[] => {
   >
     <div class="text-center">
       <div class="mb-2.5 text-[24px] font-extrabold tracking-[-0.2px]">{{ title }}</div>
-      <p
-        v-for="line in subtitleLines"
-        :key="line"
-        class="m-0 mt-1 text-[13px] font-light leading-[1.65] text-xb-light"
-      >
-        {{ line }}
-      </p>
+      <div class="member-sheet-subtitle" :class="subtitleHidden ? 'member-sheet-subtitle-hidden' : ''">
+        <div class="min-h-0 overflow-hidden">
+          <p
+            v-for="line in subtitleLines"
+            :key="line"
+            class="m-0 mt-1 text-[13px] font-light leading-[1.65] text-xb-light"
+          >
+            {{ line }}
+          </p>
+        </div>
+      </div>
     </div>
 
     <div v-if="$slots.default" class="mt-[22px]">
@@ -87,7 +97,22 @@ const subtitleLines = computed((): readonly string[] => {
   transform: translate(-50%, 0);
 }
 
+.member-sheet-subtitle {
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition:
+    grid-template-rows 0.9s cubic-bezier(0.36, 0.07, 0.19, 0.97),
+    opacity 0.9s ease;
+}
+
+.member-sheet-subtitle-hidden {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .member-sheet-subtitle,
   .member-sheet,
   .member-sheet-backdrop {
     transition: none;

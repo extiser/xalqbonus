@@ -195,3 +195,33 @@ export interface MemberChestRowView {
   /** Главный приз недели — имя золотом. */
   prize: boolean;
 }
+
+/** Ступень карточки награды — металл: у сундука дня по редкости, у крупных одна. */
+export type MemberRewardTier = 'steel' | 'bronze' | 'silver' | 'gold';
+
+/** Что написано на карточке награды, вылетающей из сундука. */
+export interface MemberRewardTicketView {
+  tier: MemberRewardTier;
+  /** Корешок — какой сундук: «Сундук дня». */
+  stub: string;
+  /** Сумма: «+36 баллов». */
+  title: string;
+  /** Подпись: «уже на балансе». */
+  subtitle: string;
+}
+
+/** Карточка дня в шторке «Сундуки дня». */
+export interface MemberChestCardView {
+  id: string;
+  /**
+   * `cold` — впереди; `today` — сегодняшний, ещё решается; `lost` — день прошёл без цели;
+   * `hot` — сундук ваш и ждёт открытия; `open` — открыт.
+   */
+  state: 'cold' | 'today' | 'lost' | 'hot' | 'open';
+  /** Ярлык сверху: «сегодня», «3 из 5». */
+  tag?: string;
+  /** Подпись снизу: «впереди», «открыть», «упущен». */
+  label: string;
+  /** Доля взятых поездок — стакан у сегодняшнего, 0…1. */
+  fill?: number;
+}

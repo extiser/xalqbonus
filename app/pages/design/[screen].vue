@@ -28,9 +28,10 @@ import {
   profileMock,
   promoHeroMock,
   campaignMock,
+  dayChestsMock,
 } from '~/design/mocks';
 import { findDesignScreen } from '~/design/screens';
-import type { MemberLanguage } from '~/types/memberView';
+import type { MemberChestCardView, MemberLanguage, MemberRewardTicketView } from '~/types/memberView';
 
 /**
  * Один экран служебной страницы `/design` — на заглушках, в колонке телефона.
@@ -143,6 +144,27 @@ const campaign = computed(() => {
   return campaignMock({ [match[1]]: Number(match[2]) - 1 });
 });
 
+// Шторка «Сундуки дня» над экраном участника: карточки живут здесь — открытый сундук
+// становится открытым по «Готово», как это сделал бы ответ сервера.
+const dayChestsMatch = /^day-chests(?:-(\d+))?$/.exec(slug.value);
+const dayChests = dayChestsMatch ? dayChestsMock(dayChestsMatch[1] ? Number(dayChestsMatch[1]) - 1 : 1) : undefined;
+const dayChestCards = ref<MemberChestCardView[]>(dayChests?.cards ?? []);
+const sheetOpen = ref(true);
+
+function markOpened(cardId: string): void {
+  dayChestCards.value = dayChestCards.value.map((card) =>
+    card.id === cardId ? { id: card.id, state: 'open', label: 'открыт' } : card,
+  );
+}
+
+/** Лист ступеней карточки награды — все четыре металла рядом. */
+const REWARD_TICKETS: MemberRewardTicketView[] = [
+  { tier: 'steel', stub: 'Сундук дня', title: '+53 балла', subtitle: 'уже на балансе' },
+  { tier: 'bronze', stub: 'Сундук дня', title: '+132 балла', subtitle: 'уже на балансе' },
+  { tier: 'silver', stub: 'Сундук дня', title: '+263 балла', subtitle: 'уже на балансе' },
+  { tier: 'gold', stub: 'Сундук дня', title: '+526 баллов', subtitle: 'уже на балансе' },
+];
+
 /** Экран заказа по номеру: у каждого нарисованного заказа своё состояние экрана. */
 const ORDER_SCREENS: Record<string, string> = {
   '1042': 'order',
@@ -204,6 +226,23 @@ function go(target: string): void {
         @accept="go('campaign')"
         @decline="go('home-invite')"
       />
+
+      <template v-else-if="dayChests">
+        <OrganismsNextMemberCampaignScreen v-bind="campaignMock()" @chest="sheetOpen = true" />
+        <OrganismsNextMemberDayChestsSheet
+          :open="sheetOpen"
+          :cards="dayChestCards"
+          :ticket="dayChests.ticket"
+          :texts="dayChests.texts"
+          @close="sheetOpen = false"
+          @done="markOpened"
+          @link="go('rewards')"
+        />
+      </template>
+
+      <div v-else-if="slug === 'reward-tickets'" class="grid grid-cols-2 gap-x-6 gap-y-10 px-6 py-10">
+        <MoleculesNextMemberRewardTicket v-for="ticket in REWARD_TICKETS" :key="ticket.tier" :ticket="ticket" />
+      </div>
 
       <OrganismsNextMemberCampaignScreen v-else-if="campaign" v-bind="campaign" @profile="go('profile')" @chest="(chestId) => go(chestId === 'day' ? 'day-chests' : `big-chest-${chestId}`)" />
     </div>
