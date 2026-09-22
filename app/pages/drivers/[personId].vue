@@ -53,8 +53,16 @@ const {
   { query: { limit: HISTORY_LIMIT, offset: historyOffset } },
 );
 
+// Награды — своей ручкой: читаются отдельно от карточки и живут своим порядком (issue #175).
+const {
+  data: rewards,
+  status: rewardsStatus,
+  refresh: refreshRewards,
+} = await useFetch(() => `/api/drivers/${personId.value}/rewards`);
+
 const cardState = computed(() => toLoadState(cardStatus.value));
 const historyState = computed(() => toLoadState(historyStatus.value));
+const rewardsState = computed(() => toLoadState(rewardsStatus.value));
 
 /** Человека нет — это ответ, а не отказ запроса, и звучать он обязан по-разному. */
 const isMissing = computed(() => cardError.value?.statusCode === 404);
@@ -167,8 +175,9 @@ const GRANT_FIELDS: readonly ManualRewardField[] = [
 ];
 
 /**
- * Выдача, затем перечитывание карточки и истории: награда баллами меняет баланс и встаёт
- * строкой в журнал, и обновить одно без другого значит показать их несогласованными.
+ * Выдача, затем перечитывание карточки, истории и наград: награда баллами меняет баланс
+ * и встаёт строкой в журнал, а любая награда — строкой в разделе наград, и обновить одно
+ * без другого значит показать их несогласованными.
  */
 const grantReward = async (body: ManualRewardRequestBody): Promise<void> => {
   granting.value = true;
@@ -187,7 +196,7 @@ const grantReward = async (body: ManualRewardRequestBody): Promise<void> => {
       ? `Выдано. Код для стойки: ${result.code}`
       : 'Выдано: баллы зачислены.';
     historyOffset.value = 0;
-    await Promise.all([refreshCard(), refreshHistory()]);
+    await Promise.all([refreshCard(), refreshHistory(), refreshRewards()]);
   } catch (error) {
     const field = failureField(error);
     grantError.value = failureText(error);
@@ -255,6 +264,7 @@ const grantReward = async (body: ManualRewardRequestBody): Promise<void> => {
         :notice="grantNotice"
         @submit="grantReward"
       />
+      <OrganismsDriverRewards :state="rewardsState" :data="rewards ?? null" />
       <OrganismsDriverMembership :card="card" />
       <OrganismsDriverParkProfiles :card="card" />
       <OrganismsDriverOperations

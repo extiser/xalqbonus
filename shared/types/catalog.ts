@@ -221,8 +221,42 @@ export type StockMovementEntry = {
   createdAt: string;
 };
 
-export type StockMovementsResponse = {
-  movements: StockMovementEntry[];
+/** Что случилось с произвольной наградой: вручена, выдана у стойки, сгорела. */
+export type OfficeRewardEvent = 'granted' | 'issued' | 'expired';
+
+/**
+ * Событие произвольной награды в ленте офиса (issue #175). Движения у неё нет — на складе
+ * ничего не лежало, — и без этой строки выданную награду офис не видел бы нигде. Несёт то же,
+ * что строка движения: что за награда, что произошло, когда и кто это сделал.
+ */
+export type OfficeRewardEventEntry = {
+  rewardId: string;
+  event: OfficeRewardEvent;
+  rewardTitle: string;
+  /** Акция — у вручения наградой акции: вручила она, а не сотрудник. */
+  campaignTitle: string | null;
+  /** Кто сделал. Пуст у сгорания — его делает воркер — и у вручения акцией. */
+  employeeName: string | null;
+  /** Пояснение к вручению. У выдачи и сгорания пусто. */
+  note: string | null;
+  createdAt: string;
+};
+
+/**
+ * Строка ленты офиса: движение остатка или событие награды без движения. Размечена `type`:
+ * экран решает по нему, какую строку рисовать.
+ */
+export type OfficeFeedEntry =
+  | { type: 'movement'; movement: StockMovementEntry }
+  | { type: 'reward'; reward: OfficeRewardEventEntry };
+
+/**
+ * Лента офиса страницей, новыми вперёд: движения остатков и события произвольных наград
+ * вперемешку по времени. Журнал движений при этом не расширяется — строки без товара
+ * сломали бы сверку остатка с ним.
+ */
+export type OfficeFeedResponse = {
+  entries: OfficeFeedEntry[];
   total: number;
   limit: number;
   offset: number;

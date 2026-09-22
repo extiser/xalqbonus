@@ -310,3 +310,51 @@ export const findAwaitingOfficeRewardByCode = async (
 
   return rows[0] ?? null;
 };
+
+export type DriverRewardRow = PersonRewardRow & {
+  /** Кто выдал у стойки. Пусто у всех, кроме выданной. */
+  issuedByName: string | null;
+  /** Кто вручил. Пусто у наград акции. */
+  grantedByName: string | null;
+};
+
+/**
+ * Награды человека глазами сотрудника в карточке водителя (issue #175): те же поля, что
+ * у раздела водителя, плюс имена сотрудников — кто вручил и кто выдал.
+ *
+ * Ждущие в офисе идут первыми независимо от даты — за ними водитель придёт, остальное история.
+ * Порядок стоит в запросе, а не на экране: иначе потолок срезал бы старую ждущую награду
+ * раньше свежей полученной.
+ */
+export const listDriverRewards = async (
+  personId: string,
+  limit: number,
+  client: Executor = db,
+): Promise<DriverRewardRow[]> =>
+  client.$queryRaw<DriverRewardRow[]>`
+    SELECT reward."id",
+           reward."kind",
+           reward."title",
+           reward."points",
+           reward."code",
+           reward."status",
+           reward."expires_at"  AS "expiresAt",
+           reward."issued_at"   AS "issuedAt",
+           reward."expired_at"  AS "expiredAt",
+           reward."source",
+           reward."source_note" AS "sourceNote",
+           campaign."title"     AS "campaignTitle",
+           office."name"        AS "officeName",
+           office."address"     AS "officeAddress",
+           issuer."full_name"   AS "issuedByName",
+           granter."full_name"  AS "grantedByName",
+           reward."created_at"  AS "createdAt"
+      FROM xb.rewards AS reward
+      LEFT JOIN xb.offices   AS office   ON office."id" = reward."office_id"
+      LEFT JOIN xb.campaigns AS campaign ON campaign."id" = reward."campaign_id"
+      LEFT JOIN xb.employees AS issuer   ON issuer."id" = reward."issued_by_employee_id"
+      LEFT JOIN xb.employees AS granter  ON granter."id" = reward."granted_by_employee_id"
+     WHERE reward."person_id" = ${personId}::uuid
+     ORDER BY (reward."status" = 'awaiting') DESC, reward."created_at" DESC
+     LIMIT ${limit}
+  `;

@@ -6,19 +6,19 @@ import { toLoadState } from '~/utils/loadState';
 import type {
   OfficeCardResponse,
   OfficeEmployeesResponse,
+  OfficeFeedResponse,
   OfficeRequestBody,
   OfficeResponse,
   OfficeStockResponse,
-  StockMovementsResponse,
   StockOperationResponse,
 } from '#shared/types/catalog';
 import type { EmployeeAccountsResponse } from '#shared/types/employee';
 
 /**
- * Страница офиса: правка, архив, состав сотрудников, остатки и журнал движений.
+ * Страница офиса: правка, архив, состав сотрудников, остатки и лента офиса.
  *
  * Запросов четыре, а не один: у блоков разная цена и разное листание, и валить их в одну
- * ручку значило бы перечитывать состав офиса при каждом перелистывании журнала.
+ * ручку значило бы перечитывать состав офиса при каждом перелистывании ленты.
  *
  * Данные берутся здесь, а не в компонентах: компонент принимает готовое свойством и о ручках
  * не знает (docs/frontend.md → «Данные в компоненты не ходят»).
@@ -31,17 +31,17 @@ definePageMeta({
 const route = useRoute();
 const officeId = computed(() => String(route.params.officeId));
 
-const MOVEMENTS_LIMIT = 25;
-const movementsOffset = ref(0);
+const FEED_LIMIT = 25;
+const feedOffset = ref(0);
 
 const { data: card, status: cardStatus, refresh: refreshCard } = await useFetch<OfficeCardResponse>(
   () => `/api/offices/${officeId.value}`,
 );
 const { data: stock, status: stockStatus, refresh: refreshStock } =
   await useFetch<OfficeStockResponse>(() => `/api/offices/${officeId.value}/stock`);
-const { data: movements, status: movementsStatus, refresh: refreshMovements } =
-  await useFetch<StockMovementsResponse>(() => `/api/offices/${officeId.value}/stock-movements`, {
-    query: { limit: MOVEMENTS_LIMIT, offset: movementsOffset },
+const { data: feed, status: feedStatus, refresh: refreshFeed } =
+  await useFetch<OfficeFeedResponse>(() => `/api/offices/${officeId.value}/feed`, {
+    query: { limit: FEED_LIMIT, offset: feedOffset },
   });
 const { data: accounts, status: accountsStatus } =
   await useFetch<EmployeeAccountsResponse>('/api/employees');
@@ -50,7 +50,7 @@ useHead({ title: () => `${card.value?.office.name ?? 'Офис'} — XalqBonus` 
 
 const cardState = computed(() => toLoadState(cardStatus.value));
 const stockState = computed(() => toLoadState(stockStatus.value));
-const movementsState = computed(() => toLoadState(movementsStatus.value));
+const feedState = computed(() => toLoadState(feedStatus.value));
 const accountsState = computed(() => toLoadState(accountsStatus.value));
 
 const archived = computed(() => card.value?.office.archivedAt !== null);
@@ -135,7 +135,7 @@ const runStockOperation = async (
       `/api/offices/${officeId.value}/stock/${productId}/${action}`,
       { method: 'POST', body },
     );
-    await Promise.all([refreshStock(), refreshMovements()]);
+    await Promise.all([refreshStock(), refreshFeed()]);
   } catch (error) {
     stockError.value = failureText(error);
   } finally {
@@ -217,10 +217,10 @@ const adjust = (payload: { productId: string; onHand: number; note: string }): P
         @adjust="adjust"
       />
 
-      <OrganismsStockMovementJournal
-        :state="movementsState"
-        :data="movements ?? null"
-        @page="movementsOffset = $event"
+      <OrganismsOfficeFeed
+        :state="feedState"
+        :data="feed ?? null"
+        @page="feedOffset = $event"
       />
     </template>
   </div>

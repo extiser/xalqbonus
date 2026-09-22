@@ -107,10 +107,12 @@ const submit = (): void => {
             type="checkbox"
             class="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
           />
-          <span class="text-sm font-medium text-slate-900">Для акции</span>
+          <span class="text-sm font-medium text-slate-900">
+            Приз: можно опубликовать без цены в баллах и выдавать наградой
+          </span>
         </label>
         <p class="text-sm text-slate-500">
-          Приз: публикуется без цены в баллах, приходуется и лежит в офисе как любой товар.
+          На витрину не влияет. Приходуется и лежит в офисе как любой товар.
         </p>
         <label class="flex items-center gap-3">
           <input
@@ -118,11 +120,13 @@ const submit = (): void => {
             type="checkbox"
             class="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
           />
-          <span class="text-sm font-medium text-slate-900">Не показывать в каталоге</span>
+          <span class="text-sm font-medium text-slate-900">
+            Скрыт с витрины: водитель не видит его в каталоге, даже если цена есть
+          </span>
         </label>
         <p class="text-sm text-slate-500">
-          Водитель не видит товар на витрине. Снимите отметку — товар выйдет на витрину без
-          повторного заведения, если у него есть цена в баллах.
+          На цену не влияет. Снимите отметку — товар выйдет на витрину без повторного
+          заведения, если у него есть цена в баллах.
         </p>
       </fieldset>
 
