@@ -15,6 +15,7 @@
 // перечисление, оно меняется нашей же миграцией. Импорт только типов — в сборку
 // не попадает ни байта.
 import type {
+  CampaignChestKind,
   CampaignParticipantOutcome,
   CampaignParticipantState,
   EmployeeRole,
@@ -267,6 +268,85 @@ export type MemberCampaignProgress = {
   weekBottom: MemberWeekLine | null;
   frozen: boolean;
   outcome: CampaignParticipantOutcome | null;
+  /** Лестница сундуков (issue #181). */
+  chests: MemberChestLadder;
+};
+
+/** Состояние ступени трёх дней или недели. */
+export type MemberChestStepState = 'reachable' | 'to_open' | 'opened' | 'unreachable';
+
+/** Состояние карточки сундука дня. «Сегодня» с взятой целью приходит уже как `to_open`. */
+export type MemberDayChestState = 'ahead' | 'today' | 'to_open' | 'opened' | 'missed';
+
+/** Карточка сундука дня. */
+export type MemberDayChest = {
+  /** Номер дня окна, с единицы. */
+  day: number;
+  state: MemberDayChestState;
+  /** Зачитанных поездок в этот день. */
+  trips: number;
+  /** Подпись карточки: «впереди», «3 из 5», «открыть», «открыт», «упущен». */
+  label: string;
+  /** Счёт «3 из 5» над ярлыком — только у упущенного: у сегодняшнего он и есть ярлык. */
+  tripsText: string | null;
+  /** Что выпало. Только у открытого. */
+  prizeText: string | null;
+};
+
+/** Сундук трёх дней или недели — одна строка лестницы. */
+export type MemberChestStep = {
+  kind: 'three_days' | 'week';
+  state: MemberChestStepState;
+  /** Порог ступени — зачётных дней. */
+  required: number;
+  /** Сколько зачётных дней ещё нужно. Ноль — заработана. */
+  daysLeft: number;
+  title: string;
+  /** Подпись под названием: условие, пока с сундуком ничего не случилось, потом — состояние. */
+  caption: string;
+  prizeText: string | null;
+};
+
+/** Строка «Сундуки дня»: есть ли что открыть и сколько открыто. */
+export type MemberDayChestRow = {
+  state: 'idle' | 'to_open' | 'opened';
+  title: string;
+  caption: string;
+  toOpen: number;
+  opened: number;
+};
+
+export type MemberChestLadder = {
+  dayRow: MemberDayChestRow;
+  /** Карточка на каждый день окна, в порядке дней. */
+  days: MemberDayChest[];
+  threeDays: MemberChestStep;
+  week: MemberChestStep;
+};
+
+/** Тело открытия сундука. Номер дня — только у сундука дня. */
+export type MiniAppOpenChestRequestBody = {
+  kind: CampaignChestKind;
+  day: number | null;
+};
+
+/**
+ * Ответ открытия: экран акции уже с открытым сундуком и что выпало. Повтор открытия того же
+ * сундука отвечает тем же призом — ответ мог потеряться по дороге.
+ */
+export type MiniAppOpenChestResponse = {
+  campaign: MemberCampaign | null;
+  /** «Ваш приз: 50 баллов». */
+  prizeText: string;
+  /** Где награду посмотреть. */
+  rewardsHint: string;
+};
+
+/** Почему сундук не открылся. Текст к коду — на языке водителя, в `message` отказа. */
+export type MemberChestDenialCode = 'campaign_unavailable' | 'chest_not_earned' | 'prize_unavailable';
+
+export type MemberChestDenialPayload = {
+  code: MemberChestDenialCode;
 };
 
 /**

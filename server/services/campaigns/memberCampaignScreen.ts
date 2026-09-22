@@ -1,5 +1,6 @@
 import { plainText, type TextKey } from '#server/bot/texts';
 import type { CampaignParticipantState, Language } from '#server/generated/prisma/enums';
+import { listOpenedChests } from '#server/repositories/campaignChests';
 import { readParticipantDayTrips, type MemberCampaignRow } from '#server/repositories/campaigns';
 import {
   describeFrozenProgress,
@@ -34,6 +35,9 @@ const formatWindowDay = (day: string): string => {
  * Прогресс недели участника (issue #168). Без вступления его нет вовсе: считать не от чего.
  * Исход проставлен — неделя рисуется из снимка итога, и журнал не читается совсем: сколько
  * бы поездок ни доехало после итога, числа стоят те, что объявлены.
+ *
+ * Открытые сундуки читаются в обеих ветках (issue #181): открытие — факт, а не счёт, и снимок
+ * итога его не хранит.
  */
 const readMemberProgress = async (
   row: MemberCampaignRow,
@@ -44,13 +48,15 @@ const readMemberProgress = async (
     return null;
   }
 
+  const opened = await listOpenedChests(row.campaignId, personId);
+
   if (row.outcome !== null) {
-    return describeFrozenProgress({ ...row, outcome: row.outcome }, language);
+    return describeFrozenProgress({ ...row, outcome: row.outcome }, opened, language);
   }
 
   const dayTrips = await readParticipantDayTrips(row.campaignId, personId);
 
-  return describeLiveProgress(row, dayTrips, language);
+  return describeLiveProgress(row, dayTrips, opened, language);
 };
 
 const describeMemberCampaign = (

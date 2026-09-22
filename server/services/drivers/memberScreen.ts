@@ -45,6 +45,7 @@ const REASON_KEYS: Readonly<
   expire: 'reason_expire',
   recon: 'reason_correction',
   merge: 'reason_correction',
+  campaign: 'reason_campaign',
 };
 
 const reasonText = (reason: PointReason, delta: bigint, language: Language): string => {

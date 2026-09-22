@@ -55,9 +55,7 @@ export const skipReasonLabel = (reason: SyncSkipRow['reason']): string =>
  * Подписи словарей карточки водителя.
  *
  * Наши перечисления описаны полным `Record`: значение, добавленное миграцией, обязано
- * уронить проверку типов здесь, а не тихо показаться на экране латинским словом. Причина
- * `campaign` появится в `xb.point_reason` вместе с первой раздачей (issue #37) — и ровно
- * этот `Record` заставит подписать её тогда же.
+ * уронить проверку типов здесь, а не тихо показаться на экране латинским словом.
  *
  * Словари Fleet API — `work_status`, `current_status`, статус заказа — описаны иначе:
  * поиском с возвратом исходного значения. Чужой словарь нам не принадлежит, новое
@@ -76,6 +74,7 @@ const POINT_REASON_LABELS: Record<DriverOperation['reason'], string> = {
   expire: 'сгорание',
   merge: 'объединение двойников',
   raffle: 'выплата приза',
+  campaign: 'акция',
 };
 
 export const pointReasonLabel = (reason: DriverOperation['reason']): string =>

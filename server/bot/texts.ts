@@ -60,6 +60,7 @@ export type TextKey =
   | 'reason_raffle'
   | 'reason_expire'
   | 'reason_correction'
+  | 'reason_campaign'
   | 'history_order_reason'
   | 'button_exchange_points'
   | 'button_my_orders'
@@ -131,6 +132,24 @@ export type TextKey =
   | 'campaign_week_no_skips'
   | 'campaign_today_goal_near'
   | 'campaign_today_goal_taken'
+  | 'campaign_chests_day_title'
+  | 'campaign_chests_three_days_title'
+  | 'campaign_chests_week_title'
+  | 'campaign_chests_day_idle'
+  | 'campaign_chests_day_opened'
+  | 'campaign_chests_to_open'
+  | 'campaign_chest_opened'
+  | 'campaign_chest_unreachable'
+  | 'campaign_chest_week_condition'
+  | 'campaign_chest_card_ahead'
+  | 'campaign_chest_card_trips'
+  | 'campaign_chest_card_open'
+  | 'campaign_chest_card_missed'
+  | 'campaign_chest_prize'
+  | 'campaign_chest_rewards_hint'
+  | 'campaign_chest_denied_campaign'
+  | 'campaign_chest_denied_not_earned'
+  | 'campaign_chest_denied_prize'
   | 'not_in_registry'
   | 'not_in_park'
   | 'profile_fired'
@@ -350,6 +369,11 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   reason_correction: {
     ru: 'Корректировка',
     uz: 'Tuzatish',
+  },
+  /** Массовое начисление и приз сундука акции — одним словом: и то и другое водитель знает как акцию. */
+  reason_campaign: {
+    ru: 'Акция',
+    uz: 'Aksiya',
   },
   /**
    * Списание и возврат по заказу — причина и номер, без лишних слов. Номер тот же, что
@@ -678,6 +702,91 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Ура! Сундук дня ваш!',
     uz: "Hurra! Kun sandig'i sizniki!",
   },
+  // Лестница сундуков (issue #181) — по `product/design/comeback/03-member-chests-states.md`
+  // и `04-day-chests-sheet.md`. Какая строка к какому состоянию — `memberProgress.ts`.
+  campaign_chests_day_title: {
+    ru: 'Сундуки дня',
+    uz: 'Kun sandiqlari',
+  },
+  campaign_chests_three_days_title: {
+    ru: 'Сундук трёх дней',
+    uz: "Uch kun sandig'i",
+  },
+  campaign_chests_week_title: {
+    ru: 'Сундук недели',
+    uz: "Hafta sandig'i",
+  },
+  /** Сундуков дня ещё нет — строка говорит условие. */
+  campaign_chests_day_idle: {
+    ru: 'по одному за взятый день',
+    uz: 'har bir olingan kun uchun bittadan',
+  },
+  /** Все заработанные сундуки дня открыты; сколько — счётчиком рядом. */
+  campaign_chests_day_opened: {
+    ru: 'открыты',
+    uz: 'ochildi',
+  },
+  campaign_chests_to_open: {
+    ru: 'К открытию: {count}',
+    uz: 'Ochishga: {count}',
+  },
+  /** Открытый сундук — ступени и карточки дня одним словом. */
+  campaign_chest_opened: {
+    ru: 'открыт',
+    uz: 'ochildi',
+  },
+  campaign_chest_unreachable: {
+    ru: 'не в этот раз',
+    uz: 'bu safar emas',
+  },
+  /** Условие недели. Порог — пятёрка, форма «дней» при нём не меняется. */
+  campaign_chest_week_condition: {
+    ru: 'за {required} дней из {total}',
+    uz: '{total} kundan {required} kun uchun',
+  },
+  campaign_chest_card_ahead: {
+    ru: 'впереди',
+    uz: 'oldinda',
+  },
+  /** Счёт дня на карточке — у сегодняшнего и у упущенного. «0 из 5» остаётся (04-day-chests-sheet.md). */
+  campaign_chest_card_trips: {
+    ru: '{trips} из {goal}',
+    uz: '{goal} dan {trips}',
+  },
+  campaign_chest_card_open: {
+    ru: 'открыть',
+    uz: 'ochish',
+  },
+  campaign_chest_card_missed: {
+    ru: 'упущен',
+    uz: "o'tkazib yuborildi",
+  },
+  /** Что выпало, — после открытия. */
+  campaign_chest_prize: {
+    ru: 'Ваш приз: {prize}',
+    uz: "Sovg'angiz: {prize}",
+  },
+  campaign_chest_rewards_hint: {
+    ru: 'Посмотреть награду можно в разделе «Мои награды и призы»',
+    uz: "Mukofotni «Mukofotlarim va sovg'alarim» bo'limida ko'rish mumkin",
+  },
+  /** Акция водителю уже не видна: окно кончилось, пока экран был открыт. */
+  campaign_chest_denied_campaign: {
+    ru: 'Акция сейчас недоступна',
+    uz: 'Aksiya hozir mavjud emas',
+  },
+  campaign_chest_denied_not_earned: {
+    ru: 'Этот сундук пока не ваш',
+    uz: 'Bu sandiq hali sizniki emas',
+  },
+  /**
+   * Выпавшего товара не оказалось на полке. Приз не называется намеренно: знай водитель,
+   * что выпало, повторное нажатие стало бы осознанной пересдачей.
+   */
+  campaign_chest_denied_prize: {
+    ru: 'Приз сейчас недоступен, попробуйте позже или подойдите в офис',
+    uz: "Sovg'a hozir mavjud emas, keyinroq urinib ko'ring yoki ofisga murojaat qiling",
+  },
   not_in_registry: {
     ru: 'Не получилось привязать номер автоматически — в данных таксопарка чего-то не хватает. Это чинится только в офисе: подойдите в любой офис Xalq Taxi с водительским удостоверением.',
     uz: "Raqamni avtomatik bog'lash imkoni bo'lmadi — taksopark ma'lumotlarida nimadir yetishmayapti. Bu faqat ofisda hal qilinadi: haydovchilik guvohnomangiz bilan Xalq Taxi'ning istalgan ofisiga murojaat qiling.",
@@ -901,7 +1010,9 @@ export type CountedTextKey =
   | 'campaign_week_days_left'
   | 'campaign_week_skips_left'
   | 'campaign_today_trips'
-  | 'campaign_today_goal_waiting';
+  | 'campaign_today_goal_waiting'
+  | 'campaign_chest_three_days_condition'
+  | 'campaign_chest_days_left';
 
 const COUNTED_TEXTS: Readonly<Record<CountedTextKey, Readonly<Record<Language, CountedForms>>>> = {
   /** Награда баллами в разделе «Мои награды»: «300 баллов». */
@@ -997,6 +1108,32 @@ const COUNTED_TEXTS: Readonly<Record<CountedTextKey, Readonly<Record<Language, C
       one: "Kun sandig'i kutmoqda: atigi {count} ta safar",
       few: "Kun sandig'i kutmoqda: atigi {count} ta safar",
       many: "Kun sandig'i kutmoqda: atigi {count} ta safar",
+    },
+  },
+  /** Условие сундука трёх дней, пока не взят ни один день. */
+  campaign_chest_three_days_condition: {
+    ru: {
+      one: 'за {count} день с целью',
+      few: 'за {count} дня с целью',
+      many: 'за {count} дней с целью',
+    },
+    uz: {
+      one: '{count} kun maqsad bilan',
+      few: '{count} kun maqsad bilan',
+      many: '{count} kun maqsad bilan',
+    },
+  },
+  /** Ступень достижима и начата: сколько зачётных дней осталось. */
+  campaign_chest_days_left: {
+    ru: {
+      one: 'ещё {count} день — и он ваш',
+      few: 'ещё {count} дня — и он ваш',
+      many: 'ещё {count} дней — и он ваш',
+    },
+    uz: {
+      one: 'yana {count} kun — va u sizniki',
+      few: 'yana {count} kun — va u sizniki',
+      many: 'yana {count} kun — va u sizniki',
     },
   },
 };

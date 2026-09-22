@@ -866,3 +866,24 @@ export const markParticipantDeclined = (
   client: Executor = db,
 ): Promise<boolean> =>
   moveParticipantState(campaignId, personId, 'declined', ['invited', 'opened'], client);
+
+/**
+ * Строка участия под блокировкой — до конца транзакции. Открытие сундука берёт её первой:
+ * два нажатия подряд идут по очереди, и второе видит уже открытый сундук, а не разыгрывает
+ * второй приз. `false` — строки нет.
+ */
+export const lockCampaignParticipant = async (
+  campaignId: string,
+  personId: string,
+  transaction: Executor,
+): Promise<boolean> => {
+  const rows = await transaction.$queryRaw<{ personId: string }[]>`
+    SELECT "person_id" AS "personId"
+      FROM xb.campaign_participants
+     WHERE "campaign_id" = ${campaignId}::uuid
+       AND "person_id" = ${personId}::uuid
+       FOR UPDATE
+  `;
+
+  return rows.length > 0;
+};

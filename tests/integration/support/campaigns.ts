@@ -6,8 +6,8 @@ import { replaceCampaignPrizes } from '#server/services/campaigns/replaceCampaig
  * Уборка акций, заведённых тестом.
  *
  * Уходит первой из всех: снимок ссылается на людей, акция — на сегмент и автора, и все
- * внешние ключи стоят на `RESTRICT`. Внутри — снимок, окна и призы раньше самой акции; призы
- * к тому же ссылаются на товары, которые уборка каталога снимает позже.
+ * внешние ключи стоят на `RESTRICT`. Внутри — сундуки, награды акции, снимок, окна и призы
+ * раньше самой акции; призы к тому же ссылаются на товары, которые уборка каталога снимает позже.
  */
 
 const createdCampaignIds = new Set<string>();
@@ -25,6 +25,21 @@ export const cleanupTestCampaigns = async (): Promise<void> => {
   }
 
   await db.$transaction(async (transaction) => {
+    // Сундуки — первыми: они ссылаются на участие и на награду. Награды акции уходят здесь,
+    // а не с людьми: они ссылаются на акцию ключом `RESTRICT`. Движения их резерва — до них,
+    // иначе `SET NULL` обнулил бы `reward_id` у `reward_reserve` и нарушил проверку знаков.
+    await transaction.$executeRaw`
+      DELETE FROM xb.campaign_chests WHERE "campaign_id" = ANY(${campaignIds}::uuid[])
+    `;
+    await transaction.$executeRaw`
+      DELETE FROM xb.stock_movements
+       WHERE "reward_id" IN (
+             SELECT "id" FROM xb.rewards WHERE "campaign_id" = ANY(${campaignIds}::uuid[])
+       )
+    `;
+    await transaction.$executeRaw`
+      DELETE FROM xb.rewards WHERE "campaign_id" = ANY(${campaignIds}::uuid[])
+    `;
     await transaction.$executeRaw`
       DELETE FROM xb.campaign_participants WHERE "campaign_id" = ANY(${campaignIds}::uuid[])
     `;
@@ -183,3 +198,23 @@ export const insertPrizeBypassingServices = async (
     )
   `;
 };
+
+export type ChestSnapshot = {
+  kind: string;
+  dayNumber: number | null;
+  openedBy: string;
+  rewardId: string;
+};
+
+/** Открытые сундуки участника построчно — то, что лежит в базе, мимо сервисов. */
+export const readChests = async (campaignId: string, personId: string): Promise<ChestSnapshot[]> =>
+  db.$queryRaw<ChestSnapshot[]>`
+    SELECT "kind"::text      AS "kind",
+           "day_number"      AS "dayNumber",
+           "opened_by"::text AS "openedBy",
+           "reward_id"       AS "rewardId"
+      FROM xb.campaign_chests
+     WHERE "campaign_id" = ${campaignId}::uuid
+       AND "person_id" = ${personId}::uuid
+     ORDER BY "kind", "day_number"
+  `;

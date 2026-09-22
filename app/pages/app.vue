@@ -768,8 +768,11 @@ const share = (): void => {
         :campaign="memberCampaign.campaign.value"
         :acting="memberCampaign.acting.value"
         :error="memberCampaign.error.value"
+        :prize="memberCampaign.prize.value"
         @join="memberCampaign.join"
         @decline="memberCampaign.decline"
+        @open-chest="memberCampaign.openChest"
+        @dismiss-prize="memberCampaign.dismissPrize"
       />
 
       <OrganismsMemberSummary
