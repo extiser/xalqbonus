@@ -4,6 +4,7 @@ import type { StockMovementKind } from '#server/generated/prisma/enums';
 
 /**
  * Остатки по офисам: журнал движения и его кэш. Движут остаток приход, правка, заказы и награды.
+ * Журнал для экрана офиса читается лентой — `officeFeed.ts`.
  *
  * Отношение ровно то же, что у журнала баллов и `accounts.balance`: истина лежит
  * в `stock_movements`, а `office_stock` — кэш, который правится только вместе с движением,
@@ -248,72 +249,3 @@ export const listOfficeShowcase = async (
        AND product."price_points" IS NOT NULL
      ORDER BY product."name"
   `;
-
-export type StockMovementListRow = {
-  id: bigint;
-  kind: StockMovementKind;
-  productId: string;
-  productName: string;
-  deltaOnHand: number;
-  deltaReserved: number;
-  /** Номер заказа для человека. Пуст у прихода и правки. */
-  orderNumber: number | null;
-  /** Название награды. Пусто у всех, кроме видов награды. */
-  rewardTitle: string | null;
-  /** Имя сотрудника. Пусто у движения, сделанного водителем или воркером просрочки. */
-  employeeName: string | null;
-  note: string | null;
-  createdAt: Date;
-};
-
-/**
- * Страница журнала движений офиса, новыми вперёд.
- *
- * Порядок по `id`, а не по `created_at`: два движения одной транзакции получают одно время
- * с точностью до микросекунд, и сортировка по времени переставляла бы их между запросами —
- * читающий журнал видел бы то резерв перед списанием, то наоборот.
- *
- * Товар, сотрудник и заказ приезжают именами и номером, а не идентификаторами: журнал читают
- * глазами, и разыменовывать uuid в вызывающем коде значило бы четыре запроса вместо одного.
- */
-export const listStockMovements = async (
-  officeId: string,
-  limit: number,
-  offset: number,
-  client: Prisma.TransactionClient = db,
-): Promise<StockMovementListRow[]> =>
-  client.$queryRaw<StockMovementListRow[]>`
-    SELECT movement."id",
-           movement."kind",
-           movement."product_id"     AS "productId",
-           product."name"            AS "productName",
-           movement."delta_on_hand"  AS "deltaOnHand",
-           movement."delta_reserved" AS "deltaReserved",
-           "order"."number"          AS "orderNumber",
-           reward."title"            AS "rewardTitle",
-           employee."full_name"      AS "employeeName",
-           movement."note",
-           movement."created_at"     AS "createdAt"
-      FROM xb.stock_movements AS movement
-      JOIN xb.products  AS product  ON product."id" = movement."product_id"
-      LEFT JOIN xb.orders    AS "order"  ON "order"."id" = movement."order_id"
-      LEFT JOIN xb.rewards   AS reward   ON reward."id" = movement."reward_id"
-      LEFT JOIN xb.employees AS employee ON employee."id" = movement."employee_id"
-     WHERE movement."office_id" = ${officeId}::uuid
-     ORDER BY movement."id" DESC
-     LIMIT ${limit} OFFSET ${offset}
-  `;
-
-/** Сколько всего движений в офисе — листанию нужен предел, а не только страница. */
-export const countStockMovements = async (
-  officeId: string,
-  client: Prisma.TransactionClient = db,
-): Promise<number> => {
-  const rows = await client.$queryRaw<{ total: bigint }[]>`
-    SELECT count(*) AS "total"
-      FROM xb.stock_movements
-     WHERE "office_id" = ${officeId}::uuid
-  `;
-
-  return Number(rows[0]?.total ?? 0);
-};

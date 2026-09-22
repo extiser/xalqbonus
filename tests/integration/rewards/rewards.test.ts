@@ -6,6 +6,7 @@ import { db } from '#server/db';
 import { DeskCodeNotFoundError } from '#server/services/desk/errors';
 import { findDeskItemByCode } from '#server/services/desk/findDeskItemByCode';
 import { OfficeNotOpenError } from '#server/services/offices/errors';
+import { readOfficeFeed } from '#server/services/offices/readOfficeFeed';
 import { placeOrder } from '#server/services/orders/placeOrder';
 import { DriverAccountMissingError } from '#server/services/points/errors';
 import { readOfficeShowcase } from '#server/services/products/readOfficeShowcase';
@@ -19,9 +20,9 @@ import {
 import { expireRewards } from '#server/services/rewards/expireRewards';
 import { grantManualReward } from '#server/services/rewards/grantManualReward';
 import { issueOfficeReward } from '#server/services/rewards/issueOfficeReward';
+import { readDriverRewards } from '#server/services/rewards/readDriverRewards';
 import { readMemberRewards } from '#server/services/rewards/readMemberRewards';
 import { readRewardGrantOptions } from '#server/services/rewards/readRewardGrantOptions';
-import { readStockMovementsPage } from '#server/services/stock/readStockMovementsPage';
 import { receiveStock } from '#server/services/stock/receiveStock';
 import {
   cleanupTestData,
@@ -118,6 +119,19 @@ const grantPrize = (scenario: Scenario, lifetimeDays = 7) =>
     note: 'за помощь новичкам',
   });
 
+const grantCustom = (scenario: Scenario, title: string) =>
+  grantManualReward({
+    personId: scenario.personId,
+    employeeId: scenario.employeeId,
+    kind: 'custom',
+    points: null,
+    productId: null,
+    title,
+    officeId: scenario.officeId,
+    lifetimeDays: 7,
+    note: 'за стаж',
+  });
+
 const worker = (scenario: Scenario) => ({ employeeId: scenario.employeeId, role: 'manager' as const });
 
 describe('награды', () => {
@@ -204,10 +218,13 @@ describe('награды', () => {
     });
     expect(rewards[0]?.stateText).toMatch(/^Ждёт в офисе до \d{2}\.\d{2}\.\d{4}$/);
 
-    // Журнал остатков называет награду, которой вызвано движение.
-    const journal = await readStockMovementsPage(scenario.officeId, 10, 0);
+    // Лента офиса называет награду, которой вызвано движение.
+    const feed = await readOfficeFeed(scenario.officeId, 10, 0);
 
-    expect(journal?.movements[0]).toMatchObject({ kind: 'reward_reserve', rewardTitle: 'Тестовый товар' });
+    expect(feed.entries[0]).toMatchObject({
+      type: 'movement',
+      movement: { kind: 'reward_reserve', rewardTitle: 'Тестовый товар' },
+    });
 
     await expectStockInvariantsHold();
   });
@@ -441,5 +458,85 @@ describe('награды', () => {
     expect(productIds).toContain(prize);
     expect(productIds).not.toContain(archived);
     expect(productIds.indexOf(prize)).toBeLessThan(productIds.indexOf(plain));
+  });
+
+  it('карточка водителя: ждущие сверху, код только у ждущей, автор и выдавший по именам', async () => {
+    const scenario = await prizeScenario();
+    const waiting = await grantPrize(scenario);
+    const taken = await grantPrize(scenario);
+    const burnt = await grantCustom(scenario, 'Сертификат на мойку');
+
+    await issueOfficeReward(worker(scenario), taken.id);
+    await expireTestReward(burnt.id);
+    await expireRewards();
+
+    const { rewards } = await readDriverRewards(scenario.personId);
+
+    // Ждущая вручена первой, но стоит сверху: за ней водитель придёт.
+    expect(rewards.map((reward) => reward.rewardId)).toEqual([waiting.id, burnt.id, taken.id]);
+    expect(rewards[0]).toMatchObject({
+      status: 'awaiting',
+      code: waiting.code,
+      officeName: 'Тестовый офис',
+      source: 'manual',
+      sourceNote: 'за помощь новичкам',
+    });
+    expect(rewards[0]?.expiresAt).not.toBeNull();
+    expect(rewards[0]?.grantedByName).not.toBeNull();
+    expect(rewards[1]).toMatchObject({ status: 'expired', code: null });
+    expect(rewards[1]?.expiredAt).not.toBeNull();
+    expect(rewards[2]).toMatchObject({ status: 'issued', code: null });
+    expect(rewards[2]?.issuedAt).not.toBeNull();
+    expect(rewards[2]?.issuedByName).toBe(rewards[0]?.grantedByName);
+  });
+
+  it('лента офиса: события своей награды рядом с движениями, у товара — только движения', async () => {
+    const scenario = await prizeScenario();
+    const prize = await grantPrize(scenario);
+    const handed = await grantCustom(scenario, 'Сертификат на мойку');
+    const burnt = await grantCustom(scenario, 'Кепка парка');
+
+    await issueOfficeReward(worker(scenario), prize.id);
+    await issueOfficeReward(worker(scenario), handed.id);
+    await expireTestReward(burnt.id);
+    await expireRewards();
+
+    const feed = await readOfficeFeed(scenario.officeId, 100, 0);
+    const rewardEvents = feed.entries.flatMap((entry) =>
+      entry.type === 'reward' ? [`${entry.reward.rewardTitle}:${entry.reward.event}`] : [],
+    );
+    const movementKinds = feed.entries.flatMap((entry) =>
+      entry.type === 'movement' ? [entry.movement.kind] : [],
+    );
+
+    expect(rewardEvents.sort()).toEqual([
+      'Кепка парка:expired',
+      'Кепка парка:granted',
+      'Сертификат на мойку:granted',
+      'Сертификат на мойку:issued',
+    ]);
+    // Награда-товар — одна строка на событие: движения, и ни одной строки события.
+    expect(movementKinds.sort()).toEqual(['incoming', 'reward_issue', 'reward_reserve']);
+    expect(feed.total).toBe(feed.entries.length);
+
+    // По времени, новыми вперёд: выдача своей награды стоит выше её вручения.
+    const moments = feed.entries.map((entry) =>
+      Date.parse(entry.type === 'movement' ? entry.movement.createdAt : entry.reward.createdAt),
+    );
+
+    expect(moments).toEqual([...moments].sort((left, right) => right - left));
+
+    const issued = feed.entries.find(
+      (entry) =>
+        entry.type === 'reward' && entry.reward.rewardId === handed.id && entry.reward.event === 'issued',
+    );
+
+    expect(issued).toMatchObject({ reward: { employeeName: expect.any(String), note: null } });
+
+    // Листание общее: вторая страница продолжает первую без повторов и пропусков.
+    const firstPage = await readOfficeFeed(scenario.officeId, 4, 0);
+    const secondPage = await readOfficeFeed(scenario.officeId, 4, 4);
+
+    expect([...firstPage.entries, ...secondPage.entries]).toEqual(feed.entries);
   });
 });

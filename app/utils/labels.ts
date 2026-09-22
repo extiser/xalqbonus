@@ -1,4 +1,4 @@
-import type { StockMovementEntry } from '#shared/types/catalog';
+import type { OfficeRewardEvent, StockMovementEntry } from '#shared/types/catalog';
 import type {
   DriverMembership,
   DriverOperation,
@@ -205,6 +205,31 @@ const REWARD_STATUS_LABELS: Record<OfficeReward['status'], string> = {
 
 export const rewardStatusLabel = (status: OfficeReward['status']): string =>
   REWARD_STATUS_LABELS[status];
+
+/**
+ * Состояние награды в карточке водителя (issue #175). Словами, которыми сотрудник ответит
+ * водителю по телефону, — отдельно от подписей стойки: там вопрос «выдавать ли», здесь
+ * «что с моей наградой».
+ */
+const DRIVER_REWARD_STATUS_LABELS: Record<OfficeReward['status'], string> = {
+  credited: 'на балансе',
+  awaiting: 'ждёт в офисе',
+  issued: 'получена',
+  expired: 'срок вышел',
+};
+
+export const driverRewardStatusLabel = (status: OfficeReward['status']): string =>
+  DRIVER_REWARD_STATUS_LABELS[status];
+
+/** Что случилось с произвольной наградой — строкой ленты офиса (issue #175). */
+const OFFICE_REWARD_EVENT_LABELS: Record<OfficeRewardEvent, string> = {
+  granted: 'награда вручена',
+  issued: 'выдача награды',
+  expired: 'награда сгорела',
+};
+
+export const officeRewardEventLabel = (event: OfficeRewardEvent): string =>
+  OFFICE_REWARD_EVENT_LABELS[event];
 
 /**
  * Подписи заказов офиса. Полным `Record` — по той же причине, что у видов движения:
