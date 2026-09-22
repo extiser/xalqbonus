@@ -9,7 +9,11 @@ import {
   writeParticipantOutcomes,
   type ParticipantOutcomeInput,
 } from '#server/repositories/campaigns';
-import { CHEST_THRESHOLDS, OUTCOME_BUFFER_HOURS } from '#server/services/campaigns/campaignClock';
+import {
+  CHEST_REVEAL_HOURS,
+  CHEST_THRESHOLDS,
+  OUTCOME_BUFFER_HOURS,
+} from '#server/services/campaigns/campaignClock';
 import {
   buildFinishedNotification,
   enqueueCampaignNotification,
@@ -35,8 +39,9 @@ import {
  * этим прогоном: `UPDATE` возвращает их поимённо, и повторный прогон второго сообщения
  * не шлёт — ему некому.
  *
- * Акция, у которой исход получили все участники обеих половин и не осталось неоткрытых
- * сундуков, переводится в `finished`; с неоткрытыми её доводит вскрытие в 21:00.
+ * Акцию в `finished` этот прогон не переводит до 21:00 — вскрытия у всех её половин
+ * (`finishSettledCampaigns`): экран вступивших живёт до него, открыли они всё сами или нет.
+ * Шаг стоит в обоих прогонах, и акцию переводит тот, который первым застанет все условия.
  *
  * «Сейчас» приходит параметром: момент «через четыре часа после конца окна» тест задаёт
  * явно, а не ждёт.
@@ -114,10 +119,10 @@ export const settleCampaignOutcomes = async (now: Date): Promise<SettleOutcomesS
     }
   }
 
-  const finished = await finishSettledCampaigns(CHEST_THRESHOLDS);
+  const finished = await finishSettledCampaigns(now, CHEST_REVEAL_HOURS, CHEST_THRESHOLDS);
 
   for (const campaignId of finished) {
-    log.info('акция окончена: исход у всех участников, неоткрытых сундуков нет', { campaignId });
+    log.info('акция окончена: вскрытие прошло, исход у всех, неоткрытых сундуков нет', { campaignId });
   }
 
   return { halves: halves.length, settled, finished: finished.length, notifications };

@@ -1,5 +1,6 @@
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
+import type { CampaignPrizeInput } from '#server/repositories/campaignPrizes';
 import { createCampaign } from '#server/services/campaigns/createCampaign';
 import { launchCampaign } from '#server/services/campaigns/launchCampaign';
 import { openCampaignChest } from '#server/services/campaigns/openCampaignChest';
@@ -27,6 +28,7 @@ import {
   countTransfersByKey,
   createTestOffice,
   createTestPerson,
+  createTestProduct,
   createTestTrip,
   disconnectDatabase,
   readAccountBalance,
@@ -79,7 +81,7 @@ const asDriver = (personId: string): LinkedDriver => ({
 });
 
 /** Акция на одного водителя, вступившего в начале окна. */
-const launch = async (): Promise<Scenario> => {
+const launch = async (prizes: CampaignPrizeInput[] = FULL_TEST_PRIZES): Promise<Scenario> => {
   const driver = await createTestPerson({ inProgram: true });
 
   await grantPoints(driver.personId, BALANCE_FROM + 1);
@@ -114,7 +116,7 @@ const launch = async (): Promise<Scenario> => {
   const campaignId = created.campaign.campaignId;
 
   trackTestCampaign(campaignId);
-  await replaceCampaignPrizes(campaignId, FULL_TEST_PRIZES);
+  await replaceCampaignPrizes(campaignId, prizes);
   await launchCampaign(campaignId);
 
   const joinedAt = tashkent('2026-10-01 06:00');
@@ -251,6 +253,102 @@ describe('завершение акции и вскрытие сундуков',
 
     expect(afterOutcome.progress).toMatchObject({ frozen: true, outcome: 'short' });
     expect(afterOutcome.finish?.kind).toBe('open_chests');
+  });
+
+  it('открывший всё сам видит акцию до 21:00: итог в 09:00 её не оканчивает', async () => {
+    const scenario = await launch();
+    const driver = asDriver(scenario.personId);
+
+    await qualifyDays(scenario.profileId, [1, 2, 3]);
+
+    const evening = tashkent('2026-10-03 18:00');
+
+    for (const dayNumber of [1, 2, 3]) {
+      await openCampaignChest(driver, { kind: 'day', dayNumber }, evening);
+    }
+
+    await openCampaignChest(driver, { kind: 'three_days' }, evening);
+
+    const settled = await settleCampaignOutcomes(tashkent('2026-10-08 09:00'));
+
+    expect(notificationsOf(settled.notifications, scenario.personId)).toEqual([
+      expect.objectContaining({ params: expect.objectContaining({ unopenedChests: 0 }) }),
+    ]);
+    // Неоткрытого нет ни у кого, но вскрытие не прошло — акция идёт, экран жив.
+    expect((await readCampaign(scenario.campaignId)).campaign.status).toBe('running');
+
+    const morning = await requireCampaign(scenario.personId, tashkent('2026-10-08 10:00'));
+
+    expect(morning.finish).toEqual({
+      kind: 'completed',
+      title: 'Поздравляем, Тест! Ваша акция завершена',
+      text: 'Собрано: 3 сундука дня, сундук трёх дней',
+    });
+
+    // Повторный итог после обеда — всё ещё до вскрытия.
+    await settleCampaignOutcomes(tashkent('2026-10-08 14:00'));
+    expect((await readCampaign(scenario.campaignId)).campaign.status).toBe('running');
+
+    const reveal = tashkent('2026-10-08 21:00');
+    const revealed = await revealCampaignChests(reveal);
+
+    expect(notificationsOf(revealed.notifications, scenario.personId)).toEqual([]);
+    expect((await readMemberCampaign(driver, reveal)).campaign).toBeNull();
+    expect((await readCampaign(scenario.campaignId)).campaign.status).toBe('finished');
+  });
+
+  it('невыдаваемый приз откатывает только свой сундук: остальные вскрыты, уведомление — о выданном', async () => {
+    // Товар без прихода — на полке ноль: приз сундука трёх дней выдать нельзя.
+    const productId = await createTestProduct({ pricePoints: null, promo: true });
+    const scenario = await launch([
+      ...FULL_TEST_PRIZES.filter((prize) => prize.chest !== 'three_days'),
+      { chest: 'three_days', kind: 'product', weight: 1, points: null, productId, title: null },
+    ]);
+    const driver = asDriver(scenario.personId);
+
+    await qualifyDays(scenario.profileId, [1, 2, 3, 4, 5]);
+
+    const evening = tashkent('2026-10-05 18:00');
+
+    for (const dayNumber of [1, 2, 3, 4]) {
+      await openCampaignChest(driver, { kind: 'day', dayNumber }, evening);
+    }
+
+    await settleCampaignOutcomes(tashkent('2026-10-08 09:00'));
+
+    // Неоткрытых три: день 5, трёхдневный (товара нет), недельный.
+    const revealed = await revealCampaignChests(tashkent('2026-10-08 21:00'));
+
+    expect(revealed.failed).toBeGreaterThanOrEqual(1);
+
+    const timerChests = (await readChests(scenario.campaignId, scenario.personId)).filter(
+      (chest) => chest.openedBy === 'timer',
+    );
+
+    expect(timerChests).toEqual([
+      expect.objectContaining({ kind: 'day', dayNumber: 5 }),
+      expect.objectContaining({ kind: 'week', dayNumber: null }),
+    ]);
+    expect(await readAccountBalance(scenario.personId)).toBe(scenario.balanceBefore + 250n);
+    expect(notificationsOf(revealed.notifications, scenario.personId)).toEqual([
+      expect.objectContaining({
+        template: 'campaign_chests_revealed',
+        params: expect.objectContaining({
+          prizes: [
+            { kind: 'points', points: 50 },
+            { kind: 'office', title: 'Мойка' },
+          ],
+        }),
+      }),
+    ]);
+
+    // Невыданный остался закрытым и заработанным — акция идёт, следующий прогон попробует снова.
+    expect((await readCampaign(scenario.campaignId)).campaign.status).toBe('running');
+
+    const again = await revealCampaignChests(tashkent('2026-10-08 21:15'));
+
+    expect(notificationsOf(again.notifications, scenario.personId)).toEqual([]);
+    expect(await readChests(scenario.campaignId, scenario.personId)).toHaveLength(6);
   });
 
   it('неоткрытое живёт до 21:00, вскрывается таймером, акция гаснет и оканчивается; повтор ничего не удваивает', async () => {
