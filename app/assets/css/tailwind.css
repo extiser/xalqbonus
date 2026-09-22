@@ -1,1 +1,35 @@
 @import "tailwindcss";
+
+/*
+ * Токены водительского Mini App — тёмный экран из макетов `product/design/`.
+ *
+ * Приставка `xb-` отделяет их от палитры Tailwind и от служебных экранов: `bg-xb-screen`
+ * нельзя спутать с `bg-slate-900`, и поиск по `xb-` находит всё водительское разом.
+ *
+ * `static` — переменные выпускаются в `:root` всегда, а не только когда класс встретился
+ * в разметке: анимации и градиенты компонентов берут цвета через `var(--color-xb-…)`
+ * из `<style>`, а туда сканер классов не смотрит.
+ *
+ * Шрифты здесь только названы. Сами файлы подключает страница, которой они нужны:
+ * пока новые компоненты живут на `/design`, приложение их не грузит.
+ */
+@theme static {
+  --color-xb-screen: #0B0D11;
+  --color-xb-card: #14171D;
+  --color-xb-sheet: #14171D;
+  --color-xb-text: #F4F6F8;
+  --color-xb-secondary: #C2C9D3;
+  --color-xb-light: #A9B2BF;
+  --color-xb-grey: #8A93A2;
+  --color-xb-garnet: #E8365D;
+  --color-xb-scarlet: #FF5C78;
+  --color-xb-scarlet-soft: #FF7089;
+  --color-xb-green: #5FD08A;
+  --color-xb-gold: #F7BC3E;
+  --color-xb-gold-light: #FFD98A;
+  --color-xb-map: #7FB3F5;
+  --color-xb-button-grey: #21242A;
+
+  --font-manrope: Manrope, "Segoe UI", system-ui, sans-serif;
+  --font-unbounded: Unbounded, Manrope, sans-serif;
+}
