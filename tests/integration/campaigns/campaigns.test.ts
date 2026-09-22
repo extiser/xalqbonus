@@ -24,6 +24,7 @@ import { FOREIGN_KEY_VIOLATION, isConstraintViolation } from '#server/utils/post
 import { EMPTY_SEGMENT_CONDITIONS } from '#shared/segment';
 import {
   cleanupTestCampaigns,
+  fillTestPrizes,
   insertParticipantBypassingServices,
   readParticipants,
   readParticipantWindows,
@@ -140,6 +141,8 @@ const createDraft = async (
   const created = await createCampaign(draftFields(context, overrides), context.employeeId);
 
   trackTestCampaign(created.campaign.campaignId);
+  // Все три сундука наполнены: без этого запуск отказывает `prizes_missing` (issue #180).
+  await fillTestPrizes(created.campaign.campaignId);
 
   return created.campaign.campaignId;
 };

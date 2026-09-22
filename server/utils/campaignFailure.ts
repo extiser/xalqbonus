@@ -3,18 +3,25 @@ import { createError, type H3Error } from 'h3';
 import {
   CampaignAudienceEmptyError,
   CampaignNotLaunchableError,
+  CampaignPrizeProductUnavailableError,
+  CampaignPrizesLockedError,
   CampaignSecondHalfUnavailableError,
   CampaignSegmentArchivedError,
   CampaignSegmentUnknownError,
   CampaignSlugTakenError,
   CampaignStatusMismatchError,
   InvalidCampaignFieldsError,
+  InvalidCampaignPrizesError,
   UnknownCampaignError,
   type CampaignFieldProblem,
+  type CampaignPrizeProblem,
 } from '#server/services/campaigns/errors';
 import {
   CAMPAIGN_AUDIENCE_EMPTY_TEXT,
+  CAMPAIGN_PRIZES_LIMIT,
+  CAMPAIGN_PRIZES_LOCKED_TEXT,
   CAMPAIGN_SEGMENT_ARCHIVED_TEXT,
+  campaignChestLabel,
   campaignLaunchProblemText,
 } from '#shared/campaign';
 
@@ -23,7 +30,7 @@ import {
  *
  * Отказы — строками при своих правилах, а не кодами словаря двери: они про предмет разговора,
  * а не про доступ (docs/decisions.md → «Отказ двери веба говорит кодом, а текст живёт
- * словарём»). Собраны в одном месте, как у рассылок и сегментов: ручек семь, а отказов
+ * словарём»). Собраны в одном месте, как у рассылок и сегментов: ручек девять, а отказов
  * на всех один набор.
  *
  * Причины незапускаемого черновика и фразы про архивный сегмент и пустой состав берутся
@@ -47,6 +54,16 @@ const FIELD_PROBLEM_TEXT: Record<CampaignFieldProblem, string> = {
   window_incomplete: 'Для окна нужны обе даты.',
   office_invalid: 'Офис выбран неверно — выберите его из списка заново.',
   reward_lifetime_invalid: 'Срок наград — целое число дней, не меньше одного.',
+};
+
+const PRIZE_PROBLEM_TEXT: Record<CampaignPrizeProblem, string> = {
+  prizes_malformed: 'Набор призов не читается — обновите страницу и наберите его заново.',
+  prizes_too_many: `Вариантов приза больше ${CAMPAIGN_PRIZES_LIMIT} на акцию — столько набор не держит.`,
+  weight_invalid: 'вес — целое число больше нуля. Вариант, который не должен выпадать, удалите.',
+  points_invalid: 'сумма баллов — целое число больше нуля.',
+  product_invalid: 'товар не выбран — выберите его из списка.',
+  title_missing: 'у своей награды нужно название.',
+  fixed_chest_duplicate: 'приз фиксированный — вариант может быть только один.',
 };
 
 const reject = (statusCode: 400 | 404 | 409, statusMessage: string, message: string): H3Error =>
@@ -92,6 +109,28 @@ export const explainCampaignFailure = (error: unknown): H3Error | null => {
       error.reason === 'no_split'
         ? 'Состав этой акции не делили — половины Б у неё нет.'
         : 'Окно половины Б уже назначено. Назначается оно один раз.',
+    );
+  }
+
+  if (error instanceof CampaignPrizesLockedError) {
+    return reject(409, 'Conflict', CAMPAIGN_PRIZES_LOCKED_TEXT);
+  }
+
+  if (error instanceof InvalidCampaignPrizesError) {
+    return reject(
+      400,
+      'Bad Request',
+      error.chest === null
+        ? PRIZE_PROBLEM_TEXT[error.problem]
+        : `${campaignChestLabel(error.chest)}: ${PRIZE_PROBLEM_TEXT[error.problem]}`,
+    );
+  }
+
+  if (error instanceof CampaignPrizeProductUnavailableError) {
+    return reject(
+      400,
+      'Bad Request',
+      `${campaignChestLabel(error.chest)}: товар не выдаётся — он не опубликован или в архиве. Выберите другой.`,
     );
   }
 

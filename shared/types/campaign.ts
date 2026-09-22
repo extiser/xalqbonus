@@ -6,13 +6,16 @@
  */
 
 import type {
+  CampaignChestKind,
   CampaignHalfCode,
   CampaignParticipantOutcome,
   CampaignParticipantState,
   CampaignStatus,
 } from '../../server/generated/prisma/enums';
+import type { RewardKind } from './rewards';
 
 export type {
+  CampaignChestKind,
   CampaignHalfCode,
   CampaignParticipantOutcome,
   CampaignParticipantState,
@@ -141,4 +144,59 @@ export type CampaignParticipantsResponse = {
   rows: CampaignParticipant[];
   limit: number;
   offset: number;
+};
+
+// ---------------------------------------------------------------------------
+// Призы сундуков (issue #180)
+// ---------------------------------------------------------------------------
+
+/**
+ * Вариант приза сундука. Значение — по виду, как у награды: у баллов сумма, у товара товар,
+ * у произвольной название; остальное пусто.
+ */
+export type CampaignPrize = {
+  prizeId: string;
+  kind: RewardKind;
+  /** Вес в розыгрыше. У фиксированных сундуков единица. */
+  weight: number;
+  points: number | null;
+  productId: string | null;
+  /** Название товара на сейчас — для экрана. */
+  productName: string | null;
+  /**
+   * Товар варианта больше не выдаётся — ушёл в архив после заведения. С таким призом акция
+   * не запускается. У баллов и своей награды всегда `false`.
+   */
+  productUnavailable: boolean;
+  title: string | null;
+};
+
+/** Сундук и его варианты. Сундуков в ответе всегда три — пустой тоже, в порядке ступеней. */
+export type CampaignChestPrizes = {
+  chest: CampaignChestKind;
+  prizes: CampaignPrize[];
+};
+
+export type CampaignPrizesResponse = {
+  /** Правится ли набор: только у черновика. */
+  editable: boolean;
+  chests: CampaignChestPrizes[];
+};
+
+/**
+ * Строка набора в теле замены — строками, как набраны в полях: «пусто значит не задано»
+ * решает сервер. Поля не своего вида уходят пустыми.
+ */
+export type CampaignPrizeRequestRow = {
+  chest: CampaignChestKind;
+  kind: RewardKind;
+  weight: string;
+  points: string;
+  productId: string;
+  title: string;
+};
+
+/** Тело замены набора — все сундуки целиком. */
+export type CampaignPrizesRequestBody = {
+  prizes: CampaignPrizeRequestRow[];
 };

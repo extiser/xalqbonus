@@ -389,6 +389,20 @@ enum CampaignParticipantOutcome {
   @@schema("xb")
 }
 
+/// Сундук акции — ступень, за которую водитель получает приз (issue #180). Называется
+/// по сундуку, а не по призу: открытие сундука заводит свою таблицу на то же перечисление.
+enum CampaignChestKind {
+  /// Сундук дня: розыгрыш по весам, редкость есть только у него.
+  day
+  /// Сундук трёх дней: приз фиксированный, розыгрыша нет.
+  three_days
+  /// Сундук недели: приз фиксированный, розыгрыша нет.
+  week
+
+  @@map("campaign_chest_kind")
+  @@schema("xb")
+}
+
 // ---------------------------------------------------------------------------
 // Люди и учётки
 // ---------------------------------------------------------------------------
@@ -1235,6 +1249,7 @@ model Product {
   movements  StockMovement[]
   orderItems OrderItem[]
   rewards    Reward[]
+  campaignPrizes CampaignPrize[]
 
   @@map("products")
   @@schema("xb")
@@ -1574,6 +1589,7 @@ model Campaign {
   halves       CampaignHalf[]
   participants CampaignParticipant[]
   rewards      Reward[]
+  prizes       CampaignPrize[]
 
   @@index([createdAt(sort: Desc)])
   @@map("campaigns")
@@ -1645,6 +1661,46 @@ model CampaignParticipant {
   /// Что у водителя с акцией — при каждом открытии Mini App.
   @@index([personId])
   @@map("campaign_participants")
+  @@schema("xb")
+}
+
+/// Вариант приза сундука акции (issue #180): чем наполнен сундук и с каким весом разыгрывается.
+///
+/// Наполнение — данные акции, а не код: что лежит в сундуке, решается с парком от акции
+/// к акции. Вид — тот же `reward_kind`, что у награды, и поля значения те же: строка приза
+/// превращается в награду без домысливания.
+///
+/// У сундука дня вариантов сколько угодно, выпадает по весу. У сундуков трёх дней и недели
+/// вариант один — частичным уникальным индексом в миграции: второй означал бы розыгрыш там,
+/// где его нет. Согласованность полей с видом и положительный вес — проверками там же.
+///
+/// Набор правится только у черновика и только целиком: у идущей акции часть водителей уже
+/// открыла сундуки по прежним весам.
+model CampaignPrize {
+  id         String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campaignId String            @map("campaign_id") @db.Uuid
+  chest      CampaignChestKind
+  kind       RewardKind
+  /// Вес в розыгрыше сундука дня. Доля варианта — вес, делённый на сумму весов сундука.
+  /// У фиксированных сундуков единица: делить нечего.
+  weight     Int
+  /// Только у баллов.
+  points     Int?
+  /// Только у товара.
+  productId  String?           @map("product_id") @db.Uuid
+  /// Только у произвольной.
+  title      String?
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  /// `Restrict`, как у `rewards.product_id`: товар не удаляется, а удалённый молча стёр бы
+  /// ответ «что разыгрывали».
+  product  Product? @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([campaignId, chest])
+  @@index([productId])
+  @@map("campaign_prizes")
   @@schema("xb")
 }
 

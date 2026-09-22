@@ -6,6 +6,8 @@
  * и клиентский — разошлись бы на первой правке, и кнопка звала бы в заведомый отказ.
  */
 
+import type { CampaignChestKind } from './types/campaign';
+
 /** Сколько строк участников на странице карточки акции. */
 export const CAMPAIGN_PARTICIPANTS_LIMIT = 25;
 
@@ -42,6 +44,29 @@ export const isCalendarDay = (value: string): boolean => {
   );
 };
 
+/**
+ * Сколько вариантов приза в наборе акции, на все сундуки. Предел от испорченного запроса,
+ * а не продуктовое правило: расчёт волны держит четыре варианта в сундуке дня.
+ */
+export const CAMPAIGN_PRIZES_LIMIT = 50;
+
+/** Сундуки акции в порядке ступеней: дня, трёх дней, недели. */
+export const CAMPAIGN_CHESTS: readonly CampaignChestKind[] = ['day', 'three_days', 'week'];
+
+/**
+ * Разыгрывается ли сундук по весам. Розыгрыш есть только у сундука дня; у сундуков трёх дней
+ * и недели вариант один — то же правило стоит индексом `campaign_prizes_fixed_chest_key`.
+ */
+export const isDrawnChest = (chest: CampaignChestKind): boolean => chest === 'day';
+
+const CHEST_LABEL: Record<CampaignChestKind, string> = {
+  day: 'Сундук дня',
+  three_days: 'Сундук трёх дней',
+  week: 'Сундук недели',
+};
+
+export const campaignChestLabel = (chest: CampaignChestKind): string => CHEST_LABEL[chest];
+
 /** Чего не хватает черновику для запуска. Все причины сразу — экран называет их списком. */
 export type CampaignLaunchProblem =
   | 'title_missing'
@@ -49,7 +74,14 @@ export type CampaignLaunchProblem =
   | 'segment_missing'
   | 'window_missing'
   | 'office_missing'
-  | 'reward_lifetime_missing';
+  | 'reward_lifetime_missing'
+  /** У какого-то сундука нет ни одного варианта приза (issue #180). */
+  | 'prizes_missing'
+  /**
+   * В сундуке есть товар, который больше не выдаётся. По значению на сундук: причина обязана
+   * назвать, какой сундук чинить, а текст к причине — строка словаря, а не сборка на месте.
+   */
+  | `prize_unavailable_${CampaignChestKind}`;
 
 /** Поля, по которым судит запуск: что на экране у формы и что в базе у сервера. */
 export type CampaignLaunchFields = {
@@ -62,6 +94,13 @@ export type CampaignLaunchFields = {
   officeId: string | null;
   /** Срок жизни неполученной награды в днях — строкой, как её набирает поле. */
   rewardLifetimeDays: string | null;
+  /**
+   * Сундуки, у которых заведён хоть один вариант приза. Судят по сохранённому набору: запуск
+   * читает базу, а не экран.
+   */
+  filledChests: readonly CampaignChestKind[];
+  /** Сундуки, где у варианта товар, который наградой уже не выдаётся. */
+  unavailablePrizeChests: readonly CampaignChestKind[];
 };
 
 const present = (value: string | null): boolean => value !== null && value.trim() !== '';
@@ -93,6 +132,19 @@ export const campaignLaunchProblems = (fields: CampaignLaunchFields): CampaignLa
     problems.push('reward_lifetime_missing');
   }
 
+  // Пустой сундук — водитель заработает его, откроет и не получит ничего.
+  if (CAMPAIGN_CHESTS.some((chest) => !fields.filledChests.includes(chest))) {
+    problems.push('prizes_missing');
+  }
+
+  // Товар приза ушёл в архив после заведения — открытый сундук отдал бы пустоту: выдача
+  // отбивает такой товар.
+  for (const chest of CAMPAIGN_CHESTS) {
+    if (fields.unavailablePrizeChests.includes(chest)) {
+      problems.push(`prize_unavailable_${chest}`);
+    }
+  }
+
   return problems;
 };
 
@@ -103,6 +155,13 @@ const LAUNCH_PROBLEM_TEXT: Record<CampaignLaunchProblem, string> = {
   window_missing: 'Нужны обе даты окна половины А.',
   office_missing: 'Нужно выбрать офис выдачи наград.',
   reward_lifetime_missing: 'Нужен срок, через который сгорает неполученная награда.',
+  prizes_missing: 'Нужны призы во всех трёх сундуках — дня, трёх дней и недели.',
+  prize_unavailable_day:
+    'В сундуке дня есть товар, который больше не выдаётся, — замените его в разделе «Призы».',
+  prize_unavailable_three_days:
+    'В сундуке трёх дней есть товар, который больше не выдаётся, — замените его в разделе «Призы».',
+  prize_unavailable_week:
+    'В сундуке недели есть товар, который больше не выдаётся, — замените его в разделе «Призы».',
 };
 
 export const campaignLaunchProblemText = (problem: CampaignLaunchProblem): string =>
@@ -113,3 +172,10 @@ export const CAMPAIGN_SEGMENT_ARCHIVED_TEXT =
 
 export const CAMPAIGN_AUDIENCE_EMPTY_TEXT =
   'По сегменту сейчас нет ни одного водителя — запускать не на ком.';
+
+/**
+ * Почему призы идущей акции не правятся — у закрытого раздела на экране и в отказе ручки
+ * (issue #180).
+ */
+export const CAMPAIGN_PRIZES_LOCKED_TEXT =
+  'Призы правятся только у черновика. Акция уже запущена: часть водителей открыла сундуки по этим весам, и после правки разбор волны не сойдётся.';

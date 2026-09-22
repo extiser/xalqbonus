@@ -68,6 +68,15 @@ export const DISPLAY_TIME_ZONE_LABEL = zoneOffset
 export const formatNumber = (value: number): string => value.toLocaleString('ru-RU');
 
 /**
+ * Доля от целого процентом, до десятой: `formatShare(8, 100)` — «8 %», `formatShare(1, 3)` —
+ * «33,3 %». Целого нет — прочерк: делить не на что.
+ */
+export const formatShare = (part: number, total: number): string =>
+  total > 0
+    ? `${((part / total) * 100).toLocaleString('ru-RU', { maximumFractionDigits: 1 })} %`
+    : DASH;
+
+/**
  * Форма слова при числе: `pluralize(21, 'час', 'часа', 'часов')` — «час».
  *
  * Правило русского счёта: на 1 — первая форма, на 2–4 — вторая, остальное и 11–14 — третья.
