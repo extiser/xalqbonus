@@ -7,6 +7,7 @@ import {
   lockCampaignStatus,
   markCampaignRunning,
 } from '#server/repositories/campaigns';
+import { listFilledChests } from '#server/repositories/campaignPrizes';
 import { findSegment } from '#server/repositories/segments';
 import {
   CampaignAudienceEmptyError,
@@ -62,6 +63,8 @@ export const launchCampaign = async (campaignId: string): Promise<CampaignRespon
       officeId: campaign.officeId,
       rewardLifetimeDays:
         campaign.rewardLifetimeDays === null ? null : String(campaign.rewardLifetimeDays),
+      // Под той же блокировкой, что берёт замена набора: набор не сменится до конца запуска.
+      filledChests: await listFilledChests(campaignId, transaction),
     });
 
     if (problems.length > 0 || campaign.segmentId === null) {

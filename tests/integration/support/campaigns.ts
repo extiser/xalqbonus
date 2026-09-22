@@ -1,10 +1,13 @@
 import { db } from '#server/db';
+import type { CampaignPrizeInput } from '#server/repositories/campaignPrizes';
+import { replaceCampaignPrizes } from '#server/services/campaigns/replaceCampaignPrizes';
 
 /**
  * Уборка акций, заведённых тестом.
  *
  * Уходит первой из всех: снимок ссылается на людей, акция — на сегмент и автора, и все
- * внешние ключи стоят на `RESTRICT`. Внутри — снимок и окна раньше самой акции.
+ * внешние ключи стоят на `RESTRICT`. Внутри — снимок, окна и призы раньше самой акции; призы
+ * к тому же ссылаются на товары, которые уборка каталога снимает позже.
  */
 
 const createdCampaignIds = new Set<string>();
@@ -27,6 +30,9 @@ export const cleanupTestCampaigns = async (): Promise<void> => {
     `;
     await transaction.$executeRaw`
       DELETE FROM xb.campaign_halves WHERE "campaign_id" = ANY(${campaignIds}::uuid[])
+    `;
+    await transaction.$executeRaw`
+      DELETE FROM xb.campaign_prizes WHERE "campaign_id" = ANY(${campaignIds}::uuid[])
     `;
     await transaction.$executeRaw`
       DELETE FROM xb.campaigns WHERE "id" = ANY(${campaignIds}::uuid[])
@@ -138,3 +144,42 @@ export const readParticipantOutcomes = async (
      WHERE "campaign_id" = ${campaignId}::uuid
      ORDER BY "person_id"
   `;
+
+/**
+ * Набор, с которым акция запускается: по варианту в каждом сундуке, без товаров — тестам запуска
+ * каталог не нужен (issue #180).
+ */
+export const FULL_TEST_PRIZES: CampaignPrizeInput[] = [
+  { chest: 'day', kind: 'points', weight: 1, points: 50, productId: null, title: null },
+  { chest: 'three_days', kind: 'points', weight: 1, points: 200, productId: null, title: null },
+  { chest: 'week', kind: 'custom', weight: 1, points: null, productId: null, title: 'Мойка' },
+];
+
+/** Наполняет все три сундука черновика — без этого запуск отказывает `prizes_missing`. */
+export const fillTestPrizes = async (campaignId: string): Promise<void> => {
+  await replaceCampaignPrizes(campaignId, FULL_TEST_PRIZES);
+};
+
+/**
+ * Пишет вариант приза мимо сервисов — так выглядела бы запись, забывшая проверки разбора.
+ * Нужна, чтобы проверить, что правила вида, веса и единственности держит база.
+ */
+export const insertPrizeBypassingServices = async (
+  campaignId: string,
+  prize: CampaignPrizeInput,
+): Promise<void> => {
+  await db.$executeRaw`
+    INSERT INTO xb.campaign_prizes (
+      "campaign_id", "chest", "kind", "weight", "points", "product_id", "title"
+    )
+    VALUES (
+      ${campaignId}::uuid,
+      ${prize.chest}::xb.campaign_chest_kind,
+      ${prize.kind}::xb.reward_kind,
+      ${prize.weight}::int,
+      ${prize.points}::int,
+      ${prize.productId}::uuid,
+      ${prize.title}
+    )
+  `;
+};

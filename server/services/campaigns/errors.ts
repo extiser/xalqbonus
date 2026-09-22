@@ -1,4 +1,4 @@
-import type { CampaignStatus } from '#server/generated/prisma/enums';
+import type { CampaignChestKind, CampaignStatus } from '#server/generated/prisma/enums';
 import type { CampaignLaunchProblem } from '#shared/campaign';
 
 /**
@@ -106,5 +106,53 @@ export type CampaignFieldProblem =
 export class InvalidCampaignFieldsError extends CampaignError {
   constructor(public readonly problem: CampaignFieldProblem) {
     super(`поля акции не годятся: ${problem}`);
+  }
+}
+
+/**
+ * Призы правятся только у черновика (issue #180): у идущей акции часть водителей уже открыла
+ * сундуки по прежним весам, и разбор волны после правки не читается.
+ */
+export class CampaignPrizesLockedError extends CampaignError {
+  constructor(
+    public readonly campaignId: string,
+    public readonly status: CampaignStatus,
+  ) {
+    super(`призы акции ${campaignId} не правятся: она в статусе ${status}`);
+  }
+}
+
+/** Что именно не так с набором призов. Текст к каждой причине — у ручки. */
+export type CampaignPrizeProblem =
+  /** Тело не набор строк, или у строки неизвестный сундук или вид. */
+  | 'prizes_malformed'
+  /** Вес — не целое число больше нуля. */
+  | 'weight_invalid'
+  /** Сумма баллов — не целое число больше нуля. */
+  | 'points_invalid'
+  /** Товар не выбран или выбран неверно. */
+  | 'product_invalid'
+  /** У своей награды нет названия. */
+  | 'title_missing'
+  /** Второй вариант у фиксированного сундука. */
+  | 'fixed_chest_duplicate';
+
+export class InvalidCampaignPrizesError extends CampaignError {
+  constructor(
+    public readonly problem: CampaignPrizeProblem,
+    /** Сундук строки, в которой нашлась причина. Пусто — тело не разобралось вовсе. */
+    public readonly chest: CampaignChestKind | null,
+  ) {
+    super(`призы акции не годятся: ${problem}${chest ? ` (${chest})` : ''}`);
+  }
+}
+
+/** Товар варианта не выдаётся: его нет, он черновик или в архиве — как в `grantReward`. */
+export class CampaignPrizeProductUnavailableError extends CampaignError {
+  constructor(
+    public readonly productId: string,
+    public readonly chest: CampaignChestKind,
+  ) {
+    super(`товар ${productId} не годится в приз: не опубликован или в архиве`);
   }
 }

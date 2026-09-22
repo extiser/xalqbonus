@@ -18,11 +18,14 @@ import {
 import type {
   Campaign,
   CampaignHalfBreakdown,
+  CampaignPrizesRequestBody,
+  CampaignPrizesResponse,
   CampaignRequestBody,
   CampaignResponse,
   CampaignWindowRequestBody,
 } from '#shared/types/campaign';
 import type { OfficeListResponse } from '#shared/types/catalog';
+import type { RewardGrantOptionsResponse } from '#shared/types/rewards';
 import type { SegmentListResponse, SegmentPreviewResponse } from '#shared/types/segment';
 
 /**
@@ -33,6 +36,9 @@ import type { SegmentListResponse, SegmentPreviewResponse } from '#shared/types/
  * - черновик — название, короткое имя, сегмент с числом на сегодня, окно половины А,
  *   деление 50 на 50, сохранение само и запуск отдельным подтверждением с числом
  * - идёт — окна, размер снимка, разбивка по состояниям, участники и окно половины Б
+ *
+ * Призы сундуков (issue #180) — своим разделом у любой заведённой акции: у черновика
+ * правятся и сохраняются одним действием, у запущенной только читаются.
  *
  * Новая и заведённый из неё черновик — один экземпляр страницы (`key` ниже): адрес меняется
  * на адрес записи без перехода, и набранное не теряется.
@@ -65,6 +71,12 @@ const breakdown = computed<CampaignHalfBreakdown[]>(() => data.value?.breakdown 
 const setCampaign = (next: CampaignResponse): void => {
   data.value = next;
 };
+
+// Призы — отдельной ручкой, тем же правилом, что акция: у новой их нет, пока нет записи.
+const { data: prizes, refresh: refreshPrizes } = await useFetch<CampaignPrizesResponse>(
+  () => `/api/campaigns/${routeId.value}/prizes`,
+  { immediate: routeId.value !== NEW_CAMPAIGN, watch: false },
+);
 
 const isDraft = computed(() => campaign.value === null || campaign.value.status === 'draft');
 
@@ -176,10 +188,14 @@ const autosave = useDraftAutosave({
 watch(routeId, async (id) => {
   if (id === NEW_CAMPAIGN) {
     data.value = undefined;
+    prizes.value = undefined;
     autosave.replace(toFields(null));
 
     return;
   }
+
+  // Призы спрашиваются и у только что заведённого черновика: раздел появляется вместе с записью.
+  void refreshPrizes();
 
   if (id === campaign.value?.campaignId) {
     return;
@@ -268,8 +284,15 @@ const loadSegmentCount = async (segmentId: string): Promise<void> => {
  * Почему «Запустить» закрыта — все причины сразу, теми же фразами, что пришли бы отказом
  * ручки. Считается по тому, что на экране: запускается оно, досохранённое перед запуском.
  */
+const filledChests = computed(() =>
+  (prizes.value?.chests ?? []).flatMap((chest) => (chest.prizes.length > 0 ? [chest.chest] : [])),
+);
+
 const launchProblems = computed(() => {
-  const problems = campaignLaunchProblems(fields.value).map(campaignLaunchProblemText);
+  const problems = campaignLaunchProblems({
+    ...fields.value,
+    filledChests: filledChests.value,
+  }).map(campaignLaunchProblemText);
 
   if (segmentArchived.value) {
     problems.push(CAMPAIGN_SEGMENT_ARCHIVED_TEXT);
@@ -376,8 +399,55 @@ const launch = (): Promise<void> =>
         method: 'POST',
       }),
     );
+    // Запущенная закрывает призы на правку: раздел переходит на чтение.
+    void refreshPrizes();
     void participants.load();
   });
+
+// ---------------------------------------------------------------------------
+// Призы
+// ---------------------------------------------------------------------------
+
+// Товары для вариантов — списком ручной выдачи: те же опубликованные не архивные, призы первыми.
+// Ручка открыта ролям выдачи, а они шире ролей акций.
+const { data: grantOptions } = await useFetch<RewardGrantOptionsResponse>(
+  '/api/rewards/grant-options',
+);
+
+const prizeProductOptions = computed<SelectOption[]>(() =>
+  (grantOptions.value?.products ?? []).map((product) => ({
+    value: product.productId,
+    label: product.promo ? `${product.name} — для акции` : product.name,
+  })),
+);
+
+const prizesSaving = ref(false);
+const prizesError = ref<string | null>(null);
+const prizesNotice = ref<string | null>(null);
+
+const savePrizes = async (body: CampaignPrizesRequestBody): Promise<void> => {
+  const current = campaign.value;
+
+  if (!current) {
+    return;
+  }
+
+  prizesSaving.value = true;
+  prizesError.value = null;
+  prizesNotice.value = null;
+
+  try {
+    prizes.value = await $fetch<CampaignPrizesResponse>(
+      `/api/campaigns/${current.campaignId}/prizes`,
+      { method: 'PUT', body },
+    );
+    prizesNotice.value = 'Призы сохранены.';
+  } catch (error) {
+    prizesError.value = failureText(error);
+  } finally {
+    prizesSaving.value = false;
+  }
+};
 
 // ---------------------------------------------------------------------------
 // Идущая акция
@@ -511,6 +581,17 @@ onBeforeUnmount(() => {
         @retry="autosave.retry"
       />
 
+      <OrganismsCampaignPrizes
+        v-if="prizes"
+        :chests="prizes.chests"
+        :editable="prizes.editable"
+        :product-options="prizeProductOptions"
+        :saving="prizesSaving"
+        :error="prizesError"
+        :notice="prizesNotice"
+        @save="savePrizes"
+      />
+
       <MoleculesSectionPanel
         title="Запуск"
         note="Уходит то, что на экране. Состав снимается из сегмента в момент запуска и больше не пересчитывается; правки после запуска нет."
@@ -568,6 +649,17 @@ onBeforeUnmount(() => {
           />
         </dl>
       </MoleculesSectionPanel>
+
+      <OrganismsCampaignPrizes
+        v-if="prizes"
+        :chests="prizes.chests"
+        :editable="prizes.editable"
+        :product-options="prizeProductOptions"
+        :saving="prizesSaving"
+        :error="prizesError"
+        :notice="prizesNotice"
+        @save="savePrizes"
+      />
 
       <OrganismsCampaignSecondHalfForm
         v-if="secondHalfOpen"

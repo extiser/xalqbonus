@@ -14,6 +14,7 @@ import { EMPTY_SEGMENT_CONDITIONS } from '#shared/segment';
 import type { MemberCampaignProgress } from '#shared/types/miniapp';
 import {
   cleanupTestCampaigns,
+  fillTestPrizes,
   readParticipantOutcomes,
   setParticipantJoinedAt,
   trackTestCampaign,
@@ -108,6 +109,7 @@ const launch = async (count: number, splitEnabled = false): Promise<Setup> => {
   const campaignId = created.campaign.campaignId;
 
   trackTestCampaign(campaignId);
+  await fillTestPrizes(campaignId);
   await launchCampaign(campaignId);
 
   return { campaignId, drivers };
