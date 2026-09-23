@@ -28,7 +28,6 @@ defineProps<{
   licenseRevealed: boolean;
   language: MemberLanguage;
   languageOptions: MemberLanguageOptionView[];
-  notificationsValue: string;
   /** Открытая шторка: сброса, языка или никакой. */
   sheet: 'none' | 'reset' | 'language';
   texts: {
@@ -36,7 +35,6 @@ defineProps<{
     back: string;
     settings: string;
     language: string;
-    notifications: string;
     reset: string;
     licenseShow: string;
     licenseHide: string;
@@ -54,7 +52,6 @@ defineEmits<{
   back: [];
   toggleLicense: [];
   openLanguage: [];
-  notifications: [];
   askReset: [];
   reset: [];
   save: [language: MemberLanguage];
@@ -116,7 +113,6 @@ const LICENSE_MASK = '•••••';
           :value="languageOptions.find((option) => option.language === language)?.label ?? ''"
           @open="$emit('openLanguage')"
         />
-        <MoleculesNextMemberSettingRow :label="texts.notifications" :value="notificationsValue" @open="$emit('notifications')" />
       </AtomsNextMemberListCard>
 
       <div class="mt-[22px]">

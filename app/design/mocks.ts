@@ -506,7 +506,6 @@ const PROFILE_TEXTS = {
     back: BACK,
     settings: 'Настройки',
     language: 'Язык',
-    notifications: 'Уведомления',
     reset: 'Сбросить сессию',
     licenseShow: 'Показать номер целиком',
     licenseHide: 'Скрыть номер',
@@ -526,7 +525,6 @@ const PROFILE_TEXTS = {
     back: 'Orqaga',
     settings: 'Sozlamalar',
     language: 'Til',
-    notifications: 'Bildirishnomalar',
     reset: 'Seansni qayta boshlash',
     // Подписей глазика и шторки сброса на узбекском в макете нет — стоят русские,
     // придумывать перевод здесь некому.
@@ -567,7 +565,6 @@ export function profileMock(language: MemberLanguage) {
     license: { label: language === 'ru' ? 'Номер ВУ' : 'Guvohnoma raqami', full: 'AF4471826', tail: '1826' },
     language,
     languageOptions: LANGUAGE_OPTIONS,
-    notificationsValue: language === 'ru' ? 'Включены' : 'Yoqilgan',
     texts: PROFILE_TEXTS[language],
   };
 }
