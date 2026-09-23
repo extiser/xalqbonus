@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Живой фон под балансом главного экрана — `product/design/motion.md`.
+ * Живой фон под балансом главного экрана и под экраном приглашения — `product/design/motion.md`.
  *
  * Неподвижное ядро и три подвижных пятна: гранат, вино и янтарь. Периоды 13, 17 и 23 секунды
  * взаимно простые — слои не сходятся в одну фазу, и картинка не «дышит в такт». Без
@@ -11,11 +11,18 @@
  *
  * Лежит под содержимым целиком, растягиваясь на родителя: место и `overflow: hidden`
  * задаёт контейнер.
+ *
+ * `home` — под балансом главной. `promo` — экран приглашения (`comeback/02-promo-hero.html`):
+ * пятна те же и дрейфуют так же, но стоят выше и ниже ростом, а затемнение начинается раньше
+ * (с 44 % вместо 52 %) — как в макете.
  */
+type BackdropVariant = 'home' | 'promo';
+
+defineProps<{ variant: BackdropVariant }>();
 </script>
 
 <template>
-  <div class="pointer-events-none absolute inset-0" aria-hidden="true">
+  <div class="pointer-events-none absolute inset-0" :class="variant === 'promo' ? 'live-promo' : ''" aria-hidden="true">
     <div class="live-blob live-base" />
     <div class="live-blob live-core" />
     <div class="live-blob live-wine" />
@@ -74,6 +81,31 @@
   position: absolute;
   inset: 0;
   background: linear-gradient(180deg, rgba(11, 13, 17, 0) 52%, rgba(11, 13, 17, 0.86) 86%, #0b0d11 100%);
+}
+
+/* Экран приглашения: те же пятна и дрейф, другие высоты и затемнение. */
+.live-promo .live-base {
+  top: -120px;
+  height: 330px;
+}
+
+.live-promo .live-core {
+  top: -150px;
+  height: 340px;
+}
+
+.live-promo .live-wine {
+  top: -80px;
+  height: 300px;
+}
+
+.live-promo .live-amber {
+  top: -20px;
+  height: 260px;
+}
+
+.live-promo .live-fade {
+  background: linear-gradient(180deg, rgba(11, 13, 17, 0) 44%, rgba(11, 13, 17, 0.8) 78%, #0b0d11 100%);
 }
 
 @keyframes live-drift-core {

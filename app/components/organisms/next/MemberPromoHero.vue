@@ -5,8 +5,8 @@ import type { MemberPromoRuleView } from '~/types/memberView';
  * Экран приглашения в акцию — `product/design/comeback/02-promo-hero.html`.
  *
  * Первый вход в акцию: приветствие, срок, три правила с сундуками и решение. Экран целиком
- * подползает снизу вверх при открытии, блоки встают по очереди. Живой фон — тот же,
- * что на главной: переход с плашки приглашения сюда не должен менять небо.
+ * подползает снизу вверх при открытии, блоки встают по очереди. Живой фон — пятна главной,
+ * но в раскладке макета приглашения: выше, ниже ростом и с затемнением раньше.
  */
 defineProps<{
   hello: string;
@@ -30,7 +30,7 @@ defineEmits<{ accept: []; decline: [] }>();
     class="relative box-border flex min-h-dvh flex-col gap-[18px] bg-xb-screen px-4 pb-[22px] pt-[30px] font-manrope leading-[normal] text-xb-text min-[400px]:px-[22px] min-[400px]:pt-[60px]"
   >
     <div class="pointer-events-none absolute inset-0 overflow-hidden">
-      <AtomsNextMemberLiveBackdrop />
+      <AtomsNextMemberLiveBackdrop variant="promo" />
     </div>
 
     <AtomsNextMemberRise>
