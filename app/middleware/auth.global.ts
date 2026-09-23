@@ -20,8 +20,17 @@ const LOGIN_PATH = '/login';
 /** Mini App водителя: своя дверь и своя личность — подписанная `initData`, а не cookie. */
 const MINIAPP_PATH = '/app';
 
+/** Служебная страница макетов (`app/pages/design/`) — только в разработке. */
+const DESIGN_PATH = '/design';
+
 export default defineNuxtRouteMiddleware(async (to) => {
   if (to.path === LOGIN_PATH || to.path === MINIAPP_PATH || to.path.startsWith(`${MINIAPP_PATH}/`)) {
+    return;
+  }
+
+  // Макеты водительского экрана на заглушках: ни данных, ни ручек, в сборке их нет вовсе.
+  // Входа сотрудника они не требуют — на них смотрят и без учётки.
+  if (import.meta.dev && (to.path === DESIGN_PATH || to.path.startsWith(`${DESIGN_PATH}/`))) {
     return;
   }
 
