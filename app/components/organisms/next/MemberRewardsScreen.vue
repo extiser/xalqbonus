@@ -28,7 +28,7 @@ defineEmits<{ back: []; retry: [] }>();
 </script>
 
 <template>
-  <div class="flex min-h-dvh flex-col bg-xb-screen pb-[calc(40px+env(safe-area-inset-bottom))] font-manrope text-xb-text">
+  <div class="flex min-h-dvh flex-col bg-xb-screen pb-[calc(40px+env(safe-area-inset-bottom))] font-manrope leading-[normal] text-xb-text">
     <MoleculesNextMemberSectionBar :title="texts.title" :back-label="texts.back" @back="$emit('back')" />
 
     <div class="flex flex-col gap-2.5 px-4 pb-5 pt-2">

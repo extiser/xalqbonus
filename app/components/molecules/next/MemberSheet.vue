@@ -58,7 +58,7 @@ const subtitleLines = computed((): readonly string[] => {
     aria-modal="true"
     :aria-label="title"
     :inert="!open"
-    class="member-sheet fixed bottom-0 left-1/2 z-[31] box-border w-full max-w-[520px] rounded-t-[26px] bg-xb-sheet px-5 pb-[calc(24px+env(safe-area-inset-bottom))] pt-8 font-manrope text-xb-text shadow-[0_-18px_50px_-20px_rgba(0,0,0,0.9)]"
+    class="member-sheet fixed bottom-0 left-1/2 z-[31] box-border w-full max-w-[520px] rounded-t-[26px] bg-xb-sheet px-5 pb-[calc(24px+env(safe-area-inset-bottom))] pt-8 font-manrope leading-[normal] text-xb-text shadow-[0_-18px_50px_-20px_rgba(0,0,0,0.9)]"
     :class="open ? 'member-sheet-open' : ''"
   >
     <div class="text-center">

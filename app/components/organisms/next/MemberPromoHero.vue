@@ -27,7 +27,7 @@ defineEmits<{ accept: []; decline: [] }>();
 
 <template>
   <section
-    class="relative box-border flex min-h-dvh flex-col gap-[18px] bg-xb-screen px-4 pb-[22px] pt-[30px] font-manrope text-xb-text min-[400px]:px-[22px] min-[400px]:pt-[60px]"
+    class="relative box-border flex min-h-dvh flex-col gap-[18px] bg-xb-screen px-4 pb-[22px] pt-[30px] font-manrope leading-[normal] text-xb-text min-[400px]:px-[22px] min-[400px]:pt-[60px]"
   >
     <div class="pointer-events-none absolute inset-0 overflow-hidden">
       <AtomsNextMemberLiveBackdrop />

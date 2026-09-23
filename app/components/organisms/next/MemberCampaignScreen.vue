@@ -47,7 +47,7 @@ defineEmits<{ profile: []; refresh: []; take: []; chest: [chestId: string] }>();
 </script>
 
 <template>
-  <div class="flex min-h-dvh flex-col bg-xb-screen font-manrope text-xb-text">
+  <div class="flex min-h-dvh flex-col bg-xb-screen font-manrope leading-[normal] text-xb-text">
     <div class="relative flex flex-col gap-[34px] overflow-hidden px-5 py-[26px]">
       <AtomsNextMemberHeatBackdrop :stage="stage" />
 
