@@ -48,7 +48,7 @@ defineEmits<{ decline: [] }>();
   font-weight: 400;
   color: var(--color-xb-muted);
   text-decoration: underline;
-  text-decoration-color: rgba(98, 106, 119, 0.4);
+  text-decoration-color: color-mix(in srgb, var(--color-xb-muted) 40%, transparent);
   text-underline-offset: 3px;
   cursor: pointer;
 }
