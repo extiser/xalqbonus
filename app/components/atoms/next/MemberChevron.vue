@@ -20,7 +20,7 @@ const TONE_CLASSES: Record<ChevronTone, string> = {
   light: 'text-xb-light',
   grey: 'text-xb-grey',
   dim: 'text-[#6B7483]',
-  muted: 'text-[#626A77]',
+  muted: 'text-xb-muted',
   green: 'text-xb-green',
   gold: 'text-xb-gold-light',
   amber: 'text-xb-gold',

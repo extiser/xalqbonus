@@ -190,7 +190,7 @@ function onAnimationEnd(event: AnimationEvent): void {
 }
 
 .chest-card-open > .chest-card-label {
-  color: #626a77;
+  color: var(--color-xb-muted);
 }
 
 /* Разгон: поверх соседей и без обрезки — иначе рамка карточки срезала бы раздутому сундуку

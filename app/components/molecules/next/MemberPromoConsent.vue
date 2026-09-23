@@ -32,7 +32,7 @@ defineEmits<{ decline: [] }>();
   font-size: 12px;
   font-weight: 300;
   line-height: 1.4;
-  color: #626a77;
+  color: var(--color-xb-muted);
 }
 
 .promo-decline {
@@ -46,7 +46,7 @@ defineEmits<{ decline: [] }>();
   font-family: var(--font-manrope);
   font-size: 14px;
   font-weight: 400;
-  color: #626a77;
+  color: var(--color-xb-muted);
   text-decoration: underline;
   text-decoration-color: rgba(98, 106, 119, 0.4);
   text-underline-offset: 3px;
