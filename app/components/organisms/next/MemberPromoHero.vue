@@ -50,14 +50,19 @@ defineEmits<{ accept: []; decline: [] }>();
     </AtomsNextMemberRise>
 
     <AtomsNextMemberRise :step="3">
-      <MoleculesNextMemberPromoDecision
-        :ask="texts.ask"
-        :accept="texts.accept"
-        :consent="texts.consent"
-        :decline="texts.decline"
-        @accept="$emit('accept')"
-        @decline="$emit('decline')"
-      />
+      <MoleculesNextMemberPromoAsk :ask="texts.ask" />
+    </AtomsNextMemberRise>
+
+    <!-- Прямой потомок экрана: липкость работает в пределах родителя, и внутри блока
+         кнопка прилипала бы только к его низу, а не к низу экрана. -->
+    <div class="sticky bottom-4 z-[3]">
+      <AtomsNextMemberRise :step="3">
+        <AtomsNextMemberPromoButton @click="$emit('accept')">{{ texts.accept }}</AtomsNextMemberPromoButton>
+      </AtomsNextMemberRise>
+    </div>
+
+    <AtomsNextMemberRise :step="3">
+      <MoleculesNextMemberPromoConsent :consent="texts.consent" :decline="texts.decline" @decline="$emit('decline')" />
     </AtomsNextMemberRise>
   </section>
 </template>
