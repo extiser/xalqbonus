@@ -31,7 +31,7 @@ defineProps<{ ask: string }>();
   margin: 0 0 5px;
   font-size: 13px;
   font-weight: 400;
-  color: #8e97a5;
+  color: var(--color-xb-grey);
 }
 
 @media (min-width: 361px) {
