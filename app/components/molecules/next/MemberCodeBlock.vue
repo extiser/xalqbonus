@@ -19,7 +19,7 @@ defineProps<{
 
 const WRAP_CLASSES: Record<CodeSize, string> = {
   l: 'items-center gap-2 text-center',
-  m: 'items-start gap-0',
+  m: 'items-start gap-[3px]',
 };
 
 const CODE_CLASSES: Record<CodeSize, string> = {

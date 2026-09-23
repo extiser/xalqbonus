@@ -9,5 +9,5 @@ defineProps<{ text: string }>();
 </script>
 
 <template>
-  <span class="text-[13px] font-extralight tracking-[0.2px] text-xb-grey">{{ text }}</span>
+  <span class="block text-[13px] font-extralight tracking-[0.2px] text-xb-grey">{{ text }}</span>
 </template>

@@ -21,12 +21,15 @@ defineProps<{
 <template>
   <div class="flex min-h-[52px] items-center gap-3 px-4">
     <span class="grow text-[15px] font-normal text-xb-grey">{{ label }}</span>
-    <span
-      class="text-right text-[15px] tabular-nums"
-      :class="missing ? 'font-normal text-xb-grey' : 'font-semibold tracking-[0.3px] text-xb-text'"
-    >
-      <span v-if="mask" class="mr-0.5 tracking-[2px] text-xb-grey">{{ mask }}</span>{{ value }}
+    <!-- Значение и кнопка рядом с ним — одной группой, ближе, чем подпись к значению. -->
+    <span class="flex items-center gap-2">
+      <span
+        class="text-right text-[15px] tabular-nums"
+        :class="missing ? 'font-normal text-xb-grey' : 'font-semibold tracking-[0.3px] text-xb-text'"
+      >
+        <span v-if="mask" class="mr-0.5 tracking-[2px] text-xb-grey">{{ mask }}</span>{{ value }}
+      </span>
+      <slot name="aside" />
     </span>
-    <slot name="aside" />
   </div>
 </template>

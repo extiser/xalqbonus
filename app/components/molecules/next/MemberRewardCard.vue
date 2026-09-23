@@ -37,7 +37,7 @@ const isAwaiting = computed(() => props.reward.status === 'awaiting');
     @click="$emit('open')"
   >
     <span class="flex min-w-0 grow flex-col gap-0.5">
-      <span class="text-[16px] font-bold">{{ reward.title }}</span>
+      <span class="text-[16px] font-bold leading-[1.25]">{{ reward.title }}</span>
       <AtomsNextMemberStateLine tone="gold" :state="reward.state" :hint="reward.hint" />
     </span>
     <AtomsNextMemberChevron tone="gold" />

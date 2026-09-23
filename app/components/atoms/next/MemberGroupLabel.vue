@@ -14,7 +14,7 @@ defineProps<{
 </script>
 
 <template>
-  <span class="text-[12px] font-semibold uppercase tracking-[1.2px] text-xb-grey">
+  <span class="block text-[12px] font-semibold uppercase tracking-[1.2px] text-xb-grey">
     {{ label }}<template v-if="count !== undefined"> · {{ count }}</template>
   </span>
 </template>

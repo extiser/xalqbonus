@@ -66,9 +66,10 @@ const subtitleLines = computed((): readonly string[] => {
       <div class="member-sheet-subtitle" :class="subtitleHidden ? 'member-sheet-subtitle-hidden' : ''">
         <div class="min-h-0 overflow-hidden">
           <p
-            v-for="line in subtitleLines"
+            v-for="(line, index) in subtitleLines"
             :key="line"
-            class="m-0 mt-1 text-[13px] font-light leading-[1.65] text-xb-light"
+            class="m-0 text-[13px] font-light leading-[1.65] text-xb-light"
+            :class="index > 0 ? 'mt-1' : ''"
           >
             {{ line }}
           </p>

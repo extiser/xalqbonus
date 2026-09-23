@@ -48,7 +48,8 @@ defineEmits<{ map: [] }>();
       </div>
     </div>
 
-    <button type="button" class="mt-3.5 w-full cursor-pointer border-0 bg-transparent p-0 font-manrope" @click="$emit('map')">
+    <!-- Поля 6 px по бокам — как у кнопки карты в макете: там её `padding` не сброшен. -->
+    <button type="button" class="mt-3.5 w-full cursor-pointer border-0 bg-transparent px-1.5 py-0 font-manrope" @click="$emit('map')">
       <AtomsNextMemberCardAction :label="texts.map" tone="blue" />
     </button>
   </div>

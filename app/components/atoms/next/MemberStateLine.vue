@@ -32,7 +32,7 @@ const TONE_CLASSES: Record<StateTone, string> = {
 </script>
 
 <template>
-  <span class="text-[13px] leading-[1.35]">
+  <span class="block text-[13px]">
     <span class="font-semibold" :class="TONE_CLASSES[tone]">{{ state }}</span>
     <span v-if="hint" class="font-light text-xb-grey"> · {{ hint }}</span>
   </span>
