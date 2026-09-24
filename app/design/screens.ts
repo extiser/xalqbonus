@@ -55,8 +55,8 @@ export const DESIGN_GROUPS: DesignGroup[] = [
     screens: [
       { slug: 'history', title: 'Страница 25 строк и «Показать ещё»', source: 'home/history-block.html, home/section-bar.md' },
       { slug: 'history-reasons', title: 'Все одиннадцать причин', source: 'home/history-block.html' },
-      { slug: 'history-empty', title: 'Пусто', source: 'home/history-block.html' },
-      { slug: 'history-error', title: 'Не загрузилось', source: 'home/history-block.html' },
+      { slug: 'history-empty', title: 'Пусто — видом экрана', source: 'home/history-block.html, orders/orders-screen-empty.html' },
+      { slug: 'history-error', title: 'Не загрузилось — видом экрана', source: 'home/history-block.html, orders/orders-screen-empty.html' },
       { slug: 'history-loading', title: 'Ждём ответа', source: 'home/history-block.html' },
     ],
   },

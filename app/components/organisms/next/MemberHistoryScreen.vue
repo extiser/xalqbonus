@@ -10,6 +10,10 @@ import type { MemberOperationDayView, MemberViewLoad } from '~/types/memberView'
  *
  * Отметка синхронизации отвечает на вопрос, который задают именно списку: «почему поездки,
  * которую я закончил десять минут назад, здесь нет».
+ *
+ * Пусто и «не загрузилось» — видом экрана, как у остальных разделов (`orders/orders-screen-empty.html`):
+ * один вид на все экраны, включая историю (Руслан, 24-09-2026, ревью #207). Блок истории
+ * на главной остаётся видом блока.
  */
 defineProps<{
   state: MemberViewLoad;
@@ -42,7 +46,7 @@ const SKELETON_ROWS = 6;
       <AtomsNextMemberSyncNote :text="texts.synced" />
     </div>
 
-    <div class="flex flex-col gap-1 px-3.5 pb-5 pt-2">
+    <div v-if="state === 'ready' || state === 'loading'" class="flex flex-col gap-1 px-3.5 pb-5 pt-2">
       <template v-if="state === 'ready'">
         <MoleculesNextMemberOperationDay v-for="day in days" :key="day.id" :label="day.label" :operations="day.operations" />
         <div v-if="hasMore" class="mt-[18px] flex justify-center">
@@ -50,15 +54,22 @@ const SKELETON_ROWS = 6;
         </div>
       </template>
 
-      <template v-else-if="state === 'loading'">
+      <template v-else>
         <div v-for="row in SKELETON_ROWS" :key="row" :class="row > 1 ? 'border-t border-white/6' : ''">
           <MoleculesNextMemberOperationRow />
         </div>
       </template>
-
-      <MoleculesNextMemberNotice v-else-if="state === 'empty'" state="empty" :message="texts.empty" />
-
-      <MoleculesNextMemberNotice v-else state="error" :message="texts.error" :retry-label="texts.retry" @retry="$emit('retry')" />
     </div>
+
+    <MoleculesNextMemberNotice v-else-if="state === 'empty'" state="empty" size="screen" :message="texts.empty" />
+
+    <MoleculesNextMemberNotice
+      v-else
+      state="error"
+      size="screen"
+      :message="texts.error"
+      :retry-label="texts.retry"
+      @retry="$emit('retry')"
+    />
   </div>
 </template>
