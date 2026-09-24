@@ -8,12 +8,16 @@
  * (палец попадает, и кнопка не спорит по весу с заголовком), 32 — внутри строки.
  *
  * Значок приходит слотом, подпись для экранного чтеца — свойством: на экране слов нет.
+ *
+ * `done` — действие только что сработало: подложка зеленеет. Кнопка копирования
+ * в «Покажите менеджеру» горит так секунду после нажатия — слов «скопировано» на экране нет.
  */
 type IconButtonSize = 'l' | 'm' | 's';
 
 defineProps<{
   label: string;
   size: IconButtonSize;
+  done?: boolean;
 }>();
 
 defineEmits<{ click: [] }>();
@@ -29,8 +33,8 @@ const SIZE_CLASSES: Record<IconButtonSize, string> = {
   <button
     type="button"
     :aria-label="label"
-    class="relative flex shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-white/7 p-0 text-[#B4BCC8]"
-    :class="SIZE_CLASSES[size]"
+    class="relative flex shrink-0 cursor-pointer items-center justify-center rounded-full border-0 p-0 text-[#B4BCC8]"
+    :class="[SIZE_CLASSES[size], done ? 'bg-[rgba(95,208,138,0.16)]' : 'bg-white/7']"
     @click="$emit('click')"
   >
     <slot />

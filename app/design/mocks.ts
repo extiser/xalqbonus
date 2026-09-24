@@ -7,6 +7,8 @@ import type {
   MemberOrderDetailView,
   MemberLanguage,
   MemberLanguageOptionView,
+  MemberManagerIdsView,
+  MemberOfficeView,
   MemberOrderRowView,
   MemberProfileFieldView,
   MemberPromoRuleView,
@@ -27,6 +29,9 @@ import type {
 
 const BACK = 'Назад';
 const RETRY = 'Повторить';
+
+/** Ссылка на карту у офисов: в макетах её значения нет, нарисована только строка карты. */
+const MAP_URL = 'https://yandex.uz/maps/';
 
 // --------------------------------------------------------------------------- главная
 
@@ -421,10 +426,12 @@ const ORDER_PENDING: MemberOrderDetailView = {
   amount: '900 баллов',
   code: '31724',
   officeCard: {
-    name: 'Офис · Чиланзар',
+    label: 'Офис',
+    name: 'Чиланзар',
     address: 'ул. Бунёдкор, 12',
     hours: 'Ежедневно, 09:00 — 20:00',
     phone: '+998 71 200-70-07',
+    mapUrl: MAP_URL,
   },
   lines: [
     { id: 'aroma', title: 'Ароматизатор «Гранат»', detail: '2 шт. · 150 баллов за штуку', cost: '300' },
@@ -933,4 +940,212 @@ export function bigChestMock(kind: BigChestKind, scene = 3) {
       link: '«Мои награды и призы»',
     },
   };
+}
+
+// ------------------------------------------------------------ регистрация и служебные экраны
+// Тексты — из словарей `T` макетов `registration/*.html`, где он есть, иначе из разметки.
+// Узбекские — черновые, как в макетах: их вычитывает переводчик.
+
+/** Двуязычная заглушка «не загрузилось» — `registration/state-load-failed.html`. */
+export const loadFailedMock = {
+  blocks: [
+    { title: "Yuklab bo'lmadi", paragraphs: ["Ma'lumotlarni yuklab bo'lmadi.\nQaytadan urinib ko'ring."] },
+    { title: 'Не удалось загрузить', paragraphs: ['Не удалось загрузить данные.\nПопробуйте ещё раз.'] },
+  ],
+  retryLabel: 'Yangilash / Обновить',
+};
+
+/** Открыто не из Telegram — `registration/state-not-telegram.html`: кнопки нет. */
+export const notTelegramMock = {
+  blocks: [
+    {
+      title: 'Telegram orqali oching',
+      paragraphs: ['Ilova faqat Telegram ichida ishlaydi.\nBotni oching va «Ilovani ochish» tugmasini bosing.'],
+    },
+    {
+      title: 'Откройте через Telegram',
+      paragraphs: ['Приложение работает только внутри Telegram.\nОткройте бота и нажмите «Открыть приложение».'],
+    },
+  ],
+  retryLabel: null,
+};
+
+/** Устаревший Telegram — `registration/state-outdated-telegram.html`: один язык, два абзаца, кнопки нет. */
+export const outdatedTelegramMock = {
+  blocks: [
+    {
+      title: 'Обновите Telegram',
+      paragraphs: [
+        'Ваш Telegram устарел: поделиться номером внутри приложения в нём нельзя.',
+        'Обновите Telegram до последней версии и откройте приложение снова.',
+      ],
+    },
+  ],
+  retryLabel: null,
+};
+
+/** Шаг 1, язык — `registration/registration-language.html`: словаря нет, тексты из разметки. */
+export const registrationLanguageMock = {
+  welcome: {
+    uz: {
+      title: "XalqTaxi BonusBot'ga\nxush kelibsiz!",
+      lead: "Bu yerda safarlaringiz uchun ballar to'planadi — ularni park ofislarida sovg'alarga almashtirish mumkin.",
+    },
+    ru: {
+      title: 'Добро пожаловать\nв XalqTaxi BonusBot',
+      lead: 'Здесь копятся ваши баллы за поездки —\nих можно обменять на подарки в офисах парка.',
+    },
+  },
+  selectLanguage: 'Tilni tanlang / Выберите язык',
+  languageUz: "O'zbekcha",
+  languageRu: 'Русский',
+};
+
+const REGISTRATION_PHONE_TEXTS = {
+  ru: {
+    title: 'Баллы за каждую поездку',
+    lead: 'Отправьте номер телефона, на который вы оформлены в таксопарке, — и программа заработает.',
+    perks: ['Начисляются автоматически после поездки', 'Подарки в офисах парка', 'Акции с сундуками и призами'],
+    ask: 'Telegram спросит разрешение отправить номер — нажмите «Поделиться».',
+    send: 'Отправить номер телефона',
+    checking: 'Проверяем ваш номер в базе таксопарка, это займёт несколько секунд…',
+  },
+  uz: {
+    title: 'Har bir safar uchun ball',
+    lead: "Taksoparkda ro'yxatdan o'tgan telefon raqamingizni yuboring — dastur ishga tushadi.",
+    perks: ['Safardan keyin avtomatik hisoblanadi', "Park ofislarida sovg'alar", 'Sandiq va sovrinli aksiyalar'],
+    ask: "Telegram raqamni yuborishga ruxsat so'raydi — «Ulashish» tugmasini bosing.",
+    send: 'Telefon raqamini yuborish',
+    checking: "Telefon raqamingiz taksopark ma'lumotlar bazasida tekshirilmoqda, bu bir necha soniya davom etadi…",
+  },
+} satisfies Record<MemberLanguage, unknown>;
+
+/** Шаг 2, номер — `registration/registration-screen.html`. */
+export function registrationPhoneMock(language: MemberLanguage) {
+  return { texts: REGISTRATION_PHONE_TEXTS[language] };
+}
+
+/** Общее для отказов: подписи «Покажите менеджеру», офисов и карты. */
+const OUTCOME_COMMON_TEXTS = {
+  ru: { ids: 'Покажите менеджеру', phone: 'Телефон', offices: 'Офисы Xalq Taxi', office: 'Офис', map: 'Открыть в Яндекс Картах' },
+  uz: { ids: "Menejerga ko'rsating", phone: 'Telefon', offices: 'Xalq Taxi ofislari', office: 'Ofis', map: 'Yandex Kartada ochish' },
+} satisfies Record<MemberLanguage, unknown>;
+
+/**
+ * Номер и Telegram ID из макетов. Подписи кнопок копирования в словарях макетов есть только
+ * по-русски, и при переключении макет их не меняет — здесь так же.
+ */
+function managerIds(language: MemberLanguage): MemberManagerIdsView {
+  return {
+    texts: {
+      title: OUTCOME_COMMON_TEXTS[language].ids,
+      phoneLabel: OUTCOME_COMMON_TEXTS[language].phone,
+      telegramIdLabel: 'Telegram ID',
+      copyPhone: 'Скопировать номер',
+      copyTelegramId: 'Скопировать Telegram ID',
+    },
+    phone: { display: '+998 90 123-45-67', copy: '+998901234567' },
+    telegramId: '5812345670',
+  };
+}
+
+/** Три офиса старого бота; адрес, часы и телефон в макетах — заглушки, разметкой, без перевода. */
+function registrationOffices(language: MemberLanguage): MemberOfficeView[] {
+  return ['Кадышева', 'Сергели', 'ТТЗ'].map((name) => ({
+    label: OUTCOME_COMMON_TEXTS[language].office,
+    name,
+    address: 'Адрес — заглушка',
+    hours: 'Часы работы — заглушка',
+    phone: '+998 71 000-00-00',
+    mapUrl: MAP_URL,
+  }));
+}
+
+const OUTCOME_TEXTS = {
+  refused: {
+    ru: {
+      title: 'Нужно зайти в офис',
+      paragraphs: [
+        'Вы уже зарегистрированы в программе, но с другого аккаунта Telegram. Откройте бота с него — баллы на месте. Если доступа к тому аккаунту больше нет, подойдите в офис с водительским удостоверением.',
+      ],
+    },
+    uz: {
+      title: 'Ofisga kelishingiz kerak',
+      paragraphs: [
+        "Siz dasturda allaqachon ro'yxatdan o'tgansiz, lekin boshqa Telegram akkaunti orqali. Botni o'sha akkauntdan oching — ballaringiz joyida. Agar o'sha akkauntga kira olmasangiz, haydovchilik guvohnomangiz bilan ofisga murojaat qiling.",
+      ],
+    },
+  },
+  retry: {
+    ru: {
+      title: 'Не получилось проверить номер',
+      paragraphs: [
+        'Сейчас не получилось проверить ваш номер. Попробуйте, пожалуйста, через несколько минут.',
+        'Если не получается с нескольких попыток — обратитесь в ближайший офис Xalq Taxi.',
+      ],
+    },
+    uz: {
+      title: "Raqamni tekshirib bo'lmadi",
+      paragraphs: [
+        "Hozir raqamingizni tekshirib bo'lmadi. Iltimos, bir necha daqiqadan so'ng qayta urinib ko'ring.",
+        "Bir necha urinishdan keyin ham bo'lmasa — eng yaqin Xalq Taxi ofisiga murojaat qiling.",
+      ],
+    },
+  },
+  employee: {
+    ru: {
+      title: 'Нужно зайти в офис',
+      paragraphs: ['Зарегистрироваться с этого аккаунта не получится.\nОбратитесь в офис Xalq Taxi — там помогут.'],
+    },
+    uz: {
+      title: 'Ofisga kelishingiz kerak',
+      paragraphs: ["Bu akkaunt orqali ro'yxatdan o'tib bo'lmaydi.\nXalq Taxi ofisiga murojaat qiling — u yerda yordam berishadi."],
+    },
+  },
+  employeeDenied: {
+    ru: { title: 'Доступ закрыт', paragraphs: ['Чтобы его вернуть, обратитесь к руководителю парка.'] },
+    uz: { title: 'Kirish yopilgan', paragraphs: ['Uni qaytarish uchun park rahbariga murojaat qiling.'] },
+  },
+} satisfies Record<string, Record<MemberLanguage, { title: string; paragraphs: string[] }>>;
+
+/** Низ повтора — `registration/registration-retry.html`: как у шага 2 и строка сбоя. */
+const RETRY_FOOT_TEXTS = {
+  ru: {
+    ask: 'Telegram спросит разрешение отправить номер — нажмите «Поделиться».',
+    send: 'Отправить номер ещё раз',
+    failed: 'Проверка номера не прошла — попробуйте ещё раз',
+    checking: 'Проверяем ваш номер в базе таксопарка, это займёт несколько секунд…',
+  },
+  uz: {
+    ask: "Telegram raqamni yuborishga ruxsat so'raydi — «Ulashish» tugmasini bosing.",
+    send: 'Raqamni qayta yuborish',
+    failed: "Raqam tekshiruvidan o'tmadi — qayta urinib ko'ring",
+    checking: "Telefon raqamingiz taksopark ma'lumotlar bazasida tekshirilmoqda, bu bir necha soniya davom etadi…",
+  },
+} satisfies Record<MemberLanguage, unknown>;
+
+export type RegistrationOutcomeScene = keyof typeof OUTCOME_TEXTS;
+
+/**
+ * Исход регистрации: `refused` — отказ «в офис» (текст `person_already_linked`), `retry` — повтор,
+ * `employee` — отказ сотруднику, `employeeDenied` — сотрудник с выключенной учёткой.
+ */
+export function registrationOutcomeMock(scene: RegistrationOutcomeScene, language: MemberLanguage) {
+  const base = { ...OUTCOME_TEXTS[scene][language], ids: managerIds(language) };
+
+  if (scene === 'employee' || scene === 'employeeDenied') {
+    return { ...base, kind: 'employee' as const };
+  }
+
+  const offices = {
+    officesTitle: OUTCOME_COMMON_TEXTS[language].offices,
+    offices: registrationOffices(language),
+    mapLabel: OUTCOME_COMMON_TEXTS[language].map,
+  };
+
+  if (scene === 'retry') {
+    return { ...base, ...offices, ...RETRY_FOOT_TEXTS[language], kind: 'retry' as const };
+  }
+
+  return { ...base, ...offices, kind: 'office' as const };
 }

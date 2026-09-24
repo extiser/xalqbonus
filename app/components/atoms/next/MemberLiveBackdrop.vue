@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Живой фон под балансом главного экрана и под экраном приглашения — `product/design/motion.md`.
+ * Живой фон под балансом главного экрана, под экраном приглашения и под регистрацией — `_reference/design/motion.md`.
  *
  * Неподвижное ядро и три подвижных пятна: гранат, вино и янтарь. Периоды 13, 17 и 23 секунды
  * взаимно простые — слои не сходятся в одну фазу, и картинка не «дышит в такт». Без
@@ -15,14 +15,25 @@
  * `home` — под балансом главной. `promo` — экран приглашения (`comeback/02-promo-hero.html`):
  * пятна те же и дрейфуют так же, но стоят выше и ниже ростом, а затемнение начинается раньше
  * (с 44 % вместо 52 %) — как в макете.
+ *
+ * `registration` — экраны регистрации, заглушки и загрузка (`registration/*.html`, `state-*.html`):
+ * тот же дрейф, но пятен три, без неподвижного ядра, мельче и резче — размытие 10–14 вместо
+ * 38–48. Утверждён именно этот вид (Руслан, 24-09-2026); комментарий в макетах «из эталона
+ * без правок» неверен. Высоту — 470 в макетах — задаёт контейнер.
  */
-type BackdropVariant = 'home' | 'promo';
+type BackdropVariant = 'home' | 'promo' | 'registration';
 
 defineProps<{ variant: BackdropVariant }>();
 </script>
 
 <template>
-  <div class="pointer-events-none absolute inset-0" :class="variant === 'promo' ? 'live-promo' : ''" aria-hidden="true">
+  <div v-if="variant === 'registration'" class="pointer-events-none absolute inset-0 live-registration" aria-hidden="true">
+    <div class="live-blob live-wine" />
+    <div class="live-blob live-core" />
+    <div class="live-blob live-amber" />
+    <div class="live-fade" />
+  </div>
+  <div v-else class="pointer-events-none absolute inset-0" :class="variant === 'promo' ? 'live-promo' : ''" aria-hidden="true">
     <div class="live-blob live-base" />
     <div class="live-blob live-core" />
     <div class="live-blob live-wine" />
@@ -106,6 +117,34 @@ defineProps<{ variant: BackdropVariant }>();
 
 .live-promo .live-fade {
   background: linear-gradient(180deg, rgba(11, 13, 17, 0) 44%, rgba(11, 13, 17, 0.8) 78%, #0b0d11 100%);
+}
+
+/* Регистрация: пятна от середины, в порядке вино → гранат → янтарь, фон и затемнение те же. */
+.live-registration .live-core {
+  top: 20px;
+  left: 50%;
+  width: 300px;
+  height: 300px;
+  filter: blur(10px);
+  background: radial-gradient(circle, rgba(232, 54, 93, 0.55) 0%, rgba(232, 54, 93, 0) 68%);
+}
+
+.live-registration .live-wine {
+  top: 40px;
+  left: 50%;
+  width: 360px;
+  height: 360px;
+  filter: blur(14px);
+  background: radial-gradient(circle, rgba(120, 24, 60, 0.6) 0%, rgba(120, 24, 60, 0) 70%);
+}
+
+.live-registration .live-amber {
+  top: 60px;
+  left: 50%;
+  width: 260px;
+  height: 260px;
+  filter: blur(12px);
+  background: radial-gradient(circle, rgba(247, 160, 60, 0.32) 0%, rgba(247, 160, 60, 0) 70%);
 }
 
 @keyframes live-drift-core {
