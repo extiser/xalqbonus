@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import type {
   MemberOperationDayView,
   MemberOrderRowView,
+  MemberProductView,
   MemberRewardView,
   MemberViewLoad,
 } from '~/types/memberView';
@@ -12,12 +13,10 @@ import type {
  *
  * Сверху липкая шапка, под ней живой фон и баллы; под баллами — плашка приглашения, если водитель
  * попал в снимок акции и не вступил. Фон начинается от верха экрана и уходит под шапку. Дальше
- * блоки в порядке срочности: заказы (живут сутки), награды (недели), история. Заказы выше
- * наград — первым говорит то, что горит.
+ * блоки в порядке срочности: заказы (живут сутки), награды (недели), каталог, история. Заказы выше
+ * наград — первым говорит то, что горит. Каталог — выше истории (`catalog-block.md`, «Место на главной»).
  *
  * Число баллов набирается здесь, один раз на крупное и на баланс в шапке: они считаются вместе.
- *
- * Каталога и блока HOT здесь нет: они придут своей задачей.
  */
 const props = defineProps<{
   name: string;
@@ -29,6 +28,7 @@ const props = defineProps<{
   invite?: { kicker: string; title: string; when: string };
   orders: { state: MemberViewLoad; items: MemberOrderRowView[] };
   rewards: { state: MemberViewLoad; items: MemberRewardView[] };
+  catalog: { state: MemberViewLoad; products: MemberProductView[] };
   history: { state: MemberViewLoad; days: MemberOperationDayView[] };
   texts: {
     profile: string;
@@ -44,6 +44,11 @@ const props = defineProps<{
     rewardsAll: string;
     rewardsEmpty: string;
     rewardsError: string;
+    catalogTitle: string;
+    catalogAll: string;
+    catalogSale: string;
+    catalogEmpty: string;
+    catalogError: string;
     historyTitle: string;
     historyAll: string;
     historyEmpty: string;
@@ -61,9 +66,12 @@ defineEmits<{
   order: [orderId: string];
   rewards: [];
   reward: [rewardId: string];
+  catalog: [];
+  product: [productId: string];
   history: [];
   retryOrders: [];
   retryRewards: [];
+  retryCatalog: [];
   retryHistory: [];
 }>();
 
@@ -126,6 +134,22 @@ const barSurface = ref(false);
       @all="$emit('rewards')"
       @open="(rewardId) => $emit('reward', rewardId)"
       @retry="$emit('retryRewards')"
+    />
+
+    <OrganismsNextMemberCatalogBlock
+      :state="catalog.state"
+      :products="catalog.products"
+      :texts="{
+        title: texts.catalogTitle,
+        all: texts.catalogAll,
+        sale: texts.catalogSale,
+        empty: texts.catalogEmpty,
+        error: texts.catalogError,
+        retry: texts.retry,
+      }"
+      @all="$emit('catalog')"
+      @open="(productId) => $emit('product', productId)"
+      @retry="$emit('retryCatalog')"
     />
 
     <OrganismsNextMemberHistoryBlock

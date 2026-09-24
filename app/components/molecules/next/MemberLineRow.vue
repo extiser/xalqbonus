@@ -13,11 +13,15 @@
  *
  * Зачёркнутая цена — у награды-товара: цена из каталога мелко сверху, под ней «0» — сколько
  * стоил бы подарок в баллах (`reward-screen.html`, Руслан, 24-09-2026).
+ *
+ * В подтверждении заказа (`_reference/design/catalog/catalog-confirm.html`) под названием
+ * вместо подписи стоит счётчик — он приходит слотом. Там строка первая в списке, и черты
+ * над ней нет (`.rb:first-child`); на экране заказа над строками подпись группы, черта есть.
  */
 defineProps<{
   title: string;
   /** «2 шт. · 150 баллов за штуку», «1 шт.». */
-  caption: string;
+  caption?: string;
   /** Фото товара. */
   image?: string;
   /** Цена строки числом: «300». */
@@ -30,7 +34,7 @@ defineProps<{
 </script>
 
 <template>
-  <div class="flex items-start gap-3 border-t border-white/6 py-3 leading-[normal]">
+  <div class="flex items-start gap-3 border-t border-white/6 py-3 leading-[normal] first:border-t-0">
     <span
       v-if="icon === 'gift'"
       class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-white/6"
@@ -47,10 +51,13 @@ defineProps<{
       <img v-if="image" :src="image" alt="" class="absolute inset-1 size-9 object-contain mix-blend-multiply" />
     </span>
 
-    <span class="min-w-0 grow">
+    <div class="min-w-0 grow">
       <span class="block text-[15px] font-normal leading-[1.3] text-xb-text">{{ title }}</span>
-      <span class="mt-[3px] block text-[13px] font-light text-xb-grey">{{ caption }}</span>
-    </span>
+      <span v-if="caption" class="mt-[3px] block text-[13px] font-light text-xb-grey">{{ caption }}</span>
+      <div v-if="$slots.default" class="mt-1">
+        <slot />
+      </div>
+    </div>
 
     <span
       v-if="price && oldPrice"

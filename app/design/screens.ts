@@ -8,7 +8,7 @@ export interface DesignScreen {
   slug: string;
   title: string;
   /**
-   * Откуда снято — файл макета. Регистрация, главная и разделы с шапкой — пути снимка
+   * Откуда снято — файл макета. Регистрация, главная, разделы с шапкой и каталог — пути снимка
    * `_reference/design/`; профиль и акция — ещё пути планировочной папки (`product/design/`).
    */
   source: string;
@@ -40,14 +40,31 @@ export const DESIGN_GROUPS: DesignGroup[] = [
   {
     title: 'Главный экран',
     screens: [
-      { slug: 'home', title: 'Участник акции — эталон', source: 'home/main-screen.html' },
+      { slug: 'home', title: 'Участник акции — эталон', source: 'home/main-screen.html, catalog/catalog-block.html' },
       { slug: 'home-invite', title: 'В снимке акции, не вступил — плашка приглашения', source: 'home/main-screen-invite.html' },
       { slug: 'home-several', title: 'Ждут несколько заказов и наград', source: 'home/orders-block.html, home/rewards-block.html' },
       { slug: 'home-quiet', title: 'Забирать нечего — последний заказ выдан, без акции', source: 'home/orders-block.html, home/rewards-block.html' },
       { slug: 'home-quiet-cancelled', title: 'Забирать нечего — последний заказ отменён', source: 'home/orders-block.html' },
-      { slug: 'home-newcomer', title: 'Новичок — заказов, наград и истории не было', source: 'home/orders-block.html, home/rewards-block.html, home/history-block.html' },
+      { slug: 'home-newcomer', title: 'Новичок — заказов, наград и истории не было, каталог пуст', source: 'home/orders-block.html, home/rewards-block.html, home/history-block.html, catalog/catalog-block.html' },
       { slug: 'home-loading', title: 'История грузится', source: 'home/history-block.html' },
-      { slug: 'home-errors', title: 'Не загрузилось', source: 'home/*-block.html' },
+      { slug: 'home-errors', title: 'Не загрузилось', source: 'home/*-block.html, catalog/catalog-block.html' },
+    ],
+  },
+  {
+    title: 'Каталог',
+    screens: [
+      { slug: 'catalog-first', title: 'Первый вход — шторка выбора офиса', source: 'catalog/catalog-office-sheet-first.html' },
+      { slug: 'catalog', title: 'Витрина офиса', source: 'catalog/catalog-showcase.html' },
+      { slug: 'catalog-nothing', title: 'Витрина 1: ничего не выбрано', source: 'catalog/catalog-showcase-states.html' },
+      { slug: 'catalog-over-balance', title: 'Витрина 2: сумма больше баланса', source: 'catalog/catalog-showcase-states.html' },
+      { slug: 'catalog-stock-limit', title: 'Витрина 3: взял всё, что есть', source: 'catalog/catalog-showcase-states.html' },
+      { slug: 'catalog-empty', title: 'Витрина 4: в офисе нет товаров', source: 'catalog/catalog-showcase-states.html' },
+      { slug: 'catalog-error', title: 'Витрина 5: не загрузилось', source: 'catalog/catalog-showcase-states.html' },
+      { slug: 'catalog-office', title: 'Смена офиса — отмечен текущий', source: 'catalog/catalog-office-sheet.html' },
+      { slug: 'catalog-office-other', title: 'Смена офиса — отмечен другой, в корзине товары', source: 'catalog/catalog-office-sheet.html' },
+      { slug: 'catalog-confirm', title: 'Подтверждение заказа', source: 'catalog/catalog-confirm.html' },
+      { slug: 'catalog-confirm-placing', title: 'Подтверждение — оформляется', source: 'catalog/catalog-confirm-states.html' },
+      { slug: 'catalog-confirm-denied', title: 'Подтверждение — отказ', source: 'catalog/catalog-confirm-states.html' },
     ],
   },
   {

@@ -4,10 +4,20 @@
  *
  * Выбранный — рамкой и отметкой, без заливки цветом: гранат в шторке занят кнопкой
  * «Сохранить», и второй гранатовый блок спорил бы с ней.
+ *
+ * Два вида по содержимому. Язык — одно название 16/600, у невыбранного тише. Офис
+ * в каталоге (`_reference/design/catalog/catalog-office-sheet.html`, `.opt`) — имя по роли
+ * «Офис в каталоге»: «Офис · » 16/400 серым, имя 16/700 белым, и адрес второй строкой;
+ * строка выше, 64 вместо 56. Цвет текста офиса от выбора не меняется — выбор держат
+ * рамка и отметка.
  */
 defineProps<{
   label: string;
   selected: boolean;
+  /** Подпись перед именем: «Офис». Есть — имя пишется моделью «Офис · **имя**». */
+  prefix?: string;
+  /** Вторая строка под именем: адрес офиса. */
+  caption?: string;
 }>();
 
 defineEmits<{ select: [] }>();
@@ -18,11 +28,16 @@ defineEmits<{ select: [] }>();
     type="button"
     role="radio"
     :aria-checked="selected"
-    class="box-border flex min-h-14 w-full cursor-pointer items-center gap-3 rounded-[16px] border px-[18px] text-left font-manrope text-[16px] font-semibold transition-colors duration-150"
-    :class="selected ? 'border-white/30 bg-white/6 text-xb-text' : 'border-white/9 bg-white/3 text-xb-secondary'"
+    class="box-border flex w-full cursor-pointer items-center gap-3 rounded-[16px] border px-[18px] text-left font-manrope text-[16px] transition-colors duration-150"
+    :class="[selected ? 'border-white/30 bg-white/6' : 'border-white/9 bg-white/3', caption ? 'min-h-16 py-2.5' : 'min-h-14']"
     @click="$emit('select')"
   >
-    <span class="grow">{{ label }}</span>
+    <span v-if="prefix || caption" class="min-w-0 grow">
+      <span v-if="prefix" class="font-normal text-xb-light">{{ prefix }} · <b class="font-bold text-xb-text">{{ label }}</b></span>
+      <span v-else class="font-semibold text-xb-text">{{ label }}</span>
+      <span v-if="caption" class="mt-0.5 block text-[13px] font-light text-xb-grey">{{ caption }}</span>
+    </span>
+    <span v-else class="grow font-semibold" :class="selected ? 'text-xb-text' : 'text-xb-secondary'">{{ label }}</span>
     <span
       class="box-border flex size-[22px] shrink-0 items-center justify-center rounded-full"
       :class="selected ? 'bg-xb-text' : 'border-[1.5px] border-white/22'"

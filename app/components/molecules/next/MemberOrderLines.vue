@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<script setup lang="ts" generic="Line extends MemberLineView">
 import type { MemberLineView } from '~/types/memberView';
 
 /**
@@ -10,21 +10,28 @@ import type { MemberLineView } from '~/types/memberView';
  *
  * Итог — белым и без знака минус: это ценник заказа, а не событие списания. Списание названо
  * один раз, в карточке заказа. У произвольной награды цены нет — нет и итога.
+ *
+ * В шторке подтверждения заказа (`_reference/design/catalog/catalog-confirm.html`) подписи группы
+ * нет — заголовок шторки уже сказал, что это заказ, — а под названием каждой строки стоит
+ * счётчик. Он приходит слотом `line` со строкой в руках.
  */
 defineProps<{
-  lines: MemberLineView[];
+  lines: Line[];
   /** Итог числом: «900». Нет — строки «Сумма» нет. */
   total?: string;
   texts: {
-    title: string;
+    /** Подпись группы над строками. Нет — подписи нет. */
+    title?: string;
     total: string;
   };
 }>();
+
+defineSlots<{ line?: (props: { line: Line }) => unknown }>();
 </script>
 
 <template>
   <div class="flex flex-col leading-[normal]">
-    <div class="pb-3.5">
+    <div v-if="texts.title" class="pb-3.5">
       <AtomsNextMemberGroupLabel :label="texts.title" />
     </div>
 
@@ -37,7 +44,11 @@ defineProps<{
       :price="line.price"
       :old-price="line.oldPrice"
       :icon="line.icon"
-    />
+    >
+      <template v-if="$slots.line" #default>
+        <slot name="line" :line="line" />
+      </template>
+    </MoleculesNextMemberLineRow>
 
     <div v-if="total" class="mt-1 flex items-baseline gap-3 border-t border-white/14 pt-[13px]">
       <span class="grow text-[15px] font-bold text-xb-text">{{ texts.total }}</span>
