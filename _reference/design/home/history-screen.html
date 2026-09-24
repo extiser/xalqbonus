@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Раздел «История баллов»</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&family=Unbounded:wght@200;300;600;700&display=swap">
+<style>
+/* РАЗДЕЛ «ИСТОРИЯ БАЛЛОВ» — экран целиком, куда ведёт «Вся история ›» с главной.
+   Нарисован 22-09-2026, сессия 52, по задаче T51.
+
+   Экран собран из двух перенесённых блоков, и правятся они ТАМ, а не здесь
+   (CLAUDE.md → «Дизайн приложения»):
+     шапка раздела — ../artboard/section-bar.html, общая у всех разделов,
+     список операций — ../artboard/history-block.html.
+   Что решается здесь и нигде больше: отметка синхронизации и листание.
+
+   Объяснение — history-screen.md рядом.
+
+   Состав строк и тексты сняты с кода, не придуманы:
+   `server/services/drivers/readMemberHistory.ts` (страница 25 строк),
+   `server/services/drivers/memberScreen.ts` (причины словами, подписи дней),
+   `server/bot/texts.ts` (`button_show_more`, `trips_counted`).
+   На этом экране ровно 25 строк — столько отдаёт одна страница.
+
+   Предел ширины 520: на 16 Pro Max логическая ширина 440 (замер 22-09-2026). */
+
+html, body { background: #0B0D11; margin: 0; }
+body { display: flex; justify-content: center; }
+
+.screen {
+  position: relative; width: 100%; max-width: 520px; min-height: 100dvh;
+  box-sizing: border-box; background: #0B0D11; color: #F4F6F8;
+  font-family: Manrope, 'Segoe UI', system-ui, sans-serif;
+  display: flex; flex-direction: column;
+  padding-bottom: calc(40px + env(safe-area-inset-bottom));
+}
+
+/* ------------------------------------------------------- шапка раздела
+   Перенесена из ../artboard/section-bar.html — общий блок всех разделов. Правки идут туда,
+   сюда переносятся копией. В коде это один компонент, а не разметка в каждом экране. */
+.bar {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 12px;
+  padding: calc(14px + env(safe-area-inset-top)) 16px 14px;
+  background: rgba(11, 13, 17, 0.82);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.bar .back {
+  width: 40px; height: 40px; flex-shrink: 0; border: 0; padding: 0; cursor: pointer;
+  border-radius: 999px; background: rgba(255, 255, 255, 0.07);
+  display: flex; align-items: center; justify-content: center;
+}
+
+.bar h1 {
+  margin: 0; flex-grow: 1; min-width: 0;
+  font-family: Unbounded, Manrope, sans-serif;
+  font-size: 19px; font-weight: 600; letter-spacing: -0.5px; line-height: 1.25;
+}
+
+/* Место под действие справа занято всегда, даже когда кнопки нет: иначе заголовок
+   прыгал бы вбок при переходе между разделами. */
+.bar .act { width: 40px; height: 40px; flex-shrink: 0; }
+/* Баланс в шапке — копия .bar .bal из ../artboard/catalog-bar.html (сессия 56, 24-09-2026: решение сессии 55 —
+   баланс в шапке каталога, «Моих наград», «Моих заказов», экрана заказа и истории). Стоит на месте действия. */
+.bar .bal { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.bar .bal .lbl { font-size: 12px; font-weight: 400; color: #8A93A2; }
+.bar .bal .num { display: flex; align-items: center; gap: 4px; font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* Отметка синхронизации. Текст `trips_counted` уже есть в коде и стоит под балансом
+   на главной; здесь он отвечает на тот же вопрос в том месте, где его задают чаще всего —
+   «почему последней поездки нет в списке». */
+.synced {
+  padding: 12px 20px 2px;
+  font-size: 13px; font-weight: 200; letter-spacing: 0.2px; color: #8A93A2;
+}
+
+/* --------------------------------------------------------------- блок истории
+   Перенесён из ../artboard/history-block.html. Отличия раздела от главной ровно два:
+   в шапке блока нет ссылки «Вся история» — идти уже некуда, и список листается при прокрутке:
+   долистал до конца — пришла следующая страница. Кнопки «Показать ещё» нет (Руслан, 25-09-2026,
+   сессия 60); стиль .more оставлен для «Повторить» под сбоем следующей страницы. */
+
+.history { display: flex; flex-direction: column; gap: 4px; padding: 8px 14px 20px; }
+
+.day {
+  font-size: 12px; font-weight: 600; letter-spacing: 1.2px; text-transform: uppercase;
+  color: #8A93A2; padding: 14px 4px 6px;
+}
+
+.op {
+  display: flex; align-items: baseline; gap: 12px; padding: 10px 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.day + .op { border-top: 0; }
+
+.op .time {
+  width: 42px; flex-shrink: 0; font-size: 13px; font-weight: 300;
+  color: #8A93A2; font-variant-numeric: tabular-nums;
+}
+
+.op .what { flex-grow: 1; min-width: 0; font-size: 15px; font-weight: 400; line-height: 1.3; }
+
+/* Знак и цвет вместе, а не вместо друг друга: знак читается и в чёрно-белом,
+   и тем, кто не различает цвета.
+
+   Списание алое (#FF5C78), а не серое — решение Руслана 22-09-2026: водитель должен видеть,
+   что баллы ушли с него. Цвет единый на все экраны, где баллы уходят со счёта; выбор
+   и замеры контраста — spend-color.html. */
+.op .sum { flex-shrink: 0; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.op .sum.plus { color: #5FD08A; }
+.op .sum.minus { color: #FF5C78; }  /* алый — единый цвет списания, ../artboard/spend-color.html */
+
+/* Вторичная кнопка S — пилюля 40, контур, 14/600 (сверка шрифтов, сессия 53, 23-09-2026). */
+.more {
+  align-self: center; margin-top: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.14); background: rgba(255, 255, 255, 0.05);
+  color: #F4F6F8; cursor: pointer; height: 40px; padding: 0 22px; border-radius: 999px;
+  font-family: Manrope, sans-serif; font-size: 14px; font-weight: 600;
+}
+</style></head><body>
+
+<div class="screen">
+
+  <div class="bar">
+    <button class="back" aria-label="Назад">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M14.5 5.5L8 12l6.5 6.5" stroke="#E4E8EE" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <h1>История баллов</h1>
+    <div class="bal"><span class="lbl">Ваши баллы</span><span class="num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg>1 450</span></div>
+  </div>
+
+  <div class="synced">Поездки учтены до 22.09, 14:31</div>
+
+  <div class="history">
+
+    <div class="day">Сегодня</div>
+    <div class="op"><span class="time">14:26</span><span class="what">Поездка</span><span class="sum plus">+1</span></div>
+    <div class="op"><span class="time">13:58</span><span class="what">Поездка</span><span class="sum plus">+1</span></div>
+    <div class="op"><span class="time">12:04</span><span class="what">Обмен на товар · #1042</span><span class="sum minus">−900</span></div>
+    <div class="op"><span class="time">11:40</span><span class="what">Поездка</span><span class="sum plus">+1</span></div>
+    <div class="op"><span class="time">10:22</span><span class="what">Поездка</span><span class="sum plus">+1</span></div>
+    <div class="op"><span class="time">09:15</span><span class="what">Поездка</span><span class="sum plus">+1</span></div>
+    <div class="op"><span class="time">08:02</span><span class="what">Поездка</span><span class="sum plus">+1</span></div>
+
+    <div class="day">Вчера</div>
+    <div class="op"><span class="time">23:41</span><span class="what">Поездка</span><span class="sum plus">+1</span></div>
+    <div class="op"><span class="time">22:10</span><span class="what">Акция</span><span class="sum plus">+150</span></div>
+    <div class="op"><span class="time">21:10</span><span class="what">Поездка</span><span class="sum plus">+1</span></div>
+    <div class="op"><span class="time">19:55</span><span class="what">Поездка</span><span class="sum plus">+1</span></div>
+    <div class="op"><span class="time">18:33</span><span class="what">Поездка</span><span class="sum plus">+1</span></div>
+    <div class="op"><span class="time">16:20</span><span class="what">Поездка</span><span class="sum plus">+1</span></div>
+    <div class="op"><span class="time">14:08</span><span class="what">Начислено сотрудником</span><span class="sum plus">+50</span></div>
+    <div class="op"><span class="time">09:30</span><span class="what">Поездка</span><span class="sum plus">+1</span></div>
+
+    <div class="day">20 сентября</div>
+    <div class="op"><span class="time">22:15</span><span class="what">Поездка</span><span class="sum plus">+1</span></div>
+    <div class="op"><span class="time">20:40</span><span class="what">Розыгрыш</span><span class="sum plus">+500</span></div>
+    <div class="op"><span class="time">18:12</span><span class="what">Поездка</span><span class="sum plus">+1</span></div>
+    <div class="op"><span class="time">15:33</span><span class="what">Возврат заказа · #1039</span><span class="sum plus">+900</span></div>
+    <div class="op"><span class="time">12:50</span><span class="what">Обмен на товар · #1039</span><span class="sum minus">−900</span></div>
+    <div class="op"><span class="time">09:05</span><span class="what">Поездка</span><span class="sum plus">+1</span></div>
+
+    <div class="day">19 сентября</div>
+    <div class="op"><span class="time">21:02</span><span class="what">Поездка</span><span class="sum plus">+1</span></div>
+    <div class="op"><span class="time">17:44</span><span class="what">Поездка</span><span class="sum plus">+1</span></div>
+    <div class="op"><span class="time">13:26</span><span class="what">Корректировка</span><span class="sum minus">−12</span></div>
+    <div class="op"><span class="time">10:11</span><span class="what">Поездка</span><span class="sum plus">+1</span></div>
+
+    <!-- Конец страницы: следующая подгружается при прокрутке, кнопки нет (сессия 60).
+         Сбой следующей страницы — history_failed и «Повторить» здесь же, вид .more -->
+
+  </div>
+
+</div>
+
+</body></html>
