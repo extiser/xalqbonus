@@ -97,20 +97,62 @@ export type RegistrationScreenTexts = {
   employeeDeniedText: string;
 };
 
-/** Тексты экрана участника на его языке. */
+/**
+ * Тексты экрана участника на его языке — главной, «Истории баллов», «Моих заказов», экрана
+ * заказа и шторки отмены. Поле на ключ словаря: страница раскладывает их по свойствам
+ * компонентов `next/`, ничего не досчитывая.
+ *
+ * Новые экраны читают только отсюда, даже если такой же текст есть в `orderTexts`: те уйдут
+ * вместе со старой цепочкой обмена, а эти останутся.
+ */
 export type MemberScreenTexts = {
-  /** Подпись над крупным числом баланса. */
+  /** Кнопка-аватар в шапке главной — для экранного чтеца. */
+  profile: string;
+  /** Подпись над балансом: крупным на главной и в шапках. */
   balanceTitle: string;
+  exchange: string;
+  back: string;
+  retry: string;
+  historyTitle: string;
+  historyAll: string;
   /** Операций нет ни одной. Пустой список без подписи читается как поломка. */
   historyEmpty: string;
   /** Страница истории не прочиталась. Это отказ запроса, а не пустая история. */
   historyFailed: string;
-  showMore: string;
-  /**
-   * Кнопка обновления рядом со строкой «Данные обновлены». На экране она значок, поэтому
-   * текст уходит в имя кнопки: без него экранный диктор прочтёт кнопку без названия.
-   */
-  refresh: string;
+  ordersTitle: string;
+  ordersAll: string;
+  ordersEmpty: string;
+  ordersFailed: string;
+  ordersGroupPending: string;
+  ordersGroupPast: string;
+  /** «Здесь пусто» под группой без ждущих. */
+  groupEmpty: string;
+  rewardsTitle: string;
+  rewardsAll: string;
+  rewardsEmpty: string;
+  rewardsFailed: string;
+  /** «код внутри» — на карточке ждущей награды. */
+  rewardCodeInside: string;
+  /** «Офис» — подпись перед именем офиса. */
+  officeLabel: string;
+  officeMap: string;
+  /** Единицы: «баллов», «шт.». Число стоит рядом цифрами, без склонения. */
+  points: string;
+  pieces: string;
+  orderAmountSpent: string;
+  orderAmountReturned: string;
+  orderActionCode: string;
+  orderActionView: string;
+  orderCodeTitle: string;
+  orderOfficeTitle: string;
+  orderLinesTitle: string;
+  /** «за штуку» — хвост подписи строки состава, когда штук больше одной. */
+  orderLineEach: string;
+  orderTotal: string;
+  cancelOrder: string;
+  cancelQuestion: string;
+  yes: string;
+  no: string;
 };
 
 /**
@@ -145,7 +187,7 @@ export type MemberOperation = {
  * Страница истории.
  *
  * Всего операций наружу не уходит: водителю это число ничего не решает, а листание
- * кнопкой «Показать ещё» спрашивает у страницы ровно одно — есть ли следующая.
+ * прокруткой спрашивает у страницы ровно одно — есть ли следующая.
  *
  * Следующая берётся меткой последней показанной строки, а не её порядковым номером:
  * прогон заказов, приехавший между двумя нажатиями, сдвинул бы нумерацию и показал
@@ -180,8 +222,19 @@ export type MiniAppMemberScreen = {
   language: Language;
   /** Имя из учётки парка — то же, которым с водителем здоровается бот. */
   name: string;
-  /** Баланс со счёта, разряды разделены. Строкой: показывается, а не считается. */
-  balance: string;
+  /** Позывной из того же профиля, что имя. `null` — позывного нет. */
+  callsign: string | null;
+  /**
+   * Баланс со счёта числом: экран набирает его от показанного значения к новому, а разряды
+   * разбивает при показе.
+   */
+  balancePoints: number;
+  /**
+   * Строка под балансом на главной: «Обновлено в 14:26» — время того же последнего успешного
+   * прогона заказов, что в `tripsNote`. Прогона не было ни одного — «Данные о поездках ещё
+   * не поступали».
+   */
+  updatedNote: string;
   /**
    * «Поездки учтены до 14.09.2026, 14:32» — время последнего **успешного** прогона заказов.
    *
@@ -408,8 +461,6 @@ export type MiniAppCampaignResponse = {
 
 /** Тексты витрины, оформления и заказов на языке участника. */
 export type MemberOrderTexts = {
-  exchangePoints: string;
-  myOrders: string;
   /** Кнопка «назад» на экране: системная кнопка Telegram в приложении не используется. */
   back: string;
   /** Ответа не было вовсе: сказать, что случилось, сервер не мог. */
@@ -435,14 +486,6 @@ export type MemberOrderTexts = {
   confirmNote: string;
   placeOrder: string;
   editOrder: string;
-  codeTitle: string;
-  cancelOrder: string;
-  cancelQuestion: string;
-  cancelYes: string;
-  cancelNo: string;
-  ordersTitle: string;
-  ordersEmpty: string;
-  ordersFailed: string;
 };
 
 /**
@@ -501,6 +544,13 @@ export type MemberOrderLine = {
   unitPoints: number;
 };
 
+/** Позиция оформленного заказа — с фото товара для строки состава. */
+export type MemberPlacedOrderLine = MemberOrderLine & {
+  photoPath: string | null;
+  /** Версия адреса фото — см. `ProductPhoto`. */
+  photoUpdatedAt: string;
+};
+
 /**
  * Заказ, каким его видит водитель.
  *
@@ -513,15 +563,18 @@ export type MemberOrder = {
   /** «Заказ № 1042». */
   title: string;
   status: OrderStatus;
-  officeName: string;
-  officeAddress: string;
+  /** Офис заказа — у любого, архивный тоже: заказ уже случился. */
+  office: MemberOffice;
   totalPoints: number;
-  lines: MemberOrderLine[];
+  lines: MemberPlacedOrderLine[];
   code: string | null;
-  /** «Заберите до 15.09.2026 14:32». Только у висящего. */
-  expiresNote: string | null;
-  /** «Ждёт выдачи», «Выдан 14.09.2026 14:32», «Отменён …». */
-  statusText: string;
+  /** Слово состояния: «Ждёт выдачи», «Выдан», «Отменён». */
+  stateWord: string;
+  /**
+   * Уточнение после точки: у висящего — «заберите до 23.09, 14:32», у выданного
+   * и отменённого — момент выдачи или отмены, «20.09.2026, 16:10».
+   */
+  stateHint: string;
   /** Причина отмены словами. Только у отменённого. */
   reasonText: string | null;
 };

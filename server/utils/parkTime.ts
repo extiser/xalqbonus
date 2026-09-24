@@ -45,6 +45,15 @@ const CALENDAR_DATE = new Intl.DateTimeFormat('ru-RU', {
 });
 
 /**
+ * День и месяц вида `23.09` — срок висящего заказа: он живёт сутки, и год при нём лишний.
+ */
+const DAY_MONTH = new Intl.DateTimeFormat('ru-RU', {
+  timeZone: PARK_TIME_ZONE,
+  day: '2-digit',
+  month: '2-digit',
+});
+
+/**
  * День вида `2026-09-12` — ключ, по которому строки истории собираются в группы.
  *
  * `en-CA` даёт ISO-порядок готовым; собирать его из частей вручную значит писать то же
@@ -60,6 +69,8 @@ const DAY_KEY = new Intl.DateTimeFormat('en-CA', {
 export const formatClockTime = (moment: Date): string => CLOCK.format(moment);
 
 export const formatCalendarDate = (moment: Date): string => CALENDAR_DATE.format(moment);
+
+export const formatDayMonth = (moment: Date): string => DAY_MONTH.format(moment);
 
 export const formatDayKey = (moment: Date): string => DAY_KEY.format(moment);
 

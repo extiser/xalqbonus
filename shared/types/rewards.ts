@@ -88,7 +88,6 @@ export type MiniAppRewardsResponse = {
 
 /** Тексты раздела на языке участника. Приезжают с экраном участника, как тексты заказов. */
 export type MemberRewardTexts = {
-  myRewards: string;
   rewardsTitle: string;
   rewardsEmpty: string;
   rewardsFailed: string;

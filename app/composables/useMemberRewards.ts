@@ -14,21 +14,37 @@ export const useMemberRewards = (readInitData: () => string) => {
   const state = ref<LoadState>('loading');
   const rewards = ref<MemberReward[]>([]);
 
+  const fetchRewards = async (): Promise<void> => {
+    const response = await $fetch<MiniAppRewardsResponse>('/api/miniapp/rewards', {
+      headers: { [INIT_DATA_HEADER]: readInitData() },
+    });
+
+    rewards.value = response.rewards;
+    state.value = 'ready';
+  };
+
   const load = async (): Promise<void> => {
     state.value = 'loading';
 
     try {
-      const response = await $fetch<MiniAppRewardsResponse>('/api/miniapp/rewards', {
-        headers: { [INIT_DATA_HEADER]: readInitData() },
-      });
-
-      rewards.value = response.rewards;
-      state.value = 'ready';
+      await fetchRewards();
     } catch (error) {
       console.error('[miniapp] не удалось загрузить награды', error);
       state.value = 'error';
     }
   };
 
-  return { state, rewards, load };
+  /**
+   * Тихое перечитывание — для блока наград на главной: показанное стоит, пока не пришло новое,
+   * отказ его не гасит (как `reloadOrders` у заказов).
+   */
+  const reload = async (): Promise<void> => {
+    try {
+      await fetchRewards();
+    } catch (error) {
+      console.error('[miniapp] не удалось перечитать награды', error);
+    }
+  };
+
+  return { state, rewards, load, reload };
 };

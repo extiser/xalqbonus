@@ -217,19 +217,37 @@ export const useMemberOrders = (readInitData: () => string, readRequestFailed: (
   const ordersState = ref<LoadState>('loading');
   const orders = ref<MemberOrder[]>([]);
 
+  const fetchOrders = async (): Promise<void> => {
+    const response = await $fetch<MiniAppOrdersResponse>('/api/miniapp/orders', {
+      headers: headers(),
+    });
+
+    orders.value = response.orders;
+    ordersState.value = 'ready';
+  };
+
   const loadOrders = async (): Promise<void> => {
     ordersState.value = 'loading';
 
     try {
-      const response = await $fetch<MiniAppOrdersResponse>('/api/miniapp/orders', {
-        headers: headers(),
-      });
-
-      orders.value = response.orders;
-      ordersState.value = 'ready';
+      await fetchOrders();
     } catch (error) {
       console.error('[miniapp] не удалось загрузить заказы', error);
       ordersState.value = 'error';
+    }
+  };
+
+  /**
+   * Тихое перечитывание: показанный список стоит на экране, пока не пришёл новый, — при возврате
+   * на экран и из фона водитель ничего не просил, и мигание загрузкой было бы ему непонятно.
+   * Отказ список не гасит: показанные заказы были верны минуту назад, а сказать об отказе
+   * здесь некому — перечитывание никто не нажимал.
+   */
+  const reloadOrders = async (): Promise<void> => {
+    try {
+      await fetchOrders();
+    } catch (error) {
+      console.error('[miniapp] не удалось перечитать заказы', error);
     }
   };
 
@@ -285,6 +303,7 @@ export const useMemberOrders = (readInitData: () => string, readRequestFailed: (
     ordersState,
     orders,
     loadOrders,
+    reloadOrders,
     cancelling,
     cancelError,
     cancel,

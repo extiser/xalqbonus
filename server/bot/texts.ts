@@ -64,12 +64,17 @@ export type TextKey =
   | 'linked_new'
   | 'welcome_bonus_promise'
   | 'balance_title'
+  | 'balance_updated'
   | 'trips_counted'
   | 'trips_not_received'
+  | 'history_title'
+  | 'history_all'
   | 'history_empty'
   | 'history_failed'
-  | 'button_show_more'
-  | 'button_refresh'
+  | 'profile_title'
+  | 'button_retry'
+  | 'button_yes'
+  | 'button_no'
   | 'day_today'
   | 'day_yesterday'
   | 'reason_trip'
@@ -85,7 +90,6 @@ export type TextKey =
   | 'reason_campaign'
   | 'history_order_reason'
   | 'button_exchange_points'
-  | 'button_my_orders'
   | 'button_back'
   | 'request_failed'
   | 'offices_title'
@@ -109,22 +113,32 @@ export type TextKey =
   | 'button_edit_order'
   | 'order_title'
   | 'order_code_title'
-  | 'order_expires'
+  | 'order_expires_short'
   | 'order_status_pending'
-  | 'order_status_issued'
-  | 'order_status_cancelled'
+  | 'order_state_issued'
+  | 'order_state_cancelled'
+  | 'order_amount_spent'
+  | 'order_amount_returned'
+  | 'order_action_code'
+  | 'order_action_view'
+  | 'order_office_title'
+  | 'order_lines_title'
+  | 'order_line_each'
   | 'order_cancel_reason_driver'
   | 'order_cancel_reason_employee'
   | 'order_cancel_reason_expired'
   | 'button_cancel_order'
   | 'cancel_order_question'
-  | 'button_cancel_order_yes'
-  | 'button_cancel_order_no'
   | 'orders_title'
+  | 'orders_all'
+  | 'orders_group_pending'
+  | 'orders_group_past'
+  | 'group_empty'
   | 'orders_empty'
   | 'orders_failed'
-  | 'button_my_rewards'
   | 'rewards_title'
+  | 'rewards_all'
+  | 'reward_code_inside'
   | 'rewards_empty'
   | 'rewards_failed'
   | 'reward_code_title'
@@ -421,8 +435,16 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     uz: "Birinchi 5 ta safarni yakunlang va 300 ball oling — ularni ofislarimizdagi sovg'alarga almashtirish mumkin.",
   },
   balance_title: {
-    ru: 'Ваш баланс',
-    uz: 'Hisobingiz',
+    ru: 'Ваши баллы',
+    uz: 'Ballaringiz',
+  },
+  /**
+   * Строка под балансом на главной — время последнего успешного прогона заказов, тот же момент,
+   * что в `trips_counted`. Даты нет, как в макете (Руслан, 25-09-2026).
+   */
+  balance_updated: {
+    ru: 'Обновлено в {time}',
+    uz: '{time} da yangilandi',
   },
   /**
    * До какого момента учтены поездки — время последнего успешного прогона заказов.
@@ -456,6 +478,15 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
    * Пустая история. Подписывается всегда: у нового участника операций нет ни одной,
    * и голый пустой список читается как поломка приложения.
    */
+  history_title: {
+    ru: 'История баллов',
+    uz: 'Ballar tarixi',
+  },
+  /** Ссылка в шапке блока истории на главной — в раздел. */
+  history_all: {
+    ru: 'Вся история',
+    uz: 'Butun tarix',
+  },
   history_empty: {
     ru: 'Здесь будет история начислений',
     uz: "Bu yerda ballar tarixi ko'rinadi",
@@ -464,17 +495,24 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Не удалось загрузить историю. Попробуйте ещё раз.',
     uz: "Tarixni yuklab bo'lmadi. Qaytadan urinib ko'ring.",
   },
-  button_show_more: {
-    ru: 'Показать ещё',
-    uz: "Yana ko'rsatish",
+  /** Кнопка-аватар в шапке главной. На экране она значок, текст читает экранный диктор. */
+  profile_title: {
+    ru: 'Профиль',
+    uz: 'Profil',
   },
-  /**
-   * Кнопка обновления на экране участника. На экране стоит значком, а текст читает
-   * экранный диктор — и он же всплывает подсказкой.
-   */
-  button_refresh: {
-    ru: 'Обновить',
-    uz: 'Yangilash',
+  /** Повтор запроса, который не прочитался, — в блоках главной и в разделах. */
+  button_retry: {
+    ru: 'Повторить',
+    uz: 'Qayta urinish',
+  },
+  /** Ответ на вопрос шторки — «Отменить заказ?». */
+  button_yes: {
+    ru: 'Да',
+    uz: 'Ha',
+  },
+  button_no: {
+    ru: 'Нет',
+    uz: "Yo'q",
   },
   day_today: {
     ru: 'Сегодня',
@@ -558,10 +596,6 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   button_exchange_points: {
     ru: 'Обменять баллы',
     uz: 'Ballarni almashtirish',
-  },
-  button_my_orders: {
-    ru: 'Мои заказы',
-    uz: 'Buyurtmalarim',
   },
   /** Возврат на прошлый экран — своей кнопкой: системная кнопка Telegram в приложении не используется. */
   button_back: {
@@ -659,21 +693,54 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Код для выдачи — назовите его в офисе',
     uz: 'Olish kodi — uni ofisda ayting',
   },
-  order_expires: {
-    ru: 'Заберите до {moment}',
+  /** Срок висящего заказа после слова состояния: «Ждёт выдачи · заберите до 23.09, 14:32». */
+  order_expires_short: {
+    ru: 'заберите до {moment}',
     uz: '{moment} gacha olib keting',
   },
   order_status_pending: {
     ru: 'Ждёт выдачи',
     uz: 'Berilishini kutmoqda',
   },
-  order_status_issued: {
-    ru: 'Выдан {moment}',
-    uz: '{moment} da berildi',
+  /** Слова состояния закрытого заказа — без даты: момент стоит отдельно, после точки. */
+  order_state_issued: {
+    ru: 'Выдан',
+    uz: 'Berildi',
   },
-  order_status_cancelled: {
-    ru: 'Отменён {moment}',
-    uz: '{moment} da bekor qilindi',
+  order_state_cancelled: {
+    ru: 'Отменён',
+    uz: 'Bekor qilindi',
+  },
+  /** Подпись под суммой закрытого заказа: что стало с баллами. */
+  order_amount_spent: {
+    ru: 'списано со счёта',
+    uz: 'hisobdan yechildi',
+  },
+  order_amount_returned: {
+    ru: 'вернулось на счёт',
+    uz: 'hisobga qaytdi',
+  },
+  /** Строка-действие внизу карточки заказа: у висящего зовёт за кодом, у закрытого — посмотреть. */
+  order_action_code: {
+    ru: 'Код для выдачи — внутри',
+    uz: 'Olish kodi — ichida',
+  },
+  order_action_view: {
+    ru: 'Просмотреть',
+    uz: "Ko'rish",
+  },
+  order_office_title: {
+    ru: 'Где забрать',
+    uz: 'Qayerdan olish',
+  },
+  order_lines_title: {
+    ru: 'Состав заказа',
+    uz: 'Buyurtma tarkibi',
+  },
+  /** Хвост подписи строки состава, когда штук больше одной: «2 шт. · 150 баллов за штуку». */
+  order_line_each: {
+    ru: 'за штуку',
+    uz: 'donasi uchun',
   },
   order_cancel_reason_driver: {
     ru: 'Вы отменили заказ',
@@ -695,21 +762,33 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Отменить заказ? Баллы вернутся на баланс.',
     uz: 'Buyurtma bekor qilinsinmi? Ballar hisobingizga qaytadi.',
   },
-  button_cancel_order_yes: {
-    ru: 'Да, отменить',
-    uz: 'Ha, bekor qilish',
-  },
-  button_cancel_order_no: {
-    ru: 'Не отменять',
-    uz: 'Bekor qilmaslik',
-  },
   orders_title: {
     ru: 'Мои заказы',
     uz: 'Buyurtmalarim',
   },
+  /** Ссылка в шапке блока заказов на главной — в раздел. */
+  orders_all: {
+    ru: 'Все заказы',
+    uz: 'Barcha buyurtmalar',
+  },
+  /** Подписи групп раздела «Мои заказы»; счётчик у ждущих ставит экран. */
+  orders_group_pending: {
+    ru: 'Ждут выдачи',
+    uz: 'Berilishini kutmoqda',
+  },
+  orders_group_past: {
+    ru: 'История заказов',
+    uz: 'Buyurtmalar tarixi',
+  },
+  /** Строка под группой, в которой ничего нет, — группа остаётся на месте с нулём. */
+  group_empty: {
+    ru: 'Здесь пусто',
+    uz: "Bu yer bo'sh",
+  },
+  /** Заказов не было — на главной и в пустом разделе, одним текстом. */
   orders_empty: {
-    ru: 'Заказов пока нет.',
-    uz: "Hozircha buyurtmalar yo'q.",
+    ru: 'Здесь появятся товары, которые вы обменяете на баллы.',
+    uz: "Bu yerda ballarga almashtirgan mahsulotlaringiz paydo bo'ladi.",
   },
   orders_failed: {
     ru: 'Не удалось загрузить заказы. Попробуйте ещё раз.',
@@ -718,17 +797,24 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
 
   // Раздел «Мои награды» (issue #172). Узбекский — черновой: вычитывает переводчик одной
   // волной ближе к выкату.
-  button_my_rewards: {
-    ru: 'Мои награды',
-    uz: 'Mukofotlarim',
-  },
   rewards_title: {
     ru: 'Мои награды',
     uz: 'Mukofotlarim',
   },
+  /** Ссылка в шапке блока наград на главной — в раздел. */
+  rewards_all: {
+    ru: 'Все награды',
+    uz: 'Barcha mukofotlar',
+  },
+  /** Обещание кода на карточке ждущей награды на главной: самого кода там нет. */
+  reward_code_inside: {
+    ru: 'код внутри',
+    uz: 'kod ichida',
+  },
+  /** Наград не было — на главной и в пустом разделе, одним текстом. */
   rewards_empty: {
-    ru: 'Наград пока нет.',
-    uz: "Hozircha mukofotlar yo'q.",
+    ru: 'Здесь появятся награды из акций и подарки от парка — баллы, товары и призы.',
+    uz: "Bu yerda aksiyalardan mukofotlar va parkdan sovg'alar paydo bo'ladi — ballar, mahsulotlar va sovrinlar.",
   },
   rewards_failed: {
     ru: 'Не удалось загрузить награды. Попробуйте ещё раз.',

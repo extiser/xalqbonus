@@ -85,7 +85,9 @@ export const DESIGN_GROUPS: DesignGroup[] = [
   {
     title: 'История баллов',
     screens: [
-      { slug: 'history', title: 'Страница 25 строк и «Показать ещё»', source: 'home/history-block.html, home/section-bar.md' },
+      { slug: 'history', title: 'Страница 25 строк, дальше — прокруткой', source: 'home/history-block.html, home/section-bar.md' },
+      { slug: 'history-more-loading', title: 'Следующая страница в пути', source: 'home/history-block.html' },
+      { slug: 'history-more-failed', title: 'Следующая страница не пришла', source: 'catalog/catalog-confirm-states.html' },
       { slug: 'history-reasons', title: 'Все одиннадцать причин', source: 'home/history-block.html' },
       { slug: 'history-empty', title: 'Пусто — видом экрана', source: 'home/history-block.html, orders/orders-screen-empty.html' },
       { slug: 'history-error', title: 'Не загрузилось — видом экрана', source: 'home/history-block.html, orders/orders-screen-empty.html' },
@@ -117,6 +119,9 @@ export const DESIGN_GROUPS: DesignGroup[] = [
       { slug: 'order-issued', title: 'Выдан', source: 'orders/order-screen-states.html' },
       { slug: 'order-cancelled', title: 'Отменён водителем', source: 'orders/order-screen-states.html' },
       { slug: 'order-expired', title: 'Не забран за сутки', source: 'orders/order-screen-states.html' },
+      { slug: 'order-cancel', title: 'Шторка «Отменить заказ?»', source: 'comeback/04-day-chests-sheet.html, catalog/catalog-confirm.html' },
+      { slug: 'order-cancel-busy', title: 'Шторка отмены — отменяется', source: 'catalog/catalog-confirm-states.html' },
+      { slug: 'order-cancel-failed', title: 'Шторка отмены — отказ', source: 'catalog/catalog-confirm-states.html' },
     ],
   },
   {

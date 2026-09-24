@@ -11,7 +11,8 @@
 </script>
 
 <template>
-  <div class="min-h-screen bg-white font-sans text-slate-900">
+  <!-- touch-manipulation: двойной тап не увеличивает экран (issue #210) -->
+  <div class="min-h-screen touch-manipulation bg-white font-sans text-slate-900">
     <main class="mx-auto flex min-h-screen w-full max-w-md flex-col px-5 py-8">
       <slot />
     </main>
