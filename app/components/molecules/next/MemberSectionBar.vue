@@ -1,10 +1,14 @@
 <script setup lang="ts">
 /**
- * Шапка раздела — одна на все внутренние экраны водителя (`product/design/artboard/section-bar`).
+ * Шапка раздела — одна на все внутренние экраны водителя (`_reference/design/home/section-bar.html`,
+ * с балансом справа — `catalog-bar.html`).
  *
- * Три места в строке: назад — заголовок — действие. Место справа занято всегда, даже когда
- * действия нет: иначе заголовок при переходе между разделами сдвигался бы вбок, и переход
- * читался бы как смена экрана целиком.
+ * Три места в строке: назад — заголовок — справа одно из трёх: баланс, действие или пустое
+ * место. Место справа занято всегда, даже когда там ничего нет: иначе заголовок при переходе
+ * между разделами сдвигался бы вбок, и переход читался бы как смена экрана целиком.
+ *
+ * Баланс стоит у истории, «Моих наград», «Моих заказов» и экрана заказа (`section-bar.md`,
+ * «Баланс справа»): шапка липкая, и баллы видны всё время, пока водитель листает раздел.
  *
  * Заголовок переносится, а не режется: узбекский длиннее русского примерно на четверть,
  * и обрезанное название раздела нечитаемо. Шапка растёт, содержимое съезжает вниз.
@@ -22,6 +26,8 @@ defineProps<{
   backLabel: string;
   /** Подпись действия справа. Без слота `action` не читается. */
   actionLabel?: string;
+  /** Баланс справа — готовыми строками. Есть — действия справа нет. */
+  balance?: { label: string; amount: string };
 }>();
 
 defineEmits<{ back: []; action: [] }>();
@@ -41,7 +47,8 @@ defineEmits<{ back: []; action: [] }>();
       {{ title }}
     </h1>
 
-    <AtomsNextMemberIconButton v-if="$slots.action" :label="actionLabel ?? ''" size="m" @click="$emit('action')">
+    <AtomsNextMemberBarBalance v-if="balance" :label="balance.label" :amount="balance.amount" />
+    <AtomsNextMemberIconButton v-else-if="$slots.action" :label="actionLabel ?? ''" size="m" @click="$emit('action')">
       <slot name="action" />
     </AtomsNextMemberIconButton>
     <span v-else class="size-10 shrink-0" aria-hidden="true" />

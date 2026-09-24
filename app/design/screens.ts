@@ -7,7 +7,10 @@
 export interface DesignScreen {
   slug: string;
   title: string;
-  /** Откуда снято — файл макета в `product/design/`. */
+  /**
+   * Откуда снято — файл макета. Регистрация, главная и разделы с шапкой — пути снимка
+   * `_reference/design/`; профиль и акция — ещё пути планировочной папки (`product/design/`).
+   */
   source: string;
 }
 
@@ -37,49 +40,50 @@ export const DESIGN_GROUPS: DesignGroup[] = [
   {
     title: 'Главный экран',
     screens: [
-      { slug: 'home', title: 'Участник акции — эталон', source: 'app/main-screen.html' },
-      { slug: 'home-invite', title: 'В снимке акции, не вступил — плашка приглашения', source: 'app/main-screen-invite.html' },
-      { slug: 'home-several', title: 'Ждут несколько заказов и наград', source: 'artboard/orders-block.html, rewards-block.html' },
-      { slug: 'home-quiet', title: 'Забирать нечего', source: 'artboard/orders-block.html, rewards-block.html' },
-      { slug: 'home-newcomer', title: 'Новичок — пусто', source: 'artboard/history-block.html' },
-      { slug: 'home-loading', title: 'История грузится', source: 'artboard/history-block.html' },
-      { slug: 'home-errors', title: 'Не загрузилось', source: 'artboard/*-block.html' },
+      { slug: 'home', title: 'Участник акции — эталон', source: 'home/main-screen.html' },
+      { slug: 'home-invite', title: 'В снимке акции, не вступил — плашка приглашения', source: 'home/main-screen-invite.html' },
+      { slug: 'home-several', title: 'Ждут несколько заказов и наград', source: 'home/orders-block.html, home/rewards-block.html' },
+      { slug: 'home-quiet', title: 'Забирать нечего — последний заказ выдан, без акции', source: 'home/orders-block.html, home/rewards-block.html' },
+      { slug: 'home-quiet-cancelled', title: 'Забирать нечего — последний заказ отменён', source: 'home/orders-block.html' },
+      { slug: 'home-newcomer', title: 'Новичок — заказов, наград и истории не было', source: 'home/orders-block.html, home/rewards-block.html, home/history-block.html' },
+      { slug: 'home-loading', title: 'История грузится', source: 'home/history-block.html' },
+      { slug: 'home-errors', title: 'Не загрузилось', source: 'home/*-block.html' },
     ],
   },
   {
     title: 'История баллов',
     screens: [
-      { slug: 'history', title: 'Страница 25 строк и «Показать ещё»', source: 'app/history-screen.html' },
-      { slug: 'history-reasons', title: 'Все одиннадцать причин', source: 'artboard/history-block.html' },
-      { slug: 'history-empty', title: 'Пусто', source: 'artboard/history-block.html' },
-      { slug: 'history-error', title: 'Не загрузилось', source: 'artboard/history-block.html' },
-      { slug: 'history-loading', title: 'Ждём ответа', source: 'artboard/history-block.html' },
+      { slug: 'history', title: 'Страница 25 строк и «Показать ещё»', source: 'home/history-block.html, home/section-bar.md' },
+      { slug: 'history-reasons', title: 'Все одиннадцать причин', source: 'home/history-block.html' },
+      { slug: 'history-empty', title: 'Пусто', source: 'home/history-block.html' },
+      { slug: 'history-error', title: 'Не загрузилось', source: 'home/history-block.html' },
+      { slug: 'history-loading', title: 'Ждём ответа', source: 'home/history-block.html' },
     ],
   },
   {
     title: 'Мои награды',
     screens: [
-      { slug: 'rewards', title: 'Ждут в офисе и история', source: 'app/rewards-screen.html' },
-      { slug: 'rewards-nothing', title: 'Ждущих нет — только история', source: 'app/rewards-screen.md' },
-      { slug: 'rewards-empty', title: 'Наград не было', source: 'artboard/rewards-block.html' },
-      { slug: 'rewards-error', title: 'Не загрузилось', source: 'artboard/rewards-block.html' },
+      { slug: 'rewards', title: 'Ждут в офисе и история', source: 'orders/rewards-screen.html' },
+      { slug: 'rewards-nothing', title: 'Ждущих нет — только история', source: 'orders/rewards-screen-nopending.html' },
+      { slug: 'rewards-empty', title: 'Наград не было', source: 'orders/rewards-screen-empty.html' },
+      { slug: 'rewards-error', title: 'Не загрузилось', source: 'home/rewards-block.html' },
     ],
   },
   {
     title: 'Мои заказы',
     screens: [
-      { slug: 'orders', title: 'Ждут выдачи и история', source: 'app/orders-screen.html' },
-      { slug: 'orders-empty', title: 'Заказов не было', source: 'server/bot/texts.ts → orders_empty' },
-      { slug: 'orders-error', title: 'Не загрузилось', source: 'artboard/orders-block.html' },
+      { slug: 'orders', title: 'Ждут выдачи и история', source: 'orders/orders-screen.html' },
+      { slug: 'orders-empty', title: 'Заказов не было', source: 'orders/orders-screen-empty.html' },
+      { slug: 'orders-error', title: 'Не загрузилось', source: 'home/orders-block.html' },
     ],
   },
   {
     title: 'Экран заказа',
     screens: [
-      { slug: 'order', title: 'Ждёт выдачи — код, офис, состав, отмена', source: 'app/order-screen.html' },
-      { slug: 'order-issued', title: 'Выдан', source: 'app/order-screen-states.html' },
-      { slug: 'order-cancelled', title: 'Отменён водителем', source: 'app/order-screen-states.html' },
-      { slug: 'order-expired', title: 'Не забран за сутки', source: 'app/order-screen-states.html' },
+      { slug: 'order', title: 'Ждёт выдачи — код, офис, состав, отмена', source: 'orders/order-screen.html' },
+      { slug: 'order-issued', title: 'Выдан', source: 'orders/order-screen-states.html' },
+      { slug: 'order-cancelled', title: 'Отменён водителем', source: 'orders/order-screen-states.html' },
+      { slug: 'order-expired', title: 'Не забран за сутки', source: 'orders/order-screen-states.html' },
     ],
   },
   {

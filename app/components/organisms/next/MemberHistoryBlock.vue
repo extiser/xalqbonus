@@ -2,7 +2,7 @@
 import type { MemberOperationDayView, MemberViewLoad } from '~/types/memberView';
 
 /**
- * «История баллов» на главной — `product/design/artboard/history-block.html`.
+ * «История баллов» на главной — `_reference/design/home/history-block.html`.
  *
  * Короткий срез по дням и вход в раздел «Вся история ›». Листания здесь нет: «Показать ещё»
  * растило бы главную без конца, а за давней операцией водитель всё равно идёт в раздел.
@@ -30,7 +30,9 @@ const SKELETON_ROWS = 3;
 
 <template>
   <section class="flex flex-col gap-1 px-3.5 pb-5 pt-2">
-    <div class="px-1 pb-2 pt-1">
+    <!-- Снизу шапки 0: от заголовка до первой строки 18 — зазор 4 и 14 сверху подписи дня,
+         один отступ у всех блоков главной (`_reference/design/system.md`) -->
+    <div class="px-1 pt-1">
       <MoleculesNextMemberBlockHead
         :title="texts.title"
         :link-label="state === 'ready' ? texts.all : undefined"
