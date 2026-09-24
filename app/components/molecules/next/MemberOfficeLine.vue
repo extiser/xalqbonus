@@ -7,6 +7,10 @@
  * Водитель видит, чью витрину смотрит. Рядом, через 8, — «Сменить» подчёркнутой ссылкой:
  * второстепенное действие рядом с текстом, как «Отказаться» на экране приглашения
  * (линия цвета текста на 40 %, отступ 3). В подтверждении «Сменить» нет — там офис справка.
+ *
+ * Строчная, как `.office` в макете: высоту строки задаёт блок, в котором она стоит. Над витриной
+ * это блок кеглем 16 (`.where > div`) — строка 22, в подтверждении блок кеглем 15 (`.office`) —
+ * строка 21. Свой кегль 15 на блоке давал бы 21 везде, и витрина поднималась бы на 1 px.
  */
 defineProps<{
   /** Подпись перед именем: «Офис». */
@@ -21,8 +25,8 @@ defineEmits<{ change: [] }>();
 </script>
 
 <template>
-  <div class="font-manrope text-[15px] font-normal leading-[normal] text-xb-light">
-    <span>{{ label }} · <b class="font-bold text-xb-text">{{ name }}</b></span>
+  <span class="font-manrope leading-[normal]">
+    <span class="text-[15px] font-normal text-xb-light">{{ label }} · <b class="font-bold text-xb-text">{{ name }}</b></span>
     <button
       v-if="changeLabel"
       type="button"
@@ -31,5 +35,5 @@ defineEmits<{ change: [] }>();
     >
       {{ changeLabel }}
     </button>
-  </div>
+  </span>
 </template>

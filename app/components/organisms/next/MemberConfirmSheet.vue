@@ -47,7 +47,10 @@ defineEmits<{ inc: [lineId: string]; dec: [lineId: string]; place: []; cancel: [
 <template>
   <MoleculesNextMemberSheet :open="open" :title="texts.title" @close="!busy && $emit('cancel')">
     <template #subtitle>
-      <MoleculesNextMemberOfficeLine :label="office.label" :name="office.name" />
+      <!-- Кегль 15 у блока — высота строки офиса, как у `.office` в макете: 21, а не 22 -->
+      <div class="text-[15px]">
+        <MoleculesNextMemberOfficeLine :label="office.label" :name="office.name" />
+      </div>
       <div class="mt-0.5 text-[13px] font-light text-xb-grey">{{ office.address }}</div>
     </template>
 
