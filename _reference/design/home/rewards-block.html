@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>XalqBonus — мои награды: состояния</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&family=Unbounded:wght@200;300;600;700&display=swap">
+<style>
+/* МОИ НАГРАДЫ — блок главного экрана, все состояния списком.
+   Нарисован 22-09-2026, сессия 51, по задаче T51. Устройство снято с кода:
+   `app/components/molecules/MemberRewardItem.vue` (состав карточки),
+   `shared/types/rewards.ts` → `MemberReward` (поля строки),
+   `server/bot/texts.ts` (тексты состояний, происхождения, пустого списка и отказа).
+   Объяснение — rewards-block.md рядом. */
+
+html, body { background: #0B0D11; }
+body {
+  margin: 0;
+  display: block;
+  padding: 24px 16px 60px;
+  font-family: Manrope, system-ui, sans-serif;
+  color: #F4F6F8;
+}
+
+.sheet {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 32px;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.cell {
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.note {
+  font-size: 12px;
+  font-weight: 400;
+  color: #8A93A2;
+  min-height: 34px;
+}
+
+/* --------------------------------------------------------------- блок наград */
+
+.rewards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 14px 20px;
+}
+
+/* Отступ под шапкой блока — один у всех блоков главной: от заголовка до первой строки 18 px
+   (Руслан, 23-09-2026: сначала 26 как у истории, затем на 30% меньше). Здесь 8 снизу шапки + зазор 10;
+   у истории 0 + зазор 4 + 14 сверху подписи дня. */
+.rewards-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 4px 8px;
+}
+
+.rewards-head h3 {
+  margin: 0;
+  font-family: Unbounded, Manrope, sans-serif;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.4px;
+}
+
+/* Ссылка и строка-действие — 14/500, цвет по смыслу (сверка шрифтов, сессия 53, 23-09-2026). */
+.rewards-head .all {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: #A9B2BF;
+  font-family: Manrope, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Карточка награды. Ждущая выделена рамкой и кодом — за ней идти; остальные спокойные. */
+.reward {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: #14171D;
+  padding: 14px 16px;
+}
+
+.reward .what {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.reward .origin {
+  font-size: 13px;
+  font-weight: 300;
+  color: #8A93A2;
+}
+
+/* Состояние цветным словом — 13/600, одно на все карточки (сверка шрифтов, сессия 53, 23-09-2026). */
+.reward .state {
+  font-size: 13px;
+  font-weight: 600;
+  color: #A9B2BF;
+  margin-top: 4px;
+}
+
+.reward .office {
+  font-size: 13px;
+  font-weight: 300;
+  color: #8A93A2;
+}
+
+/* Ждёт в офисе: рамка зелёная, код крупный. Водитель показывает экран, а не диктует. */
+.reward.awaiting {
+  border-color: rgba(95, 208, 138, 0.55);
+  background: linear-gradient(180deg, rgba(95, 208, 138, 0.07) 0%, rgba(20, 23, 29, 1) 62%);
+}
+
+.reward.awaiting .state { color: #5FD08A; }
+
+/* ----------------------------------------- цвет карточки главной: три варианта
+   Зелёный годится внутри раздела, где он один. На главной он третий акцент после граната
+   у баланса и золота у акции — и экран рассыпается. Варианты ниже отличаются только цветом. */
+
+.reward.compact.tone-quiet {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: #14171D;
+}
+
+.reward.compact.tone-quiet .state { color: #A9B2BF; }
+
+.reward.compact.tone-gold {
+  border-color: rgba(255, 220, 140, 0.40);
+  background: linear-gradient(180deg, rgba(255, 214, 120, 0.08) 0%, rgba(20, 23, 29, 1) 62%);
+}
+
+.reward.compact.tone-gold .state { color: #FFD98A; }
+
+.reward.compact.tone-garnet {
+  border-color: rgba(232, 54, 93, 0.38);
+  background: linear-gradient(180deg, rgba(232, 54, 93, 0.08) 0%, rgba(20, 23, 29, 1) 62%);
+}
+
+.reward.compact.tone-garnet .state { color: #F0708D; }
+
+/* --------------------------------------------- компактная карточка главной
+   На главной у награды две строки: что за награда и где её ждать. Происхождение, адрес
+   офиса и код живут внутри раздела — на главной они только растят блок.
+   Нажатие ведёт в «Все награды», где эта награда стоит первой. */
+
+.reward.compact {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
+}
+
+.reward.compact .body {
+  flex-grow: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Название карточки — 16/700, одно на главной и в разделах (сверка шрифтов, сессия 53, 23-09-2026). */
+.reward.compact .what {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* «Код внутри» — серым: цветом на карточке отмечено состояние награды, а обещание кода
+   только говорит, что будет за нажатием. Тем же цветом оно тянуло бы на себя вторым акцентом. */
+/* Уточнение серым — 13/300 #8A93A2, одно на все экраны (сверка шрифтов, сессия 53, 23-09-2026). */
+.reward.compact .state .hint { color: #8A93A2; font-weight: 300; }
+
+.reward.compact .state {
+  margin-top: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.reward.compact .chevron { flex-shrink: 0; }
+
+/* На главной код не показывается: он виден любому, кто заглянул через плечо, а нужен
+   только у стойки. Вместо него — обещание кода и шеврон: карточка открывается. */
+.reward .code-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #5FD08A;
+}
+
+/* Подпись над кодом выдачи — 13/500 #5FD08A, одна у заказа и награды (сверка шрифтов, сессия 53, 23-09-2026). */
+.reward .code-title {
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #5FD08A;
+}
+
+.reward .code {
+  font-family: Unbounded, Manrope, sans-serif;
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: 6px;
+  line-height: 1.2;
+  color: #5FD08A;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Получена: спокойная строка, забирать нечего. */
+.reward.issued .what { font-weight: 600; }
+
+/* Срок вышел: вся карточка гаснет, но остаётся читаемой — пустота вместо неё
+   выглядела бы так, будто награды и не было. */
+.reward.expired {
+  opacity: 0.55;
+}
+
+.notice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  padding: 30px 20px;
+  color: #8A93A2;
+  font-size: 15px;
+  font-weight: 300;
+  line-height: 1.4;
+}
+
+/* Вторичная кнопка S — пилюля 40, контур, 14/600 (сверка шрифтов, сессия 53, 23-09-2026). */
+.notice .retry {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: #F4F6F8;
+  cursor: pointer;
+  height: 40px;
+  padding: 0 22px;
+  border-radius: 999px;
+  font-family: Manrope, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+}
+</style></head><body>
+
+<div class="sheet">
+
+  <div class="cell">
+    <div class="label">1 — на главной: есть что забрать</div>
+    <div class="note">Две строки: что и где ждать. Нажатие ведёт в «Все награды», где эта награда стоит первой</div>
+    <div class="rewards">
+      <div class="rewards-head">
+        <h3>Мои награды</h3>
+        <button class="all">Все награды<svg viewBox="0 0 24 24" width="14" height="14" fill="none"><path d="M9.5 5.5l6.5 6.5-6.5 6.5" stroke="#A9B2BF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </div>
+
+      <div class="reward awaiting compact">
+        <div class="body">
+          <span class="what">Шашка Taxi</span>
+          <span class="state">Ждёт в офисе до 5 октября <span class="hint">· код внутри</span></span>
+        </div>
+        <svg class="chevron" viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M9.5 5.5l6.5 6.5-6.5 6.5" stroke="#5FD08A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="cell">
+    <div class="label">1в — цвет карточки: три варианта</div>
+    <div class="note">Сверху вниз: спокойная, золотая, гранатовая. Зелёная — та, что в состоянии 1 выше</div>
+    <div class="rewards">
+      <div class="reward awaiting compact tone-quiet">
+        <div class="body">
+          <span class="what">Спокойная — без третьего акцента</span>
+          <span class="state">Ждёт в офисе до 5 октября <span class="hint">· код внутри</span></span>
+        </div>
+        <svg class="chevron" viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M9.5 5.5l6.5 6.5-6.5 6.5" stroke="#A9B2BF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+
+      <div class="reward awaiting compact tone-gold">
+        <div class="body">
+          <span class="what">Золотая — в тон акции и подарку</span>
+          <span class="state">Ждёт в офисе до 5 октября <span class="hint">· код внутри</span></span>
+        </div>
+        <svg class="chevron" viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M9.5 5.5l6.5 6.5-6.5 6.5" stroke="#FFD98A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+
+      <div class="reward awaiting compact tone-garnet">
+        <div class="body">
+          <span class="what">Гранатовая — в тон программе</span>
+          <span class="state">Ждёт в офисе до 5 октября <span class="hint">· код внутри</span></span>
+        </div>
+        <svg class="chevron" viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M9.5 5.5l6.5 6.5-6.5 6.5" stroke="#F0708D" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="cell">
+    <div class="label">1б — на главной: ждущих несколько</div>
+    <div class="note">Каждая своей строкой: водитель идёт в офис за всеми сразу, и знать он должен за чем именно</div>
+    <div class="rewards">
+      <div class="rewards-head">
+        <h3>Мои награды</h3>
+        <button class="all">Все награды<svg viewBox="0 0 24 24" width="14" height="14" fill="none"><path d="M9.5 5.5l6.5 6.5-6.5 6.5" stroke="#A9B2BF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </div>
+
+      <div class="reward awaiting compact">
+        <div class="body">
+          <span class="what">Шашка Taxi</span>
+          <span class="state">Ждёт в офисе до 5 октября <span class="hint">· код внутри</span></span>
+        </div>
+        <svg class="chevron" viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M9.5 5.5l6.5 6.5-6.5 6.5" stroke="#5FD08A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+
+      <div class="reward awaiting compact">
+        <div class="body">
+          <span class="what">Чернитель шин</span>
+          <span class="state">Ждёт в офисе до 9 октября <span class="hint">· код внутри</span></span>
+        </div>
+        <svg class="chevron" viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M9.5 5.5l6.5 6.5-6.5 6.5" stroke="#5FD08A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="cell">
+    <div class="label">2 — внутри раздела: четыре состояния подряд</div>
+    <div class="note">Ждёт, на балансе, получена, срок вышел. Код показан только здесь. Тексты — из `server/bot/texts.ts`</div>
+    <div class="rewards">
+      <div class="reward awaiting">
+        <span class="what">Шашка Taxi</span>
+        <span class="origin">Акция «Неделя возвращения» · сундук недели</span>
+        <span class="code-title">Код для выдачи — покажите этот экран в офисе</span>
+        <span class="code">73418</span>
+        <span class="state">Ждёт в офисе до 5 октября</span>
+        <span class="office">Офис · Чиланзар, ул. Бунёдкор, 12</span>
+      </div>
+
+      <div class="reward">
+        <span class="what">300 баллов</span>
+        <span class="origin">Акция «Неделя возвращения» · сундук дня</span>
+        <span class="state">На балансе</span>
+      </div>
+
+      <div class="reward issued">
+        <span class="what">Освежитель «Вертолёт»</span>
+        <span class="origin">Вручил парк · за помощь на линии</span>
+        <span class="state">Получена 20 сентября</span>
+        <span class="office">Офис · Чиланзар</span>
+      </div>
+
+      <div class="reward expired">
+        <span class="what">Чернитель шин</span>
+        <span class="origin">Акция «Неделя возвращения» · сундук трёх дней</span>
+        <span class="state">Срок вышел 12 сентября — награда не получена</span>
+        <span class="office">Офис · Чиланзар</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="cell">
+    <div class="label">3 — забирать нечего</div>
+    <div class="note">Ждущих нет, но награды были. Одна последняя и «Все награды» (Руслан, 23-09-2026, сессия 55)</div>
+    <div class="rewards">
+      <div class="rewards-head">
+        <h3>Мои награды</h3>
+        <button class="all">Все награды<svg viewBox="0 0 24 24" width="14" height="14" fill="none"><path d="M9.5 5.5l6.5 6.5-6.5 6.5" stroke="#A9B2BF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </div>
+      <div class="reward issued">
+        <span class="what">Освежитель «Вертолёт»</span>
+        <span class="origin">Вручил парк · за помощь на линии</span>
+        <span class="state">Получена 20 сентября</span>
+        <span class="office">Офис · Чиланзар</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="cell">
+    <div class="label">4 — наград не было вовсе</div>
+    <div class="note">Текст `rewards_empty` — новый. Кнопок нет: в разделе пусто (Руслан, 23-09-2026, сессия 55)</div>
+    <div class="rewards">
+      <div class="rewards-head"><h3>Мои награды</h3></div>
+      <div class="notice">Здесь появятся награды из акций и подарки от парка — баллы, товары и призы.</div>
+    </div>
+  </div>
+
+  <div class="cell">
+    <div class="label">5 — не загрузилось</div>
+    <div class="note">Отказ запроса, а не отсутствие наград. Текст `rewards_failed`, и есть чем повторить</div>
+    <div class="rewards">
+      <div class="rewards-head"><h3>Мои награды</h3></div>
+      <div class="notice">
+        Не удалось загрузить награды. Попробуйте ещё раз.
+        <button class="retry">Повторить</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body></html>

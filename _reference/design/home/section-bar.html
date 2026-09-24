@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>XalqBonus — шапка раздела: состояния</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&family=Unbounded:wght@200;300;600;700&display=swap">
+<style>
+/* ШАПКА РАЗДЕЛА — общий блок всех внутренних экранов Mini App водителя.
+   Нарисована 22-09-2026, сессия 52, по словам Руслана: шапка у всех разделов одна и та же,
+   и рисовать её заново в каждом экране нельзя — CLI нарисует четыре разные.
+
+   Истина по шапке — здесь. Экраны (../app/history-screen.html, ../app/rewards-screen.html,
+   ../app/orders-screen.html и все следующие) переносят её копией и не правят у себя.
+   Главный экран сюда не входит: у него своя шапка с аватаром и позывным.
+
+   Объяснение — section-bar.md рядом. */
+
+html, body { background: #0B0D11; margin: 0; }
+body {
+  padding: 24px 16px 60px;
+  font-family: Manrope, system-ui, sans-serif;
+  color: #F4F6F8;
+}
+
+.sheet { display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start; justify-content: center; }
+.cell { width: 100%; max-width: 520px; display: flex; flex-direction: column; gap: 6px; }
+.label { font-size: 14px; font-weight: 700; }
+.note { font-size: 12px; font-weight: 400; color: #8A93A2; min-height: 34px; }
+
+/* Рамка вокруг сцены — только для листа, на экране её нет. */
+.frame { border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 18px; overflow: hidden; background: #0B0D11; }
+.frame.scroller { height: 230px; overflow: auto; }
+
+/* --------------------------------------------------------------- шапка раздела */
+
+.bar {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 12px;
+  padding: calc(14px + env(safe-area-inset-top)) 16px 14px;
+  background: rgba(11, 13, 17, 0.82);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Кнопка назад — 40 px: палец попадает, и она не спорит по весу с заголовком.
+   Круг с подложкой, а не голая стрелка: на списке под шапкой голая теряется. */
+.bar .back {
+  width: 40px; height: 40px; flex-shrink: 0; border: 0; padding: 0; cursor: pointer;
+  border-radius: 999px; background: rgba(255, 255, 255, 0.07);
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* Заголовок переносится на вторую строку и не обрезается: обрезанное название раздела
+   нечитаемо, а узбекский текст длиннее русского примерно на четверть. Шапка растёт. */
+.bar h1 {
+  margin: 0; flex-grow: 1; min-width: 0;
+  font-family: Unbounded, Manrope, sans-serif;
+  font-size: 19px; font-weight: 600; letter-spacing: -0.5px; line-height: 1.25;
+}
+
+/* Место под действие справа. Пустует у большинства разделов и держит симметрию:
+   заголовок не прыгает влево-вправо при переходе между разделами. */
+.bar .act {
+  width: 40px; height: 40px; flex-shrink: 0; border: 0; padding: 0; cursor: pointer;
+  border-radius: 999px; background: rgba(255, 255, 255, 0.07);
+  display: flex; align-items: center; justify-content: center;
+}
+
+.bar .act.empty { background: none; cursor: default; pointer-events: none; }
+
+/* --------------------------------------------------- содержимое сцен под шапкой */
+
+.rows { padding: 8px 18px 24px; }
+
+.row {
+  display: flex; align-items: baseline; gap: 12px; padding: 11px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 15px; font-weight: 400;
+}
+
+.row:first-child { border-top: 0; }
+.row .t { width: 42px; flex-shrink: 0; font-size: 13px; font-weight: 300; color: #8A93A2; font-variant-numeric: tabular-nums; }
+.row .w { flex-grow: 1; }
+/* Сумма начисления — только в сценах с историей. В строках наград суммы нет: прочерк там
+   был заглушкой, и CLI перенёс бы его в разметку как настоящий элемент. */
+.row .s { color: #5FD08A; font-weight: 700; font-variant-numeric: tabular-nums; }
+</style></head><body>
+
+<div class="sheet">
+
+  <div class="cell">
+    <div class="label">1 — базовая: назад и заголовок</div>
+    <div class="note">Так выглядит шапка в большинстве разделов. Справа пусто, но место занято</div>
+    <div class="frame">
+      <div class="bar">
+        <button class="back" aria-label="Назад"><svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M14.5 5.5L8 12l6.5 6.5" stroke="#E4E8EE" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <h1>История баллов</h1>
+        <span class="act empty"></span>
+      </div>
+      <div class="rows">
+        <div class="row"><span class="t">14:26</span><span class="w">Поездка</span><span class="s">+1</span></div>
+        <div class="row"><span class="t">13:58</span><span class="w">Поездка</span><span class="s">+1</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cell">
+    <div class="label">2 — длинный заголовок</div>
+    <div class="note">Узбекский длиннее русского примерно на четверть. Перенос на вторую строку, не обрезка</div>
+    <div class="frame">
+      <div class="bar">
+        <button class="back" aria-label="Orqaga"><svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M14.5 5.5L8 12l6.5 6.5" stroke="#E4E8EE" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <h1>Mening mukofotlarim va sovrinlarim</h1>
+        <span class="act empty"></span>
+      </div>
+      <div class="rows">
+        <div class="row"><span class="t">20.09</span><span class="w">Shashka Taxi</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cell">
+    <div class="label">3 — с действием справа</div>
+    <div class="note">Место под кнопку занято всегда, кнопка появляется там, где нужна. Пример — обновление</div>
+    <div class="frame">
+      <div class="bar">
+        <button class="back" aria-label="Назад"><svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M14.5 5.5L8 12l6.5 6.5" stroke="#E4E8EE" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <h1>Мои награды</h1>
+        <button class="act" aria-label="Обновить"><svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M20 12a8 8 0 1 1-2.6-5.9" stroke="#E4E8EE" stroke-width="2.1" stroke-linecap="round"/><path d="M20 4.5V10h-5.5" stroke="#E4E8EE" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </div>
+      <div class="rows">
+        <div class="row"><span class="t">20.09</span><span class="w">Шашка Taxi</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cell">
+    <div class="label">4 — список ушёл под шапку</div>
+    <div class="note">Прокрутите сцену. Шапка липкая: выход назад не требует прокрутки вверх, под ней видно продолжение</div>
+    <div class="frame scroller">
+      <div class="bar">
+        <button class="back" aria-label="Назад"><svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M14.5 5.5L8 12l6.5 6.5" stroke="#E4E8EE" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <h1>История баллов</h1>
+        <span class="act empty"></span>
+      </div>
+      <div class="rows">
+        <div class="row"><span class="t">14:26</span><span class="w">Поездка</span><span class="s">+1</span></div>
+        <div class="row"><span class="t">13:58</span><span class="w">Поездка</span><span class="s">+1</span></div>
+        <div class="row"><span class="t">11:40</span><span class="w">Поездка</span><span class="s">+1</span></div>
+        <div class="row"><span class="t">10:22</span><span class="w">Поездка</span><span class="s">+1</span></div>
+        <div class="row"><span class="t">09:15</span><span class="w">Поездка</span><span class="s">+1</span></div>
+        <div class="row"><span class="t">08:02</span><span class="w">Поездка</span><span class="s">+1</span></div>
+        <div class="row"><span class="t">23:41</span><span class="w">Поездка</span><span class="s">+1</span></div>
+        <div class="row"><span class="t">21:10</span><span class="w">Поездка</span><span class="s">+1</span></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body></html>
