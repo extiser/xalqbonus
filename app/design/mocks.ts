@@ -12,6 +12,7 @@ import type {
   MemberOrderRowView,
   MemberProfileFieldView,
   MemberPromoRuleView,
+  MemberRewardDetailView,
   MemberRewardTicketView,
   MemberRewardView,
   MemberWeekDayView,
@@ -311,13 +312,16 @@ export const historyLoadingMock = { ...historyMock, state: 'loading' as const, d
 
 // ---------------------------------------------------------------------- мои награды
 
+/** «Здесь пусто» под группой без ждущих — `_reference/design/orders/*-screen-nopending.html`. */
+const GROUP_EMPTY = 'Здесь пусто';
+
 const REWARDS_TEXTS = {
   title: 'Мои награды',
   back: BACK,
   awaitingGroup: 'Ждут в офисе',
   pastGroup: 'История наград',
-  codeTitle: 'Код для выдачи — покажите этот экран в офисе',
-  empty: 'Наград пока нет.',
+  groupEmpty: GROUP_EMPTY,
+  empty: 'Здесь появятся награды из акций и подарки от парка — баллы, товары и призы.',
   error: 'Не удалось загрузить награды. Попробуйте ещё раз.',
   retry: RETRY,
 };
@@ -328,39 +332,64 @@ const REWARDS_AWAITING: MemberRewardView[] = [
     title: 'Шашка Taxi',
     status: 'awaiting',
     origin: 'Акция «Неделя возвращения» · сундук недели',
-    code: '73418',
-    state: 'Ждёт в офисе до 5 октября',
-    office: 'Офис на Чиланзаре, ул. Бунёдкор, 12',
+    state: 'Ждёт в офисе',
+    hint: 'до 5 октября',
+    office: 'Офис · Чиланзар',
+    actionLabel: 'Код для выдачи — внутри',
   },
   {
     id: 'reward-tire',
     title: 'Чернитель шин',
     status: 'awaiting',
     origin: 'Акция «Неделя возвращения» · сундук трёх дней',
-    code: '58072',
-    state: 'Ждёт в офисе до 9 октября',
-    office: 'Офис на Чиланзаре, ул. Бунёдкор, 12',
+    state: 'Ждёт в офисе',
+    hint: 'до 9 октября',
+    office: 'Офис · Чиланзар',
+    actionLabel: 'Код для выдачи — внутри',
   },
 ];
 
+/**
+ * История — из `rewards-screen.html`. В `rewards-screen-nopending.html` история нарисована прежним
+ * видом карточки, который `rewards-screen.md` называет заменённым; с этого листа берётся только
+ * группа с нулём.
+ */
 const REWARDS_PAST: MemberRewardView[] = [
-  { id: 'reward-300', title: '300 баллов', status: 'credited', origin: 'Акция «Неделя возвращения» · сундук дня', state: 'На балансе' },
+  {
+    id: 'reward-300',
+    title: '300 баллов',
+    status: 'credited',
+    origin: 'Акция «Неделя возвращения» · сундук дня',
+    state: 'На балансе',
+    hint: '21.09.2026',
+  },
   {
     id: 'reward-freshener',
     title: 'Освежитель «Вертолёт»',
     status: 'issued',
     origin: 'Вручил парк · за помощь на линии',
-    state: 'Получена 20 сентября',
-    office: 'Офис на Чиланзаре',
+    state: 'Получена',
+    hint: '20.09.2026, 16:10',
+    office: 'Офис · Чиланзар',
+    actionLabel: 'Просмотреть',
   },
-  { id: 'reward-150', title: '150 баллов', status: 'credited', origin: 'Акция «Неделя возвращения» · сундук дня', state: 'На балансе' },
+  {
+    id: 'reward-150',
+    title: '150 баллов',
+    status: 'credited',
+    origin: 'Акция «Неделя возвращения» · сундук дня',
+    state: 'На балансе',
+    hint: '19.09.2026',
+  },
   {
     id: 'reward-aroma',
     title: 'Ароматизатор «Гранат»',
     status: 'expired',
     origin: 'Акция «Неделя возвращения» · сундук дня',
-    state: 'Срок вышел 12 сентября — награда не получена',
-    office: 'Офис на Чиланзаре',
+    state: 'Срок вышел',
+    hint: '12.09.2026',
+    reason: 'Не забрали в офисе до срока',
+    actionLabel: 'Просмотреть',
   },
 ];
 
@@ -371,7 +400,7 @@ export const rewardsMock = {
   balance: BAR_BALANCE,
   texts: REWARDS_TEXTS,
 };
-export const rewardsNothingToPickMock = { ...rewardsMock, awaiting: [] };
+export const rewardsNoPendingMock = { ...rewardsMock, awaiting: [] };
 export const rewardsEmptyMock = { ...rewardsMock, state: 'empty' as const, awaiting: [], past: [] };
 export const rewardsErrorMock = { ...rewardsMock, state: 'error' as const, awaiting: [], past: [] };
 
@@ -382,7 +411,8 @@ const ORDERS_TEXTS = {
   back: BACK,
   pendingGroup: 'Ждут выдачи',
   pastGroup: 'История заказов',
-  empty: 'Заказов пока нет.',
+  groupEmpty: GROUP_EMPTY,
+  empty: 'Здесь появятся товары, которые вы обменяете на баллы.',
   error: 'Не удалось загрузить заказы. Попробуйте ещё раз.',
   retry: RETRY,
 };
@@ -443,10 +473,30 @@ export const ordersMock = {
   balance: BAR_BALANCE,
   texts: ORDERS_TEXTS,
 };
+export const ordersNoPendingMock = { ...ordersMock, pending: [] };
 export const ordersEmptyMock = { ...ordersMock, state: 'empty' as const, pending: [], past: [] };
 export const ordersErrorMock = { ...ordersMock, state: 'error' as const, pending: [], past: [] };
 
 // ---------------------------------------------------------------------- экран заказа
+
+/** Миниатюры товаров — вынуты из макетов `_reference/design/orders/` в `public/design/products/`. */
+const PRODUCT_IMAGES = {
+  freshener: '/design/products/freshener.jpg',
+  tireBlack: '/design/products/tire-black.jpg',
+  magnetHolder: '/design/products/magnet-holder.jpg',
+  taxiChecker: '/design/products/taxi-checker.jpg',
+  headset: '/design/products/headset.jpg',
+};
+
+/** Карточка офиса «Где забрать» — одна на экраны заказа и награды. */
+const PICKUP_OFFICE: MemberOfficeView = {
+  label: 'Офис',
+  name: 'Чиланзар',
+  address: 'ул. Бунёдкор, 12',
+  hours: 'Ежедневно, 09:00 — 20:00',
+  phone: '+998 71 200-70-07',
+  mapUrl: MAP_URL,
+};
 
 const ORDER_TEXTS = {
   back: BACK,
@@ -454,7 +504,7 @@ const ORDER_TEXTS = {
   officeTitle: 'Где забрать',
   map: 'Открыть в Яндекс Картах',
   linesTitle: 'Состав заказа',
-  total: 'Итого',
+  total: 'Сумма',
   cancel: 'Отменить заказ',
 };
 
@@ -466,18 +516,11 @@ const ORDER_PENDING: MemberOrderDetailView = {
   hint: 'заберите до 23.09, 14:32',
   amount: '900 баллов',
   code: '31724',
-  officeCard: {
-    label: 'Офис',
-    name: 'Чиланзар',
-    address: 'ул. Бунёдкор, 12',
-    hours: 'Ежедневно, 09:00 — 20:00',
-    phone: '+998 71 200-70-07',
-    mapUrl: MAP_URL,
-  },
+  officeCard: PICKUP_OFFICE,
   lines: [
-    { id: 'aroma', title: 'Ароматизатор «Гранат»', detail: '2 шт. · 150 баллов за штуку', cost: '300' },
-    { id: 'tire', title: 'Чернитель шин', detail: '1 шт. · 400 баллов', cost: '400' },
-    { id: 'cloth', title: 'Салфетки из микрофибры', detail: '1 шт. · 200 баллов', cost: '200' },
+    { id: 'freshener', title: 'Освежитель «Вертолёт»', caption: '2 шт. · 150 баллов за штуку', image: PRODUCT_IMAGES.freshener, price: '300' },
+    { id: 'tire', title: 'Чернитель шин', caption: '1 шт. · 400 баллов', image: PRODUCT_IMAGES.tireBlack, price: '400' },
+    { id: 'magnet', title: 'Магнитный держатель', caption: '1 шт. · 200 баллов', image: PRODUCT_IMAGES.magnetHolder, price: '200' },
   ],
   total: '900',
   cancellable: true,
@@ -493,8 +536,8 @@ const ORDER_ISSUED: MemberOrderDetailView = {
   amount: '−450 баллов',
   amountCaption: 'списано со счёта',
   lines: [
-    { id: 'tire', title: 'Чернитель шин', detail: '1 шт. · 400 баллов', cost: '400' },
-    { id: 'cloth', title: 'Салфетки из микрофибры', detail: '1 шт. · 50 баллов', cost: '50' },
+    { id: 'tire', title: 'Чернитель шин', caption: '1 шт. · 400 баллов', image: PRODUCT_IMAGES.tireBlack, price: '400' },
+    { id: 'magnet', title: 'Магнитный держатель', caption: '1 шт. · 50 баллов', image: PRODUCT_IMAGES.magnetHolder, price: '50' },
   ],
   total: '450',
   cancellable: false,
@@ -510,8 +553,8 @@ const ORDER_CANCELLED: MemberOrderDetailView = {
   amount: '1 200 баллов',
   amountCaption: 'вернулось на счёт',
   lines: [
-    { id: 'shine', title: 'Автохимия «Блеск»', detail: '2 шт. · 400 баллов за штуку', cost: '800' },
-    { id: 'brush', title: 'Щётка для стёкол', detail: '1 шт. · 400 баллов', cost: '400' },
+    { id: 'freshener', title: 'Освежитель «Вертолёт»', caption: '2 шт. · 400 баллов за штуку', image: PRODUCT_IMAGES.freshener, price: '800' },
+    { id: 'checker', title: 'Шашка Taxi', caption: '1 шт. · 400 баллов', image: PRODUCT_IMAGES.taxiChecker, price: '400' },
   ],
   total: '1 200',
   cancellable: false,
@@ -526,7 +569,7 @@ const ORDER_EXPIRED: MemberOrderDetailView = {
   reason: 'Не забрали за сутки',
   amount: '300 баллов',
   amountCaption: 'вернулось на счёт',
-  lines: [{ id: 'aroma', title: 'Ароматизатор «Гранат»', detail: '2 шт. · 150 баллов за штуку', cost: '300' }],
+  lines: [{ id: 'headset', title: 'Bluetooth гарнитура', caption: '2 шт. · 150 баллов за штуку', image: PRODUCT_IMAGES.headset, price: '300' }],
   total: '300',
   cancellable: false,
 };
@@ -535,6 +578,85 @@ export const orderMock = { order: ORDER_PENDING, balance: BAR_BALANCE, texts: OR
 export const orderIssuedMock = { order: ORDER_ISSUED, balance: BAR_BALANCE, texts: ORDER_TEXTS };
 export const orderCancelledMock = { order: ORDER_CANCELLED, balance: BAR_BALANCE, texts: ORDER_TEXTS };
 export const orderExpiredMock = { order: ORDER_EXPIRED, balance: BAR_BALANCE, texts: ORDER_TEXTS };
+
+// --------------------------------------------------------------------- экран награды
+
+const REWARD_TEXTS = {
+  title: 'Награда',
+  back: BACK,
+  codeTitle: 'Код для выдачи — покажите этот экран в офисе',
+  officeTitle: 'Где забрать',
+  map: 'Открыть в Яндекс Картах',
+  linesTitle: 'Награда',
+  total: 'Сумма',
+};
+
+/** Награда-товар строкой: цена из каталога зачёркнута, рядом «0». */
+const REWARD_CHECKER_LINE = {
+  id: 'checker',
+  title: 'Шашка Taxi',
+  caption: '1 шт.',
+  image: PRODUCT_IMAGES.taxiChecker,
+  oldPrice: '1 500',
+  price: '0',
+};
+
+const REWARD_WEEK_ORIGIN = 'Акция «Неделя возвращения» · сундук недели';
+
+export const rewardMock = {
+  reward: {
+    status: 'awaiting',
+    origin: REWARD_WEEK_ORIGIN,
+    state: 'Ждёт в офисе',
+    hint: 'заберите до 5 октября',
+    code: '73418',
+    officeCard: PICKUP_OFFICE,
+    lines: [REWARD_CHECKER_LINE],
+    total: '0',
+  } satisfies MemberRewardDetailView,
+  texts: REWARD_TEXTS,
+};
+
+/** Произвольная награда: фото и цены нет — значок подарка, ни цены, ни «Суммы». «Сертификат на мойку» — демонстрационный. */
+export const rewardCustomMock = {
+  reward: {
+    status: 'awaiting',
+    origin: 'Вручил парк · за помощь на линии',
+    state: 'Ждёт в офисе',
+    hint: 'заберите до 5 октября',
+    code: '73418',
+    officeCard: PICKUP_OFFICE,
+    lines: [{ id: 'wash', title: 'Сертификат на мойку', caption: '1 шт.', icon: 'gift' }],
+  } satisfies MemberRewardDetailView,
+  texts: REWARD_TEXTS,
+};
+
+/** Получена: где выдали — в строке состояния. */
+export const rewardIssuedMock = {
+  reward: {
+    status: 'issued',
+    origin: REWARD_WEEK_ORIGIN,
+    state: 'Получена',
+    hint: '20.09.2026, 16:10 · Офис · Чиланзар',
+    lines: [REWARD_CHECKER_LINE],
+    total: '0',
+  } satisfies MemberRewardDetailView,
+  texts: REWARD_TEXTS,
+};
+
+/** Срок вышел: причина под состоянием, как у отменённого заказа. */
+export const rewardExpiredMock = {
+  reward: {
+    status: 'expired',
+    origin: REWARD_WEEK_ORIGIN,
+    state: 'Срок вышел',
+    hint: '12.09.2026',
+    reason: 'Не забрали в офисе до срока — награда сгорела',
+    lines: [REWARD_CHECKER_LINE],
+    total: '0',
+  } satisfies MemberRewardDetailView,
+  texts: REWARD_TEXTS,
+};
 
 // -------------------------------------------------------------------------- профиль
 

@@ -64,17 +64,18 @@ export const DESIGN_GROUPS: DesignGroup[] = [
     title: 'Мои награды',
     screens: [
       { slug: 'rewards', title: 'Ждут в офисе и история', source: 'orders/rewards-screen.html' },
-      { slug: 'rewards-nothing', title: 'Ждущих нет — только история', source: 'orders/rewards-screen-nopending.html' },
+      { slug: 'rewards-nopending', title: 'Ждущих нет — группа с нулём', source: 'orders/rewards-screen-nopending.html' },
       { slug: 'rewards-empty', title: 'Наград не было', source: 'orders/rewards-screen-empty.html' },
-      { slug: 'rewards-error', title: 'Не загрузилось', source: 'home/rewards-block.html' },
+      { slug: 'rewards-error', title: 'Не загрузилось', source: 'orders/rewards-screen-empty.html' },
     ],
   },
   {
     title: 'Мои заказы',
     screens: [
       { slug: 'orders', title: 'Ждут выдачи и история', source: 'orders/orders-screen.html' },
+      { slug: 'orders-nopending', title: 'Ждущих нет — группа с нулём', source: 'orders/orders-screen-nopending.html' },
       { slug: 'orders-empty', title: 'Заказов не было', source: 'orders/orders-screen-empty.html' },
-      { slug: 'orders-error', title: 'Не загрузилось', source: 'home/orders-block.html' },
+      { slug: 'orders-error', title: 'Не загрузилось', source: 'orders/orders-screen-empty.html' },
     ],
   },
   {
@@ -84,6 +85,15 @@ export const DESIGN_GROUPS: DesignGroup[] = [
       { slug: 'order-issued', title: 'Выдан', source: 'orders/order-screen-states.html' },
       { slug: 'order-cancelled', title: 'Отменён водителем', source: 'orders/order-screen-states.html' },
       { slug: 'order-expired', title: 'Не забран за сутки', source: 'orders/order-screen-states.html' },
+    ],
+  },
+  {
+    title: 'Экран награды',
+    screens: [
+      { slug: 'reward', title: 'Награда-товар — код, офис, зачёркнутая цена', source: 'orders/reward-screen.html' },
+      { slug: 'reward-custom', title: 'Произвольная награда — значок подарка', source: 'orders/reward-screen-custom.html' },
+      { slug: 'reward-issued', title: 'Получена', source: 'orders/reward-screen-states.html' },
+      { slug: 'reward-expired', title: 'Срок вышел', source: 'orders/reward-screen-states.html' },
     ],
   },
   {
