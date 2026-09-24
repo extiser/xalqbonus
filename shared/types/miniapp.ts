@@ -23,6 +23,7 @@ import type {
   LinkAttemptOutcome,
   OrderStatus,
 } from '../../server/generated/prisma/enums';
+import type { FormattedPhone } from '../phone';
 import type { EmployeeOffice } from './orders';
 import type { MemberRewardTexts } from './rewards';
 
@@ -41,31 +42,59 @@ export type { Language };
  */
 export const INIT_DATA_HEADER = 'x-telegram-init-data';
 
-/** Офис парка: куда идти, когда автоматика не справилась. */
-export type OfficeContact = {
-  name: string;
-  /** Режим работы. Показывается всегда: у ТТЗ он не круглосуточный. */
-  hours: string;
-  phone: string;
-  /** Ссылка на карту. Открывается наружу, поэтому строкой, а не координатами. */
-  mapUrl: string;
-};
-
-/** Тексты экрана регистрации на одном языке. */
+/**
+ * Тексты регистрации и её исходов на одном языке — поле на ключ словаря.
+ *
+ * Имена полей — по свойствам компонентов регистрации из `next/`: страница
+ * раскладывает их по экранам, ничего не досчитывая. Отказ «выключенный сотрудник» читает
+ * отсюда же: по устройству это тот же экран исхода.
+ */
 export type RegistrationScreenTexts = {
+  /** Шаг 1 — приветствие. На экране стоят оба языка сразу, узбекский первым. */
+  welcomeTitle: string;
+  welcomeLead: string;
+  /** Подпись над кнопками языка и сами кнопки — одинаковы на обоих языках. */
   selectLanguage: string;
-  languageRu: string;
   languageUz: string;
-  askPhone: string;
-  sendPhone: string;
+  languageRu: string;
+  /** Шаг 2 — номер. */
+  title: string;
+  lead: string;
+  /** Три обещания: автоматическое начисление, подарки, акции. */
+  perks: string[];
+  /** Подсказка над кнопкой номера — на шаге 2 и на повторе. */
+  ask: string;
+  send: string;
   /** Пока запрос в пути. Поход в Fleet API занимает секунды. */
-  checkingPhone: string;
+  checking: string;
+  /** Заголовок отказа «в офис» и отказа сотруднику. */
+  officeTitle: string;
+  /** Повтор: заголовок, абзац под текстом исхода, кнопка и строка сбоя под ней. */
+  retryTitle: string;
+  retryNote: string;
+  retrySend: string;
+  retryFailed: string;
+  /** «Покажите менеджеру». */
+  idsTitle: string;
+  phoneLabel: string;
+  telegramIdLabel: string;
+  copyPhone: string;
+  copyTelegramId: string;
+  /** Офисы на отказе и повторе: подпись над списком, «Офис · …» и строка карты. */
+  officesTitle: string;
+  officeLabel: string;
+  mapLabel: string;
   /**
    * Клиент старее Bot API 6.9: вызова `requestContact` в нём нет, и номер внутри приложения
    * взять нечем. Приезжает вместе с остальными текстами, а не лежит на клиенте: к моменту,
    * когда он понадобится, язык водителя уже выбран, и говорить с ним на двух сразу незачем.
+   * Текст — абзацами через пустую строку.
    */
+  outdatedClientTitle: string;
   outdatedClient: string;
+  /** Сотрудник с выключенной учёткой. */
+  employeeDeniedTitle: string;
+  employeeDeniedText: string;
 };
 
 /** Тексты экрана участника на его языке. */
@@ -381,7 +410,7 @@ export type MiniAppCampaignResponse = {
 export type MemberOrderTexts = {
   exchangePoints: string;
   myOrders: string;
-  /** Кнопка «назад» на экране — только у клиента без системной кнопки Telegram. */
+  /** Кнопка «назад» на экране: системная кнопка Telegram в приложении не используется. */
   back: string;
   /** Ответа не было вовсе: сказать, что случилось, сервер не мог. */
   requestFailed: string;
@@ -552,11 +581,19 @@ export type MiniAppEmployeeScreen = {
 
 /**
  * Сотрудник, чья учётка выключена. Водительский экран ему не показывается и в этом случае:
- * роль у Telegram одна, и выключенная учётка её не меняет. Текст — из словаря двери веба.
+ * роль у Telegram одна, и выключенная учётка её не меняет.
+ *
+ * Экран устроен как отказ регистрации: номер и Telegram ID — то, по чему руководитель найдёт
+ * учётку. Тексты — из словаря водителя на обоих языках: экран открывается на русском,
+ * переключатель работает без запроса.
  */
 export type MiniAppEmployeeDeniedScreen = {
   screen: 'employee_denied';
-  message: string;
+  /** Телефон учётки, `employees.phone_e164`. */
+  phone: FormattedPhone;
+  /** `user.id` из проверенной `initData`, строкой. */
+  telegramId: string;
+  texts: Record<Language, RegistrationScreenTexts>;
 };
 
 export type MiniAppStateResponse =
@@ -565,11 +602,9 @@ export type MiniAppStateResponse =
   | MiniAppEmployeeDeniedScreen
   | {
       screen: 'registration';
-      /** Предвыбор по `language_code` из `initData`. Переключается на экране. */
-      language: Language;
       /**
-       * Оба языка сразу: переключатель работает мгновенно и за ответом сервера не ходит.
-       * Двух строк на экран — цена, которую не жалко.
+       * Оба языка сразу: шаг 1 показывает оба, а переключатель на следующих экранах работает
+       * мгновенно и за ответом сервера не ходит. Предвыбора языка нет — его выбирает человек.
        */
       texts: Record<Language, RegistrationScreenTexts>;
     };
@@ -591,18 +626,34 @@ export type MiniAppRegisterRequestBody = {
   language: Language;
 };
 
-export type MiniAppRegisterResponse = {
-  outcome: LinkAttemptOutcome;
-  /** Язык ответа. У удачи — язык участника, а не выбранный сейчас. */
-  language: Language;
-  message: string;
-  /** Список офисов под текстом. Пуст у исходов, которые походом в офис не решаются. */
-  offices: OfficeContact[];
-  /**
-   * Осмысленно ли повторить ту же кнопку.
-   *
-   * Ложь — не строгость, а то же решение, что снимало клавиатуру в боте: кнопка под
-   * окончательным отказом звала бы человека в действие, которое даст тот же ответ.
-   */
-  canRetry: boolean;
-};
+/**
+ * Какой экран исхода показать.
+ *
+ * - `office` — исход решает оператор: повтор дал бы тот же ответ, кнопки нет
+ * - `retry` — чинится второй попыткой той же кнопкой: проверка не прошла или контакт чужой
+ * - `employee` — контакт сотрудника парка: нейтральный отказ, без офисов и кнопок
+ */
+export type RegistrationRefusalKind = 'office' | 'retry' | 'employee';
+
+/**
+ * Ответ на попытку привязки.
+ *
+ * Удача — только исход: экран участника перечитывается у `/api/miniapp/me` целиком, как при
+ * следующем открытии приложения.
+ */
+export type MiniAppRegisterResponse =
+  | { outcome: 'linked' }
+  | {
+      outcome: Exclude<LinkAttemptOutcome, 'linked'>;
+      kind: RegistrationRefusalKind;
+      /** Язык, выбранный при отправке. С него экран исхода открывается. */
+      language: Language;
+      /** Текст исхода на обоих языках: переключатель работает без запроса. */
+      message: Record<Language, string>;
+      /** Номер, присланный контактом, — даже если в парке его нет. */
+      phone: FormattedPhone;
+      /** `user.id` из проверенной `initData`, строкой. */
+      telegramId: string;
+      /** Пусто у `kind: 'employee'`. */
+      offices: MemberOffice[];
+    };

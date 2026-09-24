@@ -1,6 +1,7 @@
 import { findEmployeeByTelegramUserId } from '#server/repositories/employees';
+import { registrationScreenTexts } from '#server/services/drivers/registrationScreen';
 import { readEmployeeOffices } from '#server/services/offices/employeeOffices';
-import { denialText, WEB_LANGUAGE } from '#shared/denials';
+import { formatPhone } from '#shared/phone';
 import type { MiniAppEmployeeDeniedScreen, MiniAppEmployeeScreen } from '#shared/types/miniapp';
 
 /**
@@ -12,7 +13,9 @@ import type { MiniAppEmployeeDeniedScreen, MiniAppEmployeeScreen } from '#shared
  * ничего не выбирает, а только экономит запрос водителю.
  *
  * Выключенная учётка — тоже экран сотрудника, с отказом: роль у Telegram одна, и выключение
- * не делает человека водителем.
+ * не делает человека водителем. Отказ показывает номер учётки и Telegram ID — по ним
+ * руководитель найдёт, кого включить, — и говорит текстами экранов регистрации: по устройству
+ * это тот же экран исхода. Словарь двери веба (`shared/denials.ts`) здесь не читается.
  */
 export const readEmployeeScreen = async (
   telegramUserId: bigint,
@@ -24,7 +27,12 @@ export const readEmployeeScreen = async (
   }
 
   if (employee.disabledAt !== null) {
-    return { screen: 'employee_denied', message: denialText('disabled', WEB_LANGUAGE) };
+    return {
+      screen: 'employee_denied',
+      phone: formatPhone(employee.phoneE164),
+      telegramId: telegramUserId.toString(),
+      texts: registrationScreenTexts(),
+    };
   }
 
   return {

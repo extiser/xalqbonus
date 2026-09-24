@@ -2,7 +2,6 @@ import { readLinkedDriver } from '#server/services/drivers/readLinkedDriver';
 import { readMemberScreen } from '#server/services/drivers/readMemberScreen';
 import { registrationScreenTexts } from '#server/services/drivers/registrationScreen';
 import { readEmployeeScreen } from '#server/services/employees/readEmployeeScreen';
-import { preferredLanguage } from '#server/utils/language';
 import { requireTelegramUser } from '#server/utils/telegramAuth';
 import type { MiniAppStateResponse } from '#shared/types/miniapp';
 
@@ -36,11 +35,10 @@ export default defineEventHandler(async (event): Promise<MiniAppStateResponse> =
     return readMemberScreen(driver, new Date());
   }
 
+  // Без предвыбора языка: шаг 1 показывает оба, и выбирает человек. В `person_settings`
+  // уезжает выбранный там — при удачной привязке нового участника.
   return {
     screen: 'registration',
-    // Предвыбор, а не решение: язык переключается на экране, и уезжает в `person_settings`
-    // именно выбранный там.
-    language: preferredLanguage(user.languageCode),
     texts: registrationScreenTexts(),
   };
 });
