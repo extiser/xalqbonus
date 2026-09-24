@@ -31,7 +31,14 @@ import {
   dayChestsMock,
   bigChestMock,
   bigChestNote,
+  loadFailedMock,
+  notTelegramMock,
+  outdatedTelegramMock,
+  registrationLanguageMock,
+  registrationOutcomeMock,
+  registrationPhoneMock,
 } from '~/design/mocks';
+import type { RegistrationOutcomeScene } from '~/design/mocks';
 import { findDesignScreen } from '~/design/screens';
 import type { MemberChestCardView, MemberLanguage, MemberRewardTicketView } from '~/types/memberView';
 
@@ -113,6 +120,67 @@ const order = computed(() =>
     'order-expired': orderExpiredMock,
   }),
 );
+
+// Загрузка: уход включает кнопка страницы. После `left` блока нет — «Показать снова» монтирует
+// экран заново, и вход проигрывается ещё раз.
+const loadingLeaving = ref(false);
+const loadingLeft = ref(false);
+const loadingKey = ref(0);
+
+function toggleLoading(): void {
+  if (!loadingLeft.value) {
+    loadingLeaving.value = true;
+    return;
+  }
+
+  loadingKey.value += 1;
+  loadingLeaving.value = false;
+  loadingLeft.value = false;
+}
+
+const stub = computed(() =>
+  pick({
+    'app-load-failed': loadFailedMock,
+    'app-not-telegram': notTelegramMock,
+    'app-outdated-telegram': outdatedTelegramMock,
+  }),
+);
+
+// Регистрация: язык один на весь поток — выбран на шаге 1 и переживает переход между экранами.
+const registrationLanguage = useState<MemberLanguage>('design-registration-language', () => 'ru');
+
+function selectLanguage(language: MemberLanguage): void {
+  registrationLanguage.value = language;
+  go('registration-phone');
+}
+
+// Проверка номера длится 3 с, как в макете; экраны «проверяем» стоят в ней всё время.
+const PHONE_CHECK_MS = 3000;
+const isCheckingScreen = slug.value.endsWith('-checking');
+const phoneChecking = ref(isCheckingScreen);
+
+function checkPhone(): void {
+  phoneChecking.value = true;
+  setTimeout(() => {
+    phoneChecking.value = isCheckingScreen;
+  }, PHONE_CHECK_MS);
+}
+
+const registrationPhone = computed(() =>
+  slug.value.startsWith('registration-phone') ? registrationPhoneMock(registrationLanguage.value) : undefined,
+);
+
+const outcome = computed(() => {
+  const scene = pick<RegistrationOutcomeScene>({
+    'registration-refused': 'refused',
+    'registration-retry': 'retry',
+    'registration-retry-checking': 'retry',
+    'registration-employee': 'employee',
+    'registration-employee-denied': 'employeeDenied',
+  });
+
+  return scene ? registrationOutcomeMock(scene, registrationLanguage.value) : undefined;
+});
 
 // Профиль: глазик, открытая шторка и язык живут здесь, компонент только рисует их.
 const licenseRevealed = ref(false);
@@ -196,8 +264,41 @@ function go(target: string): void {
 <template>
   <div class="min-h-dvh bg-xb-screen font-manrope text-xb-text">
     <div class="mx-auto w-full max-w-[520px] bg-xb-screen">
+      <template v-if="slug === 'app-loading'">
+        <OrganismsNextMemberLoadingScreen :key="loadingKey" :leaving="loadingLeaving" @left="loadingLeft = true" />
+        <div class="fixed inset-x-0 bottom-0 z-40 flex justify-center pb-[calc(24px+env(safe-area-inset-bottom))]">
+          <AtomsNextMemberButton size="s" tone="outline" :disabled="loadingLeaving && !loadingLeft" @click="toggleLoading">
+            {{ loadingLeft ? 'Показать снова' : 'Уйти' }}
+          </AtomsNextMemberButton>
+        </div>
+      </template>
+
+      <OrganismsNextMemberStubScreen v-else-if="stub" v-bind="stub" @retry="go('app-loading')" />
+
+      <OrganismsNextMemberRegistrationLanguage
+        v-else-if="slug === 'registration-language'"
+        v-bind="registrationLanguageMock"
+        @select="selectLanguage"
+      />
+
+      <OrganismsNextMemberRegistrationPhone
+        v-else-if="registrationPhone"
+        v-bind="registrationPhone"
+        v-model:language="registrationLanguage"
+        :checking="phoneChecking"
+        @send="checkPhone"
+      />
+
+      <OrganismsNextMemberRegistrationOutcome
+        v-else-if="outcome"
+        v-bind="outcome"
+        v-model:language="registrationLanguage"
+        :busy="phoneChecking"
+        @send="checkPhone"
+      />
+
       <OrganismsNextMemberHome
-        v-if="home"
+        v-else-if="home"
         v-bind="home"
         @history="go('history')"
         @rewards="go('rewards')"

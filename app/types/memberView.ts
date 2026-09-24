@@ -76,13 +76,51 @@ export interface MemberRewardView {
   code?: string;
 }
 
-/** Офис на экране заказа: всё, чтобы доехать. */
+/**
+ * Офис карточкой — «Где забрать» на экране заказа и списки офисов при регистрации: всё,
+ * чтобы доехать. Имя пишется «Офис · Кадышева»: подпись ставит фронт, имя приходит из базы.
+ */
 export interface MemberOfficeView {
-  /** «Офис · Чиланзар». */
+  /** Подпись перед именем на языке водителя: «Офис». */
+  label: string;
+  /** Имя офиса из базы: «Кадышева». */
   name: string;
   address: string;
-  hours: string;
-  phone: string;
+  /** Часы работы. Нет — строки нет. */
+  hours: string | null;
+  /** Телефон офиса. Нет — строки нет. */
+  phone: string | null;
+  /** Ссылка на карту. Нет — строки «Открыть в Яндекс Картах» нет. */
+  mapUrl: string | null;
+}
+
+/** Строка под кнопкой номера: «Проверяем…» серым или сбой алым. */
+export interface MemberPhoneSendStatus {
+  /** `checking` — идёт проверка; `failed` — проверка не прошла. */
+  tone: 'checking' | 'failed';
+  text: string;
+}
+
+/** Номер, с которым пришёл водитель: как показать и что положить в буфер. */
+export interface MemberPhoneView {
+  /** «+998 90 123-45-67». */
+  display: string;
+  /** «+998901234567». */
+  copy: string;
+}
+
+/** «Покажите менеджеру» на отказах регистрации: подписи, номер и Telegram ID. */
+export interface MemberManagerIdsView {
+  texts: {
+    title: string;
+    phoneLabel: string;
+    telegramIdLabel: string;
+    /** Подписи кнопок копирования для экранного чтеца: на экране слов нет. */
+    copyPhone: string;
+    copyTelegramId: string;
+  };
+  phone: MemberPhoneView;
+  telegramId: string;
 }
 
 /** Позиция в составе заказа. */

@@ -18,6 +18,23 @@ export interface DesignGroup {
 
 export const DESIGN_GROUPS: DesignGroup[] = [
   {
+    title: 'Регистрация и служебные экраны',
+    screens: [
+      { slug: 'app-loading', title: 'Загрузка — кнопкой внизу проверяется уход', source: 'registration/state-loading.html' },
+      { slug: 'app-load-failed', title: 'Не удалось загрузить', source: 'registration/state-load-failed.html' },
+      { slug: 'app-not-telegram', title: 'Открыто не из Telegram', source: 'registration/state-not-telegram.html' },
+      { slug: 'app-outdated-telegram', title: 'Устаревший Telegram', source: 'registration/state-outdated-telegram.html' },
+      { slug: 'registration-language', title: 'Шаг 1 — язык', source: 'registration/registration-language.html' },
+      { slug: 'registration-phone', title: 'Шаг 2 — номер', source: 'registration/registration-screen.html' },
+      { slug: 'registration-phone-checking', title: 'Шаг 2 — проверяем номер', source: 'registration/registration-screen.html' },
+      { slug: 'registration-refused', title: 'Отказ «в офис» — person_already_linked', source: 'registration/registration-refused.html' },
+      { slug: 'registration-retry', title: 'Повтор — проверка не прошла', source: 'registration/registration-retry.html' },
+      { slug: 'registration-retry-checking', title: 'Повтор — проверяем номер', source: 'registration/registration-retry.html' },
+      { slug: 'registration-employee', title: 'Отказ сотруднику', source: 'registration/registration-employee.html' },
+      { slug: 'registration-employee-denied', title: 'Сотрудник с выключенной учёткой', source: 'registration/state-employee-denied.html' },
+    ],
+  },
+  {
     title: 'Главный экран',
     screens: [
       { slug: 'home', title: 'Участник акции — эталон', source: 'app/main-screen.html' },
