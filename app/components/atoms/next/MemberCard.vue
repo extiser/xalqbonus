@@ -51,8 +51,18 @@ const SURFACES: Record<CardTone, Partial<Record<CardVariant, string>>> = {
   },
 };
 
+/**
+ * Незаведённое сочетание тона и вида — ошибка, а не карточка без фона: значение для него
+ * не подбирается, это вопрос к макету.
+ */
+const surface = computed(() => {
+  const classes = SURFACES[props.tone][props.variant];
+  if (!classes) throw new Error(`MemberCard: у тона ${props.tone} нет вида ${props.variant} — вопрос к макету`);
+  return classes;
+});
+
 const surfaceClasses = computed(() => [
-  SURFACES[props.tone][props.variant],
+  surface.value,
   props.divided ? 'divide-y divide-white/6 overflow-hidden' : '',
   props.dimmed ? 'opacity-55' : '',
 ]);
