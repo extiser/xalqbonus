@@ -51,14 +51,31 @@ defineEmits<{ profile: []; refresh: []; take: []; chest: [chestId: string] }>();
     <div class="relative flex flex-col gap-[34px] overflow-hidden px-5 py-[26px]">
       <AtomsNextMemberHeatBackdrop :stage="stage" />
 
-      <OrganismsNextMemberHomeHeader
-        :name="name"
-        :callsign="callsign"
-        :balance="balance"
-        :texts="{ profile: texts.profile, refresh: texts.refresh, promo: texts.promo }"
-        @profile="$emit('profile')"
-        @refresh="$emit('refresh')"
-      />
+      <!-- Шапка экрана акции — прежняя шапка главной, перенесена сюда как есть до отдельной задачи
+           на этот экран: у главной шапка стала липкой и без «обновить» (#201). Центр экрана занят
+           дневной целью, поэтому баланс здесь пилюлей в шапке. -->
+      <div class="relative flex items-center gap-3">
+        <AtomsNextMemberIconButton :label="texts.profile" size="l" @click="$emit('profile')">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true">
+            <circle cx="12" cy="8.5" r="3.6" stroke="currentColor" stroke-width="1.8" />
+            <path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+          </svg>
+        </AtomsNextMemberIconButton>
+
+        <div class="min-w-0 grow">
+          <AtomsNextMemberNameplate :name="name" :callsign="callsign" />
+        </div>
+
+        <div class="flex shrink-0 items-center gap-2">
+          <AtomsNextMemberBalancePill :points="balance" />
+          <AtomsNextMemberIconButton :label="texts.refresh" size="l" @click="$emit('refresh')">
+            <svg viewBox="0 0 24 24" width="19" height="19" fill="none" aria-hidden="true">
+              <path d="M20 12a8 8 0 1 1-2.6-5.9" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
+              <path d="M20 4v4.4h-4.4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </AtomsNextMemberIconButton>
+        </div>
+      </div>
 
       <MoleculesNextMemberDailyGoal
         :done="goal.done"

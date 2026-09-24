@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue';
 import type {
   MemberOperationDayView,
   MemberOrderRowView,
@@ -7,13 +8,16 @@ import type {
 } from '~/types/memberView';
 
 /**
- * Главный экран водителя — `product/design/app/main-screen.html` и `main-screen-invite.html`.
+ * Главный экран водителя — `_reference/design/home/main-screen.html` и `main-screen-invite.html`.
  *
- * Сверху живой фон, шапка и баллы; под баллами — плашка приглашения, если водитель попал
- * в снимок акции и не вступил. Дальше блоки в порядке срочности: заказы (живут сутки),
- * награды (недели), история. Заказы выше наград — первым говорит то, что горит.
+ * Сверху липкая шапка, под ней живой фон и баллы; под баллами — плашка приглашения, если водитель
+ * попал в снимок акции и не вступил. Фон начинается от верха экрана и уходит под шапку. Дальше
+ * блоки в порядке срочности: заказы (живут сутки), награды (недели), история. Заказы выше
+ * наград — первым говорит то, что горит.
  *
- * Каталога и блока HOT здесь нет: каталог не нарисован, они придут своей задачей.
+ * Число баллов набирается здесь, один раз на крупное и на баланс в шапке: они считаются вместе.
+ *
+ * Каталога и блока HOT здесь нет: они придут своей задачей.
  */
 const props = defineProps<{
   name: string;
@@ -28,16 +32,17 @@ const props = defineProps<{
   history: { state: MemberViewLoad; days: MemberOperationDayView[] };
   texts: {
     profile: string;
-    refresh: string;
     promo: string;
     balanceTitle: string;
     exchange: string;
     updated: string;
     ordersTitle: string;
     ordersAll: string;
+    ordersEmpty: string;
     ordersError: string;
     rewardsTitle: string;
     rewardsAll: string;
+    rewardsEmpty: string;
     rewardsError: string;
     historyTitle: string;
     historyAll: string;
@@ -49,7 +54,6 @@ const props = defineProps<{
 
 defineEmits<{
   profile: [];
-  refresh: [];
   promo: [];
   exchange: [];
   invite: [];
@@ -62,27 +66,39 @@ defineEmits<{
   retryRewards: [];
   retryHistory: [];
 }>();
+
+const amount = useCountUp(() => props.points);
+
+/** Крупное число ушло под шапку — у шапки подложка. Считает `MemberBalance`. */
+const barSurface = ref(false);
 </script>
 
 <template>
-  <div class="flex min-h-dvh flex-col bg-xb-screen font-manrope leading-[normal] text-xb-text">
-    <div class="relative flex flex-col gap-[34px] overflow-hidden px-5 pt-[26px]" :class="props.invite ? 'pb-4' : 'pb-11'">
+  <!-- overflow-x: clip — золотая пыль пилюли акции свисает за правый край экрана на 10–18 px,
+       и без обрезки у главной появлялась бы прокрутка вбок (в эталоне она есть). clip, а не hidden:
+       контейнером прокрутки обёртка не становится, липкость шапки и таймлайн числа работают -->
+  <div class="home-screen relative flex min-h-dvh flex-col overflow-x-clip bg-xb-screen font-manrope leading-[normal] text-xb-text">
+    <OrganismsNextMemberHomeHeader
+      :name="name"
+      :callsign="callsign"
+      :promo="promo"
+      :balance="{ label: texts.balanceTitle, amount }"
+      :surface="barSurface"
+      :texts="{ profile: texts.profile, promo: texts.promo }"
+      @profile="$emit('profile')"
+      @promo="$emit('promo')"
+    />
+
+    <!-- overflow: clip, а не hidden: hidden делает блок контейнером прокрутки, и таймлайн числа
+         баллов считал бы прокрутку внутри него, которой нет, — баланс в шапке не появлялся бы -->
+    <div class="relative z-[6] flex flex-col gap-[34px] overflow-clip px-5 pt-[104px]" :class="props.invite ? 'pb-4' : 'pb-11'">
       <AtomsNextMemberLiveBackdrop variant="home" />
 
-      <OrganismsNextMemberHomeHeader
-        :name="name"
-        :callsign="callsign"
-        :promo="promo"
-        :texts="{ profile: texts.profile, refresh: texts.refresh, promo: texts.promo }"
-        @profile="$emit('profile')"
-        @refresh="$emit('refresh')"
-        @promo="$emit('promo')"
-      />
-
       <OrganismsNextMemberBalance
-        :points="points"
+        :amount="amount"
         :texts="{ title: texts.balanceTitle, exchange: texts.exchange, updated: texts.updated }"
         @exchange="$emit('exchange')"
+        @covered="(covered) => (barSurface = covered)"
       />
 
       <MoleculesNextMemberInviteBanner
@@ -97,7 +113,7 @@ defineEmits<{
     <OrganismsNextMemberOrdersBlock
       :state="orders.state"
       :orders="orders.items"
-      :texts="{ title: texts.ordersTitle, all: texts.ordersAll, error: texts.ordersError, retry: texts.retry }"
+      :texts="{ title: texts.ordersTitle, all: texts.ordersAll, empty: texts.ordersEmpty, error: texts.ordersError, retry: texts.retry }"
       @all="$emit('orders')"
       @open="(orderId) => $emit('order', orderId)"
       @retry="$emit('retryOrders')"
@@ -106,7 +122,7 @@ defineEmits<{
     <OrganismsNextMemberRewardsBlock
       :state="rewards.state"
       :rewards="rewards.items"
-      :texts="{ title: texts.rewardsTitle, all: texts.rewardsAll, error: texts.rewardsError, retry: texts.retry }"
+      :texts="{ title: texts.rewardsTitle, all: texts.rewardsAll, empty: texts.rewardsEmpty, error: texts.rewardsError, retry: texts.retry }"
       @all="$emit('rewards')"
       @open="(rewardId) => $emit('reward', rewardId)"
       @retry="$emit('retryRewards')"
@@ -127,3 +143,12 @@ defineEmits<{
     />
   </div>
 </template>
+
+<style scoped>
+/* Область имени таймлайна числа: число — в `MemberBalance`, читает его шапка — `MemberHomeHeader`. */
+@supports (animation-timeline: view()) {
+  .home-screen {
+    timeline-scope: --amount;
+  }
+}
+</style>

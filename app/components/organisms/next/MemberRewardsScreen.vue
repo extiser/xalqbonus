@@ -2,7 +2,7 @@
 import type { MemberRewardView, MemberViewLoad } from '~/types/memberView';
 
 /**
- * Раздел «Мои награды» — `product/design/app/rewards-screen.html`.
+ * Раздел «Мои награды» — `_reference/design/orders/rewards-screen.html`.
  *
  * Две группы: сверху ждущие в офисе со счётчиком — за ними идти, ниже история наград.
  * Ждущих нет — первой группы нет вовсе: пустая группа с нулём выглядела бы как потеря.
@@ -12,6 +12,8 @@ defineProps<{
   state: MemberViewLoad;
   awaiting: MemberRewardView[];
   past: MemberRewardView[];
+  /** Баланс справа в шапке — готовыми строками («Ваши баллы», «1 450»). */
+  balance?: { label: string; amount: string };
   texts: {
     title: string;
     back: string;
@@ -29,7 +31,7 @@ defineEmits<{ back: []; retry: [] }>();
 
 <template>
   <div class="flex min-h-dvh flex-col bg-xb-screen pb-[calc(40px+env(safe-area-inset-bottom))] font-manrope leading-[normal] text-xb-text">
-    <MoleculesNextMemberSectionBar :title="texts.title" :back-label="texts.back" @back="$emit('back')" />
+    <MoleculesNextMemberSectionBar :title="texts.title" :back-label="texts.back" :balance="balance" @back="$emit('back')" />
 
     <div class="flex flex-col gap-2.5 px-4 pb-5 pt-2">
       <template v-if="state === 'ready'">

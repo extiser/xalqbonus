@@ -12,8 +12,10 @@ import type { MemberOrderRowView, MemberOrderStatus } from '~/types/memberView';
  * `full` — номер, состояние, сумма с подписью, офис и строка-действие внизу. Сумма обычным
  * цветом: здесь каждая строка и так про списание, алым был бы весь экран.
  *
- * `compact` — на главной показываются только висящие: номер, состояние со сроком и офисом,
- * шеврон. Суммы нет — блок отвечает на «за чем идти и до когда».
+ * `compact` — на главной (`_reference/design/home/orders-block.html`): номер, состояние со сроком
+ * и офисом, шеврон. Суммы нет — блок отвечает на «за чем идти и до когда». Висящий — зелёной
+ * карточкой; ждущих нет — на главной один последний, выданный или отменённый, спокойной
+ * карточкой с серым шевроном: за ним идти не нужно.
  *
  * Висящий зелёный — «сходи и забери»; выданный спокойный, со словом зелёным;
  * отменённый спокойный, со словом алым. Закрытые не гасятся прозрачностью: это запись,
@@ -38,13 +40,13 @@ const isPending = computed(() => props.order.status === 'pending');
 </script>
 
 <template>
-  <AtomsNextMemberCard v-if="variant === 'compact'" tone="green" clickable @click="$emit('open')">
+  <AtomsNextMemberCard v-if="variant === 'compact'" :tone="isPending ? 'green' : 'plain'" clickable @click="$emit('open')">
     <span class="flex items-center gap-3 px-3.5 py-[13px]">
-      <span class="flex min-w-0 grow flex-col gap-0.5">
-        <span class="text-[16px] font-bold">{{ order.title }}</span>
+      <span class="flex min-w-0 grow flex-col gap-0.5 leading-[1.35]">
+        <span class="text-[16px] leading-[normal]" :class="isPending ? 'font-bold' : 'font-semibold'">{{ order.title }}</span>
         <AtomsNextMemberStateLine :tone="STATE_TONES[order.status]" :state="order.state" :hint="order.hint" />
       </span>
-      <AtomsNextMemberChevron tone="green" />
+      <AtomsNextMemberChevron :tone="isPending ? 'green' : 'grey'" />
     </span>
   </AtomsNextMemberCard>
 

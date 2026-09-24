@@ -2,7 +2,7 @@
 import type { MemberOrderDetailView } from '~/types/memberView';
 
 /**
- * Экран заказа — `product/design/app/order-screen.html` и закрытые состояния
+ * Экран заказа — `_reference/design/orders/order-screen.html` и закрытые состояния
  * `order-screen-states.html`.
  *
  * Живой заказ: карточка с кодом, карточка офиса, состав и отмена внизу — вторичной кнопкой,
@@ -12,6 +12,8 @@ import type { MemberOrderDetailView } from '~/types/memberView';
  */
 defineProps<{
   order: MemberOrderDetailView;
+  /** Баланс справа в шапке — готовыми строками («Ваши баллы», «1 450»). */
+  balance?: { label: string; amount: string };
   texts: {
     back: string;
     codeTitle: string;
@@ -28,7 +30,7 @@ defineEmits<{ back: []; map: []; cancel: [] }>();
 
 <template>
   <div class="flex min-h-dvh flex-col bg-xb-screen pb-[calc(40px+env(safe-area-inset-bottom))] font-manrope leading-[normal] text-xb-text">
-    <MoleculesNextMemberSectionBar :title="order.title" :back-label="texts.back" @back="$emit('back')" />
+    <MoleculesNextMemberSectionBar :title="order.title" :back-label="texts.back" :balance="balance" @back="$emit('back')" />
 
     <div class="flex flex-col gap-3 px-4 pt-3.5">
       <MoleculesNextMemberOrderStatusCard :order="order" :code-title="texts.codeTitle" />

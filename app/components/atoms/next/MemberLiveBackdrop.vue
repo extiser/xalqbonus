@@ -12,7 +12,8 @@
  * Лежит под содержимым целиком, растягиваясь на родителя: место и `overflow: hidden`
  * задаёт контейнер.
  *
- * `home` — под балансом главной. `promo` — экран приглашения (`comeback/02-promo-hero.html`):
+ * `home` — под балансом главной (`_reference/design/home/main-screen.html`): затемнение привязано
+ * к низу блока, а не к доле — 86 % за 104 px до низа, полный фон за 68. `promo` — экран приглашения (`comeback/02-promo-hero.html`):
  * пятна те же и дрейфуют так же, но стоят выше и ниже ростом, а затемнение начинается раньше
  * (с 44 % вместо 52 %) — как в макете.
  *
@@ -33,7 +34,7 @@ defineProps<{ variant: BackdropVariant }>();
     <div class="live-blob live-amber" />
     <div class="live-fade" />
   </div>
-  <div v-else class="pointer-events-none absolute inset-0" :class="variant === 'promo' ? 'live-promo' : ''" aria-hidden="true">
+  <div v-else class="pointer-events-none absolute inset-0" :class="variant === 'promo' ? 'live-promo' : 'live-home'" aria-hidden="true">
     <div class="live-blob live-base" />
     <div class="live-blob live-core" />
     <div class="live-blob live-wine" />
@@ -92,6 +93,11 @@ defineProps<{ variant: BackdropVariant }>();
   position: absolute;
   inset: 0;
   background: linear-gradient(180deg, rgba(11, 13, 17, 0) 52%, rgba(11, 13, 17, 0.86) 86%, #0b0d11 100%);
+}
+
+/* Главная: затемнение от низа блока — как в эталоне главного экрана. */
+.live-home .live-fade {
+  background: linear-gradient(180deg, rgba(11, 13, 17, 0) 45%, rgba(11, 13, 17, 0.86) calc(100% - 104px), #0b0d11 calc(100% - 68px));
 }
 
 /* Экран приглашения: те же пятна и дрейф, другие высоты и затемнение. */

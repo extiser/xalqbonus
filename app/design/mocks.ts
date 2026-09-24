@@ -18,7 +18,7 @@ import type {
 } from '~/types/memberView';
 
 /**
- * Заглушки служебной страницы `/design` — значения сняты с макетов `product/design/`.
+ * Заглушки служебной страницы `/design` — значения сняты с макетов `_reference/design/`.
  *
  * По объекту на экран и состояние: страница берёт объект целиком и отдаёт компоненту,
  * ничего не досчитывая. Это не словарь и не данные — рабочий экран возьмёт тексты
@@ -33,20 +33,24 @@ const RETRY = 'Повторить';
 /** Ссылка на карту у офисов: в макетах её значения нет, нарисована только строка карты. */
 const MAP_URL = 'https://yandex.uz/maps/';
 
+/** Баланс справа в шапке раздела — `_reference/design/home/catalog-bar.html`, число из экранов разделов. */
+const BAR_BALANCE = { label: 'Ваши баллы', amount: '1\u00A0450' };
+
 // --------------------------------------------------------------------------- главная
 
 const HOME_TEXTS = {
   profile: 'Профиль',
-  refresh: 'Обновить',
   promo: 'Акция: 3 дня из 5',
   balanceTitle: 'Ваши баллы',
   exchange: 'Обменять баллы',
   updated: 'Обновлено в 14:26',
   ordersTitle: 'Мои заказы',
   ordersAll: 'Все заказы',
+  ordersEmpty: 'Здесь появятся товары, которые вы обменяете на баллы.',
   ordersError: 'Не удалось загрузить заказы. Попробуйте ещё раз.',
   rewardsTitle: 'Мои награды',
   rewardsAll: 'Все награды',
+  rewardsEmpty: 'Здесь появятся награды из акций и подарки от парка — баллы, товары и призы.',
   rewardsError: 'Не удалось загрузить награды. Попробуйте ещё раз.',
   historyTitle: 'История баллов',
   historyAll: 'Вся история',
@@ -60,14 +64,33 @@ const HOME_ORDER: MemberOrderRowView = {
   title: 'Заказ № 1042',
   status: 'pending',
   state: 'Ждёт выдачи',
-  hint: 'заберите до 23.09, 14:32 · Чиланзар',
+  hint: 'заберите до 23.09, 14:32 · Офис · Чиланзар',
 };
 
+/** «Офис · Юнусабад» — со словом «Офис», как у соседних строк: в макете у этой строки правка недонесена. */
 const HOME_ORDERS_SEVERAL: MemberOrderRowView[] = [
   HOME_ORDER,
-  { id: '1044', title: 'Заказ № 1044', status: 'pending', state: 'Ждёт выдачи', hint: 'заберите до 24.09, 09:15 · Юнусабад' },
-  { id: '1045', title: 'Заказ № 1045', status: 'pending', state: 'Ждёт выдачи', hint: 'заберите до 24.09, 18:40 · Чиланзар' },
+  { id: '1044', title: 'Заказ № 1044', status: 'pending', state: 'Ждёт выдачи', hint: 'заберите до 24.09, 09:15 · Офис · Юнусабад' },
+  { id: '1045', title: 'Заказ № 1045', status: 'pending', state: 'Ждёт выдачи', hint: 'заберите до 24.09, 18:40 · Офис · Чиланзар' },
 ];
+
+/** Ждущих нет, но заказы были: один последний, выданный. */
+const HOME_ORDER_LAST_ISSUED: MemberOrderRowView = {
+  id: '1039',
+  title: 'Заказ № 1039',
+  status: 'issued',
+  state: 'Выдан',
+  hint: '20.09.2026, 16:10 · Офис · Чиланзар',
+};
+
+/** Ждущих нет, последним оказался отменённый: офиса нет, причина — на экране заказа. */
+const HOME_ORDER_LAST_CANCELLED: MemberOrderRowView = {
+  id: '1031',
+  title: 'Заказ № 1031',
+  status: 'cancelled',
+  state: 'Отменён',
+  hint: '18.09.2026, 09:40',
+};
 
 const HOME_REWARD: MemberRewardView = {
   id: 'reward-checker',
@@ -82,7 +105,7 @@ const HOME_REWARDS_SEVERAL: MemberRewardView[] = [
   { id: 'reward-tire', title: 'Чернитель шин', status: 'awaiting', state: 'Ждёт в офисе до 9 октября', hint: 'код внутри' },
 ];
 
-/** Ждущих нет, но награды были: блок остаётся полной карточкой полученной. */
+/** Ждущих нет, но награды были: одна последняя полной карточкой. */
 const HOME_REWARDS_NOTHING_TO_PICK: MemberRewardView[] = [
   {
     id: 'reward-freshener',
@@ -90,7 +113,7 @@ const HOME_REWARDS_NOTHING_TO_PICK: MemberRewardView[] = [
     status: 'issued',
     origin: 'Вручил парк · за помощь на линии',
     state: 'Получена 20 сентября',
-    office: 'Офис на Чиланзаре',
+    office: 'Офис · Чиланзар',
   },
 ];
 
@@ -150,15 +173,21 @@ export const homeSeveralMock = {
   rewards: { state: 'ready' as const, items: HOME_REWARDS_SEVERAL },
 };
 
-/** Забирать нечего: висящих заказов нет — блока нет; награды были — блок с полученной. */
+/** Забирать нечего, без акции: ждущих нет — последний заказ выдан, последняя награда получена. */
 export const homeQuietMock = {
   ...homeMock,
   promo: undefined,
-  orders: { state: 'empty' as const, items: [] },
+  orders: { state: 'ready' as const, items: [HOME_ORDER_LAST_ISSUED] },
   rewards: { state: 'ready' as const, items: HOME_REWARDS_NOTHING_TO_PICK },
 };
 
-/** Новичок: заказов и наград не было — блоков нет, история пуста. */
+/** То же, последним заказом оказался отменённый. */
+export const homeQuietCancelledMock = {
+  ...homeQuietMock,
+  orders: { state: 'ready' as const, items: [HOME_ORDER_LAST_CANCELLED] },
+};
+
+/** Новичок: заказов и наград не было — блоки объясняют, что в них появится; история пуста. */
 export const homeNewcomerMock = {
   ...homeMock,
   promo: undefined,
@@ -274,7 +303,7 @@ const HISTORY_ALL_REASONS: MemberOperationDayView[] = [
   },
 ];
 
-export const historyMock = { state: 'ready' as const, days: HISTORY_DAYS, hasMore: true, texts: HISTORY_TEXTS };
+export const historyMock = { state: 'ready' as const, days: HISTORY_DAYS, hasMore: true, balance: BAR_BALANCE, texts: HISTORY_TEXTS };
 export const historyReasonsMock = { ...historyMock, days: HISTORY_ALL_REASONS, hasMore: false };
 export const historyEmptyMock = { ...historyMock, state: 'empty' as const, days: [], hasMore: false };
 export const historyErrorMock = { ...historyMock, state: 'error' as const, days: [], hasMore: false };
@@ -335,7 +364,13 @@ const REWARDS_PAST: MemberRewardView[] = [
   },
 ];
 
-export const rewardsMock = { state: 'ready' as const, awaiting: REWARDS_AWAITING, past: REWARDS_PAST, texts: REWARDS_TEXTS };
+export const rewardsMock = {
+  state: 'ready' as const,
+  awaiting: REWARDS_AWAITING,
+  past: REWARDS_PAST,
+  balance: BAR_BALANCE,
+  texts: REWARDS_TEXTS,
+};
 export const rewardsNothingToPickMock = { ...rewardsMock, awaiting: [] };
 export const rewardsEmptyMock = { ...rewardsMock, state: 'empty' as const, awaiting: [], past: [] };
 export const rewardsErrorMock = { ...rewardsMock, state: 'error' as const, awaiting: [], past: [] };
@@ -401,7 +436,13 @@ const ORDERS_PAST: MemberOrderRowView[] = [
   },
 ];
 
-export const ordersMock = { state: 'ready' as const, pending: ORDERS_PENDING, past: ORDERS_PAST, texts: ORDERS_TEXTS };
+export const ordersMock = {
+  state: 'ready' as const,
+  pending: ORDERS_PENDING,
+  past: ORDERS_PAST,
+  balance: BAR_BALANCE,
+  texts: ORDERS_TEXTS,
+};
 export const ordersEmptyMock = { ...ordersMock, state: 'empty' as const, pending: [], past: [] };
 export const ordersErrorMock = { ...ordersMock, state: 'error' as const, pending: [], past: [] };
 
@@ -490,10 +531,10 @@ const ORDER_EXPIRED: MemberOrderDetailView = {
   cancellable: false,
 };
 
-export const orderMock = { order: ORDER_PENDING, texts: ORDER_TEXTS };
-export const orderIssuedMock = { order: ORDER_ISSUED, texts: ORDER_TEXTS };
-export const orderCancelledMock = { order: ORDER_CANCELLED, texts: ORDER_TEXTS };
-export const orderExpiredMock = { order: ORDER_EXPIRED, texts: ORDER_TEXTS };
+export const orderMock = { order: ORDER_PENDING, balance: BAR_BALANCE, texts: ORDER_TEXTS };
+export const orderIssuedMock = { order: ORDER_ISSUED, balance: BAR_BALANCE, texts: ORDER_TEXTS };
+export const orderCancelledMock = { order: ORDER_CANCELLED, balance: BAR_BALANCE, texts: ORDER_TEXTS };
+export const orderExpiredMock = { order: ORDER_EXPIRED, balance: BAR_BALANCE, texts: ORDER_TEXTS };
 
 // -------------------------------------------------------------------------- профиль
 
