@@ -13,6 +13,9 @@ import { computed, onBeforeUnmount, onMounted } from 'vue';
  *
  * `close` отдаётся на Escape — единственное закрытие, которое шторка знает сама; кнопки
  * приходят слотом и закрывают её через родителя.
+ *
+ * Когда под заголовком не текст, а своё — офис и адрес в подтверждении заказа, — оно приходит
+ * слотом `subtitle` на место подписи.
  */
 const props = defineProps<{
   open: boolean;
@@ -63,7 +66,8 @@ const subtitleLines = computed((): readonly string[] => {
   >
     <div class="text-center">
       <div class="mb-2.5 text-[24px] font-extrabold tracking-[-0.2px]">{{ title }}</div>
-      <div class="member-sheet-subtitle" :class="subtitleHidden ? 'member-sheet-subtitle-hidden' : ''">
+      <slot v-if="$slots.subtitle" name="subtitle" />
+      <div v-else class="member-sheet-subtitle" :class="subtitleHidden ? 'member-sheet-subtitle-hidden' : ''">
         <div class="min-h-0 overflow-hidden">
           <p
             v-for="(line, index) in subtitleLines"

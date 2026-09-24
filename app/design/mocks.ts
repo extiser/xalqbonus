@@ -1,4 +1,6 @@
 import type {
+  MemberCartLineView,
+  MemberCatalogOfficeView,
   MemberChestCardView,
   MemberChestKind,
   MemberChestRowView,
@@ -10,6 +12,7 @@ import type {
   MemberManagerIdsView,
   MemberOfficeView,
   MemberOrderRowView,
+  MemberProductView,
   MemberProfileFieldView,
   MemberPromoRuleView,
   MemberRewardDetailView,
@@ -37,6 +40,115 @@ const MAP_URL = 'https://yandex.uz/maps/';
 /** Баланс справа в шапке раздела — `_reference/design/home/catalog-bar.html`, число из экранов разделов. */
 const BAR_BALANCE = { label: 'Ваши баллы', amount: '1\u00A0450' };
 
+/**
+ * Фото товаров — вынуты из макетов `_reference/design/orders/` и `catalog/` в `public/design/products/`.
+ * Power Bank есть только в каталоге.
+ */
+const PRODUCT_IMAGES = {
+  freshener: '/design/products/freshener.jpg',
+  tireBlack: '/design/products/tire-black.jpg',
+  magnetHolder: '/design/products/magnet-holder.jpg',
+  taxiChecker: '/design/products/taxi-checker.jpg',
+  headset: '/design/products/headset.jpg',
+  powerBank: '/design/products/power-bank.jpg',
+};
+
+// -------------------------------------------------------------------- товары каталога
+
+/** Товар каталога числами: витрина, шторка подтверждения и блок на главной считают из них. */
+interface CatalogProduct {
+  id: string;
+  name: string;
+  image: string;
+  points: number;
+  oldPoints?: number;
+  discount?: string;
+  available: number;
+}
+
+/** Число баллов с пробелом между разрядами и настоящим минусом: «2 310», «−590». */
+function formatPoints(value: number): string {
+  const digits = String(Math.abs(value)).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00A0');
+
+  return value < 0 ? `\u2212${digits}` : digits;
+}
+
+/** Товары витрины `_reference/design/catalog/catalog-showcase.html`, по порядку сетки. */
+const POWER_BANK: CatalogProduct = {
+  id: 'power-bank',
+  name: 'Power Bank 20 000 mAh',
+  image: PRODUCT_IMAGES.powerBank,
+  points: 1720,
+  oldPoints: 4300,
+  discount: '\u221260%',
+  available: 8,
+};
+
+/** Название длиннее 30 символов — на плитке видно, как оно срезается. В макете — «Bluetooth гарнитура». */
+const HEADSET: CatalogProduct = {
+  id: 'headset',
+  name: 'Bluetooth-гарнитура с шумоподавлением',
+  image: PRODUCT_IMAGES.headset,
+  points: 1320,
+  oldPoints: 3300,
+  discount: '\u221260%',
+  available: 3,
+};
+
+const CHECKER: CatalogProduct = {
+  id: 'checker',
+  name: 'Шашка Taxi',
+  image: PRODUCT_IMAGES.taxiChecker,
+  points: 900,
+  oldPoints: 1500,
+  discount: '\u221240%',
+  available: 14,
+};
+
+const FRESHENER: CatalogProduct = {
+  id: 'freshener',
+  name: 'Освежитель «Вертолёт»',
+  image: PRODUCT_IMAGES.freshener,
+  points: 590,
+  oldPoints: 840,
+  discount: '\u221230%',
+  available: 22,
+};
+
+const TIRE: CatalogProduct = {
+  id: 'tire',
+  name: 'Чернитель шин',
+  image: PRODUCT_IMAGES.tireBlack,
+  points: 750,
+  available: 31,
+};
+
+/** Второе название длиннее 30 символов. В макете — «Магнитный держатель». */
+const MAGNET: CatalogProduct = {
+  id: 'magnet',
+  name: 'Магнитный держатель для телефона на дефлектор',
+  image: PRODUCT_IMAGES.magnetHolder,
+  points: 225,
+  available: 45,
+};
+
+/** Корзина: сколько взято каждого товара. */
+export type CatalogCart = Record<string, number>;
+
+function productView(product: CatalogProduct, cart: CatalogCart): MemberProductView {
+  return {
+    id: product.id,
+    name: product.name,
+    image: product.image,
+    price: formatPoints(product.points),
+    oldPrice: product.oldPoints === undefined ? undefined : formatPoints(product.oldPoints),
+    discount: product.discount,
+    stock: `${product.available} шт`,
+    count: cart[product.id] ?? 0,
+    available: product.available,
+  };
+}
+
 // --------------------------------------------------------------------------- главная
 
 const HOME_TEXTS = {
@@ -53,6 +165,11 @@ const HOME_TEXTS = {
   rewardsAll: 'Все награды',
   rewardsEmpty: 'Здесь появятся награды из акций и подарки от парка — баллы, товары и призы.',
   rewardsError: 'Не удалось загрузить награды. Попробуйте ещё раз.',
+  catalogTitle: 'Каталог',
+  catalogAll: 'Весь каталог',
+  catalogSale: 'SALE',
+  catalogEmpty: 'Здесь появятся товары, которые можно взять за баллы.',
+  catalogError: 'Не удалось загрузить товары. Попробуйте ещё раз.',
   historyTitle: 'История баллов',
   historyAll: 'Вся история',
   historyEmpty: 'Здесь будет история начислений',
@@ -143,6 +260,9 @@ const HOME_HISTORY: MemberOperationDayView[] = [
   },
 ];
 
+/** Блок каталога на главной — `_reference/design/catalog/catalog-block.html`: четыре товара со скидкой. */
+const HOME_CATALOG: MemberProductView[] = [POWER_BANK, HEADSET, CHECKER, FRESHENER].map((product) => productView(product, {}));
+
 const HOME_BASE = {
   name: 'Бахтиёр',
   callsign: 'А-247',
@@ -157,6 +277,7 @@ export const homeMock = {
   invite: undefined,
   orders: { state: 'ready' as const, items: [HOME_ORDER] },
   rewards: { state: 'ready' as const, items: [HOME_REWARD] },
+  catalog: { state: 'ready' as const, products: HOME_CATALOG },
   history: { state: 'ready' as const, days: HOME_HISTORY },
 };
 
@@ -195,6 +316,7 @@ export const homeNewcomerMock = {
   points: 0,
   orders: { state: 'empty' as const, items: [] },
   rewards: { state: 'empty' as const, items: [] },
+  catalog: { state: 'empty' as const, products: [] },
   history: { state: 'empty' as const, days: [] },
 };
 
@@ -203,6 +325,7 @@ export const homeErrorsMock = {
   ...homeMock,
   orders: { state: 'error' as const, items: [] },
   rewards: { state: 'error' as const, items: [] },
+  catalog: { state: 'error' as const, products: [] },
   history: { state: 'error' as const, days: [] },
 };
 
@@ -478,15 +601,6 @@ export const ordersEmptyMock = { ...ordersMock, state: 'empty' as const, pending
 export const ordersErrorMock = { ...ordersMock, state: 'error' as const, pending: [], past: [] };
 
 // ---------------------------------------------------------------------- экран заказа
-
-/** Миниатюры товаров — вынуты из макетов `_reference/design/orders/` в `public/design/products/`. */
-const PRODUCT_IMAGES = {
-  freshener: '/design/products/freshener.jpg',
-  tireBlack: '/design/products/tire-black.jpg',
-  magnetHolder: '/design/products/magnet-holder.jpg',
-  taxiChecker: '/design/products/taxi-checker.jpg',
-  headset: '/design/products/headset.jpg',
-};
 
 /** Карточка офиса «Где забрать» — одна на экраны заказа и награды. */
 const PICKUP_OFFICE: MemberOfficeView = {
@@ -1311,4 +1425,151 @@ export function registrationOutcomeMock(scene: RegistrationOutcomeScene, languag
   }
 
   return { ...base, ...offices, kind: 'office' as const };
+}
+
+// --------------------------------------------------------------------------- каталог
+
+/** Баланс в шапке каталога — состояние снимка макетов: 2 450. */
+const CATALOG_BALANCE = 2450;
+
+const CATALOG_TEXTS = {
+  title: 'Каталог',
+  back: BACK,
+  change: 'Сменить',
+  sale: 'SALE',
+  decrease: 'Убрать одну',
+  increase: 'Добавить',
+  increaseMore: 'Добавить ещё',
+  total: 'Сумма',
+  remaining: 'Останется',
+  checkout: 'Оформить',
+  empty: 'Здесь появятся товары, которые можно взять за баллы в этом офисе. Сейчас их нет — загляните в другой офис.',
+  error: 'Не удалось загрузить товары. Попробуйте ещё раз.',
+  retry: RETRY,
+};
+
+/** Причины под погашенной «Оформить» — `catalog-showcase-states.html`, сцены 1 и 2. */
+const CHECKOUT_NOTHING_SELECTED = 'Выберите товар, чтобы оформить заказ.';
+const CHECKOUT_OVER_BALANCE = 'Сумма больше вашего баланса — уберите что-нибудь из заказа.';
+
+/** Офисы каталога — имена из старой базы, адреса демонстрационные (`catalog.md`). */
+const CATALOG_OFFICES: MemberCatalogOfficeView[] = [
+  { id: 'kadysheva', name: 'Кадышева', address: 'ул. Кадышева, 4' },
+  { id: 'sergeli', name: 'Сергели', address: 'Сергели, 6-й квартал, 21' },
+  { id: 'ttz', name: 'ТТЗ', address: 'массив ТТЗ-1, 15' },
+];
+
+/** Офис витрины в снимке. */
+export const CATALOG_CURRENT_OFFICE = 'kadysheva';
+
+/**
+ * Сцены витрины: `showcase` — `catalog-showcase.html`, `first` — `catalog-office-sheet-first.html`,
+ * остальные — сцены 1–5 `catalog-showcase-states.html`. На листе состояний по два товара,
+ * в сцене 3 у держателя в офисе две штуки.
+ */
+export type CatalogScene = 'first' | 'showcase' | 'nothing' | 'overBalance' | 'stockLimit' | 'empty' | 'error';
+
+const CATALOG_SCENES: Record<
+  CatalogScene,
+  { state: 'pick' | 'ready' | 'empty' | 'error'; products: CatalogProduct[]; cart: CatalogCart }
+> = {
+  first: { state: 'pick', products: [], cart: {} },
+  showcase: {
+    state: 'ready',
+    products: [POWER_BANK, HEADSET, CHECKER, FRESHENER, TIRE, MAGNET],
+    cart: { [POWER_BANK.id]: 1, [FRESHENER.id]: 1 },
+  },
+  nothing: { state: 'ready', products: [POWER_BANK, HEADSET], cart: {} },
+  overBalance: { state: 'ready', products: [POWER_BANK, HEADSET], cart: { [POWER_BANK.id]: 1, [HEADSET.id]: 1 } },
+  stockLimit: { state: 'ready', products: [TIRE, { ...MAGNET, available: 2 }], cart: { [MAGNET.id]: 2 } },
+  empty: { state: 'empty', products: [], cart: {} },
+  error: { state: 'error', products: [], cart: {} },
+};
+
+/** Корзина, с которой сцена открывается. Дальше её держит страница. */
+export function catalogInitialCart(scene: CatalogScene): CatalogCart {
+  return { ...CATALOG_SCENES[scene].cart };
+}
+
+function catalogOffice(officeId: string): MemberCatalogOfficeView {
+  return CATALOG_OFFICES.find((office) => office.id === officeId) ?? CATALOG_OFFICES[0]!;
+}
+
+function cartTotal(products: CatalogProduct[], cart: CatalogCart): number {
+  return products.reduce((sum, product) => sum + product.points * (cart[product.id] ?? 0), 0);
+}
+
+/** Витрина сцены с корзиной страницы: итог, остаток и причина под кнопкой считаются из корзины. */
+export function catalogShowcaseMock(scene: CatalogScene, cart: CatalogCart, officeId: string) {
+  const setup = CATALOG_SCENES[scene];
+  const total = cartTotal(setup.products, cart);
+  const remaining = CATALOG_BALANCE - total;
+
+  return {
+    state: setup.state,
+    balance: { label: 'Ваши баллы', amount: formatPoints(CATALOG_BALANCE) },
+    office: { label: 'Офис', name: catalogOffice(officeId).name },
+    products: setup.products.map((product) => productView(product, cart)),
+    checkout: {
+      total: formatPoints(total),
+      remaining: formatPoints(remaining),
+      remainingNegative: remaining < 0,
+      disabled: total === 0 || remaining < 0,
+      reason: total === 0 ? CHECKOUT_NOTHING_SELECTED : remaining < 0 ? CHECKOUT_OVER_BALANCE : undefined,
+      reasonTone: remaining < 0 ? ('warn' as const) : ('quiet' as const),
+    },
+    texts: CATALOG_TEXTS,
+  };
+}
+
+/** Шторка «Где заберёте товары?» — `catalog-office-sheet.html`. */
+export const catalogOfficeSheetMock = {
+  offices: CATALOG_OFFICES,
+  texts: {
+    title: 'Где заберёте товары?',
+    subtitle: 'Выберите офис. В каждом свой набор, и заказ забирается там, где вы его оформили.',
+    office: 'Офис',
+    warning: 'Корзина очистится: в другом офисе свой набор',
+    save: 'Сохранить',
+    cancel: 'Отменить',
+  },
+};
+
+/** Отказ оформления на листе `catalog-confirm-states.html`, сцена 2 — `order_denied_insufficient_stock`. */
+export const CATALOG_ORDER_DENIED = '«Power Bank 20 000 mAh» осталось меньше, чем в заказе: доступно 0. Измените количество.';
+
+/** Шторка «Проверьте заказ» — `catalog-confirm.html`: строки — то, что взято в корзину. */
+export function catalogConfirmMock(scene: CatalogScene, cart: CatalogCart, officeId: string) {
+  const setup = CATALOG_SCENES[scene];
+  const office = catalogOffice(officeId);
+  const lines: MemberCartLineView[] = setup.products
+    .filter((product) => (cart[product.id] ?? 0) > 0)
+    .map((product) => {
+      const count = cart[product.id] ?? 0;
+
+      return {
+        id: product.id,
+        title: product.name,
+        image: product.image,
+        price: formatPoints(product.points * count),
+        count,
+        quantity: `${count} шт.`,
+        available: product.available,
+      };
+    });
+
+  return {
+    office: { label: 'Офис', name: office.name, address: office.address },
+    lines,
+    total: formatPoints(cartTotal(setup.products, cart)),
+    texts: {
+      title: 'Проверьте заказ',
+      total: 'Сумма',
+      note: 'Баллы спишутся сейчас. Они вернутся, если отменить заказ или не забрать его в течение суток.',
+      place: 'Оформить заказ',
+      cancel: 'Отменить',
+      decrease: 'Убрать одну',
+      increase: 'Добавить',
+    },
+  };
 }

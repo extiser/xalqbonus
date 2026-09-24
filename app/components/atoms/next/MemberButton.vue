@@ -16,7 +16,8 @@
  * Гранатовая и серая L — один вид на всё приложение, по макетам регистрации (решение Руслана
  * 24-09-2026, ревью `#195`). Гранатовая L светится так же крупно, как M посреди экрана, а погашенная
  * тускнеет не до 35 %, а до 55 %: пока идёт запрос, кнопка остаётся читаемой, а внутри крутится
- * загрузчик (`busy`). Серая L — светлый текст и тонкий контур, при нажатии чуть светлеет.
+ * загрузчик (`busy`). Серая L — светлый текст и тонкий контур, при нажатии чуть светлеет;
+ * погашенная — 50 %, как «Отменить», пока оформляется заказ (`catalog-confirm-states.html`).
  *
  * Кнопка стоит на `z-index: 1`: свечение гранатовой выходит за её габариты и иначе ложится
  * поверх соседа снизу. Соседям, которые должны остаться над свечением, контейнер даёт тот же
@@ -59,7 +60,7 @@ const TONE_CLASSES: Record<ButtonTone, string> = {
   'gold-soft':
     'member-button-gold-soft bg-[linear-gradient(135deg,#FFD98A_0%,#E9A93C_100%)] font-bold text-[#2A1B05] disabled:opacity-35',
   scarlet: 'bg-xb-scarlet font-bold text-white disabled:opacity-35',
-  grey: 'member-button-grey border border-white/8 bg-xb-button-grey font-semibold text-xb-text active:bg-[#2A2E35] disabled:opacity-35',
+  grey: 'member-button-grey border border-white/8 bg-xb-button-grey font-semibold text-xb-text active:bg-[#2A2E35] disabled:opacity-50',
   danger:
     'border border-[rgba(255,92,120,0.40)] bg-[rgba(255,92,120,0.08)] font-semibold text-xb-scarlet-soft disabled:opacity-35',
   outline: 'border border-white/14 bg-white/5 font-semibold text-xb-text disabled:opacity-35',

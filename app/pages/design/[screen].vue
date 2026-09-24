@@ -37,6 +37,12 @@ import {
   dayChestsMock,
   bigChestMock,
   bigChestNote,
+  CATALOG_CURRENT_OFFICE,
+  CATALOG_ORDER_DENIED,
+  catalogConfirmMock,
+  catalogInitialCart,
+  catalogOfficeSheetMock,
+  catalogShowcaseMock,
   loadFailedMock,
   notTelegramMock,
   outdatedTelegramMock,
@@ -44,7 +50,7 @@ import {
   registrationOutcomeMock,
   registrationPhoneMock,
 } from '~/design/mocks';
-import type { RegistrationOutcomeScene } from '~/design/mocks';
+import type { CatalogCart, CatalogScene, RegistrationOutcomeScene } from '~/design/mocks';
 import { findDesignScreen } from '~/design/screens';
 import type { MemberChestCardView, MemberLanguage, MemberRewardTicketView } from '~/types/memberView';
 
@@ -137,6 +143,101 @@ const reward = computed(() =>
     'reward-expired': rewardExpiredMock,
   }),
 );
+
+/**
+ * Каталог: витрина сцены по адресу, поверх — шторка офиса или подтверждения. Корзину, офис
+ * и отметку в шторке держит страница: счётчики, «Сменить», «Сохранить» и «Оформить» работают,
+ * итог пересчитывается из корзины.
+ */
+const catalogScene = ref(
+  pick<CatalogScene>({
+    'catalog-first': 'first',
+    catalog: 'showcase',
+    'catalog-nothing': 'nothing',
+    'catalog-over-balance': 'overBalance',
+    'catalog-stock-limit': 'stockLimit',
+    'catalog-empty': 'empty',
+    'catalog-error': 'error',
+    'catalog-office': 'showcase',
+    'catalog-office-other': 'showcase',
+    'catalog-confirm': 'showcase',
+    'catalog-confirm-placing': 'showcase',
+    'catalog-confirm-denied': 'showcase',
+  }),
+);
+const catalogOfficeId = ref<string | null>(slug.value === 'catalog-first' ? null : CATALOG_CURRENT_OFFICE);
+const catalogCart = ref<CatalogCart>(catalogScene.value ? catalogInitialCart(catalogScene.value) : {});
+const catalogSheet = ref<'none' | 'office' | 'confirm'>(
+  pick<'office' | 'confirm'>({
+    'catalog-first': 'office',
+    'catalog-office': 'office',
+    'catalog-office-other': 'office',
+    'catalog-confirm': 'confirm',
+    'catalog-confirm-placing': 'confirm',
+    'catalog-confirm-denied': 'confirm',
+  }) ?? 'none',
+);
+/** Отметка в шторке офиса: при первом входе её нет, на `catalog-office-other` отмечен Сергели. */
+const catalogSelected = ref<string | null>(slug.value === 'catalog-office-other' ? 'sergeli' : catalogOfficeId.value);
+const catalogPlacing = ref(slug.value === 'catalog-confirm-placing');
+const catalogDenied = slug.value === 'catalog-confirm-denied' ? CATALOG_ORDER_DENIED : undefined;
+
+const catalogShowcase = computed(() =>
+  catalogScene.value ? catalogShowcaseMock(catalogScene.value, catalogCart.value, catalogOfficeId.value ?? CATALOG_CURRENT_OFFICE) : undefined,
+);
+const catalogConfirm = computed(() =>
+  catalogScene.value ? catalogConfirmMock(catalogScene.value, catalogCart.value, catalogOfficeId.value ?? CATALOG_CURRENT_OFFICE) : undefined,
+);
+const catalogCartFilled = computed(() => Object.keys(catalogCart.value).length > 0);
+
+/** Счётчик на плитке или в шторке: не больше остатка, до нуля — товар уходит из корзины. */
+function changeCatalogCount(productId: string, delta: number): void {
+  const available = catalogShowcase.value?.products.find((product) => product.id === productId)?.available ?? 0;
+  const count = Math.min((catalogCart.value[productId] ?? 0) + delta, available);
+  const { [productId]: _removed, ...rest } = catalogCart.value;
+
+  catalogCart.value = count > 0 ? { ...rest, [productId]: count } : rest;
+
+  // Ушла последняя строка подтверждения — шторка закрывается, водитель на витрине.
+  if (catalogSheet.value === 'confirm' && count <= 0 && Object.keys(catalogCart.value).length === 0) {
+    catalogSheet.value = 'none';
+  }
+}
+
+function openCatalogOffices(): void {
+  catalogSelected.value = catalogOfficeId.value;
+  catalogSheet.value = 'office';
+}
+
+/** Другой офис — корзина очищается: в другом офисе свой набор. После первого входа — витрина. */
+function saveCatalogOffice(officeId: string): void {
+  if (officeId !== catalogOfficeId.value) {
+    catalogCart.value = {};
+  }
+
+  if (catalogScene.value === 'first') {
+    catalogScene.value = 'showcase';
+  }
+
+  catalogOfficeId.value = officeId;
+  catalogSheet.value = 'none';
+}
+
+/** «Отменить» при первом входе уводит из каталога: без офиса витрины нет. */
+function cancelCatalogOffice(): void {
+  if (catalogOfficeId.value === null) {
+    go('home');
+    return;
+  }
+
+  catalogSheet.value = 'none';
+}
+
+/** Заказ оформляется столько же, сколько проверяется номер, и открывается экран заказа. */
+function placeCatalogOrder(): void {
+  catalogPlacing.value = true;
+  setTimeout(() => go('order'), PHONE_CHECK_MS);
+}
 
 // Загрузка: уход включает кнопка страницы. После `left` блока нет — «Показать снова» монтирует
 // экран заново, и вход проигрывается ещё раз.
@@ -331,6 +432,8 @@ function go(target: string): void {
       <OrganismsNextMemberHome
         v-else-if="home"
         v-bind="home"
+        @catalog="go('catalog-first')"
+        @product="go('catalog-first')"
         @history="go('history')"
         @rewards="go('rewards')"
         @reward="go('rewards')"
@@ -350,6 +453,37 @@ function go(target: string): void {
       <OrganismsNextMemberOrderScreen v-else-if="order" v-bind="order" @back="go('orders')" />
 
       <OrganismsNextMemberRewardScreen v-else-if="reward" v-bind="reward" @back="go('rewards')" />
+
+      <template v-else-if="catalogShowcase && catalogConfirm">
+        <OrganismsNextMemberShowcaseScreen
+          v-bind="catalogShowcase"
+          @back="go('home')"
+          @change="openCatalogOffices"
+          @inc="(productId) => changeCatalogCount(productId, 1)"
+          @dec="(productId) => changeCatalogCount(productId, -1)"
+          @checkout="catalogSheet = 'confirm'"
+        />
+        <OrganismsNextMemberOfficeSheet
+          :open="catalogSheet === 'office'"
+          v-bind="catalogOfficeSheetMock"
+          :current="catalogOfficeId"
+          :selected="catalogSelected"
+          :cart-filled="catalogCartFilled"
+          @select="(officeId) => (catalogSelected = officeId)"
+          @save="saveCatalogOffice"
+          @cancel="cancelCatalogOffice"
+        />
+        <OrganismsNextMemberConfirmSheet
+          :open="catalogSheet === 'confirm'"
+          v-bind="catalogConfirm"
+          :busy="catalogPlacing"
+          :error="catalogDenied"
+          @inc="(lineId) => changeCatalogCount(lineId, 1)"
+          @dec="(lineId) => changeCatalogCount(lineId, -1)"
+          @place="placeCatalogOrder"
+          @cancel="catalogSheet = 'none'"
+        />
+      </template>
 
       <OrganismsNextMemberProfileScreen
         v-else-if="isProfile"
