@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import { formatPhone, type FormattedPhone } from '#shared/phone';
 import {
   INIT_DATA_HEADER,
   type Language,
+  type MemberOffice,
   type MemberOrder,
+  type MiniAppEmployeeDeniedScreen,
   type MiniAppEmployeeScreen,
   type MiniAppMemberScreen,
   type MiniAppRegisterResponse,
@@ -16,7 +19,8 @@ import { useMemberHistory } from '~/composables/useMemberHistory';
 import { useMemberOrders } from '~/composables/useMemberOrders';
 import { useMemberRewards } from '~/composables/useMemberRewards';
 import { useOfficeDesk } from '~/composables/useOfficeDesk';
-import { failureDenial, failureText } from '~/utils/requestError';
+import type { MemberManagerIdsView, MemberOfficeView } from '~/types/memberView';
+import { failureDenial } from '~/utils/requestError';
 import {
   hasSignedInitData,
   loadTelegramWebApp,
@@ -39,7 +43,18 @@ import {
  * через `useFetch`.
  */
 
-definePageMeta({ layout: 'miniapp' });
+/**
+ * Раскладка выбирается стадией, а не одна на страницу: загрузка, заглушки, регистрация
+ * и отказ выключенному сотруднику уже на новых макетах (`miniapp-next`), экраны участника
+ * и сотрудника — ещё на старых (`miniapp`).
+ *
+ * Своим `<NuxtLayout :name>` в шаблоне, а не `setPageLayout`: раскладку страницы Nuxt рисует
+ * с ключом по её имени, и смена имени пересоздаёт страницу целиком — вместе с состоянием
+ * и `onMounted`. Загрузка сменилась бы экраном участника, тот — снова загрузкой, и так по кругу.
+ * Раскладка внутри страницы пересоздаёт только экран под собой, а он при смене стадии
+ * меняется и так.
+ */
+definePageMeta({ layout: false });
 
 useHead({
   title: 'XalqBonus',
@@ -55,41 +70,141 @@ useHead({
   script: [{ src: TELEGRAM_SDK_URL }],
 });
 
-/**
- * Три текста, которых нет в серверном словаре, — и не по недосмотру: показываются они ровно
- * тогда, когда сервер не ответил, отказал или его не спрашивали вовсе. Спросить у него перевод
- * в этот момент не у кого.
- *
- * На двух языках сразу, как экран выбора языка в боте: чей это человек, мы здесь ещё
- * не знаем. Всё остальное, включая ответ устаревшему клиенту, приезжает с сервера
- * на языке водителя — к тому моменту экран регистрации уже загружен.
- */
-const OPEN_FROM_TELEGRAM =
-  'Ilovani Telegram orqali oching. / Откройте приложение через Telegram.';
-const LOAD_FAILED =
-  "Ma'lumotlarni yuklab bo'lmadi. Qaytadan urinib ko'ring. / Не удалось загрузить данные. Попробуйте ещё раз.";
+/** Заглушка вместо экрана — свойства `MemberStubScreen`. */
+type StubView = {
+  blocks: { title: string; paragraphs: string[] }[];
+  /** Кнопка «Обновить». Нет — повтор дал бы тот же ответ. */
+  retryLabel: string | null;
+};
+
 /** Кнопка заглушки: перечитать экран. Заглушку видят и водитель, и сотрудник. */
 const RETRY_LABEL = 'Yangilash / Обновить';
 
-/** Что показываем прямо сейчас. Загрузка и отказ различаются намеренно: они значат разное. */
-type Stage = 'loading' | 'error' | 'member' | 'registration' | 'employee';
-
-const stage = ref<Stage>('loading');
-const errorMessage = ref('');
+/**
+ * Две заглушки, текстов которых нет в серверном словаре, — и не по недосмотру: показываются
+ * они ровно тогда, когда сервер не ответил или его не спрашивали вовсе. Спросить у него перевод
+ * в этот момент не у кого.
+ *
+ * На двух языках сразу, узбекский первым: чей это человек, мы здесь ещё не знаем. Всё остальное,
+ * включая ответ устаревшему клиенту, приезжает с сервера на языке водителя — к тому моменту
+ * экран регистрации уже загружен. Тексты — из макетов `_reference/design/registration/state-*.html`.
+ */
+const LOAD_FAILED: StubView = {
+  blocks: [
+    { title: "Yuklab bo'lmadi", paragraphs: ["Ma'lumotlarni yuklab bo'lmadi.\nQaytadan urinib ko'ring."] },
+    { title: 'Не удалось загрузить', paragraphs: ['Не удалось загрузить данные.\nПопробуйте ещё раз.'] },
+  ],
+  retryLabel: RETRY_LABEL,
+};
 
 /**
- * На заглушке есть «Обновить». Нет её ровно в одном случае — приложение открыто не из Telegram:
- * подписанной строки не появится, сколько ни повторяй (issue #132).
+ * Открыто не из Telegram. Кнопки нет: подписанной строки не появится, сколько ни повторяй
+ * (issue #132). Название кнопки — как у кнопки бота `button_open_app`, без значка.
  */
-const retryable = ref(true);
+const OPEN_FROM_TELEGRAM: StubView = {
+  blocks: [
+    {
+      title: 'Telegram orqali oching',
+      paragraphs: ['Ilova faqat Telegram ichida ishlaydi.\nBotni oching va «Ilovani ochish» tugmasini bosing.'],
+    },
+    {
+      title: 'Откройте через Telegram',
+      paragraphs: ['Приложение работает только внутри Telegram.\nОткройте бота и нажмите «Открыть приложение».'],
+    },
+  ],
+  retryLabel: null,
+};
+
+/**
+ * Заглушка «не загрузилось» одной строкой — запасной текст отказа витрины и акции на случай,
+ * если тексты участника ещё не пришли.
+ */
+const LOAD_FAILED_TEXT = LOAD_FAILED.blocks
+  .map((block) => block.paragraphs.join(' ').replaceAll('\n', ' '))
+  .join(' / ');
+
+/** Абзацы текста из словаря: они разделены пустой строкой. */
+const toParagraphs = (text: string): string[] => text.split('\n\n');
+
+/**
+ * Что показываем прямо сейчас. Загрузка и отказ различаются намеренно: они значат разное.
+ *
+ * `employee_denied` — выключенный сотрудник: экран исхода регистрации, а не заглушка,
+ * потому что на нём номер и Telegram ID, по которым руководитель найдёт учётку.
+ */
+type Stage = 'loading' | 'error' | 'member' | 'registration' | 'employee' | 'employee_denied';
+
+const stage = ref<Stage>('loading');
+
+/** Стадии на новых макетах. Остальные — экраны участника и сотрудника — ещё на старых. */
+const NEXT_LAYOUT_STAGES: ReadonlySet<Stage> = new Set<Stage>(['loading', 'error', 'registration', 'employee_denied']);
+
+const layout = computed(() => (NEXT_LAYOUT_STAGES.has(stage.value) ? 'miniapp-next' : 'miniapp'));
+
+/** Заглушка на стадии `error`. */
+const stub = ref<StubView | null>(null);
+
+/**
+ * Загрузчик уходит. Следующая стадия ставится не сразу, а когда он ушёл целиком (`left`):
+ * иначе кольцо обрывается на полуобороте.
+ */
+const loadingLeaving = ref(false);
+
+/** Что показать, когда загрузчик ушёл. */
+let afterLoading: (() => void) | null = null;
+
+/**
+ * Показывает следующий экран. С загрузки — через уход загрузчика, с любого другого экрана —
+ * сразу: регистрация после удачной привязки держит «Проверяем…» до смены экрана, а не
+ * показывает загрузку второй раз.
+ */
+const showNext = (next: () => void): void => {
+  if (stage.value !== 'loading') {
+    next();
+
+    return;
+  }
+
+  afterLoading = next;
+  loadingLeaving.value = true;
+};
+
+const onLoadingLeft = (): void => {
+  const next = afterLoading;
+
+  afterLoading = null;
+  next?.();
+  loadingLeaving.value = false;
+};
 
 /** Экран участника: баланс, имя, отметка свежести и обещание бонуса новичку. */
 const member = ref<MiniAppMemberScreen | null>(null);
 
-const texts = ref<Record<Language, RegistrationScreenTexts> | null>(null);
+/**
+ * Регистрация: шаг 1 — язык, шаг 2 — номер, после отправки — экран исхода.
+ *
+ * Язык держится здесь до конца потока, в базу его не пишет ни один шаг: в `person_settings`
+ * его кладёт сервер при удачной привязке нового участника — тот, что уехал в запросе.
+ */
+type RegistrationStep = 'language' | 'phone';
+
+/** Тексты регистрации на обоих языках. Их же читает отказ выключенному сотруднику. */
+const screenTexts = ref<Record<Language, RegistrationScreenTexts> | null>(null);
+const registrationStep = ref<RegistrationStep>('language');
 const language = ref<Language>('ru');
+
+/** Запрос регистрации в пути: кнопка и язык гаснут, под кнопкой «Проверяем…». */
 const sending = ref(false);
-const result = ref<MiniAppRegisterResponse | null>(null);
+
+type RegistrationRefusal = Exclude<MiniAppRegisterResponse, { outcome: 'linked' }>;
+
+/** Последний отказ регистрации. Есть — показывается экран исхода, следующий ответ его заменяет. */
+const refusal = ref<RegistrationRefusal | null>(null);
+
+/** Отказ выключенному сотруднику. */
+const employeeDenied = ref<MiniAppEmployeeDeniedScreen | null>(null);
+
+const currentTexts = computed(() => screenTexts.value?.[language.value] ?? null);
 
 let webApp: TelegramWebApp | null = null;
 
@@ -130,7 +245,7 @@ const memberHistory = useMemberHistory(() => initData);
  */
 const memberOrders = useMemberOrders(
   () => initData,
-  () => member.value?.orderTexts.requestFailed ?? LOAD_FAILED,
+  () => member.value?.orderTexts.requestFailed ?? LOAD_FAILED_TEXT,
 );
 
 /** Раздел «Мои награды» (issue #172). Читается при открытии раздела и при возврате в него. */
@@ -142,7 +257,7 @@ const memberRewards = useMemberRewards(() => initData);
  */
 const memberCampaign = useMemberCampaign(
   () => initData,
-  () => member.value?.orderTexts.requestFailed ?? LOAD_FAILED,
+  () => member.value?.orderTexts.requestFailed ?? LOAD_FAILED_TEXT,
 );
 
 /**
@@ -156,7 +271,7 @@ const employeeOfficeId = ref<string | null>(null);
 const employeeCode = ref('');
 
 // Отказ отдаётся странице обёрткой, а не самой функцией: `reportDoorDenial` объявлена ниже,
-// рядом с `failWith`, и к моменту первого запроса уже существует.
+// рядом с `loadState`, и к моменту первого запроса уже существует.
 const officeDesk = useOfficeDesk(
   () => ({ [INIT_DATA_HEADER]: initData }),
   (error) => reportDoorDenial(error),
@@ -271,8 +386,8 @@ const cancelEmployeeOrder = async (): Promise<void> => {
  * Экраны участника.
  *
  * Переключаются внутри страницы, а не адресами: адрес Mini App несёт в хеше подписанную
- * строку, и роутер при переходе портит её (issue #90, #105). Шапки с навигацией нет —
- * «назад» делает системная кнопка Telegram (`layouts/miniapp.vue`).
+ * строку, и роутер при переходе портит её (issue #90, #105). «Назад» — своей кнопкой экрана:
+ * системная кнопка Telegram в приложении не используется.
  */
 type MemberScreenName = 'home' | 'offices' | 'showcase' | 'confirm' | 'order' | 'orders' | 'rewards';
 
@@ -282,12 +397,6 @@ const currentScreen = computed<MemberScreenName>(() => screens.value.at(-1) ?? '
 
 /** Заказ, открытый на экране заказа: только что оформленный или выбранный из списка. */
 const currentOrder = ref<MemberOrder | null>(null);
-
-/**
- * Есть ли у клиента системная кнопка «назад». Нет — экран рисует свою: без неё с витрины
- * не вернуться иначе как перезапуском приложения.
- */
-const systemBack = ref(false);
 
 const openScreen = (screen: MemberScreenName): void => {
   screens.value = [...screens.value, screen];
@@ -316,15 +425,9 @@ const goBack = (): void => {
   }
 };
 
-watch(currentScreen, (screen) => {
-  // Новый экран открывается с начала, а не с той высоты, на которой листали прошлый.
+// Новый экран открывается с начала, а не с той высоты, на которой листали прошлый.
+watch(currentScreen, () => {
   window.scrollTo(0, 0);
-
-  if (screen === 'home') {
-    webApp?.BackButton?.hide();
-  } else {
-    webApp?.BackButton?.show();
-  }
 });
 
 // Пункт пароля открывается с начала экрана. Отдельно от наблюдателя ниже: со стойки из нескольких
@@ -333,18 +436,12 @@ watch(employeePasswordOpen, () => {
   window.scrollTo(0, 0);
 });
 
-watch(employeeCanGoBack, (canGoBack) => {
+watch(employeeCanGoBack, () => {
   if (stage.value !== 'employee') {
     return;
   }
 
   window.scrollTo(0, 0);
-
-  if (canGoBack) {
-    webApp?.BackButton?.show();
-  } else {
-    webApp?.BackButton?.hide();
-  }
 });
 
 const openExchange = (): void => {
@@ -440,13 +537,22 @@ const applyState = (state: MiniAppStateResponse): void => {
   }
 
   if (state.screen === 'employee_denied') {
-    failWith(state.message);
+    resetScreenWork();
+    employeeDenied.value = state;
+    screenTexts.value = state.texts;
+    // Служебная часть русская (docs/frontend.md → «Язык»): экран открывается на русском,
+    // узбекский — переключателем.
+    language.value = 'ru';
+    stage.value = 'employee_denied';
 
     return;
   }
 
-  texts.value = state.texts;
-  language.value = state.language;
+  // Регистрация — с шага 1: язык выбирает человек, и «Обновить» после сбоя возвращает
+  // к началу, а не к экрану, с которого ушёл запрос.
+  screenTexts.value = state.texts;
+  registrationStep.value = 'language';
+  refusal.value = null;
   stage.value = 'registration';
 };
 
@@ -468,37 +574,11 @@ const resetScreenWork = (): void => {
   currentOrder.value = null;
 };
 
-/**
- * Заглушка вместо экрана. `retryable: false` — только для приложения, открытого не из Telegram.
- */
-const failWith = (message: string, options: { retryable: boolean } = { retryable: true }): void => {
+/** Заглушка вместо экрана. */
+const failWith = (next: StubView): void => {
   resetScreenWork();
-  webApp?.BackButton?.hide();
-  errorMessage.value = message;
-  retryable.value = options.retryable;
+  stub.value = next;
   stage.value = 'error';
-};
-
-/**
- * Отказ двери посреди работы — одно решение на все ручки открытого приложения.
- *
- * Сотрудника выключили, пока приложение было открыто: отказ строкой под полем кода, рядом
- * с набранным кодом и списком «Ждут выдачи», читался как «заказ не найден» (прогон на стенде
- * 14-09-2026, issue #132). Поэтому отказ двери заменяет экран той же заглушкой, что при
- * холодном открытии (`employee_denied`), с текстом от сервера.
- *
- * Отказ двери от доменного отличает словарь: `failureDenial` возвращает код только для
- * отказов из `shared/denials.ts`. Остальные — «заказ не найден», «пароль короче» — остаются
- * строкой у поля: композабл получает `false` и показывает их сам.
- */
-const reportDoorDenial = (error: unknown): boolean => {
-  if (failureDenial(error) === null) {
-    return false;
-  }
-
-  failWith(failureText(error));
-
-  return true;
 };
 
 /**
@@ -522,7 +602,7 @@ const loadState = async (): Promise<void> => {
   try {
     const state = await fetchState();
 
-    applyState(state);
+    showNext(() => applyState(state));
 
     if (state.screen === 'member') {
       // История догружается следом, своим состоянием: её отказ гасит список, а не экран
@@ -535,8 +615,31 @@ const loadState = async (): Promise<void> => {
     // она обязана быть: это единственное окно наружу, которое у Mini App есть, и без
     // записи `malformed` и `hash_mismatch` снаружи выглядят одинаково (issue #90).
     console.error('[miniapp] не удалось получить состояние экрана', error);
-    failWith(LOAD_FAILED);
+    showNext(() => failWith(LOAD_FAILED));
   }
+};
+
+/**
+ * Отказ двери посреди работы — одно решение на все ручки открытого приложения.
+ *
+ * Сотрудника выключили, пока приложение было открыто: отказ строкой под полем кода, рядом
+ * с набранным кодом и списком «Ждут выдачи», читался как «заказ не найден» (прогон на стенде
+ * 14-09-2026, issue #132). Поэтому отказ двери перечитывает экран: выключенному придёт тот же
+ * отказ, что при холодном открытии (`employee_denied`), с его номером и Telegram ID. Ручка
+ * не ответила — заглушка «не загрузилось», как при первом открытии.
+ *
+ * Отказ двери от доменного отличает словарь: `failureDenial` возвращает код только для
+ * отказов из `shared/denials.ts`. Остальные — «заказ не найден», «пароль короче» — остаются
+ * строкой у поля: композабл получает `false` и показывает их сам.
+ */
+const reportDoorDenial = (error: unknown): boolean => {
+  if (failureDenial(error) === null) {
+    return false;
+  }
+
+  void loadState();
+
+  return true;
 };
 
 /**
@@ -591,7 +694,7 @@ onMounted(async () => {
   // отдаёт непустой огрызок, и по пустоте человек вне Telegram получал бы сообщение
   // о поломке вместо указания, где вход.
   if (!hasSignedInitData(initData)) {
-    failWith(OPEN_FROM_TELEGRAM, { retryable: false });
+    showNext(() => failWith(OPEN_FROM_TELEGRAM));
 
     return;
   }
@@ -601,16 +704,7 @@ onMounted(async () => {
   webApp?.ready();
   webApp?.expand();
 
-  if (webApp?.BackButton) {
-    webApp.BackButton.onClick(goBack);
-    systemBack.value = true;
-  }
-
   await loadState();
-});
-
-onBeforeUnmount(() => {
-  webApp?.BackButton?.offClick(goBack);
 });
 
 /** Отправляет подписанную строку контакта на сервер и показывает исход. */
@@ -629,13 +723,15 @@ const register = async (contactData: string): Promise<void> => {
       // участника. Экран участника перечитывается у сервера целиком, а не собирается
       // из ответа привязки: баланс, отметка свежести и обещание бонуса приходят оттуда же,
       // откуда придут при следующем открытии приложения, — иначе первый экран нового
-      // участника отличался бы от всех последующих.
+      // участника отличался бы от всех последующих. «Проверяем…» держится до смены экрана.
       await loadState();
 
       return;
     }
 
-    result.value = response;
+    // Экран исхода открывается на языке, с которым ушёл запрос, и заменяет прежний.
+    language.value = response.language;
+    refusal.value = response;
   } catch (error) {
     // Отказ ручки — не исход привязки: сервер до правил не дошёл, и говорить человеку
     // «подойдите в офис» не за что. В консоль пишется то, что случилось на самом деле.
@@ -647,11 +743,12 @@ const register = async (contactData: string): Promise<void> => {
 };
 
 /**
- * Нажатие «поделиться номером».
+ * Нажатие «поделиться номером» — на шаге 2 и на повторе.
  *
- * Экран после нажатия не меняется и кнопка не гаснет. Причина не в удобстве: закрытие
- * системного окна свайпом не вызывает колбэк **вовсе** — ни ответа, ни события, — и любое
+ * До ответа системного окна экран не меняется и кнопка не гаснет. Причина не в удобстве:
+ * закрытие окна свайпом не вызывает колбэк **вовсе** — ни ответа, ни события, — и любое
  * состояние ожидания здесь стало бы состоянием, из которого нет выхода (docs/miniapp.md).
+ * Гаснет кнопка только на время запроса к серверу — его конец приходит всегда.
  */
 const share = (): void => {
   const requestContact = webApp?.requestContact;
@@ -660,10 +757,18 @@ const share = (): void => {
     // Клиент старее Bot API 6.9: вызова в объекте нет вовсе, и номер внутри приложения
     // взять нечем. Текст свой, а не «откройте приложение через Telegram»: человек уже
     // в Telegram, и по той подсказке ему делать нечего — чинится это обновлением клиента.
+    // Поэтому и кнопки нет: «Обновить» вернуло бы регистрацию и то же окно.
     //
     // Нажать кнопку можно только с экрана регистрации, а значит тексты уже загружены
     // и язык выбран: ответ идёт на нём, а не на двух сразу.
-    failWith(texts.value?.[language.value].outdatedClient ?? OPEN_FROM_TELEGRAM);
+    const texts = currentTexts.value;
+
+    if (texts) {
+      failWith({
+        blocks: [{ title: texts.outdatedClientTitle, paragraphs: toParagraphs(texts.outdatedClient) }],
+        retryLabel: null,
+      });
+    }
 
     return;
   }
@@ -677,202 +782,327 @@ const share = (): void => {
     void register(contact.response);
   });
 };
+
+/** Шаг 1: выбор языка сразу ведёт на шаг 2 — «Далее» нет. */
+const selectLanguage = (next: Language): void => {
+  language.value = next;
+  registrationStep.value = 'phone';
+};
+
+/** Приветствие шага 1 — на обоих языках сразу: язык ещё не выбран. */
+const welcome = computed(() => {
+  const texts = screenTexts.value;
+
+  return texts
+    ? {
+        uz: { title: texts.uz.welcomeTitle, lead: texts.uz.welcomeLead },
+        ru: { title: texts.ru.welcomeTitle, lead: texts.ru.welcomeLead },
+      }
+    : null;
+});
+
+const managerIds = (texts: RegistrationScreenTexts, phone: FormattedPhone, telegramId: string): MemberManagerIdsView => ({
+  texts: {
+    title: texts.idsTitle,
+    phoneLabel: texts.phoneLabel,
+    telegramIdLabel: texts.telegramIdLabel,
+    copyPhone: texts.copyPhone,
+    copyTelegramId: texts.copyTelegramId,
+  },
+  phone,
+  telegramId,
+});
+
+/** Офис на экране исхода: «Офис · » ставит экран, имя и адрес — из таблицы офисов. */
+const officeView = (office: MemberOffice, texts: RegistrationScreenTexts): MemberOfficeView => ({
+  label: texts.officeLabel,
+  name: office.name,
+  address: office.address,
+  hours: office.workHours,
+  phone: office.phone === null ? null : formatPhone(office.phone).display,
+  mapUrl: office.mapUrl,
+});
+
+/**
+ * Экран исхода — свойства `MemberRegistrationOutcome` на выбранном языке. `null` — исхода нет,
+ * и показывается шаг регистрации.
+ *
+ * Текст исхода приходит абзацами через пустую строку; у повтора под ним — что делать, если
+ * повтор не помогает. Язык переключается целиком, вместе с текстом исхода: он пришёл на обоих.
+ */
+const outcome = computed(() => {
+  const texts = currentTexts.value;
+
+  if (!texts) {
+    return null;
+  }
+
+  if (stage.value === 'employee_denied' && employeeDenied.value) {
+    return {
+      kind: 'employee' as const,
+      title: texts.employeeDeniedTitle,
+      paragraphs: [texts.employeeDeniedText],
+      ids: managerIds(texts, employeeDenied.value.phone, employeeDenied.value.telegramId),
+    };
+  }
+
+  const response = refusal.value;
+
+  if (stage.value !== 'registration' || !response) {
+    return null;
+  }
+
+  const paragraphs = toParagraphs(response.message[language.value]);
+  const ids = managerIds(texts, response.phone, response.telegramId);
+
+  if (response.kind === 'employee') {
+    return { kind: 'employee' as const, title: texts.officeTitle, paragraphs, ids };
+  }
+
+  const offices = {
+    officesTitle: texts.officesTitle,
+    offices: response.offices.map((office) => officeView(office, texts)),
+    mapLabel: texts.mapLabel,
+  };
+
+  if (response.kind === 'retry') {
+    return {
+      kind: 'retry' as const,
+      title: texts.retryTitle,
+      paragraphs: [...paragraphs, texts.retryNote],
+      ids,
+      ...offices,
+      ask: texts.ask,
+      send: texts.retrySend,
+      failed: texts.retryFailed,
+      checking: texts.checking,
+      busy: sending.value,
+    };
+  }
+
+  return { kind: 'office' as const, title: texts.officeTitle, paragraphs, ids, ...offices };
+});
+
+/** Карта офиса открывается наружу — в Яндекс Картах или браузере, а не поверх приложения. */
+const openMap = (office: MemberOfficeView): void => {
+  if (office.mapUrl) {
+    window.open(office.mapUrl, '_blank', 'noopener');
+  }
+};
 </script>
 
 <template>
-  <p v-if="stage === 'loading'" class="py-10 text-center text-base text-slate-500">…</p>
+  <NuxtLayout :name="layout">
+    <OrganismsNextMemberLoadingScreen v-if="stage === 'loading'" :leaving="loadingLeaving" @left="onLoadingLeft" />
 
-  <div v-else-if="stage === 'error'" class="flex flex-col gap-6 py-10">
-    <p class="text-center text-base leading-relaxed text-red-700">{{ errorMessage }}</p>
-    <AtomsMiniAppButton v-if="retryable" :label="RETRY_LABEL" @click="retry" />
-  </div>
+    <OrganismsNextMemberStubScreen v-else-if="stage === 'error' && stub" v-bind="stub" @retry="retry" />
 
-  <div v-else-if="stage === 'employee' && employee" class="flex flex-col gap-6">
-    <OrganismsEmployeePasswordForm
-      v-if="employeePasswordOpen"
-      v-model="employeePassword.password.value"
-      :submitting="employeePassword.submitting.value"
-      :error="employeePassword.error.value"
-      :saved="employeePassword.saved.value"
-      @submit="saveEmployeePassword"
-      @done="employeeBack"
-    />
-
-    <template v-else-if="!employeeOffice">
-      <OrganismsEmployeeOfficePicker
-        :full-name="employee.fullName"
-        :offices="employee.offices"
-        @select="selectEmployeeOffice"
+    <div v-else-if="stage === 'employee' && employee" class="flex flex-col gap-6">
+      <OrganismsEmployeePasswordForm
+        v-if="employeePasswordOpen"
+        v-model="employeePassword.password.value"
+        :submitting="employeePassword.submitting.value"
+        :error="employeePassword.error.value"
+        :saved="employeePassword.saved.value"
+        @submit="saveEmployeePassword"
+        @done="employeeBack"
       />
 
-      <AtomsMiniAppButton
-        v-if="!employee.passwordSet"
-        variant="secondary"
-        :label="EMPLOYEE_PASSWORD_LABEL"
-        @click="openEmployeePassword"
-      />
-    </template>
+      <template v-else-if="!employeeOffice">
+        <OrganismsEmployeeOfficePicker
+          :full-name="employee.fullName"
+          :offices="employee.offices"
+          @select="selectEmployeeOffice"
+        />
 
-    <OrganismsEmployeeOrderCard
-      v-else-if="officeDesk.current.value?.kind === 'order'"
-      :order="officeDesk.current.value.order"
-      :acting="officeDesk.acting.value"
-      :error="officeDesk.actionError.value"
-      @issue="issueEmployeeItem"
-      @cancel="cancelEmployeeOrder"
-      @close="officeDesk.close()"
-    />
+        <AtomsMiniAppButton
+          v-if="!employee.passwordSet"
+          variant="secondary"
+          :label="EMPLOYEE_PASSWORD_LABEL"
+          @click="openEmployeePassword"
+        />
+      </template>
 
-    <OrganismsEmployeeRewardCard
-      v-else-if="officeDesk.current.value?.kind === 'reward'"
-      :reward="officeDesk.current.value.reward"
-      :acting="officeDesk.acting.value"
-      :error="officeDesk.actionError.value"
-      @issue="issueEmployeeItem"
-      @close="officeDesk.close()"
-    />
-
-    <template v-else>
-      <OrganismsEmployeeCodeEntry
-        v-model="employeeCode"
-        :office-name="employeeOffice.name"
-        :searching="officeDesk.searching.value"
-        :error="officeDesk.searchError.value"
-        :notice="officeDesk.notice.value"
-        @complete="searchOrderCode"
+      <OrganismsEmployeeOrderCard
+        v-else-if="officeDesk.current.value?.kind === 'order'"
+        :order="officeDesk.current.value.order"
+        :acting="officeDesk.acting.value"
+        :error="officeDesk.actionError.value"
+        @issue="issueEmployeeItem"
+        @cancel="cancelEmployeeOrder"
+        @close="officeDesk.close()"
       />
 
-      <OrganismsEmployeePendingOrders
-        :state="officeDesk.pendingState.value"
-        :orders="officeDesk.pendingOrders.value"
-        @open="officeDesk.open($event)"
+      <OrganismsEmployeeRewardCard
+        v-else-if="officeDesk.current.value?.kind === 'reward'"
+        :reward="officeDesk.current.value.reward"
+        :acting="officeDesk.acting.value"
+        :error="officeDesk.actionError.value"
+        @issue="issueEmployeeItem"
+        @close="officeDesk.close()"
       />
 
-      <AtomsMiniAppButton
-        v-if="!employee.passwordSet"
-        variant="secondary"
-        :label="EMPLOYEE_PASSWORD_LABEL"
-        @click="openEmployeePassword"
-      />
-    </template>
+      <template v-else>
+        <OrganismsEmployeeCodeEntry
+          v-model="employeeCode"
+          :office-name="employeeOffice.name"
+          :searching="officeDesk.searching.value"
+          :error="officeDesk.searchError.value"
+          :notice="officeDesk.notice.value"
+          @complete="searchOrderCode"
+        />
 
-    <div v-if="employeeCanGoBack && !systemBack">
-      <AtomsMiniAppButton variant="secondary" label="Назад" @click="employeeBack" />
+        <OrganismsEmployeePendingOrders
+          :state="officeDesk.pendingState.value"
+          :orders="officeDesk.pendingOrders.value"
+          @open="officeDesk.open($event)"
+        />
+
+        <AtomsMiniAppButton
+          v-if="!employee.passwordSet"
+          variant="secondary"
+          :label="EMPLOYEE_PASSWORD_LABEL"
+          @click="openEmployeePassword"
+        />
+      </template>
+
+      <div v-if="employeeCanGoBack">
+        <AtomsMiniAppButton variant="secondary" label="Назад" @click="employeeBack" />
+      </div>
     </div>
-  </div>
 
-  <div v-else-if="stage === 'member' && member" class="flex flex-col gap-2">
-    <template v-if="currentScreen === 'home'">
-      <OrganismsMemberCampaign
-        v-if="memberCampaign.campaign.value"
-        :campaign="memberCampaign.campaign.value"
-        :acting="memberCampaign.acting.value"
-        :error="memberCampaign.error.value"
-        :prize="memberCampaign.prize.value"
-        @join="memberCampaign.join"
-        @decline="memberCampaign.decline"
-        @open-chest="memberCampaign.openChest"
-        @dismiss-prize="memberCampaign.dismissPrize"
+    <div v-else-if="stage === 'member' && member" class="flex flex-col gap-2">
+      <template v-if="currentScreen === 'home'">
+        <OrganismsMemberCampaign
+          v-if="memberCampaign.campaign.value"
+          :campaign="memberCampaign.campaign.value"
+          :acting="memberCampaign.acting.value"
+          :error="memberCampaign.error.value"
+          :prize="memberCampaign.prize.value"
+          @join="memberCampaign.join"
+          @decline="memberCampaign.decline"
+          @open-chest="memberCampaign.openChest"
+          @dismiss-prize="memberCampaign.dismissPrize"
+        />
+
+        <OrganismsMemberSummary
+          :balance-title="member.texts.balanceTitle"
+          :balance="member.balance"
+          :name="member.name"
+          :trips-note="member.tripsNote"
+          :promise="member.promise"
+          :refresh-label="member.texts.refresh"
+          :refreshing="refreshing"
+          :refresh-failed-note="refreshFailedNote"
+          :exchange-label="member.orderTexts.exchangePoints"
+          :orders-label="member.orderTexts.myOrders"
+          :rewards-label="member.rewardTexts.myRewards"
+          @refresh="refresh"
+          @exchange="openExchange"
+          @orders="openOrders"
+          @rewards="openRewards"
+        />
+
+        <OrganismsMemberHistory
+          :state="memberHistory.state.value"
+          :operations="memberHistory.operations.value"
+          :has-more="memberHistory.nextCursor.value !== null"
+          :loading-more="memberHistory.loadingMore.value"
+          :more-failed="memberHistory.moreFailed.value"
+          :texts="member.texts"
+          @more="memberHistory.loadMore()"
+        />
+      </template>
+
+      <OrganismsMemberOfficePicker
+        v-else-if="currentScreen === 'offices'"
+        :state="memberOrders.officesState.value"
+        :offices="memberOrders.offices.value"
+        :texts="member.orderTexts"
+        @select="selectOffice"
       />
 
-      <OrganismsMemberSummary
-        :balance-title="member.texts.balanceTitle"
-        :balance="member.balance"
-        :name="member.name"
-        :trips-note="member.tripsNote"
-        :promise="member.promise"
-        :refresh-label="member.texts.refresh"
-        :refreshing="refreshing"
-        :refresh-failed-note="refreshFailedNote"
-        :exchange-label="member.orderTexts.exchangePoints"
-        :orders-label="member.orderTexts.myOrders"
-        :rewards-label="member.rewardTexts.myRewards"
-        @refresh="refresh"
-        @exchange="openExchange"
-        @orders="openOrders"
-        @rewards="openRewards"
+      <OrganismsOfficeShowcase
+        v-else-if="currentScreen === 'showcase'"
+        :state="memberOrders.showcaseState.value"
+        :showcase="memberOrders.showcase.value"
+        :error-message="memberOrders.showcaseError.value"
+        :quantities="memberOrders.quantities.value"
+        :total="memberOrders.cartTotal.value"
+        :texts="member.orderTexts"
+        @increment="changeQuantity($event, 1)"
+        @decrement="changeQuantity($event, -1)"
+        @checkout="openConfirm"
       />
 
-      <OrganismsMemberHistory
-        :state="memberHistory.state.value"
-        :operations="memberHistory.operations.value"
-        :has-more="memberHistory.nextCursor.value !== null"
-        :loading-more="memberHistory.loadingMore.value"
-        :more-failed="memberHistory.moreFailed.value"
-        :texts="member.texts"
-        @more="memberHistory.loadMore()"
+      <OrganismsOrderConfirmation
+        v-else-if="currentScreen === 'confirm' && memberOrders.showcase.value"
+        :office="memberOrders.showcase.value.office"
+        :lines="memberOrders.cartLines.value"
+        :total="memberOrders.cartTotal.value"
+        :placing="memberOrders.placing.value"
+        :error-message="memberOrders.placeError.value"
+        :texts="member.orderTexts"
+        @place="placeOrder"
+        @edit="goBack"
+      />
+
+      <OrganismsMemberOrderCard
+        v-else-if="currentScreen === 'order' && currentOrder"
+        :order="currentOrder"
+        :cancelling="memberOrders.cancelling.value"
+        :cancel-error="memberOrders.cancelError.value"
+        :texts="member.orderTexts"
+        @cancel="cancelCurrentOrder"
+      />
+
+      <OrganismsMemberOrderList
+        v-else-if="currentScreen === 'orders'"
+        :state="memberOrders.ordersState.value"
+        :orders="memberOrders.orders.value"
+        :texts="member.orderTexts"
+        @open="openOrder"
+      />
+
+      <OrganismsMemberRewardList
+        v-else-if="currentScreen === 'rewards'"
+        :state="memberRewards.state.value"
+        :rewards="memberRewards.rewards.value"
+        :texts="member.rewardTexts"
+      />
+
+      <div v-if="currentScreen !== 'home'" class="pt-4">
+        <AtomsMiniAppButton variant="secondary" :label="member.orderTexts.back" @click="goBack" />
+      </div>
+    </div>
+
+    <template v-else-if="(stage === 'registration' || stage === 'employee_denied') && currentTexts">
+      <OrganismsNextMemberRegistrationOutcome
+        v-if="outcome"
+        v-bind="outcome"
+        :language="language"
+        @update:language="language = $event"
+        @map="openMap"
+        @send="share"
+      />
+
+      <OrganismsNextMemberRegistrationLanguage
+        v-else-if="registrationStep === 'language' && welcome"
+        :welcome="welcome"
+        :select-language="currentTexts.selectLanguage"
+        :language-uz="currentTexts.languageUz"
+        :language-ru="currentTexts.languageRu"
+        @select="selectLanguage"
+      />
+
+      <OrganismsNextMemberRegistrationPhone
+        v-else
+        :texts="currentTexts"
+        :language="language"
+        :checking="sending"
+        @update:language="language = $event"
+        @send="share"
       />
     </template>
-
-    <OrganismsMemberOfficePicker
-      v-else-if="currentScreen === 'offices'"
-      :state="memberOrders.officesState.value"
-      :offices="memberOrders.offices.value"
-      :texts="member.orderTexts"
-      @select="selectOffice"
-    />
-
-    <OrganismsOfficeShowcase
-      v-else-if="currentScreen === 'showcase'"
-      :state="memberOrders.showcaseState.value"
-      :showcase="memberOrders.showcase.value"
-      :error-message="memberOrders.showcaseError.value"
-      :quantities="memberOrders.quantities.value"
-      :total="memberOrders.cartTotal.value"
-      :texts="member.orderTexts"
-      @increment="changeQuantity($event, 1)"
-      @decrement="changeQuantity($event, -1)"
-      @checkout="openConfirm"
-    />
-
-    <OrganismsOrderConfirmation
-      v-else-if="currentScreen === 'confirm' && memberOrders.showcase.value"
-      :office="memberOrders.showcase.value.office"
-      :lines="memberOrders.cartLines.value"
-      :total="memberOrders.cartTotal.value"
-      :placing="memberOrders.placing.value"
-      :error-message="memberOrders.placeError.value"
-      :texts="member.orderTexts"
-      @place="placeOrder"
-      @edit="goBack"
-    />
-
-    <OrganismsMemberOrderCard
-      v-else-if="currentScreen === 'order' && currentOrder"
-      :order="currentOrder"
-      :cancelling="memberOrders.cancelling.value"
-      :cancel-error="memberOrders.cancelError.value"
-      :texts="member.orderTexts"
-      @cancel="cancelCurrentOrder"
-    />
-
-    <OrganismsMemberOrderList
-      v-else-if="currentScreen === 'orders'"
-      :state="memberOrders.ordersState.value"
-      :orders="memberOrders.orders.value"
-      :texts="member.orderTexts"
-      @open="openOrder"
-    />
-
-    <OrganismsMemberRewardList
-      v-else-if="currentScreen === 'rewards'"
-      :state="memberRewards.state.value"
-      :rewards="memberRewards.rewards.value"
-      :texts="member.rewardTexts"
-    />
-
-    <div v-if="currentScreen !== 'home' && !systemBack" class="pt-4">
-      <AtomsMiniAppButton variant="secondary" :label="member.orderTexts.back" @click="goBack" />
-    </div>
-  </div>
-
-  <OrganismsDriverRegistration
-    v-else-if="texts"
-    :texts="texts[language]"
-    :language="language"
-    :sending="sending"
-    :result="result"
-    @update:language="language = $event"
-    @share="share"
-  />
+  </NuxtLayout>
 </template>

@@ -1,7 +1,6 @@
 import type { Language } from '#server/generated/prisma/enums';
 // Относительным путём, а не через `#shared`: этот модуль собирается ещё и в воркер,
 // а там из псевдонимов настроен один `#server` (package.json → `build:worker`).
-import type { OfficeContact } from '../../shared/types/miniapp';
 import { escapeHtml } from '../../shared/telegramHtml';
 
 /**
@@ -37,8 +36,31 @@ export type TextKey =
   | 'button_send_phone'
   | 'checking_phone'
   | 'client_outdated'
+  | 'client_outdated_title'
+  | 'registration_welcome_title'
+  | 'registration_welcome_lead'
+  | 'registration_title'
+  | 'registration_lead'
+  | 'registration_perk_auto'
+  | 'registration_perk_gifts'
+  | 'registration_perk_chests'
+  | 'miniapp_send_phone'
+  | 'registration_office_title'
+  | 'registration_retry_title'
+  | 'registration_retry_note'
+  | 'registration_retry_send'
+  | 'registration_retry_failed'
+  | 'registration_ids_title'
+  | 'registration_phone_label'
+  | 'registration_telegram_id_label'
+  | 'registration_copy_phone'
+  | 'registration_copy_telegram_id'
+  | 'registration_offices_title'
+  | 'office_label'
+  | 'office_map'
+  | 'employee_denied_title'
+  | 'employee_denied_text'
   | 'contact_not_own'
-  | 'linked'
   | 'linked_new'
   | 'welcome_bonus_promise'
   | 'balance_title'
@@ -214,15 +236,59 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: '🎁 Открыть приложение',
     uz: '🎁 Ilovani ochish',
   },
+  // Регистрация в Mini App (issue #194) — по макетам `_reference/design/registration/`.
+  // Узбекские тексты новых ключей черновые: вычитывает переводчик одной волной ближе к выкату.
+  /**
+   * Шаг 1 двуязычный целиком — язык ещё не выбран, — поэтому подпись и кнопки одинаковы
+   * на обоих языках.
+   */
   select_language: {
-    ru: 'Tilni tanlang: / Выберите язык:',
-    uz: 'Tilni tanlang: / Выберите язык:',
+    ru: 'Tilni tanlang / Выберите язык',
+    uz: 'Tilni tanlang / Выберите язык',
   },
-  button_language_ru: { ru: '🇷🇺 Русский', uz: '🇷🇺 Русский' },
-  button_language_uz: { ru: "🇺🇿 O'zbek", uz: "🇺🇿 O'zbek" },
+  button_language_ru: { ru: 'Русский', uz: 'Русский' },
+  button_language_uz: { ru: "O'zbekcha", uz: "O'zbekcha" },
+  /** Приветствие шага 1. Переносы строк — из макета: заголовок стоит в две строки. */
+  registration_welcome_title: {
+    ru: 'Добро пожаловать\nв XalqTaxi BonusBot',
+    uz: "XalqTaxi BonusBot'ga\nxush kelibsiz!",
+  },
+  registration_welcome_lead: {
+    ru: 'Здесь копятся ваши баллы за поездки —\nих можно обменять на подарки в офисах парка.',
+    uz: "Bu yerda safarlaringiz uchun ballar to'planadi — ularni park ofislarida sovg'alarga almashtirish mumkin.",
+  },
+  registration_title: {
+    ru: 'Баллы за каждую поездку',
+    uz: 'Har bir safar uchun ball',
+  },
+  /**
+   * Называет, **какой** номер нужен: самый частый отказ — `not_in_park`, не тот номер,
+   * и сказать это лучше до ошибки, чем после.
+   */
+  registration_lead: {
+    ru: 'Отправьте номер телефона, на который вы оформлены в таксопарке, — и программа заработает.',
+    uz: "Taksoparkda ro'yxatdan o'tgan telefon raqamingizni yuboring — dastur ishga tushadi.",
+  },
+  /**
+   * Три обещания шага 2. Ни курса, ни приветственного бонуса: курс заморожен подсчётом,
+   * а на регистрацию попадают и перенесённые водители, которым бонус не положен.
+   */
+  registration_perk_auto: {
+    ru: 'Начисляются автоматически после поездки',
+    uz: 'Safardan keyin avtomatik hisoblanadi',
+  },
+  registration_perk_gifts: {
+    ru: 'Подарки в офисах парка',
+    uz: "Park ofislarida sovg'alar",
+  },
+  registration_perk_chests: {
+    ru: 'Акции с сундуками и призами',
+    uz: 'Sandiq va sovrinli aksiyalar',
+  },
+  /** Подсказка над кнопкой номера: окно Telegram не наше, и что в нём нажать, говорим заранее. */
   ask_phone: {
-    ru: 'Нажмите кнопку ниже, чтобы отправить свой номер телефона — мы найдём вас в базе таксопарка.',
-    uz: "Telefon raqamingizni yuborish uchun pastdagi tugmani bosing — biz sizni taksopark ma'lumotlar bazasidan topamiz.",
+    ru: 'Telegram спросит разрешение отправить номер — нажмите «Поделиться».',
+    uz: "Telegram raqamni yuborishga ruxsat so'raydi — «Ulashish» tugmasini bosing.",
   },
   button_send_phone: {
     ru: '📱 Отправить номер телефона',
@@ -241,16 +307,101 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
    * ровно то, что тот уже сделал.
    */
   client_outdated: {
-    ru: 'Ваш Telegram устарел: поделиться номером внутри приложения в нём нельзя. Обновите Telegram до последней версии и откройте приложение снова.',
-    uz: "Telegram ilovangiz eskirgan: uning ichida raqam bilan bo'lishish mumkin emas. Telegram'ni so'nggi versiyaga yangilang va ilovani qaytadan oching.",
+    ru: 'Ваш Telegram устарел: поделиться номером внутри приложения в нём нельзя.\n\nОбновите Telegram до последней версии и откройте приложение снова.',
+    uz: "Telegram ilovangiz eskirgan: uning ichida raqam bilan bo'lishish mumkin emas.\n\nTelegram'ni so'nggi versiyaga yangilang va ilovani qaytadan oching.",
+  },
+  client_outdated_title: {
+    ru: 'Обновите Telegram',
+    uz: "Telegram'ni yangilang",
+  },
+  /**
+   * Кнопка номера в приложении — своим ключом, а не `button_send_phone`: у бота на кнопке
+   * значок, а в приложении кнопка своя и значка не носит.
+   */
+  miniapp_send_phone: {
+    ru: 'Отправить номер телефона',
+    uz: 'Telefon raqamini yuborish',
+  },
+  /** Заголовок отказа «в офис» — и нейтрального отказа сотруднику: у них один и тот же. */
+  registration_office_title: {
+    ru: 'Нужно зайти в офис',
+    uz: 'Ofisga kelishingiz kerak',
+  },
+  registration_retry_title: {
+    ru: 'Не получилось проверить номер',
+    uz: "Raqamni tekshirib bo'lmadi",
+  },
+  /** Второй абзац повтора — под текстом исхода: что делать, если повтор не помогает. */
+  registration_retry_note: {
+    ru: 'Если не получается с нескольких попыток — обратитесь в ближайший офис Xalq Taxi.',
+    uz: "Bir necha urinishdan keyin ham bo'lmasa — eng yaqin Xalq Taxi ofisiga murojaat qiling.",
+  },
+  registration_retry_send: {
+    ru: 'Отправить номер ещё раз',
+    uz: 'Raqamni qayta yuborish',
+  },
+  /**
+   * Строка сбоя под кнопкой повтора. Сформулирована так, чтобы не выглядело, будто мы сами
+   * номер не проверили.
+   */
+  registration_retry_failed: {
+    ru: 'Проверка номера не прошла — попробуйте ещё раз',
+    uz: "Raqam tekshiruvidan o'tmadi — qayta urinib ko'ring",
+  },
+  /**
+   * «Покажите менеджеру» — номер и Telegram ID на каждом отказе: единственные признаки,
+   * по которым в базе можно найти попытку.
+   */
+  registration_ids_title: {
+    ru: 'Покажите менеджеру',
+    uz: "Menejerga ko'rsating",
+  },
+  registration_phone_label: {
+    ru: 'Телефон',
+    uz: 'Telefon',
+  },
+  registration_telegram_id_label: {
+    ru: 'Telegram ID',
+    uz: 'Telegram ID',
+  },
+  /** Подписи кнопок копирования для экранного чтеца: на экране у кнопок слов нет. */
+  registration_copy_phone: {
+    ru: 'Скопировать номер',
+    uz: 'Raqamni nusxalash',
+  },
+  registration_copy_telegram_id: {
+    ru: 'Скопировать Telegram ID',
+    uz: "Telegram ID'ni nusxalash",
+  },
+  registration_offices_title: {
+    ru: 'Офисы Xalq Taxi',
+    uz: 'Xalq Taxi ofislari',
+  },
+  /** Подпись перед именем офиса: «Офис · Кадышева». Имя приходит из базы как есть. */
+  office_label: {
+    ru: 'Офис',
+    uz: 'Ofis',
+  },
+  office_map: {
+    ru: 'Открыть в Яндекс Картах',
+    uz: 'Yandex Kartada ochish',
+  },
+  /**
+   * Сотрудник с выключенной учёткой открыл приложение. Текст двери веба (`shared/denials.ts`)
+   * здесь не берётся: экран устроен как отказ регистрации — с номером и Telegram ID, — и тексты
+   * у него из этого словаря.
+   */
+  employee_denied_title: {
+    ru: 'Доступ закрыт',
+    uz: 'Kirish yopilgan',
+  },
+  employee_denied_text: {
+    ru: 'Чтобы его вернуть, обратитесь к руководителю парка.',
+    uz: 'Uni qaytarish uchun park rahbariga murojaat qiling.',
   },
   contact_not_own: {
     ru: 'Отправьте, пожалуйста, свой номер телефона кнопкой ниже — чужой контакт мы принять не можем.',
     uz: "Iltimos, pastdagi tugma bilan o'z telefon raqamingizni yuboring — boshqa shaxsning kontaktini qabul qila olmaymiz.",
-  },
-  linked: {
-    ru: 'Добро пожаловать, {name}! Ваш баланс: {points}.',
-    uz: 'Xush kelibsiz, {name}! Hisobingiz: {points}.',
   },
   linked_new: {
     ru: 'Добро пожаловать, {name}! Спасибо, что выбрали Xalq Taxi. Завершите первые 5 поездок и получите 300 баллов — их можно обменять на подарки в наших офисах.',
@@ -412,7 +563,7 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Мои заказы',
     uz: 'Buyurtmalarim',
   },
-  /** Возврат на прошлый экран, когда у клиента нет системной кнопки «назад». */
+  /** Возврат на прошлый экран — своей кнопкой: системная кнопка Telegram в приложении не используется. */
   button_back: {
     ru: 'Назад',
     uz: 'Orqaga',
@@ -906,12 +1057,13 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   /**
    * Седьмой исход привязки: контакт прислал сотрудник парка.
    *
-   * Списка офисов под ним нет намеренно, в отличие от семи отказов «в офис»: сотрудник
-   * в офисе и так работает, а нужное ему действие — открыть приложение кнопкой меню.
+   * Текст нейтральный и не говорит, что аккаунт принадлежит сотруднику: скриншот экрана могут
+   * переслать водителю. Списка офисов под ним нет, в отличие от семи отказов «в офис»: сотрудник
+   * в офисе и так работает.
    */
   employee_account: {
-    ru: 'Этот аккаунт заведён как сотрудник парка. Регистрация водителя для него недоступна: откройте приложение кнопкой меню.',
-    uz: "Bu akkaunt park xodimi sifatida ro'yxatdan o'tgan. Unga haydovchi sifatida ro'yxatdan o'tish mumkin emas: ilovani menyu tugmasi orqali oching.",
+    ru: 'Зарегистрироваться с этого аккаунта не получится.\nОбратитесь в офис Xalq Taxi — там помогут.',
+    uz: "Bu akkaunt orqali ro'yxatdan o'tib bo'lmaydi.\nXalq Taxi ofisiga murojaat qiling — u yerda yordam berishadi.",
   },
   /**
    * Проверка не прошла — и неважно, у кого именно отказало.
@@ -1021,69 +1173,6 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     uz: "Bu Telegram akkaunti yoki bu raqam uchun xodim hisobi allaqachon mavjud. Menyu tugmasi orqali ilovani oching — siz tizimdasiz.",
   },
 };
-
-/**
- * Офис парка.
- *
- * Таблицы офисов в `xb` нет: она не переносится и появляется этапом 8. До тех пор офисы
- * живут здесь тремя записями, а не готовой строкой сообщения: список собирается кодом,
- * и когда таблица появится, поменяется источник данных, а не текст.
- *
- * Telegram-контактов и имён менеджеров тут нет намеренно: водителю нужен адрес и телефон,
- * а имя менеджера меняется чаще, чем офис.
- */
-type Office = {
-  name: Readonly<Record<Language, string>>;
-  latitude: number;
-  longitude: number;
-  /** Режим работы. Показывается всегда: у ТТЗ он не круглосуточный. */
-  hours: Readonly<Record<Language, string>>;
-  phone: string;
-};
-
-const OFFICES: readonly Office[] = [
-  {
-    name: { ru: 'Сергели', uz: 'Sergeli' },
-    latitude: 41.219328,
-    longitude: 69.243491,
-    hours: { ru: '24/7', uz: '24/7' },
-    phone: '+998 99 695 66 44',
-  },
-  {
-    name: { ru: 'Кадышева', uz: 'Kadisheva' },
-    latitude: 41.289547,
-    longitude: 69.343994,
-    hours: { ru: '24/7', uz: '24/7' },
-    phone: '+998 99 795 66 42',
-  },
-  {
-    name: { ru: 'ТТЗ', uz: 'TTZ' },
-    latitude: 41.360032,
-    longitude: 69.38894,
-    hours: { ru: '09:00–19:00', uz: '09:00–19:00' },
-    phone: '+998 99 795 66 43',
-  },
-];
-
-/** Долгота первой — как в ссылках старого бота, и как их читает сам Яндекс. */
-const mapLink = (office: Office): string =>
-  `https://yandex.ru/navi/?whatshere[point]=${office.longitude},${office.latitude}&whatshere[zoom]=18`;
-
-/**
- * Офисы на языке водителя — данными, а не готовым куском разметки.
- *
- * Раньше отсюда уходила склеенная строка с тегами `<a>`: получателем был Telegram,
- * и разметка была его. Получатель сменился на экран приложения, и склеенный HTML пришлось
- * бы вставлять в страницу через `v-html` — то есть отдавать разметку месту, которое
- * её не писало. Список отдаётся полями, а как он выглядит, решает компонент.
- */
-export const officeContacts = (language: Language): OfficeContact[] =>
-  OFFICES.map((office) => ({
-    name: office.name[language],
-    hours: office.hours[language],
-    phone: office.phone,
-    mapUrl: mapLink(office),
-  }));
 
 /**
  * Число баллов в человеческом виде: разряды разделены неразрывным пробелом.

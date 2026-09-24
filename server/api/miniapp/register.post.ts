@@ -76,5 +76,12 @@ export default defineEventHandler(async (event): Promise<MiniAppRegisterResponse
     language,
   });
 
-  return describeRegistrationResult(result, language);
+  // Номер и Telegram ID уходят на экран исхода: по ним менеджер найдёт попытку. Номер —
+  // из той же проверенной строки контакта, идентификатор — из проверенной `initData`.
+  return describeRegistrationResult({
+    result,
+    language,
+    phoneRaw: contact.contact.phoneNumber,
+    telegramUserId: user.id,
+  });
 });
