@@ -4,6 +4,7 @@ import type {
   MemberChestCardView,
   MemberChestKind,
   MemberChestRowView,
+  MemberGiftView,
   MemberHeatStage,
   MemberOperationDayView,
   MemberOrderDetailView,
@@ -163,6 +164,7 @@ const HOME_TEXTS = {
   ordersError: 'Не удалось загрузить заказы. Попробуйте ещё раз.',
   rewardsTitle: 'Мои награды',
   rewardsAll: 'Все награды',
+  rewardsGiftHint: 'нажмите, чтобы забрать',
   rewardsEmpty: 'Здесь появятся награды из акций и подарки от парка — баллы, товары и призы.',
   rewardsError: 'Не удалось загрузить награды. Попробуйте ещё раз.',
   catalogTitle: 'Каталог',
@@ -441,6 +443,8 @@ const GROUP_EMPTY = 'Здесь пусто';
 const REWARDS_TEXTS = {
   title: 'Мои награды',
   back: BACK,
+  giftsGroup: 'Подарки от Xalq Taxi',
+  take: 'Забрать',
   awaitingGroup: 'Ждут в офисе',
   pastGroup: 'История наград',
   groupEmpty: GROUP_EMPTY,
@@ -526,6 +530,67 @@ export const rewardsMock = {
 export const rewardsNoPendingMock = { ...rewardsMock, awaiting: [] };
 export const rewardsEmptyMock = { ...rewardsMock, state: 'empty' as const, awaiting: [], past: [] };
 export const rewardsErrorMock = { ...rewardsMock, state: 'error' as const, awaiting: [], past: [] };
+
+// -------------------------------------------------------------------------- подарки
+
+/** Подарки от Xalq Taxi — `_reference/design/gifts/`. Третий есть только в сцене «Забрать». */
+const GIFT_TEACHER: MemberGiftView = {
+  id: 'gift-teacher',
+  title: '300 баллов в подарок',
+  reason: 'Xalq Taxi · ко Дню учителя',
+  deadline: 'Заберите до 5 октября',
+};
+
+const GIFT_INDEPENDENCE: MemberGiftView = {
+  id: 'gift-independence',
+  title: '500 баллов в подарок',
+  reason: 'Xalq Taxi · ко Дню независимости',
+  deadline: 'Заберите до 12 октября',
+};
+
+const GIFT_LINE: MemberGiftView = {
+  id: 'gift-line',
+  title: '150 баллов в подарок',
+  reason: 'Xalq Taxi · за помощь на линии',
+  deadline: 'Заберите до 20 октября',
+};
+
+/** Главная с подарками — `main-screen-gift-sheet.html` (один) и `main-screen-gift.html` (два). */
+export function homeGiftsMock(gifts: MemberGiftView[] = [GIFT_TEACHER, GIFT_INDEPENDENCE]) {
+  return { ...homeMock, rewards: { state: 'ready' as const, items: [HOME_REWARD], gifts } };
+}
+
+/** В сцене «Забрать» вторая карточка с первого раза не забирается — как в скрипте макета. */
+export const GIFT_TAKE_ERROR = 'Не удалось забрать подарок. Попробуйте ещё раз.';
+
+export type GiftSheetScene = 'one' | 'several' | 'take';
+
+/**
+ * Шторка подарков над главной: `one` — `main-screen-gift-sheet.html`, `several` —
+ * `main-screen-gifts-sheet.html`, `take` — `main-screen-gifts-take.html`. Под шторкой главная
+ * своего макета: в `take` на ней два подарка, в шторке — три.
+ */
+export function giftSheetMock(scene: GiftSheetScene) {
+  const home = scene === 'one' ? [GIFT_TEACHER] : [GIFT_TEACHER, GIFT_INDEPENDENCE];
+  const sheet = scene === 'take' ? [GIFT_TEACHER, GIFT_INDEPENDENCE, GIFT_LINE] : home;
+
+  return {
+    home,
+    sheet,
+    /** Сбой с первого раза — у второй карточки и только в сцене «Забрать». */
+    failOnce: scene === 'take' ? [GIFT_INDEPENDENCE.id] : [],
+    texts: {
+      title: sheet.length === 1 ? 'Подарок от Xalq Taxi' : 'Подарки от Xalq Taxi',
+      subtitle: 'Баллы придут на счёт, как только заберёте',
+      take: 'Забрать',
+      takeAll: 'Забрать всё',
+      close: 'Закрыть',
+    },
+  };
+}
+
+/** «Мои награды» с группой подарков — `rewards-screen-gift.html`. */
+export const rewardsGiftsMock = { ...rewardsMock, gifts: [GIFT_TEACHER, GIFT_INDEPENDENCE] };
 
 // ----------------------------------------------------------------------- мои заказы
 

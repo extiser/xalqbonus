@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { MemberItemTone, MemberRewardStatus, MemberRewardView, MemberViewLoad } from '~/types/memberView';
+import { computed } from 'vue';
+import type { MemberGiftView, MemberItemTone, MemberRewardStatus, MemberRewardView, MemberViewLoad } from '~/types/memberView';
 
 /**
  * Раздел «Мои награды» — `_reference/design/orders/rewards-screen.html`; ждущих нет —
@@ -11,27 +12,53 @@ import type { MemberItemTone, MemberRewardStatus, MemberRewardView, MemberViewLo
  *
  * Кода в списке нет — он на экране награды. Товар и произвольная награда открывают его,
  * баллы на балансе не открываются: экран им не нужен.
+ *
+ * Подарки от Xalq Taxi — группой над ждущими (`_reference/design/gifts/rewards-screen-gift.html`),
+ * у каждого «Забрать» с тем же поведением, что в шторке: ожидание, лопание с серпантином,
+ * ошибка под карточкой. «Забрать всё» здесь нет — только в шторке (Руслан, 24-09-2026).
+ * Счётчик уменьшается с каждым забранным, когда место подарка схлопнулось и страница убрала его
+ * из списка. Лопается последний — подпись группы схлопывается вместе с его местом, и группы
+ * нет вовсе: без «· 0» и «Здесь пусто» — подарок событие, а не очередь (Руслан, 24-09-2026).
+ * Состояний подарков экран не хранит: они приходят свойствами, как в шторке.
  */
-defineProps<{
-  state: MemberViewLoad;
-  awaiting: MemberRewardView[];
-  past: MemberRewardView[];
-  /** Баланс справа в шапке — готовыми строками («Ваши баллы», «1 450»). */
-  balance?: { label: string; amount: string };
-  texts: {
-    title: string;
-    back: string;
-    awaitingGroup: string;
-    pastGroup: string;
-    /** «Здесь пусто» под группой без ждущих. */
-    groupEmpty: string;
-    empty: string;
-    error: string;
-    retry: string;
-  };
-}>();
+const props = withDefaults(
+  defineProps<{
+    state: MemberViewLoad;
+    awaiting: MemberRewardView[];
+    past: MemberRewardView[];
+    gifts?: MemberGiftView[];
+    /** Подарки, которые ждут ответа на «Забрать». */
+    giftsBusy?: readonly string[];
+    /** Забранные — лопаются. */
+    giftsPopping?: readonly string[];
+    /** Незабранные — строка ошибки под карточкой. */
+    giftErrors?: Readonly<Record<string, string>>;
+    /** Баланс справа в шапке — готовыми строками («Ваши баллы», «1 450»). */
+    balance?: { label: string; amount: string };
+    texts: {
+      title: string;
+      back: string;
+      /** «Подарки от Xalq Taxi». */
+      giftsGroup: string;
+      take: string;
+      awaitingGroup: string;
+      pastGroup: string;
+      /** «Здесь пусто» под группой без ждущих. */
+      groupEmpty: string;
+      empty: string;
+      error: string;
+      retry: string;
+    };
+  }>(),
+  { gifts: () => [], giftsBusy: () => [], giftsPopping: () => [], giftErrors: () => ({}), balance: undefined },
+);
 
-defineEmits<{ back: []; open: [rewardId: string]; retry: [] }>();
+defineEmits<{ back: []; open: [rewardId: string]; take: [giftId: string]; popped: [giftId: string]; retry: [] }>();
+
+/** Лопаются все, что остались, — подпись группы уходит вместе с последним. */
+const giftsLeaving = computed(
+  () => props.gifts.length > 0 && props.gifts.every((gift) => props.giftsPopping.includes(gift.id)),
+);
 
 const TONES: Record<MemberRewardStatus, MemberItemTone> = {
   awaiting: 'waiting',
@@ -60,6 +87,28 @@ function itemCard(reward: MemberRewardView) {
     <MoleculesNextMemberSectionBar :title="texts.title" :back-label="texts.back" :balance="balance" @back="$emit('back')" />
 
     <div v-if="state === 'ready'" class="flex flex-col gap-2.5 px-4 pb-5 pt-2">
+      <template v-if="gifts.length > 0">
+        <div class="rewards-gifts-label" :class="giftsLeaving ? 'rewards-gifts-label-gone' : ''">
+          <div class="min-h-0 overflow-hidden">
+            <div class="px-0.5 pb-0.5 pt-[18px]">
+              <AtomsNextMemberGroupLabel :label="texts.giftsGroup" :count="gifts.length" />
+            </div>
+          </div>
+        </div>
+        <MoleculesNextMemberGiftCard
+          v-for="gift in gifts"
+          :key="gift.id"
+          :gift="gift"
+          mode="take"
+          :take-label="texts.take"
+          :busy="giftsBusy.includes(gift.id)"
+          :error="giftErrors[gift.id]"
+          :popping="giftsPopping.includes(gift.id)"
+          @take="$emit('take', gift.id)"
+          @popped="$emit('popped', gift.id)"
+        />
+      </template>
+
       <div class="px-0.5 pb-0.5 pt-[18px]">
         <AtomsNextMemberGroupLabel :label="texts.awaitingGroup" :count="awaiting.length" />
       </div>
@@ -88,3 +137,23 @@ function itemCard(reward: MemberRewardView) {
     />
   </div>
 </template>
+
+<style scoped>
+/*
+ * Подпись группы подарков схлопывается тем же темпом, что место последнего подарка: через 0.75 с
+ * за 0.3 с. Она стоит в списке первой, поэтому зазор 10 под ней съедается снизу — иначе после
+ * ухода группы «Ждут в офисе» прыгала бы на 10 вверх.
+ */
+.rewards-gifts-label {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition:
+    grid-template-rows 0.3s ease-in 0.75s,
+    margin 0.3s ease-in 0.75s;
+}
+
+.rewards-gifts-label-gone {
+  grid-template-rows: 0fr;
+  margin-bottom: -10px;
+}
+</style>
