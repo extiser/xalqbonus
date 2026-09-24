@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>XalqBonus — мои заказы на главной: состояния</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&family=Unbounded:wght@200;300;600;700&display=swap">
+<style>
+/* МОИ ЗАКАЗЫ — блок главного экрана, все состояния списком.
+   Нарисован 22-09-2026, сессия 52, по задаче T51. Собран по образцу rewards-block.html:
+   на главной короткий срез и вход в раздел, всё остальное живёт внутри.
+
+   Полный вид строки заказа и правила состояний — ../app/orders-screen.html
+   и orders-screen.md; здесь решается только компактная карточка для главной.
+
+   Снято с кода: `shared/types/miniapp.ts` → `MemberOrder`,
+   `server/services/orders/readMemberOrders.ts` (висящие сверху),
+   `server/bot/texts.ts` (`orders_title`, `order_title`, `order_status_pending`,
+    `order_expires`, `orders_failed`).
+
+   Объяснение — orders-block.md рядом. */
+
+html, body { background: #0B0D11; }
+body {
+  margin: 0; display: block; padding: 24px 16px 60px;
+  font-family: Manrope, system-ui, sans-serif; color: #F4F6F8;
+}
+
+.sheet { display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start; justify-content: center; }
+.cell { width: 100%; max-width: 520px; display: flex; flex-direction: column; gap: 6px; }
+.label { font-size: 14px; font-weight: 700; }
+.note { font-size: 12px; font-weight: 400; color: #8A93A2; min-height: 34px; }
+
+/* --------------------------------------------------------------- блок заказов */
+
+.orders { display: flex; flex-direction: column; gap: 10px; padding: 8px 14px 20px; }
+
+/* Отступ под шапкой блока — один у всех блоков главной: от заголовка до первой строки 18 px
+   (Руслан, 23-09-2026: сначала 26 как у истории, затем на 30% меньше). Здесь 8 снизу шапки + зазор 10;
+   у истории 0 + зазор 4 + 14 сверху подписи дня. */
+.orders-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 4px 4px 8px;
+}
+
+.orders-head h3 {
+  margin: 0; font-family: Unbounded, Manrope, sans-serif;
+  font-size: 17px; font-weight: 600; letter-spacing: -0.4px;
+}
+
+/* Ссылка и строка-действие — 14/500, цвет по смыслу (сверка шрифтов, сессия 53, 23-09-2026). */
+.orders-head .all {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: none; border: 0; padding: 0; cursor: pointer; color: #A9B2BF;
+  font-family: Manrope, sans-serif; font-size: 14px; font-weight: 500;
+}
+
+/* Компактная карточка заказа. Зелёная — тем же зелёным, которым в разделе помечен висящий
+   заказ: на главной показываются только висящие, и другого состояния у блока нет.
+
+   Награда рядом золотая, и это не спор двух акцентов: золото значит подарок, зелёное —
+   «сходи и забери». У них разные ответы на вопрос «что мне с этим делать». */
+.order {
+  display: flex; align-items: center; gap: 12px;
+  border-radius: 20px; padding: 13px 14px; cursor: pointer;
+  border: 1px solid rgba(95, 208, 138, 0.55);
+  background: linear-gradient(180deg, rgba(95, 208, 138, 0.07) 0%, rgba(20, 23, 29, 1) 62%);
+}
+
+.order .body { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+/* Название карточки — 16/700, одно на главной и в разделах (сверка шрифтов, сессия 53, 23-09-2026). */
+.order .num { font-size: 16px; font-weight: 700; }
+
+/* Строка состояния — слово-метка, точка, уточнения: та же сборка, что в разделе.
+   Срок и офис здесь обязательны: ради ответа «куда и до когда» блок и стоит на главной.
+   Строке разрешено переноситься — на 320 px три части в одну не влезают, и офис уходит
+   во вторую строку последним, как наименее срочное из трёх. */
+/* Уточнение серым — 13/300 #8A93A2, одно на все экраны (сверка шрифтов, сессия 53, 23-09-2026). */
+.order .state { font-size: 13px; font-weight: 300; color: #8A93A2; line-height: 1.35; }
+/* Состояние цветным словом — 13/600, одно на все карточки (сверка шрифтов, сессия 53, 23-09-2026). */
+.order .state b { font-weight: 600; color: #5FD08A; }
+
+.order .chevron { flex-shrink: 0; }
+
+/* Прошлый заказ — выдан или отменён. Показывается один, последний, когда ждущих нет
+   (Руслан, 23-09-2026, сессия 55). Карточка спокойная, как полученная награда:
+   за ним идти не нужно. Цвет слова — как в разделе: выдан зелёным, отменён алым. */
+.order.past { border-color: rgba(255, 255, 255, 0.09); background: #14171D; }
+.order.past .num { font-weight: 600; }
+.order.past.cancelled .state b { color: #FF5C78; }
+
+/* Суммы на главной нет. Блок отвечает на «за чем идти и до когда», а сколько это стоило —
+   вопрос закрытый: баллы списаны при оформлении, и второй раз про них тут говорить нечего. */
+
+.notice {
+  display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center;
+  padding: 30px 20px; color: #8A93A2; font-size: 15px; font-weight: 300; line-height: 1.4;
+}
+
+/* Вторичная кнопка S — пилюля 40, контур, 14/600 (сверка шрифтов, сессия 53, 23-09-2026). */
+.notice .retry {
+  border: 1px solid rgba(255, 255, 255, 0.14); background: rgba(255, 255, 255, 0.05); color: #F4F6F8;
+  cursor: pointer; height: 40px; padding: 0 22px; border-radius: 999px;
+  font-family: Manrope, sans-serif; font-size: 14px; font-weight: 600;
+}
+</style></head><body>
+
+<div class="sheet">
+
+  <div class="cell">
+    <div class="label">1 — один заказ ждёт</div>
+    <div class="note">Обычный случай. Нажатие ведёт на экран заказа, где код</div>
+    <div class="orders">
+      <div class="orders-head">
+        <h3>Мои заказы</h3>
+        <button class="all">Все заказы<svg viewBox="0 0 24 24" width="14" height="14" fill="none"><path d="M9.5 5.5l6.5 6.5-6.5 6.5" stroke="#A9B2BF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </div>
+
+      <div class="order">
+        <div class="body">
+          <span class="num">Заказ № 1042</span>
+          <span class="state"><b>Ждёт выдачи</b> · заберите до 23.09, 14:32 · Офис · Чиланзар</span>
+        </div>
+        <svg class="chevron" viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M9.5 5.5l6.5 6.5-6.5 6.5" stroke="#5FD08A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="cell">
+    <div class="label">2 — ждут несколько</div>
+    <div class="note">Каждый своей строкой — водители берут по два-три заказа. У них разные сроки и бывают разные офисы</div>
+    <div class="orders">
+      <div class="orders-head">
+        <h3>Мои заказы</h3>
+        <button class="all">Все заказы<svg viewBox="0 0 24 24" width="14" height="14" fill="none"><path d="M9.5 5.5l6.5 6.5-6.5 6.5" stroke="#A9B2BF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </div>
+
+      <div class="order">
+        <div class="body">
+          <span class="num">Заказ № 1042</span>
+          <span class="state"><b>Ждёт выдачи</b> · заберите до 23.09, 14:32 · Офис · Чиланзар</span>
+        </div>
+        <svg class="chevron" viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M9.5 5.5l6.5 6.5-6.5 6.5" stroke="#5FD08A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+
+      <div class="order">
+        <div class="body">
+          <span class="num">Заказ № 1044</span>
+          <span class="state"><b>Ждёт выдачи</b> · заберите до 24.09, 09:15 · Юнусабад</span>
+        </div>
+        <svg class="chevron" viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M9.5 5.5l6.5 6.5-6.5 6.5" stroke="#5FD08A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+
+      <div class="order">
+        <div class="body">
+          <span class="num">Заказ № 1045</span>
+          <span class="state"><b>Ждёт выдачи</b> · заберите до 24.09, 18:40 · Офис · Чиланзар</span>
+        </div>
+        <svg class="chevron" viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M9.5 5.5l6.5 6.5-6.5 6.5" stroke="#5FD08A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- Пустое состояние и прошлый заказ — решение Руслана 23-09-2026, сессия 55: блок на главной
+       не прячется, пока водители привыкают к новому боту. Ждущие есть — показаны все ждущие.
+       Ждущих нет, но заказы были — один последний, выданный или отменённый, и «Все заказы».
+       Заказов не было вовсе — текст без кнопок. Прежде (сессия 52) без ждущих блок пропадал. -->
+  <div class="cell">
+    <div class="label">3 — заказов ещё не было</div>
+    <div class="note">Текст `orders_empty` — новый. Кнопок нет: в разделе пусто</div>
+    <div class="orders">
+      <div class="orders-head"><h3>Мои заказы</h3></div>
+      <div class="notice">Здесь появятся товары, которые вы обменяете на баллы.</div>
+    </div>
+  </div>
+
+  <div class="cell">
+    <div class="label">3б — ждущих нет, последний выдан</div>
+    <div class="note">Один последний заказ и «Все заказы». Нажатие ведёт на экран заказа</div>
+    <div class="orders">
+      <div class="orders-head">
+        <h3>Мои заказы</h3>
+        <button class="all">Все заказы<svg viewBox="0 0 24 24" width="14" height="14" fill="none"><path d="M9.5 5.5l6.5 6.5-6.5 6.5" stroke="#A9B2BF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </div>
+      <div class="order past issued">
+        <div class="body">
+          <span class="num">Заказ № 1039</span>
+          <span class="state"><b>Выдан</b> · 20.09.2026, 16:10 · Офис · Чиланзар</span>
+        </div>
+        <svg class="chevron" viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M9.5 5.5l6.5 6.5-6.5 6.5" stroke="#8A93A2" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="cell">
+    <div class="label">3в — ждущих нет, последний отменён</div>
+    <div class="note">То же, последним оказался отменённый. Причина отмены — на экране заказа</div>
+    <div class="orders">
+      <div class="orders-head">
+        <h3>Мои заказы</h3>
+        <button class="all">Все заказы<svg viewBox="0 0 24 24" width="14" height="14" fill="none"><path d="M9.5 5.5l6.5 6.5-6.5 6.5" stroke="#A9B2BF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </div>
+      <div class="order past cancelled">
+        <div class="body">
+          <span class="num">Заказ № 1031</span>
+          <span class="state"><b>Отменён</b> · 18.09.2026, 09:40</span>
+        </div>
+        <svg class="chevron" viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M9.5 5.5l6.5 6.5-6.5 6.5" stroke="#8A93A2" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="cell">
+    <div class="label">4 — не загрузилось</div>
+    <div class="note">Отказ запроса, а не отсутствие заказов. Текст `orders_failed`, и есть чем повторить</div>
+    <div class="orders">
+      <div class="orders-head"><h3>Мои заказы</h3></div>
+      <div class="notice">
+        Не удалось загрузить заказы. Попробуйте ещё раз.
+        <button class="retry">Повторить</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body></html>

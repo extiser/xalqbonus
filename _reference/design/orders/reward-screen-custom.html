@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Экран произвольной награды</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&family=Unbounded:wght@200;300;600;700&display=swap">
+<style>
+/* ЭКРАН ПРОИЗВОЛЬНОЙ НАГРАДЫ — копия экрана награды-товара (reward-screen.html), правится ТАМ.
+   24-09-2026, сессия 55, решение Руслана: общий вид для всего, что забирают в офисе по коду.
+   Произвольная награда (`RewardKind.custom`) описана только названием: на складе её нет, фото и цены нет.
+   Поэтому в строке вместо фото — значок подарка, цены и «Суммы» нет. Какие это будут награды — пока
+   не ясно (Руслан); название в снимке — демонстрационное. */
+
+html, body { background: #0B0D11; margin: 0; }
+body { display: flex; justify-content: center; }
+
+.screen {
+  position: relative; width: 100%; max-width: 520px; min-height: 100dvh;
+  box-sizing: border-box; background: #0B0D11; color: #F4F6F8;
+  font-family: Manrope, 'Segoe UI', system-ui, sans-serif;
+  display: flex; flex-direction: column;
+  padding-bottom: calc(40px + env(safe-area-inset-bottom));
+}
+
+/* ------------------------------------------------------- шапка раздела
+   Перенесена из ../artboard/section-bar.html — общий блок всех разделов. Правки идут туда. */
+.bar {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 12px;
+  padding: calc(14px + env(safe-area-inset-top)) 16px 14px;
+  background: rgba(11, 13, 17, 0.82);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.bar .back {
+  width: 40px; height: 40px; flex-shrink: 0; border: 0; padding: 0; cursor: pointer;
+  border-radius: 999px; background: rgba(255, 255, 255, 0.07);
+  display: flex; align-items: center; justify-content: center;
+}
+
+.bar h1 {
+  margin: 0; flex-grow: 1; min-width: 0;
+  font-family: Unbounded, Manrope, sans-serif;
+  font-size: 19px; font-weight: 600; letter-spacing: -0.5px; line-height: 1.25;
+}
+
+.bar .act { width: 40px; height: 40px; flex-shrink: 0; }
+
+.body { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px 0; }
+
+/* ------------------------------------------------------------- карточка
+   Общая форма всех трёх блоков — та же, что у строки в списке заказов: закрытый блок
+   с подложкой, а не строки на голом фоне. */
+.card {
+  border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.09);
+  background: #14171D; padding: 14px 16px;
+}
+
+/* Подпись блока — одна на все: «Где забрать», «Состав заказа». Отдельным классом, а не
+   `.card .cap`: состав живёт без подложки, и внутри карточки правило его не доставало. */
+.cap {
+  font-size: 12px; font-weight: 600; letter-spacing: 1.2px; text-transform: uppercase;
+  color: #8A93A2; padding-bottom: 10px;
+}
+
+/* --------------------------------------------------------- карточка заказа
+   Состояние, сумма, срок и код — одним блоком. Отдельно висящей строки состояния
+   на экране нет: заказ — это одна вещь, и рассказ о ней не разваливается на части. */
+.card.order {
+  border-color: rgba(95, 208, 138, 0.55);
+  background: linear-gradient(180deg, rgba(95, 208, 138, 0.08) 0%, rgba(20, 23, 29, 1) 68%);
+  padding: 16px;
+}
+
+.order .head { display: flex; align-items: baseline; gap: 12px; }
+
+/* Состояние — одной строкой, как в списке: слово-метка жирным и цветным, уточнение после
+   точки тонким и серым. «Ждёт выдачи · заберите до …», «Отменён · 18.09.2026». */
+/* Уточнение серым — 13/300 #8A93A2, одно на все экраны (сверка шрифтов, сессия 53, 23-09-2026). */
+.order .state { flex-grow: 1; min-width: 0; font-size: 13px; font-weight: 300; color: #8A93A2; }
+/* Состояние цветным словом — 13/600, одно на все карточки (сверка шрифтов, сессия 53, 23-09-2026). */
+.order .state b { font-weight: 600; color: #5FD08A; }
+
+/* Сумма — обычным цветом и без знака: заказ ещё ждёт выдачи, и главное здесь код и срок.
+   Алый со знаком минус остаётся только в истории баллов (Руслан, 22-09-2026). */
+.order .sum { flex-shrink: 0; font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; color: #C2C9D3; }
+
+/* Код — самое крупное на экране: его называют вслух у стойки, держа телефон в руке.
+   В списке его нет, он виден любому, кто заглянул через плечо (../artboard/rewards-block.md).
+   Отбит линией, а не отдельной карточкой: это часть заказа, а не соседняя вещь. */
+.order .code-zone {
+  margin-top: 14px; padding-top: 14px; text-align: center;
+  border-top: 1px solid rgba(95, 208, 138, 0.22);
+}
+
+/* Подпись над кодом выдачи — 13/500 #5FD08A, одна у заказа и награды (сверка шрифтов, сессия 53, 23-09-2026). */
+.order .code-title { font-size: 13px; font-weight: 500; color: #5FD08A; }
+
+.order .code {
+  margin-top: 8px;
+  font-family: Unbounded, Manrope, sans-serif;
+  font-size: 52px; font-weight: 700; letter-spacing: 10px; line-height: 1.05;
+  color: #5FD08A; font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------------------------------------- карточка офиса
+   Серым блоком и со всем, что нужно, чтобы доехать: адрес, часы, телефон и карта.
+   Раньше офис стоял двумя строками на фоне и читался как начало состава. */
+/* Имя офиса — модель каталога (Руслан, 24-09-2026, сессия 57): «Офис · » 15/400 серым, имя 15/700 белым.
+   Водитель ищет глазом, куда ехать; офис выглядит так же, как в каталоге, где он его выбирал. */
+.office .name { font-size: 15px; font-weight: 400; color: #A9B2BF; }
+.office .name b { font-weight: 700; color: #F4F6F8; }
+.office .address { margin-top: 2px; font-size: 13px; font-weight: 300; color: #8A93A2; }
+
+.office .facts { margin-top: 10px; display: flex; flex-direction: column; gap: 7px; }
+
+.office .fact { display: flex; align-items: center; gap: 9px; font-size: 14px; font-weight: 400; color: #C2C9D3; }
+.office .fact svg { flex-shrink: 0; }
+
+/* Ссылка и строка-действие — 14/500, цвет по смыслу (сверка шрифтов, сессия 53, 23-09-2026). */
+.office .map {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.07);
+  background: none; border-left: 0; border-right: 0; border-bottom: 0; width: 100%;
+  padding-left: 0; padding-right: 0;  /* браузерные поля кнопки сброшены (сессия 54) */
+  cursor: pointer; font-family: Manrope, sans-serif; font-size: 14px; font-weight: 500; color: #7FB3F5;
+}
+
+/* ---------------------------------------------------------------- состав
+   Без подложки, строками на фоне: две карточки выше уже держат экран, и третья делала бы
+   его сплошной лестницей блоков. Подпись и линия под ней отделяют состав не хуже рамки. */
+.lines { padding: 14px 2px 0; }
+
+/* Подписи нужен воздух: без подложки она иначе слипается с первой строкой состава
+   и читается как её часть, а не как заголовок блока. */
+.lines .cap { padding-bottom: 14px; }
+
+.line {
+  display: flex; align-items: baseline; gap: 12px; padding: 11px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.line .what { flex-grow: 1; min-width: 0; font-size: 15px; font-weight: 400; line-height: 1.3; }
+
+/* Количество и цена за штуку — второй строкой под названием: на узком экране они иначе
+   ломают название и уезжают сами. */
+.line .what small { display: block; margin-top: 2px; font-size: 13px; font-weight: 300; color: #8A93A2; }
+.line .cost { flex-shrink: 0; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; color: #C2C9D3; }
+
+.total {
+  display: flex; align-items: baseline; gap: 12px;
+  margin-top: 4px; padding-top: 13px; border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.total .what { flex-grow: 1; font-size: 15px; font-weight: 700; }
+
+/* Итог — обычным цветом и без знака: это сумма строк выше, ценник заказа, а не событие
+   списания. Списание названо один раз, алым, в карточке заказа; второе такое же число
+   тем же цветом читалось бы как второй уход баллов. */
+.total .cost { flex-shrink: 0; font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; color: #F4F6F8; }
+
+/* ---------------------------------------------------------------- отмена
+   Внизу и вторичной кнопкой: отмена — не то, зачем сюда пришли. В коде она в два нажатия,
+   первое спрашивает, второе отменяет; здесь нарисовано первое.
+   z-index соседям кнопки сразу — свечение выходит за габариты (feedback_zindex_above_glow). */
+.cancel-zone { padding: 20px 16px 0; }
+
+/* Вторичная кнопка L — во всю ширину, 52, радиус 16, 15/600 (сверка шрифтов, сессия 53, 23-09-2026). */
+.cancel {
+  position: relative; z-index: 1; width: 100%; height: 52px; border-radius: 16px; cursor: pointer;
+  border: 1px solid rgba(255, 92, 120, 0.40); background: rgba(255, 92, 120, 0.08);
+  color: #FF7089; font-family: Manrope, sans-serif; font-size: 15px; font-weight: 600;
+}
+
+/* Состав — тем же видом, что строка корзины в подтверждении (catalog-confirm.html, вариант Б),
+   только без счётчика: заказ оформлен, количество не меняется (Руслан, 23-09-2026).
+   Миниатюра на подложке xb-photo, название, под ним количество и цена за штуку, справа сумма
+   строки с гранатом. Цена — на момент заказа (`order_items.unit_points`). */
+.rb { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-top: 1px solid rgba(255,255,255,.06); }
+.th { width: 44px; height: 44px; border-radius: 12px; background: #F1F2F4; flex-shrink: 0; position: relative; overflow: hidden; }
+.th img { position: absolute; inset: 4px; width: 36px; height: 36px; object-fit: contain; mix-blend-mode: multiply; }
+.mid { flex-grow: 1; min-width: 0; }
+.nm { font-size: 15px; font-weight: 400; line-height: 1.3; }
+.sub { margin-top: 3px; font-size: 13px; font-weight: 300; color: #8A93A2; }
+.cst { flex-shrink: 0; display: flex; align-items: center; gap: 4px; padding-top: 1px; font-size: 15px; font-weight: 600; color: #C2C9D3; font-variant-numeric: tabular-nums; }
+.pom { flex-shrink: 0; position: relative; top: 1px; }
+.total .cost { display: inline-flex; align-items: center; gap: 4px; }
+/* Цена со скидкой — как на плитке каталога: старая цена мелко зачёркнутой над новой (Руслан, 24-09-2026).
+   Здесь новая — 0: приз водителю ничего не стоит. */
+.cst.disc { flex-direction: column; align-items: flex-end; gap: 1px; padding-top: 0; }
+.cst.disc s { font-size: 12px; font-weight: 500; color: #8A93A2; }
+.cst.disc span { display: inline-flex; align-items: center; gap: 4px; }
+/* Откуда награда — первой строкой карточки с кодом: это про награду целиком, а не про товар
+   в строке (Руслан, 24-09-2026). Белым 14/500, чтобы было заметнее (Руслан, 24-09-2026). */
+.card.order .origin { font-size: 14px; font-weight: 500; color: #F4F6F8; margin-bottom: 6px; }
+/* Значок подарка вместо фото: у произвольной награды фото нет, а место в строке держим. */
+.th.gift { background: rgba(255,255,255,.06); display: flex; align-items: center; justify-content: center; }
+</style></head><body>
+
+<div class="screen">
+
+  <div class="bar">
+    <button class="back" aria-label="Назад">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M14.5 5.5L8 12l6.5 6.5" stroke="#E4E8EE" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <h1>Награда</h1>
+    <span class="act"></span>
+  </div>
+
+  <div class="body">
+
+    <div class="card order">
+      <div class="origin">Вручил парк · за помощь на линии</div>
+      <div class="head">
+        <span class="state"><b>Ждёт в офисе</b> · заберите до 5 октября</span>
+      </div>
+
+      <div class="code-zone">
+        <div class="code-title">Код для выдачи — покажите этот экран в офисе</div>
+        <div class="code">73418</div>
+      </div>
+    </div>
+
+    <div class="card office">
+      <div class="cap">Где забрать</div>
+      <div class="name">Офис · <b>Чиланзар</b></div>
+      <div class="address">ул. Бунёдкор, 12</div>
+
+      <div class="facts">
+        <div class="fact">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none"><circle cx="12" cy="12" r="8.5" stroke="#8A93A2" stroke-width="1.7"/><path d="M12 7.5V12l3 1.8" stroke="#8A93A2" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Ежедневно, 09:00 — 20:00
+        </div>
+        <div class="fact">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M6.2 4.5h3l1.4 3.4-2 1.4a11 11 0 0 0 5.1 5.1l1.4-2 3.4 1.4v3c0 .8-.7 1.5-1.5 1.4C10.5 17.7 6.3 13.5 4.8 6c-.1-.8.6-1.5 1.4-1.5Z" stroke="#8A93A2" stroke-width="1.7" stroke-linejoin="round"/></svg>
+          +998 71 200-70-07
+        </div>
+      </div>
+
+      <button class="map">
+        <span>Открыть в Яндекс Картах</span>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M9.5 5.5l6.5 6.5-6.5 6.5" stroke="#7FB3F5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+
+    <div class="lines">
+      <div class="cap">Награда</div>
+
+      <div class="rb"><div class="th gift"><svg viewBox="0 0 24 24" width="22" height="22" fill="none"><rect x="4" y="10" width="16" height="10" rx="2" stroke="#8A93A2" stroke-width="1.7"/><path d="M3 8h18v2H3z" stroke="#8A93A2" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 8v12" stroke="#8A93A2" stroke-width="1.7"/><path d="M12 8c-2-3.5-5.5-3-5-1s3 1 5 1c2 0 4.5 1 5-1s-3-2.5-5 1z" stroke="#8A93A2" stroke-width="1.5" stroke-linejoin="round"/></svg></div><div class="mid"><div class="nm">Сертификат на мойку</div><div class="sub">1 шт.</div></div></div>
+    </div>
+
+  </div>
+
+</div>
+
+</body></html>

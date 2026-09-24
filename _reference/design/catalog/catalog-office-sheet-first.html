@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Каталог — первый вход, выбор офиса</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&family=Unbounded:wght@200;300;600;700&display=swap">
+<style>
+/* КАТАЛОГ — ПЕРВЫЙ ВХОД: ТА ЖЕ ШТОРКА ВЫБОРА ОФИСА. Копия catalog-office-sheet.html, правится ТАМ.
+   Отличия: офис ещё не выбран — отметки нет, «Сохранить» погашена, предупреждения нет;
+   под шторкой витрина без товаров — заглушки плиток; строки офиса нет. «Закрыть» уводит из каталога.
+
+   Ниже — комментарий шторки смены офиса.
+   КАТАЛОГ — ШТОРКА СМЕНЫ ОФИСА. Нарисована 23-09-2026, сессия 55, по слову Руслана: офис меняется
+   шторкой снизу на той же странице, а не возвратом к списку офисов.
+   Под шторкой — копия витрины (catalog-showcase.html), правится ТАМ. Шторка — по эталону проекта
+   (../comeback/04-day-chests-sheet.html) и устроена как шторка языка (../artboard/language-sheet.html):
+   без ручки и свайпа, варианты строками с отметкой, «Сохранить» гранатом над серой «Закрыть».
+   Та же шторка открывается при первом входе в каталог (catalog-office-sheet-first.html) —
+   отдельной страницы выбора офиса нет (Руслан, 23-09-2026).
+
+   Ниже — комментарий витрины.
+   КАТАЛОГ, ШАГ 2 — ВИТРИНА ОФИСА. Нарисована 23-09-2026, сессия 55.
+   Решения Руслана 23-09-2026: подложка фото — Б, один светлый фон на все товары; зелёного
+   вокруг выбранного нет; плитка по образцу блока HOT на главной (../artboard/hot-action-block.html):
+   фото на светлом квадрате, пилюли скидки и остатка сверху, название слева и цена справа под фото.
+
+   Снято с кода: `ShowcaseProductTile.vue` и `ShowcaseProduct` (фото, название, цена, `available`),
+   `OfficeShowcase.vue` (итог «сумма / останется на балансе», «Оформить» гаснет с причиной),
+   тексты `cart_total`, `cart_balance_after`, `button_checkout`, `checkout_*` в `server/bot/texts.ts`.
+   Скидка (старая цена, «SALE −60%») — место заложено, механика в T57, в коде её нет.
+
+   Шапка перенесена из ../artboard/section-bar.html и правится ТАМ.
+   Состояние снимка: баланс 2 450, выбраны Power Bank и «Вертолёт» по одной штуке.
+   Предел ширины 520. */
+html, body { background: #0B0D11; margin: 0; }
+body { display: flex; justify-content: center; }
+.screen {
+  position: relative; width: 100%; max-width: 520px; min-height: 100dvh; box-sizing: border-box;
+  background: #0B0D11; color: #F4F6F8; font-family: Manrope, 'Segoe UI', system-ui, sans-serif;
+  display: flex; flex-direction: column;
+}
+.bar {
+  position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 12px;
+  padding: calc(14px + env(safe-area-inset-top)) 16px 14px;
+  background: rgba(11, 13, 17, 0.82); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.bar .back { width: 40px; height: 40px; flex-shrink: 0; border: 0; padding: 0; cursor: pointer; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07); display: flex; align-items: center; justify-content: center; }
+.bar h1 { margin: 0; flex-grow: 1; min-width: 0; font-family: Unbounded, Manrope, sans-serif;
+  font-size: 19px; font-weight: 600; letter-spacing: -0.5px; line-height: 1.25; }
+/* Баланс — в шапке справа, на месте действия (Руслан, 23-09-2026): шапка липкая, и баллы видны
+   всегда, пока водитель листает витрину и набирает корзину. Подпись над числом — чтобы число
+   не читалось как цена или сумма заказа. */
+.bar .bal { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.bar .bal .lbl { font-size: 12px; font-weight: 400; color: #8A93A2; }
+.bar .bal .num { display: flex; align-items: center; gap: 4px; font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* Имя офиса — роль «Офис в каталоге», размер над витриной (README, сессия 55): «Офис · » 15/400 серым,
+   имя 15/700 белым. Та же модель, что в списке офисов каталога, только мельче (Руслан, 23-09-2026).
+   Где я. Офис — чтобы водитель видел, чью витрину смотрит; «Сменить» возвращает к выбору
+   офиса (корзина при этом очищается — так устроен код). Баланс переехал в шапку. */
+.where { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px 4px; }
+.where .office { font-size: 15px; font-weight: 400; color: #A9B2BF; }
+.where .office b { font-weight: 700; color: #F4F6F8; }
+.where .change { margin-left: 8px; border: 0; background: none; padding: 0; cursor: pointer;
+  font-family: Manrope, sans-serif; font-size: 14px; font-weight: 500; color: #A9B2BF;
+  /* Подчёркнутая ссылка — второстепенное действие рядом с текстом, как «Отказаться» на экране приглашения. */
+  text-decoration: underline; text-decoration-color: rgba(169,178,191,.4); text-underline-offset: 3px; }
+.where .bal { display: flex; align-items: center; gap: 4px; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px 16px; padding: 18px 16px 24px; }
+.grid.v2 .row { flex-direction: column; justify-content: flex-start; align-items: stretch; gap: 4px; }
+.grid.v2 .price { order: -1; flex-direction: row-reverse; justify-content: flex-end; align-items: baseline; gap: 8px; }
+.grid.v2 .price s { top: 0; }
+.grid.v2 .name { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+/* Вариант 2 плитки — везде, и на витрине, и в блоке на главной (Руслан, 24-09-2026, сессия 58). Название обрезается многоточием по 30 символам — предел, а не переключатель варианта */
+
+/* Плитка — как в HOT. Подложка одна на все товары (вариант Б): фото приходят на белом фоне,
+   и `multiply` растворяет его в подложке. */
+.tile { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+/* Подложка фото #F1F2F4 — новый токен палитры `xb-photo` (README, сессия 55). */
+.ph { position: relative; aspect-ratio: 9 / 10; border-radius: 24px; overflow: hidden; background: #F1F2F4; }
+.ph img { position: absolute; left: 8%; top: 13%; width: 84%; height: 80%; object-fit: contain; mix-blend-mode: multiply; display: block; }
+.pills { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; justify-content: space-between; }
+.pill { height: 24px; display: inline-flex; align-items: center; gap: 3px; padding: 0 9px; border-radius: 999px;
+  background: #FFFFFF; box-shadow: 0 1px 2px rgba(0,0,0,.06); font-size: 12px; font-weight: 600; color: #626A77; }  /* xb-muted вместо #5A606B из HOT — на пробу (Руслан, 23-09-2026) */
+/* Скидка — «SALE −N%» у каждого товара со скидкой, одним видом (Руслан, 23-09-2026). «HOT» с огнём
+   остаётся за блоком на главной: там это выделение сезона, здесь — просто скидка на товар. */
+.pill.sale { font-weight: 700; color: #E8365D; padding-left: 6px; }
+
+.row { display: flex; justify-content: space-between; align-items: flex-end; gap: 6px; padding: 0 4px; }
+.name { font-size: 14px; font-weight: 500; line-height: 1.3; color: #F4F6F8; min-width: 0; }
+.price { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; flex-shrink: 0; }
+.price s { position: relative; top: 1px; font-size: 12px; font-weight: 500; color: #8A93A2; }
+.price span { display: flex; align-items: center; gap: 3px; line-height: 1.1; font-size: 20px; font-weight: 800; letter-spacing: -.3px; font-variant-numeric: tabular-nums; }
+.price .pom { position: relative; top: 2px; flex-shrink: 0; }
+
+/* Выбор количества — во всю ширину плитки, под ценой, чтобы кнопка однозначно принадлежала
+   своей плитке (замечание Руслана на листе вариантов). У невыбранного и выбранного товара
+   один и тот же счётчик «− N +» (Руслан, 23-09-2026): невыбранный — тёмный, с нулём
+   и погашенным «−»; выбранный — белый. Зелёного нет. Размер и тёмный вид — вторичная кнопка S
+   по шкале: высота 40, контур .14, заливка .05. */
+.step { height: 40px; display: flex; align-items: center; justify-content: space-between; border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.05); color: #F4F6F8; box-sizing: border-box; }
+.step button { width: 44px; height: 38px; border: 0; background: none; cursor: pointer; color: inherit;
+  display: flex; align-items: center; justify-content: center; }
+.step button:disabled { opacity: .3; cursor: default; }
+/* Число в счётчике — обычного веса (Руслан, 23-09-2026): жирное спорило с ценой над ним. */
+.step b { font-size: 16px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.step:not(.on) b { color: #8A93A2; }
+.step.on { background: #F4F6F8; border-color: #F4F6F8; color: #0B0D11; }
+
+/* Итог и «Оформить» — внизу, в зоне большого пальца, липко. Сумма и остаток — как в коде. */
+.checkout {
+  position: sticky; bottom: 0; z-index: 5; margin-top: auto;
+  padding: 14px 16px calc(16px + env(safe-area-inset-bottom));
+  background: rgba(11, 13, 17, 0.9); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+/* Итог корзины — роль шкалы: подпись 14/400 #8A93A2, число 15/700 #F4F6F8. */
+.sum { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 0 2px 12px; font-size: 14px; font-weight: 400; color: #8A93A2; }
+.sum b { font-size: 15px; font-weight: 700; color: #F4F6F8; font-variant-numeric: tabular-nums; }
+/* Основная кнопка L по шкале: во всю ширину, 52, радиус 16, 15/700. */
+.go { position: relative; z-index: 1; width: 100%; height: 52px; border: 0; border-radius: 16px; cursor: pointer;
+  background: #E8365D; color: #FFFFFF; font-family: Manrope, sans-serif; font-size: 15px; font-weight: 700;
+  box-shadow: 0 8px 26px rgba(232,54,93,0.38); } /* гранатовая L одна на всё приложение — Руслан, 24-09-2026, сессия 58 */
+.go:disabled { opacity: 0.55; box-shadow: none; }
+/* Узкие телефоны (320–360): пилюли и итог не переносятся. */
+.pill, .sum span { white-space: nowrap; }
+@media (max-width: 360px) {
+  .pills { top: 8px; left: 8px; right: 8px; }
+  .pill { padding: 0 7px; font-size: 11px; }
+  .sum { font-size: 13px; }
+  /* На 320 «SALE» и остаток в одну строку не влезают: слово уходит, значок процента остаётся. */
+  .pill.sale .w { display: none; }
+}
+
+/* ------------------------------------------------------------- шторка смены офиса */
+.backdrop { position: fixed; inset: 0; z-index: 30; background: rgba(0,0,0,0.62); }
+.sheet {
+  position: fixed; left: 50%; bottom: 0; z-index: 31; width: 100%; max-width: 520px;
+  box-sizing: border-box; transform: translate(-50%, 0);
+  background: #14171D; border-radius: 26px 26px 0 0; box-shadow: 0 -18px 50px -20px rgba(0,0,0,0.9);
+  padding: 32px 20px calc(24px + env(safe-area-inset-bottom));
+  color: #F4F6F8; font-family: Manrope, 'Segoe UI', system-ui, sans-serif;
+}
+.sheet-head { text-align: center; }
+.sheet-head .title { font-size: 24px; font-weight: 800; letter-spacing: -0.2px; margin-bottom: 10px; }
+.sheet-head .sub { margin-top: 4px; font-size: 13px; font-weight: 300; line-height: 1.65; color: #A9B2BF; }
+
+/* Варианты — как в шторке языка: строка, рамка и отметка у выбранного, без заливки цветом.
+   Имя офиса — роль «Офис в каталоге», размер списка; адрес под ним уточнением серым. */
+.opts { display: flex; flex-direction: column; gap: 10px; margin-top: 22px; }
+.opt {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px;
+  box-sizing: border-box; padding: 10px 18px; cursor: pointer; text-align: left;
+  border: 1px solid rgba(255,255,255,0.09); border-radius: 16px; background: rgba(255,255,255,0.03);
+  font-family: inherit; color: inherit;
+}
+.opt .who { flex-grow: 1; min-width: 0; }
+.opt .name { font-size: 16px; font-weight: 400; color: #A9B2BF; }
+.opt .name b { font-weight: 700; color: #F4F6F8; }
+.opt .address { margin-top: 2px; font-size: 13px; font-weight: 300; color: #8A93A2; }
+.opt .mark { width: 22px; height: 22px; border-radius: 99px; flex-shrink: 0; box-sizing: border-box;
+  border: 1.5px solid rgba(255,255,255,0.22); display: flex; align-items: center; justify-content: center; }
+.opt.on { border-color: rgba(255,255,255,0.30); background: rgba(255,255,255,0.06); }
+.opt.on .mark { border: 0; background: #F4F6F8; }
+.opt:not(.on) .mark svg { display: none; }
+
+/* Предупреждение — только когда выбран другой офис и в корзине что-то есть. Говорится до
+   «Сохранить», а не после: водителя не удивляем. Алым мягким — это потеря, но не ошибка. */
+.warn { margin-top: 16px; padding: 0 4px; text-align: center; font-size: 14px; font-weight: 400; line-height: 1.45; color: #FF7089; }
+.warn[hidden] { display: none; }
+
+.sheet-btns { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+.sheet-btns button { width: 100%; height: 52px; padding: 0 16px; border: none; border-radius: 16px; cursor: pointer;
+  font-family: Manrope, sans-serif; font-size: 15px; font-weight: 600; }
+/* «Сохранить» гаснет, пока отмечен текущий офис: менять нечего. */
+.sheet-btns .sheet-save { font-weight: 700; position: relative; z-index: 1; background: #E8365D; color: #fff; box-shadow: 0 8px 26px rgba(232,54,93,0.38); }
+.sheet-btns .sheet-save:disabled { opacity: 0.55; box-shadow: none; cursor: default; }
+.sheet-close { position: relative; z-index: 2; background: #21242A; color: #F4F6F8; border: 1px solid rgba(255,255,255,0.08); }
+
+/* Заглушки витрины под шторкой: товары ещё не загружены — офис не выбран. */
+.ph.sk { background: rgba(255,255,255,.05); }
+.skl { height: 12px; border-radius: 6px; background: rgba(255,255,255,.06); }
+.skl.w60 { width: 60%; } .skl.w30 { width: 28%; }
+.skl.pill40 { height: 40px; border-radius: 999px; }
+.sheet-close:active, .rs-cancel:active, .gsheet .g-close:active { background: #2A2E35; }
+/* Кнопки L сведены к одному виду — решение Руслана 24-09-2026, сессия 58 (ревью PR #195): гранатовая — свечение 8/26 38 %, погашенная 55 %; серая — как кнопки языка на регистрации: контур 8 %, белый текст, при нажатии #2A2E35. */
+</style></head><body>
+
+<div class="screen">
+
+  <div class="bar">
+    <button class="back" aria-label="Назад">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M14.5 5.5L8 12l6.5 6.5" stroke="#E4E8EE" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <h1>Каталог</h1>
+    <div class="bal"><span class="lbl">Ваши баллы</span><span class="num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg>2 450</span></div>
+  </div>
+
+
+  <div class="grid v2">
+      <div class="tile"><div class="ph sk"></div><div class="row"><div class="skl w60"></div><div class="skl w30"></div></div><div class="skl pill40"></div></div>
+      <div class="tile"><div class="ph sk"></div><div class="row"><div class="skl w60"></div><div class="skl w30"></div></div><div class="skl pill40"></div></div>
+      <div class="tile"><div class="ph sk"></div><div class="row"><div class="skl w60"></div><div class="skl w30"></div></div><div class="skl pill40"></div></div>
+      <div class="tile"><div class="ph sk"></div><div class="row"><div class="skl w60"></div><div class="skl w30"></div></div><div class="skl pill40"></div></div>
+  </div>
+
+
+</div>
+<div class="backdrop"></div>
+<div class="sheet" role="dialog" aria-modal="true">
+  <div class="sheet-head">
+    <div class="title">Где заберёте товары?</div>
+    <div class="sub">Выберите офис. В каждом свой набор, и заказ забирается там, где вы его оформили.</div>
+  </div>
+  <div class="opts">
+    <button class="opt" data-office="Кадышева"><span class="who"><span class="name">Офис · <b>Кадышева</b></span><div class="address">ул. Кадышева, 4</div></span><i class="mark"><svg viewBox="0 0 24 24" width="14" height="14" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#0B0D11" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></i></button>
+    <button class="opt" data-office="Сергели"><span class="who"><span class="name">Офис · <b>Сергели</b></span><div class="address">Сергели, 6-й квартал, 21</div></span><i class="mark"><svg viewBox="0 0 24 24" width="14" height="14" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#0B0D11" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></i></button>
+    <button class="opt" data-office="ТТЗ"><span class="who"><span class="name">Офис · <b>ТТЗ</b></span><div class="address">массив ТТЗ-1, 15</div></span><i class="mark"><svg viewBox="0 0 24 24" width="14" height="14" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#0B0D11" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></i></button>
+  </div>
+  <div class="warn" id="warn" hidden>Корзина очистится: в другом офисе свой набор</div>
+  <div class="sheet-btns">
+    <button class="sheet-save" id="save">Сохранить</button>
+    <button class="sheet-close">Отменить</button>
+  </div>
+</div>
+
+<script>
+  // Отметка ставится нажатием; «Сохранить» гаснет на текущем офисе, предупреждение — только
+  // при другом офисе и непустой корзине. Первый вход: офиса нет, корзина пуста.
+  const CURRENT = null, CART = 0;
+  const opts = document.querySelectorAll('.opt'), save = document.getElementById('save'), warn = document.getElementById('warn');
+  const sync = (name) => { save.disabled = name === CURRENT; warn.hidden = !(name !== CURRENT && CART > 0); };
+  opts.forEach(o => o.addEventListener('click', () => { opts.forEach(x => x.classList.toggle('on', x === o)); sync(o.dataset.office); }));
+  save.disabled = true; warn.hidden = true;
+</script>
+</body></html>

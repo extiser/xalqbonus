@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Мои награды — ждущих нет</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&family=Unbounded:wght@200;300;600;700&display=swap">
+<style>
+/* РАЗДЕЛ «МОИ НАГРАДЫ», КОГДА ЖДУЩИХ НЕТ. 24-09-2026, сессия 55, решение Руслана: верхняя группа
+   остаётся с нулём и строкой «Здесь пусто» по центру. Экран — rewards-screen.html. */
+
+/* РАЗДЕЛ «МОИ НАГРАДЫ» — экран целиком, куда ведёт «Все награды ›» с главной.
+   Нарисован 22-09-2026, сессия 52, по задаче T51.
+
+   Экран собран из двух перенесённых блоков, и правятся они ТАМ, а не здесь
+   (CLAUDE.md → «Дизайн приложения»):
+     шапка раздела — ../artboard/section-bar.html, общая у всех разделов,
+     карточки наград — ../artboard/rewards-block.html (полный вид, сцена 2).
+   Что решается здесь и нигде больше: порядок наград на экране и деление на две группы.
+
+   Объяснение — rewards-screen.md рядом.
+
+   Снято с кода, не придумано:
+   `server/services/rewards/readMemberRewards.ts` (потолок 100, листания нет),
+   `server/repositories/rewards.ts` → `listPersonRewards` (ORDER BY created_at DESC),
+   `shared/types/rewards.ts` → `MemberReward` (состав строки),
+   `server/bot/texts.ts` (`rewards_title`, `reward_code_title`).
+
+   ВНИМАНИЕ: деление на группы — правка кода. Сегодня список идёт одним потоком,
+   свежие первыми; группы «Ждут в офисе» и «История наград» требуют другой сортировки.
+
+   Предел ширины 520: на 16 Pro Max логическая ширина 440 (замер 22-09-2026). */
+
+html, body { background: #0B0D11; margin: 0; }
+body { display: flex; justify-content: center; }
+
+.screen {
+  position: relative; width: 100%; max-width: 520px; min-height: 100dvh;
+  box-sizing: border-box; background: #0B0D11; color: #F4F6F8;
+  font-family: Manrope, 'Segoe UI', system-ui, sans-serif;
+  display: flex; flex-direction: column;
+  padding-bottom: calc(40px + env(safe-area-inset-bottom));
+}
+
+/* ------------------------------------------------------- шапка раздела
+   Перенесена из ../artboard/section-bar.html — общий блок всех разделов. Правки идут туда,
+   сюда переносятся копией. В коде это один компонент, а не разметка в каждом экране. */
+.bar {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 12px;
+  padding: calc(14px + env(safe-area-inset-top)) 16px 14px;
+  background: rgba(11, 13, 17, 0.82);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.bar .back {
+  width: 40px; height: 40px; flex-shrink: 0; border: 0; padding: 0; cursor: pointer;
+  border-radius: 999px; background: rgba(255, 255, 255, 0.07);
+  display: flex; align-items: center; justify-content: center;
+}
+
+.bar h1 {
+  margin: 0; flex-grow: 1; min-width: 0;
+  font-family: Unbounded, Manrope, sans-serif;
+  font-size: 19px; font-weight: 600; letter-spacing: -0.5px; line-height: 1.25;
+}
+
+/* Место под действие справа занято всегда, даже когда кнопки нет: иначе заголовок
+   прыгал бы вбок при переходе между разделами. */
+.bar .act { width: 40px; height: 40px; flex-shrink: 0; }
+/* Баланс в шапке — копия .bar .bal из ../artboard/catalog-bar.html (сессия 56, 24-09-2026: решение сессии 55 —
+   баланс в шапке каталога, «Моих наград», «Моих заказов», экрана заказа и истории). Стоит на месте действия. */
+.bar .bal { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.bar .bal .lbl { font-size: 12px; font-weight: 400; color: #8A93A2; }
+.bar .bal .num { display: flex; align-items: center; gap: 4px; font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* ------------------------------------------------------------ группы
+   Подпись группы в том же ключе, что подпись дня в истории: разделы водителя
+   выглядят одинаково, и в коде это одна и та же строка-заголовок. */
+.list { display: flex; flex-direction: column; gap: 10px; padding: 8px 16px 20px; }
+
+.group {
+  font-size: 12px; font-weight: 600; letter-spacing: 1.2px; text-transform: uppercase;
+  color: #8A93A2; padding: 18px 2px 2px;
+}
+
+/* ------------------------------------------------------- карточка награды
+   Полный вид, перенесён из ../artboard/rewards-block.html. Компактная карточка
+   с главной сюда не идёт: здесь показывается всё, в том числе код. */
+.reward {
+  display: flex; flex-direction: column; gap: 3px;
+  border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.09);
+  background: #14171D; padding: 14px 16px;
+}
+
+.reward .what { font-size: 16px; font-weight: 700; line-height: 1.25; }
+.reward .origin { font-size: 13px; font-weight: 300; color: #8A93A2; }
+/* Состояние цветным словом — 13/600, одно на все карточки (сверка шрифтов, сессия 53, 23-09-2026). */
+.reward .state { font-size: 13px; font-weight: 600; color: #A9B2BF; margin-top: 4px; }
+.reward .office { font-size: 13px; font-weight: 300; color: #8A93A2; }
+
+/* Ждёт в офисе: рамка зелёная, код крупный. Водитель показывает экран, а не диктует. */
+.reward.awaiting {
+  border-color: rgba(95, 208, 138, 0.55);
+  background: linear-gradient(180deg, rgba(95, 208, 138, 0.07) 0%, rgba(20, 23, 29, 1) 62%);
+}
+
+.reward.awaiting .state { color: #5FD08A; }
+
+/* Подпись над кодом выдачи — 13/500 #5FD08A, одна у заказа и награды (сверка шрифтов, сессия 53, 23-09-2026). */
+.reward .code-title { margin-top: 10px; font-size: 13px; font-weight: 500; color: #5FD08A; }
+
+.reward .code {
+  font-family: Unbounded, Manrope, sans-serif;
+  font-size: 34px; font-weight: 700; letter-spacing: 6px; line-height: 1.2;
+  color: #5FD08A; font-variant-numeric: tabular-nums;
+}
+
+/* Получена: спокойная строка, забирать нечего. */
+.reward.issued .what { font-weight: 600; }
+
+/* Срок вышел: карточка гаснет, но остаётся читаемой — пустота вместо неё выглядела бы так,
+   будто награды и не было. */
+.reward.expired { opacity: 0.55; }
+
+
+body { display: block !important; }
+.sheetwrap { max-width: 520px; margin: 0 auto; padding: 24px 16px 60px; display: flex; flex-direction: column; gap: 14px; font-family: Manrope, sans-serif; color: #F4F6F8; }
+.nt { font-size: 12px; color: #8A93A2; line-height: 1.45; }
+.sheetwrap .screen { min-height: 0 !important; border: 1px solid rgba(255,255,255,.08); border-radius: 24px; overflow: hidden; }
+.sheetwrap .bar { position: static !important; }
+/* Группа без записей не пропадает (Руслан, 24-09-2026): иначе водитель решит, что раздел исчез.
+   Под ней «Здесь пусто» по центру, отступ сверху и снизу одинаковый — 36 px от подписи группы
+   до строки и от строки до следующей группы (2 + зазор 10 + 24 сверху; 8 + зазор 10 + 18 снизу). */
+.zero { padding: 24px 4px 8px; text-align: center; font-size: 15px; font-weight: 300; color: #8A93A2; }
+
+</style></head><body><div class="sheetwrap">
+<div style="font-family:Unbounded,Manrope,sans-serif;font-size:20px;font-weight:600;letter-spacing:-.4px">Мои награды: ждущих нет</div>
+<div class="nt">Награды были, но все получены, зачислены или сгорели. Группа «Ждут в офисе» остаётся с нулём.</div>
+<div class="screen">
+
+  <div class="bar">
+    <button class="back" aria-label="Назад">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M14.5 5.5L8 12l6.5 6.5" stroke="#E4E8EE" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <h1>Мои награды</h1>
+    <div class="bal"><span class="lbl">Ваши баллы</span><span class="num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg>1 450</span></div>
+  </div>
+
+  <div class="list">
+
+    <div class="group">Ждут в офисе · 0</div>
+    <div class="zero">Здесь пусто</div>
+
+    <div class="group">История наград</div>
+
+    <div class="reward">
+      <span class="what">300 баллов</span>
+      <span class="origin">Акция «Неделя возвращения» · сундук дня</span>
+      <span class="state">На балансе</span>
+    </div>
+
+    <div class="reward issued">
+      <span class="what">Освежитель «Вертолёт»</span>
+      <span class="origin">Вручил парк · за помощь на линии</span>
+      <span class="state">Получена 20 сентября</span>
+      <span class="office">Офис · Чиланзар</span>
+    </div>
+
+    <div class="reward">
+      <span class="what">150 баллов</span>
+      <span class="origin">Акция «Неделя возвращения» · сундук дня</span>
+      <span class="state">На балансе</span>
+    </div>
+
+    <div class="reward expired">
+      <span class="what">Ароматизатор «Гранат»</span>
+      <span class="origin">Акция «Неделя возвращения» · сундук дня</span>
+      <span class="state">Срок вышел 12 сентября — награда не получена</span>
+      <span class="office">Офис · Чиланзар</span>
+    </div>
+
+  </div>
+
+</div>
+
+</div></body></html>

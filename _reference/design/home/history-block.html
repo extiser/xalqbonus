@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>XalqBonus — история начислений: состояния</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&family=Unbounded:wght@200;300;600;700&display=swap">
+<style>
+/* ИСТОРИЯ НАЧИСЛЕНИЙ — блок главного экрана, все состояния списком.
+   Нарисован 22-09-2026, сессия 51, по задаче T51. Устройство снято с кода, а не придумано:
+   `server/services/drivers/memberScreen.ts` (группировка по дням, тексты причин),
+   `app/components/molecules/MemberOperationItem.vue` (состав строки),
+   `server/services/drivers/readMemberHistory.ts` (страница 25 строк),
+   `server/bot/texts.ts` (тексты пустого списка, отказа и кнопки).
+   Объяснение — history-block.md рядом. */
+
+html, body { background: #0B0D11; }
+body {
+  margin: 0;
+  display: block;
+  padding: 24px 16px 60px;
+  font-family: Manrope, system-ui, sans-serif;
+  color: #F4F6F8;
+}
+
+.sheet {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 32px;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.cell {
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.note {
+  font-size: 12px;
+  font-weight: 400;
+  color: #8A93A2;
+  min-height: 34px;
+}
+
+/* --------------------------------------------------------------- блок истории */
+
+.history {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 14px 20px;
+}
+
+.history-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 4px 0;
+}
+
+/* Ссылка и строка-действие — 14/500, цвет по смыслу (сверка шрифтов, сессия 53, 23-09-2026). */
+.history-head .all {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: #A9B2BF;
+  font-family: Manrope, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.history-head h3 {
+  margin: 0;
+  font-family: Unbounded, Manrope, sans-serif;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.4px;
+}
+
+/* Подпись дня. Сегодня и вчера — словами: водитель ищет вчерашнюю поездку,
+   а не поездку одиннадцатого числа. */
+.day {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: #8A93A2;
+  padding: 14px 4px 6px;
+}
+
+.op {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.day + .op {  /* первая операция дня — без линии под подписью; first-of-type не срабатывал: подпись тоже div (сессия 54) */
+  border-top: 0;
+}
+
+.op .time {
+  width: 42px;
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 300;
+  color: #8A93A2;
+  font-variant-numeric: tabular-nums;
+}
+
+.op .what {
+  flex-grow: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.3;
+}
+
+/* Знак и цвет вместе, а не вместо друг друга: знак читается и в чёрно-белом,
+   и тем, кто не различает цвета.
+
+   Списание алое (#FF5C78), а не серое — решение Руслана 22-09-2026: водитель должен видеть,
+   что баллы ушли с него. Цвет единый на все экраны, где баллы уходят со счёта; выбор
+   и замеры контраста — spend-color.html. */
+.op .sum {
+  flex-shrink: 0;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.op .sum.plus { color: #5FD08A; }
+.op .sum.minus { color: #FF5C78; }  /* алый — единый цвет списания, spend-color.html */
+
+.more {
+  align-self: center;
+  margin-top: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: #F4F6F8;
+  cursor: pointer;
+  height: 40px;
+  padding: 0 22px;
+  border-radius: 999px;
+  font-family: Manrope, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* --------------------------------------------------- пусто, отказ и ожидание */
+
+.notice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  padding: 30px 20px;
+  color: #8A93A2;
+  font-size: 15px;
+  font-weight: 300;
+  line-height: 1.4;
+
+  /* 30, а не 34 — как в блоках заказов и наград; решение Руслана 24-09-2026, сессия 58 */
+}
+
+/* Вторичная кнопка S — пилюля 40, контур, 14/600 (сверка шрифтов, сессия 53, 23-09-2026). */
+.notice .retry {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: #F4F6F8;
+  cursor: pointer;
+  height: 40px;
+  padding: 0 22px;
+  border-radius: 999px;
+  font-family: Manrope, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Ожидание: строки той же высоты, что настоящие, — список не прыгает, когда доедет. */
+.skeleton {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.skeleton:first-of-type { border-top: 0; }
+
+.bar {
+  height: 11px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.13) 50%, rgba(255,255,255,0.07) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+.bar.time { width: 42px; flex-shrink: 0; }
+.bar.what { flex-grow: 1; }
+.bar.sum { width: 54px; flex-shrink: 0; }
+
+@keyframes shimmer {
+  0% { background-position: 140% 0; }
+  100% { background-position: -40% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar { animation: none; }
+}
+</style></head><body>
+
+<div class="sheet">
+
+  <div class="cell">
+    <div class="label">1 — на главной: короткий срез</div>
+    <div class="note">Несколько последних строк и «Вся история» в шапке. Листание живёт в разделе, а не на главной</div>
+    <div class="history">
+      <div class="history-head"><h3>История баллов</h3><button class="all">Вся история<svg viewBox="0 0 24 24" width="14" height="14" fill="none"><path d="M9.5 5.5l6.5 6.5-6.5 6.5" stroke="#A9B2BF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
+
+      <div class="day">Сегодня</div>
+      <div class="op"><span class="time">14:26</span><span class="what">Поездка</span><span class="sum plus">+1</span></div>
+      <div class="op"><span class="time">13:58</span><span class="what">Поездка</span><span class="sum plus">+1</span></div>
+      <div class="op"><span class="time">12:04</span><span class="what">Обмен на товар · #1042</span><span class="sum minus">−900</span></div>
+
+      <div class="day">Вчера</div>
+      <div class="op"><span class="time">21:10</span><span class="what">Акция</span><span class="sum plus">+150</span></div>
+      <div class="op"><span class="time">18:33</span><span class="what">Поездка</span><span class="sum plus">+1</span></div>
+
+      <div class="day">14 сентября</div>
+      <div class="op"><span class="time">09:12</span><span class="what">Начислено сотрудником</span><span class="sum plus">+50</span></div>
+
+    </div>
+  </div>
+
+  <div class="cell">
+    <div class="label">1б — внутри раздела: листание</div>
+    <div class="note">Страница 25 строк (`readMemberHistory.ts`), дальше «Показать ещё». На главной этой кнопки нет</div>
+    <div class="history">
+      <div class="history-head"><h3>История баллов</h3></div>
+      <div class="day">Сегодня</div>
+      <div class="op"><span class="time">14:26</span><span class="what">Поездка</span><span class="sum plus">+1</span></div>
+      <div class="op"><span class="time">13:58</span><span class="what">Поездка</span><span class="sum plus">+1</span></div>
+      <div class="op"><span class="time">12:04</span><span class="what">Обмен на товар · #1042</span><span class="sum minus">−900</span></div>
+      <button class="more">Показать ещё</button>
+    </div>
+  </div>
+
+  <div class="cell">
+    <div class="label">2 — все причины по одной строке</div>
+    <div class="note">Одиннадцать значений `point_reason`, словами водителя. Списания серым, начисления зелёным</div>
+    <div class="history">
+      <div class="op"><span class="time">14:26</span><span class="what">Поездка</span><span class="sum plus">+1</span></div>
+      <div class="op"><span class="time">14:20</span><span class="what">Бонус за первые поездки</span><span class="sum plus">+100</span></div>
+      <div class="op"><span class="time">14:15</span><span class="what">Перенос баланса</span><span class="sum plus">+1 450</span></div>
+      <div class="op"><span class="time">13:40</span><span class="what">Обмен на товар · #1042</span><span class="sum minus">−900</span></div>
+      <div class="op"><span class="time">13:02</span><span class="what">Возврат заказа · #1042</span><span class="sum plus">+900</span></div>
+      <div class="op"><span class="time">12:30</span><span class="what">Начислено сотрудником</span><span class="sum plus">+50</span></div>
+      <div class="op"><span class="time">12:11</span><span class="what">Списано сотрудником</span><span class="sum minus">−50</span></div>
+      <div class="op"><span class="time">11:45</span><span class="what">Розыгрыш</span><span class="sum plus">+500</span></div>
+      <div class="op"><span class="time">11:20</span><span class="what">Акция</span><span class="sum plus">+150</span></div>
+      <div class="op"><span class="time">10:05</span><span class="what">Сгорание баллов</span><span class="sum minus">−300</span></div>
+      <div class="op"><span class="time">09:30</span><span class="what">Корректировка</span><span class="sum minus">−12</span></div>
+    </div>
+  </div>
+
+  <div class="cell">
+    <div class="label">3 — пусто</div>
+    <div class="note">Новичок до первой поездки. Голый пустой список читается как поломка приложения</div>
+    <div class="history">
+      <div class="history-head"><h3>История баллов</h3></div>
+      <div class="notice">Здесь будет история начислений</div>
+    </div>
+  </div>
+
+  <div class="cell">
+    <div class="label">4 — не загрузилось</div>
+    <div class="note">Отказ запроса, а не отсутствие операций. Разница названа словами, и есть чем повторить</div>
+    <div class="history">
+      <div class="history-head"><h3>История баллов</h3></div>
+      <div class="notice">
+        Не удалось загрузить историю. Попробуйте ещё раз.
+        <button class="retry">Повторить</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="cell">
+    <div class="label">5 — ждём ответа</div>
+    <div class="note">Строки той же высоты, что настоящие: список не прыгнет, когда данные доедут</div>
+    <div class="history">
+      <div class="history-head"><h3>История баллов</h3></div>
+      <div class="skeleton"><div class="bar time"></div><div class="bar what"></div><div class="bar sum"></div></div>
+      <div class="skeleton"><div class="bar time"></div><div class="bar what"></div><div class="bar sum"></div></div>
+      <div class="skeleton"><div class="bar time"></div><div class="bar what"></div><div class="bar sum"></div></div>
+    </div>
+  </div>
+
+</div>
+
+</body></html>
