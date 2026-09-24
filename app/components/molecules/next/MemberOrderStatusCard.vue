@@ -20,23 +20,22 @@ const props = defineProps<{
 </script>
 
 <template>
-  <div
-    v-if="props.order.status === 'pending'"
-    class="rounded-[20px] border border-[rgba(95,208,138,0.55)] bg-[linear-gradient(180deg,rgba(95,208,138,0.08)_0%,rgba(20,23,29,1)_68%)] p-4"
-  >
-    <div class="flex items-baseline gap-3">
-      <span class="min-w-0 grow">
-        <AtomsNextMemberStateLine tone="green" :state="order.state" :hint="order.hint" />
-      </span>
-      <span class="shrink-0 text-[17px] font-bold tabular-nums text-xb-secondary">{{ order.amount }}</span>
+  <AtomsNextMemberCard v-if="props.order.status === 'pending'" tone="green" variant="full">
+    <div class="p-4">
+      <div class="flex items-baseline gap-3">
+        <span class="min-w-0 grow">
+          <AtomsNextMemberStateLine tone="green" :state="order.state" :hint="order.hint" />
+        </span>
+        <span class="shrink-0 text-[17px] font-bold tabular-nums text-xb-secondary">{{ order.amount }}</span>
+      </div>
+      <div v-if="order.code" class="mt-3.5 border-t border-[rgba(95,208,138,0.22)] pt-3.5">
+        <MoleculesNextMemberCodeBlock :title="codeTitle" :code="order.code" size="l" />
+      </div>
     </div>
-    <div v-if="order.code" class="mt-3.5 border-t border-[rgba(95,208,138,0.22)] pt-3.5">
-      <MoleculesNextMemberCodeBlock :title="codeTitle" :code="order.code" size="l" />
-    </div>
-  </div>
+  </AtomsNextMemberCard>
 
-  <div v-else class="rounded-[20px] border border-white/9 bg-xb-card p-4">
-    <div class="flex items-start gap-3">
+  <AtomsNextMemberCard v-else tone="plain" variant="full">
+    <div class="flex items-start gap-3 p-4">
       <span class="flex min-w-0 grow flex-col">
         <AtomsNextMemberStateLine
           :tone="order.status === 'issued' ? 'green' : 'scarlet'"
@@ -51,5 +50,5 @@ const props = defineProps<{
         <span v-if="order.amountCaption" class="text-[12px] font-light text-xb-grey">{{ order.amountCaption }}</span>
       </span>
     </div>
-  </div>
+  </AtomsNextMemberCard>
 </template>

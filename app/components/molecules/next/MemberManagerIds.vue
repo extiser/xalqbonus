@@ -55,7 +55,7 @@ onBeforeUnmount(() => {
     <div class="px-0.5 pb-0.5">
       <AtomsNextMemberGroupLabel :label="texts.title" />
     </div>
-    <AtomsNextMemberListCard>
+    <AtomsNextMemberCard tone="plain" divided>
       <MoleculesNextMemberFieldRow
         v-for="row in rows"
         :key="row.target"
@@ -74,6 +74,6 @@ onBeforeUnmount(() => {
           </span>
         </template>
       </MoleculesNextMemberFieldRow>
-    </AtomsNextMemberListCard>
+    </AtomsNextMemberCard>
   </div>
 </template>

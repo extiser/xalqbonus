@@ -67,7 +67,7 @@ const LICENSE_MASK = '•••••';
     <MoleculesNextMemberSectionBar :title="texts.title" :back-label="texts.back" @back="$emit('back')" />
 
     <div class="flex flex-col gap-2.5 px-4 pb-5 pt-2">
-      <AtomsNextMemberListCard>
+      <AtomsNextMemberCard tone="plain" divided>
         <MoleculesNextMemberPersonHead :last-name="lastName" :given-names="givenNames" />
         <MoleculesNextMemberFieldRow
           v-for="field in fields"
@@ -102,18 +102,18 @@ const LICENSE_MASK = '•••••';
             </span>
           </template>
         </MoleculesNextMemberFieldRow>
-      </AtomsNextMemberListCard>
+      </AtomsNextMemberCard>
 
       <div class="px-0.5 pb-0.5 pt-[18px]">
         <AtomsNextMemberGroupLabel :label="texts.settings" />
       </div>
-      <AtomsNextMemberListCard>
+      <AtomsNextMemberCard tone="plain" divided>
         <MoleculesNextMemberSettingRow
           :label="texts.language"
           :value="languageOptions.find((option) => option.language === language)?.label ?? ''"
           @open="$emit('openLanguage')"
         />
-      </AtomsNextMemberListCard>
+      </AtomsNextMemberCard>
 
       <div class="mt-[22px]">
         <AtomsNextMemberButton size="l" tone="danger" @click="$emit('askReset')">{{ texts.reset }}</AtomsNextMemberButton>
