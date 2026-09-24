@@ -18,10 +18,15 @@ import {
   rewardsEmptyMock,
   rewardsErrorMock,
   rewardsMock,
-  rewardsNothingToPickMock,
+  rewardsNoPendingMock,
+  rewardCustomMock,
+  rewardExpiredMock,
+  rewardIssuedMock,
+  rewardMock,
   ordersEmptyMock,
   ordersErrorMock,
   ordersMock,
+  ordersNoPendingMock,
   orderCancelledMock,
   orderExpiredMock,
   orderIssuedMock,
@@ -100,7 +105,7 @@ const history = computed(() =>
 const rewards = computed(() =>
   pick({
     rewards: rewardsMock,
-    'rewards-nothing': rewardsNothingToPickMock,
+    'rewards-nopending': rewardsNoPendingMock,
     'rewards-empty': rewardsEmptyMock,
     'rewards-error': rewardsErrorMock,
   }),
@@ -109,6 +114,7 @@ const rewards = computed(() =>
 const orders = computed(() =>
   pick({
     orders: ordersMock,
+    'orders-nopending': ordersNoPendingMock,
     'orders-empty': ordersEmptyMock,
     'orders-error': ordersErrorMock,
   }),
@@ -120,6 +126,15 @@ const order = computed(() =>
     'order-issued': orderIssuedMock,
     'order-cancelled': orderCancelledMock,
     'order-expired': orderExpiredMock,
+  }),
+);
+
+const reward = computed(() =>
+  pick({
+    reward: rewardMock,
+    'reward-custom': rewardCustomMock,
+    'reward-issued': rewardIssuedMock,
+    'reward-expired': rewardExpiredMock,
   }),
 );
 
@@ -258,6 +273,20 @@ function openOrder(orderId: string): void {
   go(ORDER_SCREENS[orderId] ?? 'order');
 }
 
+/**
+ * Экран награды по карточке раздела: у нарисованных наград своё состояние экрана,
+ * у второй ждущей своего экрана в макетах нет — открывается тот же, что у первой.
+ */
+const REWARD_SCREENS: Record<string, string> = {
+  'reward-checker': 'reward',
+  'reward-freshener': 'reward-issued',
+  'reward-aroma': 'reward-expired',
+};
+
+function openReward(rewardId: string): void {
+  go(REWARD_SCREENS[rewardId] ?? 'reward');
+}
+
 function go(target: string): void {
   void navigateTo(`/design/${target}`);
 }
@@ -314,11 +343,13 @@ function go(target: string): void {
 
       <OrganismsNextMemberHistoryScreen v-else-if="history" v-bind="history" @back="go('home')" />
 
-      <OrganismsNextMemberRewardsScreen v-else-if="rewards" v-bind="rewards" @back="go('home')" />
+      <OrganismsNextMemberRewardsScreen v-else-if="rewards" v-bind="rewards" @back="go('home')" @open="openReward" />
 
       <OrganismsNextMemberOrdersScreen v-else-if="orders" v-bind="orders" @back="go('home')" @open="openOrder" />
 
       <OrganismsNextMemberOrderScreen v-else-if="order" v-bind="order" @back="go('orders')" />
+
+      <OrganismsNextMemberRewardScreen v-else-if="reward" v-bind="reward" @back="go('rewards')" />
 
       <OrganismsNextMemberProfileScreen
         v-else-if="isProfile"

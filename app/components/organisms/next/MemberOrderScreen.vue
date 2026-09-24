@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import type { MemberOrderDetailView } from '~/types/memberView';
+import type { MemberItemTone, MemberOrderDetailView, MemberOrderStatus } from '~/types/memberView';
 
 /**
  * Экран заказа — `_reference/design/orders/order-screen.html` и закрытые состояния
  * `order-screen-states.html`.
  *
- * Живой заказ: карточка с кодом, карточка офиса, состав и отмена внизу — вторичной кнопкой,
- * потому что отмена не то, зачем сюда пришли. Закрытый: карточка без кода, без офиса
+ * Живой заказ: карточка с кодом, карточка офиса, состав с «Суммой» и отмена внизу — вторичной
+ * кнопкой, потому что отмена не то, зачем сюда пришли. Закрытый: карточка без кода, без офиса
  * и без отмены — забирать и отменять нечего; состав остаётся, «что я заказывал» — единственный
  * вопрос, с которым сюда возвращаются.
  */
@@ -26,6 +26,12 @@ defineProps<{
 }>();
 
 defineEmits<{ back: []; map: []; cancel: [] }>();
+
+const TONES: Record<MemberOrderStatus, Exclude<MemberItemTone, 'credited'>> = {
+  pending: 'waiting',
+  issued: 'issued',
+  cancelled: 'cancelled',
+};
 </script>
 
 <template>
@@ -33,7 +39,17 @@ defineEmits<{ back: []; map: []; cancel: [] }>();
     <MoleculesNextMemberSectionBar :title="order.title" :back-label="texts.back" :balance="balance" @back="$emit('back')" />
 
     <div class="flex flex-col gap-3 px-4 pt-3.5">
-      <MoleculesNextMemberOrderStatusCard :order="order" :code-title="texts.codeTitle" />
+      <MoleculesNextMemberOrderStatusCard
+        :tone="TONES[order.status]"
+        :state="order.state"
+        :hint="order.hint"
+        :reason="order.reason"
+        :office="order.office"
+        :amount="order.amount"
+        :amount-caption="order.amountCaption"
+        :code="order.code"
+        :code-title="texts.codeTitle"
+      />
 
       <MoleculesNextMemberOfficeCard
         v-if="order.officeCard"

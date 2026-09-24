@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /*
- * Токены водительского Mini App — тёмный экран из макетов `product/design/`.
+ * Токены водительского Mini App — тёмный экран из макетов `_reference/design/`.
  *
  * Приставка `xb-` отделяет их от палитры Tailwind и от служебных экранов: `bg-xb-screen`
  * нельзя спутать с `bg-slate-900`, и поиск по `xb-` находит всё водительское разом.
@@ -30,6 +30,9 @@
   --color-xb-gold-light: #FFD98A;
   --color-xb-map: #7FB3F5;
   --color-xb-button-grey: #21242A;
+  /* Светлая подложка под фото товара: фото приходят на белом и кладутся умножением
+     (`_reference/design/system.md`, «Подложка фото товара»). */
+  --color-xb-photo: #F1F2F4;
 
   --font-manrope: Manrope, "Segoe UI", system-ui, sans-serif;
   --font-unbounded: Unbounded, Manrope, sans-serif;
