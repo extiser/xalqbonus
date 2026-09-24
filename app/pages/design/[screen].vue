@@ -37,6 +37,10 @@ import {
   dayChestsMock,
   bigChestMock,
   bigChestNote,
+  GIFT_TAKE_ERROR,
+  giftSheetMock,
+  homeGiftsMock,
+  rewardsGiftsMock,
   CATALOG_CURRENT_OFFICE,
   CATALOG_ORDER_DENIED,
   catalogConfirmMock,
@@ -50,9 +54,9 @@ import {
   registrationOutcomeMock,
   registrationPhoneMock,
 } from '~/design/mocks';
-import type { CatalogCart, CatalogScene, RegistrationOutcomeScene } from '~/design/mocks';
+import type { CatalogCart, CatalogScene, GiftSheetScene, RegistrationOutcomeScene } from '~/design/mocks';
 import { findDesignScreen } from '~/design/screens';
-import type { MemberChestCardView, MemberLanguage, MemberRewardTicketView } from '~/types/memberView';
+import type { MemberChestCardView, MemberGiftView, MemberLanguage, MemberRewardTicketView } from '~/types/memberView';
 
 /**
  * Один экран служебной страницы `/design` — на заглушках, в колонке телефона.
@@ -237,6 +241,88 @@ function cancelCatalogOffice(): void {
 function placeCatalogOrder(): void {
   catalogPlacing.value = true;
   setTimeout(() => go('order'), PHONE_CHECK_MS);
+}
+
+/**
+ * Подарки: главная со шторкой и «Мои награды» с группой. Страница отвечает за сервер — «Забрать»
+ * ждёт 0.9 с, как в скрипте `main-screen-gifts-take.html`, и решает исход каждого подарка; компоненты
+ * только рисуют ожидание, лопание и ошибку. Главная сцены — та же, что под шторкой, со шторкой
+ * закрытой: нажатие на подарок открывает её на месте.
+ */
+const giftScene = pick<{ scene: GiftSheetScene; open: boolean }>({
+  'gifts-home-one': { scene: 'one', open: false },
+  'gifts-home': { scene: 'several', open: false },
+  'gifts-sheet-one': { scene: 'one', open: true },
+  'gifts-sheet': { scene: 'several', open: true },
+  'gifts-take': { scene: 'take', open: true },
+});
+const giftSheet = giftScene ? giftSheetMock(giftScene.scene) : undefined;
+const isGiftRewards = slug.value === 'gifts-rewards';
+
+const GIFT_ANSWER_MS = 900;
+const GIFT_TAKE_ALL_STEP_MS = 480;
+
+const giftSheetOpen = ref(giftScene?.open ?? false);
+const giftHome = ref<MemberGiftView[]>(giftSheet?.home ?? []);
+const giftList = ref<MemberGiftView[]>(isGiftRewards ? rewardsGiftsMock.gifts : (giftSheet?.sheet ?? []));
+const giftBusy = ref<string[]>([]);
+const giftPopping = ref<string[]>([]);
+const giftErrors = ref<Record<string, string>>({});
+const giftTakingAll = ref(false);
+/** Подарки, которые с первого раза не забираются; после ошибки забираются. */
+const giftFailOnce = new Set(giftSheet?.failOnce ?? []);
+
+function clearGiftError(giftId: string): void {
+  const { [giftId]: _cleared, ...rest } = giftErrors.value;
+  giftErrors.value = rest;
+}
+
+/** Ответ на один подарок: не забрался — ошибка под карточкой, забрался — лопается. */
+function answerGift(giftId: string): void {
+  if (giftFailOnce.delete(giftId)) {
+    giftErrors.value = { ...giftErrors.value, [giftId]: GIFT_TAKE_ERROR };
+    return;
+  }
+
+  giftPopping.value = [...giftPopping.value, giftId];
+}
+
+function takeGift(giftId: string): void {
+  clearGiftError(giftId);
+  giftBusy.value = [...giftBusy.value, giftId];
+  setTimeout(() => {
+    giftBusy.value = giftBusy.value.filter((busyId) => busyId !== giftId);
+    answerGift(giftId);
+  }, GIFT_ANSWER_MS);
+}
+
+/** «Забрать всё»: у каждого подарка свой исход, забранные лопаются по очереди. */
+function takeAllGifts(): void {
+  giftErrors.value = {};
+  giftTakingAll.value = true;
+  setTimeout(() => {
+    giftTakingAll.value = false;
+    const live = giftList.value.filter((gift) => !giftPopping.value.includes(gift.id)).map((gift) => gift.id);
+    const failed = live.filter((giftId) => giftFailOnce.has(giftId));
+    const taken = live.filter((giftId) => !giftFailOnce.has(giftId));
+
+    failed.forEach(answerGift);
+    taken.forEach((giftId, index) => setTimeout(() => answerGift(giftId), index * GIFT_TAKE_ALL_STEP_MS));
+  }, GIFT_ANSWER_MS);
+}
+
+/** Место схлопнулось — подарка больше нет ни в шторке, ни на главной. */
+function removeGift(giftId: string): void {
+  giftList.value = giftList.value.filter((gift) => gift.id !== giftId);
+  giftHome.value = giftHome.value.filter((gift) => gift.id !== giftId);
+  giftPopping.value = giftPopping.value.filter((poppingId) => poppingId !== giftId);
+  clearGiftError(giftId);
+}
+
+function openGiftSheet(): void {
+  if (giftList.value.length > 0) {
+    giftSheetOpen.value = true;
+  }
 }
 
 // Загрузка: уход включает кнопка страницы. После `left` блока нет — «Показать снова» монтирует
@@ -427,6 +513,48 @@ function go(target: string): void {
         v-model:language="registrationLanguage"
         :busy="phoneChecking"
         @send="checkPhone"
+      />
+
+      <template v-else-if="giftSheet">
+        <OrganismsNextMemberHome
+          v-bind="homeGiftsMock(giftHome)"
+          @gift="openGiftSheet"
+          @rewards="go('gifts-rewards')"
+          @reward="go('gifts-rewards')"
+          @catalog="go('catalog-first')"
+          @product="go('catalog-first')"
+          @history="go('history')"
+          @orders="go('orders')"
+          @order="openOrder"
+          @profile="go('profile')"
+          @promo="go('campaign')"
+        />
+        <OrganismsNextMemberGiftSheet
+          :open="giftSheetOpen"
+          :gifts="giftList"
+          :busy="giftBusy"
+          :popping="giftPopping"
+          :errors="giftErrors"
+          :taking-all="giftTakingAll"
+          :texts="giftSheet.texts"
+          @take="takeGift"
+          @take-all="takeAllGifts"
+          @popped="removeGift"
+          @close="giftSheetOpen = false"
+        />
+      </template>
+
+      <OrganismsNextMemberRewardsScreen
+        v-else-if="isGiftRewards"
+        v-bind="rewardsGiftsMock"
+        :gifts="giftList"
+        :gifts-busy="giftBusy"
+        :gifts-popping="giftPopping"
+        :gift-errors="giftErrors"
+        @back="go('gifts-home')"
+        @open="openReward"
+        @take="takeGift"
+        @popped="removeGift"
       />
 
       <OrganismsNextMemberHome

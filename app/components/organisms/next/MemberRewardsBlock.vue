@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { MemberRewardView, MemberViewLoad } from '~/types/memberView';
+import type { MemberGiftView, MemberRewardView, MemberViewLoad } from '~/types/memberView';
 
 /**
  * «Мои награды» на главной — `_reference/design/home/rewards-block.html` и `rewards-block.md`.
@@ -8,20 +8,29 @@ import type { MemberRewardView, MemberViewLoad } from '~/types/memberView';
  * и должен знать, за чем именно. Ждущих нет, но награды были — одна последняя полной
  * карточкой и «Все награды», иначе раздел не найти. Наград не было вовсе — текст, что здесь
  * появится, и без ссылки: в разделе пусто (Руслан, 23-09-2026).
+ *
+ * Подарки от Xalq Taxi — первыми карточками, каждый своей (`_reference/design/gifts/main-screen-gift.html`):
+ * отдельного блока у них нет. Нажатие открывает шторку подарков — её держит страница.
  */
-defineProps<{
-  state: MemberViewLoad;
-  rewards: MemberRewardView[];
-  texts: {
-    title: string;
-    all: string;
-    empty: string;
-    error: string;
-    retry: string;
-  };
-}>();
+withDefaults(
+  defineProps<{
+    state: MemberViewLoad;
+    rewards: MemberRewardView[];
+    gifts?: MemberGiftView[];
+    texts: {
+      title: string;
+      all: string;
+      /** «нажмите, чтобы забрать» — хвост срока у подарка. */
+      giftHint: string;
+      empty: string;
+      error: string;
+      retry: string;
+    };
+  }>(),
+  { gifts: () => [] },
+);
 
-defineEmits<{ all: []; open: [rewardId: string]; retry: [] }>();
+defineEmits<{ all: []; open: [rewardId: string]; gift: [giftId: string]; retry: [] }>();
 </script>
 
 <template>
@@ -35,6 +44,14 @@ defineEmits<{ all: []; open: [rewardId: string]; retry: [] }>();
     </div>
 
     <template v-if="state === 'ready'">
+      <MoleculesNextMemberGiftCard
+        v-for="gift in gifts"
+        :key="gift.id"
+        :gift="gift"
+        mode="home"
+        :hint="texts.giftHint"
+        @open="$emit('gift', gift.id)"
+      />
       <MoleculesNextMemberRewardCard
         v-for="reward in rewards"
         :key="reward.id"

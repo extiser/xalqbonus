@@ -8,7 +8,7 @@ export interface DesignScreen {
   slug: string;
   title: string;
   /**
-   * Откуда снято — файл макета. Регистрация, главная, разделы с шапкой и каталог — пути снимка
+   * Откуда снято — файл макета. Регистрация, главная, разделы с шапкой, каталог и подарки — пути снимка
    * `_reference/design/`; профиль и акция — ещё пути планировочной папки (`product/design/`).
    */
   source: string;
@@ -48,6 +48,21 @@ export const DESIGN_GROUPS: DesignGroup[] = [
       { slug: 'home-newcomer', title: 'Новичок — заказов, наград и истории не было, каталог пуст', source: 'home/orders-block.html, home/rewards-block.html, home/history-block.html, catalog/catalog-block.html' },
       { slug: 'home-loading', title: 'История грузится', source: 'home/history-block.html' },
       { slug: 'home-errors', title: 'Не загрузилось', source: 'home/*-block.html, catalog/catalog-block.html' },
+    ],
+  },
+  {
+    title: 'Подарки',
+    screens: [
+      { slug: 'gifts-home-one', title: 'Главная — один подарок первым в «Моих наградах»', source: 'gifts/main-screen-gift-sheet.html' },
+      { slug: 'gifts-home', title: 'Главная — два подарка первыми в «Моих наградах»', source: 'gifts/main-screen-gift.html' },
+      { slug: 'gifts-sheet-one', title: 'Шторка — один подарок', source: 'gifts/main-screen-gift-sheet.html' },
+      { slug: 'gifts-sheet', title: 'Шторка — два подарка и «Забрать всё»', source: 'gifts/main-screen-gifts-sheet.html' },
+      {
+        slug: 'gifts-take',
+        title: '«Забрать» — ожидание, лопание, ошибка у второй, «Забрать всё», уход шторки',
+        source: 'gifts/main-screen-gifts-take.html',
+      },
+      { slug: 'gifts-rewards', title: '«Мои награды» — группа подарков сверху', source: 'gifts/rewards-screen-gift.html' },
     ],
   },
   {

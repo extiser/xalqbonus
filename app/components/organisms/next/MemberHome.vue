@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import type {
+  MemberGiftView,
   MemberOperationDayView,
   MemberOrderRowView,
   MemberProductView,
@@ -15,6 +16,8 @@ import type {
  * попал в снимок акции и не вступил. Фон начинается от верха экрана и уходит под шапку. Дальше
  * блоки в порядке срочности: заказы (живут сутки), награды (недели), каталог, история. Заказы выше
  * наград — первым говорит то, что горит. Каталог — выше истории (`catalog-block.md`, «Место на главной»).
+ * Подарки от Xalq Taxi — первыми карточками в блоке наград (`_reference/design/gifts/main-screen-gift.html`),
+ * нажатие отдаётся наружу `gift`: шторку подарков держит страница.
  *
  * Число баллов набирается здесь, один раз на крупное и на баланс в шапке: они считаются вместе.
  */
@@ -27,7 +30,7 @@ const props = defineProps<{
   /** Плашка приглашения. Есть — водитель в снимке акции, но не вступил. */
   invite?: { kicker: string; title: string; when: string };
   orders: { state: MemberViewLoad; items: MemberOrderRowView[] };
-  rewards: { state: MemberViewLoad; items: MemberRewardView[] };
+  rewards: { state: MemberViewLoad; items: MemberRewardView[]; gifts?: MemberGiftView[] };
   catalog: { state: MemberViewLoad; products: MemberProductView[] };
   history: { state: MemberViewLoad; days: MemberOperationDayView[] };
   texts: {
@@ -42,6 +45,7 @@ const props = defineProps<{
     ordersError: string;
     rewardsTitle: string;
     rewardsAll: string;
+    rewardsGiftHint: string;
     rewardsEmpty: string;
     rewardsError: string;
     catalogTitle: string;
@@ -66,6 +70,7 @@ defineEmits<{
   order: [orderId: string];
   rewards: [];
   reward: [rewardId: string];
+  gift: [giftId: string];
   catalog: [];
   product: [productId: string];
   history: [];
@@ -130,9 +135,18 @@ const barSurface = ref(false);
     <OrganismsNextMemberRewardsBlock
       :state="rewards.state"
       :rewards="rewards.items"
-      :texts="{ title: texts.rewardsTitle, all: texts.rewardsAll, empty: texts.rewardsEmpty, error: texts.rewardsError, retry: texts.retry }"
+      :gifts="rewards.gifts"
+      :texts="{
+        title: texts.rewardsTitle,
+        all: texts.rewardsAll,
+        giftHint: texts.rewardsGiftHint,
+        empty: texts.rewardsEmpty,
+        error: texts.rewardsError,
+        retry: texts.retry,
+      }"
       @all="$emit('rewards')"
       @open="(rewardId) => $emit('reward', rewardId)"
+      @gift="(giftId) => $emit('gift', giftId)"
       @retry="$emit('retryRewards')"
     />
 

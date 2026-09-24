@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { computed } from 'vue';
+
 /**
- * Кнопка водительского Mini App — по шкале из `product/design/README.md`, «Шкала шрифтов».
+ * Кнопка водительского Mini App — по шкале из `_reference/design/system.md`, «Шкала шрифтов».
  *
  * Размер задаёт форму, тон — смысл. Основные (`garnet`, `gold`, `gold-soft`, `scarlet`) пишутся
  * весом 700, вторичные (`grey`, `danger`, `outline`) — 600: вторичная не должна спорить по весу
@@ -9,6 +11,11 @@
  * Золотых тонов два, как в макетах. `gold` — «Открыть сундук» на экране акции: плотная
  * вертикальная заливка, тёмный текст и бегущий блик в ритме «Участвовать». `gold-soft` —
  * кнопка плашки приглашения: мягкий диагональный градиент и дыхание свечением.
+ *
+ * `gold-calm` — «Забрать» и «Забрать всё» у подарков (`_reference/design/gifts/`): заливка и тень
+ * те же, что у `gold`, но без блика и с обычными полями S — 22. В шторке с тремя подарками
+ * бегущий блик шёл бы по четырём кнопкам разом (решение Руслана 25-09-2026, `#200`). В ожидании
+ * гаснет до 55 %, как гранатовая L, и кольцо у неё тёмное — цвета её текста.
  *
  * Своего отступа снаружи у кнопки нет, как и ширины, кроме `l` — та по шкале «во всю ширину»,
  * и это форма кнопки, а не её место.
@@ -24,7 +31,7 @@
  * `relative z-[1]` — две кнопки подряд разводятся сами, порядком в разметке.
  */
 type ButtonSize = 'l' | 'm' | 's';
-type ButtonTone = 'garnet' | 'gold' | 'gold-soft' | 'scarlet' | 'grey' | 'danger' | 'outline';
+type ButtonTone = 'garnet' | 'gold' | 'gold-calm' | 'gold-soft' | 'scarlet' | 'grey' | 'danger' | 'outline';
 
 const props = withDefaults(
   defineProps<{
@@ -57,6 +64,8 @@ const GOLD_PADDING_S = 'px-7';
 const TONE_CLASSES: Record<ButtonTone, string> = {
   garnet: 'gap-2.5 bg-xb-garnet font-bold text-white disabled:shadow-none',
   gold: 'member-button-gold overflow-hidden bg-[linear-gradient(180deg,#FFD37A_0%,#F7BC3E_52%,#E39B1E_100%)] font-bold tracking-[-0.2px] text-[#17110A] shadow-[0_12px_30px_-14px_rgba(0,0,0,0.9),inset_0_0_0_1px_rgba(255,231,168,0.35)] disabled:opacity-35',
+  'gold-calm':
+    'gap-2.5 bg-[linear-gradient(180deg,#FFD37A_0%,#F7BC3E_52%,#E39B1E_100%)] font-bold tracking-[-0.2px] text-[#17110A] shadow-[0_12px_30px_-14px_rgba(0,0,0,0.9),inset_0_0_0_1px_rgba(255,231,168,0.35)] disabled:opacity-55',
   'gold-soft':
     'member-button-gold-soft bg-[linear-gradient(135deg,#FFD98A_0%,#E9A93C_100%)] font-bold text-[#2A1B05] disabled:opacity-35',
   scarlet: 'bg-xb-scarlet font-bold text-white disabled:opacity-35',
@@ -76,6 +85,11 @@ const GARNET_SIZE_CLASSES: Record<ButtonSize, string> = {
   m: 'shadow-[0_8px_26px_rgba(232,54,93,0.38)] disabled:opacity-35',
   s: 'shadow-[0_6px_16px_rgba(232,54,93,0.22)] disabled:opacity-35',
 };
+
+/** Кольцо ожидания цвета текста: на золотой — тёмное, на остальных — белое. */
+const spinClasses = computed(() =>
+  props.tone === 'gold-calm' ? 'border-[rgba(23,17,10,0.3)] border-t-[#17110A]' : 'border-white/35 border-t-white',
+);
 </script>
 
 <template>
@@ -91,7 +105,7 @@ const GARNET_SIZE_CLASSES: Record<ButtonSize, string> = {
     ]"
     @click="$emit('click')"
   >
-    <span v-if="busy" class="member-button-spin box-content size-4 rounded-full border-2 border-white/35 border-t-white" aria-hidden="true" />
+    <span v-if="busy" class="member-button-spin box-content size-4 rounded-full border-2" :class="spinClasses" aria-hidden="true" />
     <slot />
   </button>
 </template>
