@@ -39,7 +39,7 @@ defineEmits<{ retry: [] }>();
     </div>
 
     <div v-if="retryLabel" class="relative z-[2] px-5 pb-[calc(50px+env(safe-area-inset-bottom))] pt-[22px]">
-      <AtomsNextMemberButton size="l" tone="garnet-solo" @click="$emit('retry')">{{ retryLabel }}</AtomsNextMemberButton>
+      <AtomsNextMemberButton size="l" tone="garnet" @click="$emit('retry')">{{ retryLabel }}</AtomsNextMemberButton>
     </div>
   </div>
 </template>

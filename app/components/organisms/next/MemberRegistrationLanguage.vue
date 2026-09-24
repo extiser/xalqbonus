@@ -40,8 +40,8 @@ defineEmits<{ select: [language: MemberLanguage] }>();
     <div class="relative z-[2] px-5 pb-[calc(50px+env(safe-area-inset-bottom))] pt-[22px]">
       <p class="m-0 mb-3.5 text-left text-[13px] font-light leading-[1.5] text-xb-grey">{{ selectLanguage }}</p>
       <div class="flex w-full flex-col gap-2.5">
-        <AtomsNextMemberButton size="l" tone="choice" @click="$emit('select', 'uz')">{{ languageUz }}</AtomsNextMemberButton>
-        <AtomsNextMemberButton size="l" tone="choice" @click="$emit('select', 'ru')">{{ languageRu }}</AtomsNextMemberButton>
+        <AtomsNextMemberButton size="l" tone="grey" @click="$emit('select', 'uz')">{{ languageUz }}</AtomsNextMemberButton>
+        <AtomsNextMemberButton size="l" tone="grey" @click="$emit('select', 'ru')">{{ languageRu }}</AtomsNextMemberButton>
       </div>
     </div>
   </div>

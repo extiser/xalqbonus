@@ -28,7 +28,7 @@ defineEmits<{ send: [] }>();
 <template>
   <div class="bg-[linear-gradient(180deg,rgba(11,13,17,0)_0%,#0B0D11_26%)] px-5 pb-[calc(20px+env(safe-area-inset-bottom))] pt-[22px]">
     <p class="m-0 mb-3.5 text-center text-[13px] font-light leading-[1.5] text-xb-grey">{{ ask }}</p>
-    <AtomsNextMemberButton size="l" tone="garnet-solo" :busy="busy" @click="$emit('send')">{{ send }}</AtomsNextMemberButton>
+    <AtomsNextMemberButton size="l" tone="garnet" :busy="busy" @click="$emit('send')">{{ send }}</AtomsNextMemberButton>
     <p
       v-if="status?.tone === 'failed'"
       class="m-0 mt-3 flex min-h-[18px] items-center justify-center gap-[7px] text-center text-[13px] font-normal text-xb-scarlet"
