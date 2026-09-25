@@ -102,8 +102,8 @@ export type RegistrationScreenTexts = {
  * заказа и шторки отмены. Поле на ключ словаря: страница раскладывает их по свойствам
  * компонентов `next/`, ничего не досчитывая.
  *
- * Новые экраны читают только отсюда, даже если такой же текст есть в `orderTexts`: те уйдут
- * вместе со старой цепочкой обмена, а эти останутся.
+ * Тексты каталога — в `orderTexts`; общие с каталогом подписи — «Назад», «Повторить», «Офис» —
+ * живут здесь, одним полем на всё приложение.
  */
 export type MemberScreenTexts = {
   /** Кнопка-аватар в шапке главной — для экранного чтеца. */
@@ -252,8 +252,8 @@ export type MiniAppMemberScreen = {
   promise: string | null;
   texts: MemberScreenTexts;
   /**
-   * Тексты витрины и заказа. Приезжают с экраном участника, а не с каждой ручкой витрины:
-   * экраны переключаются без перезагрузки, и язык у них тот же, что у экрана участника.
+   * Тексты каталога. Приезжают с экраном участника, а не с каждой ручкой витрины: экраны
+   * переключаются без перезагрузки, и язык у них тот же, что у экрана участника.
    */
   orderTexts: MemberOrderTexts;
   /** Тексты раздела «Мои награды» (issue #172) — тем же приёмом, что тексты заказов. */
@@ -514,24 +514,37 @@ export type MiniAppCampaignResponse = {
   campaign: MemberCampaign | null;
 };
 
-/** Тексты витрины, оформления и заказов на языке участника. */
+/**
+ * Тексты каталога на языке участника: витрина, шторка офиса, шторка подтверждения и блок
+ * на главной (issue #218). Поле на ключ словаря, как у `MemberScreenTexts`; общие с другими
+ * экранами — «Назад», «Повторить», «Офис», «шт.» — берутся оттуда.
+ */
 export type MemberOrderTexts = {
-  /** Кнопка «назад» на экране: системная кнопка Telegram в приложении не используется. */
-  back: string;
   /** Ответа не было вовсе: сказать, что случилось, сервер не мог. */
   requestFailed: string;
-  officesTitle: string;
+  /** «Каталог» — шапка витрины и блок на главной. */
+  catalogTitle: string;
+  catalogAll: string;
+  /** Блок на главной: товаров нет ни в одном офисе. */
+  catalogEmpty: string;
+  /** Слово на пилюле скидки. */
+  sale: string;
   officesEmpty: string;
   officesFailed: string;
-  openMap: string;
+  officeSheetTitle: string;
+  officeSheetSubtitle: string;
+  officeChange: string;
+  officeChangeWarning: string;
+  save: string;
+  cancel: string;
   showcaseEmpty: string;
   showcaseFailed: string;
-  noPhoto: string;
-  /** Единица штук — «шт.». Число стоит рядом цифрами, без склонения. */
-  pieces: string;
-  /** Единица баллов — «баллов». */
-  points: string;
-  inStock: string;
+  /** Остаток на пилюле — шаблон «{count} шт»: число подставляет экран. */
+  stockPieces: string;
+  /** Подписи кнопок счётчика для экранного чтеца. */
+  decrease: string;
+  increase: string;
+  increaseMore: string;
   cartTotal: string;
   balanceAfter: string;
   checkout: string;
@@ -540,7 +553,6 @@ export type MemberOrderTexts = {
   confirmTitle: string;
   confirmNote: string;
   placeOrder: string;
-  editOrder: string;
 };
 
 /**
@@ -589,6 +601,23 @@ export type MiniAppShowcaseResponse = {
    */
   balancePoints: number;
   products: ShowcaseProduct[];
+};
+
+/**
+ * Товары блока каталога на главной: самые свежие, без привязки к офису (issue #218).
+ *
+ * Остатка нет — у каждого офиса он свой, а офис на главной не выбран. Нажатие ведёт в каталог,
+ * где сначала выбор офиса.
+ */
+export type MiniAppLatestProductsResponse = {
+  products: {
+    productId: string;
+    name: string;
+    photoPath: string | null;
+    /** Версия адреса фото, как у `ShowcaseProduct`. */
+    updatedAt: string;
+    pricePoints: number;
+  }[];
 };
 
 export type MemberOrderLine = {

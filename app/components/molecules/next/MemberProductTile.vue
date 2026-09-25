@@ -7,8 +7,9 @@ import type { MemberProductView } from '~/types/memberView';
  * на главной — `catalog-block.html`.
  *
  * Фото на светлой подложке `xb-photo`: фото приходят на белом, и умножение растворяет белый
- * в подложке. Сверху на фото пилюли — скидка слева, остаток справа. Под фото цена первой
- * строкой, старая зачёркнутая справа от новой, и под ней название во всю ширину, до трёх строк.
+ * в подложке; у товара без фото — одна подложка, без картинки (issue #218). Сверху на фото
+ * пилюли — скидка слева, остаток справа. Под фото цена первой строкой, старая зачёркнутая
+ * справа от новой, и под ней название во всю ширину, до трёх строк.
  *
  * Название срезается по 30 символов с многоточием (Руслан, 24-09-2026): длинные названия
  * иначе растягивают плитку. Три строки — страховка сверх этого. Полное название видно
@@ -54,11 +55,15 @@ const count = computed(() => props.product.count ?? 0);
     :is="mode === 'home' ? 'button' : 'div'"
     :type="mode === 'home' ? 'button' : undefined"
     class="flex min-w-0 flex-col gap-2.5 font-manrope leading-[normal] text-xb-text"
-    :class="mode === 'home' ? 'cursor-pointer border-0 bg-transparent p-0 text-left' : ''"
+    :class="mode === 'home' ? 'w-full cursor-pointer border-0 bg-transparent p-0 text-left' : ''"
     @click="mode === 'home' && $emit('open')"
   >
-    <div class="relative aspect-[9/10] overflow-hidden rounded-[24px] bg-xb-photo">
-      <img :src="product.image" alt="" class="absolute left-[8%] top-[13%] block h-[80%] w-[84%] object-contain mix-blend-multiply" />
+    <!-- Ширина явная — и у плитки-кнопки, и у фото: на iPhone в Telegram квадрат пропадал целиком
+         (прогон PR #231). В квадрате только абсолютная картинка, и ширину ему даёт растяжение
+         родителя; движок, не растягивающий содержимое кнопки, оставил бы его без размера.
+         В WebKit 26.6 поломка не воспроизвелась — это страховка, а не найденная причина -->
+    <div class="relative aspect-[9/10] w-full overflow-hidden rounded-[24px] bg-xb-photo">
+      <img v-if="product.image" :src="product.image" alt="" class="absolute left-[8%] top-[13%] block h-[80%] w-[84%] object-contain mix-blend-multiply" />
       <div class="member-product-tile-pills absolute flex justify-between">
         <AtomsNextMemberTilePill v-if="product.discount" kind="sale" :label="product.discount" :word="texts.sale" />
         <span v-else />

@@ -1,12 +1,22 @@
 import { formatPhone } from '#shared/phone';
-import type { MemberOffice, MemberOperation, MemberOrder, MemberScreenTexts } from '#shared/types/miniapp';
+import type {
+  MemberOffice,
+  MemberOperation,
+  MemberOrder,
+  MemberOrderTexts,
+  MemberScreenTexts,
+  MiniAppLatestProductsResponse,
+  ShowcaseProduct,
+} from '#shared/types/miniapp';
 import type { MemberReward } from '#shared/types/rewards';
 import type { LoadState } from '~/types/loadState';
 import type {
+  MemberCartLineView,
   MemberOperationDayView,
   MemberOfficeView,
   MemberOrderDetailView,
   MemberOrderRowView,
+  MemberProductView,
   MemberRewardDetailView,
   MemberRewardView,
   MemberViewLoad,
@@ -330,3 +340,80 @@ export const rewardDetailView = (reward: MemberReward, texts: MemberScreenTexts)
     total: product ? formatPoints(0) : undefined,
   };
 };
+
+// Каталог ------------------------------------------------------------------
+
+/** Товар блока каталога на главной: без остатка и счётчика — офис там не выбран. */
+export const homeCatalogView = (
+  state: LoadState,
+  products: MiniAppLatestProductsResponse['products'],
+): { state: MemberViewLoad; products: MemberProductView[] } => ({
+  state: viewLoad(state, products.length),
+  products: products.map((product) => ({
+    id: product.productId,
+    name: product.name,
+    image: photoUrl(product.photoPath, product.updatedAt),
+    price: formatPoints(product.pricePoints),
+  })),
+});
+
+/**
+ * Плитки витрины с корзиной. Скидок нет (T57): ни старой цены, ни пилюли SALE. Остаток —
+ * шаблоном словаря «{count} шт».
+ */
+export const showcaseProductsView = (
+  products: readonly ShowcaseProduct[],
+  quantities: Readonly<Record<string, number>>,
+  texts: MemberOrderTexts,
+): MemberProductView[] =>
+  products.map((product) => ({
+    id: product.productId,
+    name: product.name,
+    image: photoUrl(product.photoPath, product.updatedAt),
+    price: formatPoints(product.pricePoints),
+    stock: texts.stockPieces.replaceAll('{count}', String(product.available)),
+    count: quantities[product.productId] ?? 0,
+    available: product.available,
+  }));
+
+/**
+ * Итог и «Оформить» внизу витрины. Погашенная кнопка всегда с причиной: пусто — серым,
+ * больше баланса — алым мягким. Решает всё равно сервер: баланс мог измениться.
+ */
+export const showcaseCheckoutView = (total: number, balance: number, texts: MemberOrderTexts) => {
+  const remaining = balance - total;
+  const overBalance = remaining < 0;
+
+  return {
+    total: formatPoints(total),
+    remaining: `${overBalance ? MINUS : ''}${formatPoints(remaining)}`,
+    remainingNegative: overBalance,
+    disabled: total === 0 || overBalance,
+    reason: total === 0 ? texts.checkoutNothingSelected : overBalance ? texts.checkoutOverBalance : undefined,
+    reasonTone: overBalance ? ('warn' as const) : ('quiet' as const),
+  };
+};
+
+/** Строки корзины в шторке подтверждения — в порядке витрины, со счётчиком «− N шт. +». */
+export const cartLinesView = (
+  products: readonly ShowcaseProduct[],
+  quantities: Readonly<Record<string, number>>,
+  texts: MemberScreenTexts,
+): MemberCartLineView[] =>
+  products.flatMap((product) => {
+    const count = quantities[product.productId] ?? 0;
+
+    return count > 0
+      ? [
+          {
+            id: product.productId,
+            title: product.name,
+            image: photoUrl(product.photoPath, product.updatedAt),
+            price: formatPoints(product.pricePoints * count),
+            count,
+            quantity: `${count} ${texts.pieces}`,
+            available: product.available,
+          },
+        ]
+      : [];
+  });
