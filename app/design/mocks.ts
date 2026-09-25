@@ -215,6 +215,7 @@ const HOME_ORDER_LAST_CANCELLED: MemberOrderRowView = {
 const HOME_REWARD: MemberRewardView = {
   id: 'reward-checker',
   title: 'Шашка Taxi',
+  kind: 'product',
   status: 'awaiting',
   state: 'Ждёт в офисе до 5 октября',
   hint: 'код внутри',
@@ -222,7 +223,7 @@ const HOME_REWARD: MemberRewardView = {
 
 const HOME_REWARDS_SEVERAL: MemberRewardView[] = [
   HOME_REWARD,
-  { id: 'reward-tire', title: 'Чернитель шин', status: 'awaiting', state: 'Ждёт в офисе до 9 октября', hint: 'код внутри' },
+  { id: 'reward-tire', title: 'Чернитель шин', kind: 'product', status: 'awaiting', state: 'Ждёт в офисе до 9 октября', hint: 'код внутри' },
 ];
 
 /** Ждущих нет, но награды были: одна последняя полной карточкой. */
@@ -230,6 +231,7 @@ const HOME_REWARDS_NOTHING_TO_PICK: MemberRewardView[] = [
   {
     id: 'reward-freshener',
     title: 'Освежитель «Вертолёт»',
+    kind: 'product',
     status: 'issued',
     origin: 'Вручил парк · за помощь на линии',
     state: 'Получена 20 сентября',
@@ -460,6 +462,7 @@ const REWARDS_AWAITING: MemberRewardView[] = [
   {
     id: 'reward-checker',
     title: 'Шашка Taxi',
+    kind: 'product',
     status: 'awaiting',
     origin: 'Акция «Неделя возвращения» · сундук недели',
     state: 'Ждёт в офисе',
@@ -470,6 +473,7 @@ const REWARDS_AWAITING: MemberRewardView[] = [
   {
     id: 'reward-tire',
     title: 'Чернитель шин',
+    kind: 'product',
     status: 'awaiting',
     origin: 'Акция «Неделя возвращения» · сундук трёх дней',
     state: 'Ждёт в офисе',
@@ -488,6 +492,7 @@ const REWARDS_PAST: MemberRewardView[] = [
   {
     id: 'reward-300',
     title: '300 баллов',
+    kind: 'points',
     status: 'credited',
     origin: 'Акция «Неделя возвращения» · сундук дня',
     state: 'На балансе',
@@ -496,6 +501,7 @@ const REWARDS_PAST: MemberRewardView[] = [
   {
     id: 'reward-freshener',
     title: 'Освежитель «Вертолёт»',
+    kind: 'product',
     status: 'issued',
     origin: 'Вручил парк · за помощь на линии',
     state: 'Получена',
@@ -506,6 +512,7 @@ const REWARDS_PAST: MemberRewardView[] = [
   {
     id: 'reward-150',
     title: '150 баллов',
+    kind: 'points',
     status: 'credited',
     origin: 'Акция «Неделя возвращения» · сундук дня',
     state: 'На балансе',
@@ -514,6 +521,7 @@ const REWARDS_PAST: MemberRewardView[] = [
   {
     id: 'reward-aroma',
     title: 'Ароматизатор «Гранат»',
+    kind: 'product',
     status: 'expired',
     origin: 'Акция «Неделя возвращения» · сундук дня',
     state: 'Срок вышел',

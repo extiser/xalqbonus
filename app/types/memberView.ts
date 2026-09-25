@@ -58,6 +58,9 @@ export interface MemberOrderRowView {
 
 export type MemberRewardStatus = 'awaiting' | 'credited' | 'issued' | 'expired';
 
+/** Вид награды: баллы на баланс, товар каталога или произвольная. Баллы экрана награды не открывают. */
+export type MemberRewardKind = 'points' | 'product' | 'custom';
+
 /**
  * Награда — строкой в разделе и карточкой на главной. Кода здесь нет: он только на экране
  * награды (`MemberRewardDetailView`).
@@ -66,6 +69,7 @@ export interface MemberRewardView {
   id: string;
   /** Что за награда: «Шашка Taxi», «300 баллов». */
   title: string;
+  kind: MemberRewardKind;
   status: MemberRewardStatus;
   /** Откуда: «Акция „Неделя возвращения“ · сундук недели». */
   origin?: string;

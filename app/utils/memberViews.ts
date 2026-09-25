@@ -226,6 +226,7 @@ const rewardAction = (reward: MemberReward, texts: MemberScreenTexts): string | 
 export const rewardRowView = (reward: MemberReward, texts: MemberScreenTexts): MemberRewardView => ({
   id: reward.rewardId,
   title: reward.title,
+  kind: reward.kind,
   status: reward.status,
   origin: reward.originText,
   state: reward.stateWord,
@@ -245,6 +246,7 @@ const homeRewardView = (reward: MemberReward, texts: MemberScreenTexts): MemberR
     ? {
         id: reward.rewardId,
         title: reward.title,
+        kind: reward.kind,
         status: reward.status,
         state: reward.stateText,
         hint: texts.rewardCodeInside,
