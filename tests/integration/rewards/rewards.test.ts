@@ -17,6 +17,8 @@ import {
   RewardNotAwaitingError,
   RewardStockShortError,
 } from '#server/services/rewards/errors';
+import { claimGift } from '#server/services/gifts/creditGift';
+import { grantGift } from '#server/services/gifts/grantGift';
 import { expireRewards } from '#server/services/rewards/expireRewards';
 import { grantManualReward } from '#server/services/rewards/grantManualReward';
 import { issueOfficeReward } from '#server/services/rewards/issueOfficeReward';
@@ -37,6 +39,7 @@ import {
   trackTestProduct,
 } from '../support/database';
 import { cleanupTestEmployees, createTestEmployee, setTestProfilePhone } from '../support/employees';
+import { backdateTestGift, findGiftRewardId } from '../support/gifts';
 import { grantPoints } from '../support/points';
 import {
   backdateTestReward,
@@ -112,7 +115,6 @@ const grantPrize = (scenario: Scenario, lifetimeDays = 7) =>
     personId: scenario.personId,
     employeeId: scenario.employeeId,
     kind: 'product',
-    points: null,
     productId: scenario.productId,
     title: null,
     officeId: scenario.officeId,
@@ -125,7 +127,6 @@ const grantCustom = (scenario: Scenario, title: string) =>
     personId: scenario.personId,
     employeeId: scenario.employeeId,
     kind: 'custom',
-    points: null,
     productId: null,
     title,
     officeId: scenario.officeId,
@@ -332,22 +333,22 @@ describe('награды', () => {
     const scenario = await prizeScenario();
     const waiting = await grantCustom(scenario, 'Мойка');
     const prize = await grantPrize(scenario);
-    const points = await grantManualReward({
-      personId: scenario.personId,
-      employeeId: scenario.employeeId,
-      kind: 'points',
+    const { giftGrantId } = await grantGift({
+      recipient: { kind: 'person', personId: scenario.personId },
       points: 100,
-      productId: null,
-      title: null,
-      officeId: null,
-      lifetimeDays: null,
-      note: 'компенсация',
+      reason: 'компенсация',
+      untilDate: '2099-01-01',
+      employeeId: scenario.employeeId,
     });
+    const points = { id: await findGiftRewardId(giftGrantId, scenario.personId) };
 
-    // Вручены по порядку: ждущая три дня назад, приз два дня назад, баллы вчера. Приз выдан сейчас.
+    await claimGift(points.id, scenario.personId);
+
+    // Вручены по порядку: ждущая три дня назад, приз два дня назад, подарок вчера и вчера же
+    // забран. Приз выдан сейчас.
     await backdateTestReward(waiting.id, 72);
     await backdateTestReward(prize.id, 48);
-    await backdateTestReward(points.id, 24);
+    await backdateTestGift(points.id, 24);
     await issueOfficeReward(worker(scenario), prize.id);
 
     const { rewards } = await readMemberRewards({ personId: scenario.personId, language: 'ru' });
@@ -361,39 +362,27 @@ describe('награды', () => {
     expect(driverRewards.map((reward) => reward.rewardId)).toEqual([waiting.id, points.id, prize.id]);
   });
 
-  it('баллы наградой: на балансе, строка ручной правки в журнале, без кода и офиса', async () => {
+  it('баллы ручной выдачей не вручаются: только подарком (issue #219)', async () => {
     const scenario = await prizeScenario();
     const balanceBefore = await readAccountBalance(scenario.personId);
     const manualBefore = await countTransfersByReason(scenario.personId, 'manual');
 
-    const reward = await grantManualReward({
-      personId: scenario.personId,
-      employeeId: scenario.employeeId,
-      kind: 'points',
-      points: 300,
-      productId: null,
-      title: null,
-      officeId: null,
-      lifetimeDays: null,
-      note: 'компенсация',
-    });
+    await expect(
+      grantManualReward({
+        personId: scenario.personId,
+        employeeId: scenario.employeeId,
+        kind: 'points',
+        productId: null,
+        title: null,
+        officeId: null,
+        lifetimeDays: null,
+        note: 'компенсация',
+      }),
+    ).rejects.toMatchObject({ problem: 'points_via_gift' });
 
-    expect(reward).toMatchObject({ status: 'credited', code: null, officeId: null });
-    expect(await readAccountBalance(scenario.personId)).toBe(balanceBefore + 300n);
-    expect(await countTransfersByReason(scenario.personId, 'manual')).toBe(manualBefore + 1);
-
-    const { rewards } = await readMemberRewards({ personId: scenario.personId, language: 'ru' });
-
-    expect(rewards[0]).toMatchObject({
-      title: '300 баллов',
-      status: 'credited',
-      stateWord: 'На балансе',
-      code: null,
-      office: null,
-      photoPath: null,
-      pricePoints: null,
-    });
-    expect(rewards[0]?.stateText).toMatch(/^На балансе · \d{2}\.\d{2}\.\d{4}$/);
+    expect(await readAccountBalance(scenario.personId)).toBe(balanceBefore);
+    expect(await countTransfersByReason(scenario.personId, 'manual')).toBe(manualBefore);
+    expect(await countRewardsByPerson(scenario.personId)).toBe(0);
   });
 
   it('человеку вне программы награда не вручается', async () => {
@@ -406,7 +395,6 @@ describe('награды', () => {
         personId: person.personId,
         employeeId,
         kind: 'custom',
-        points: null,
         productId: null,
         title: 'Сертификат на мойку',
         officeId,
@@ -425,12 +413,11 @@ describe('награды', () => {
       grantManualReward({
         personId: scenario.personId,
         employeeId: scenario.employeeId,
-        kind: 'points',
-        points: 10,
+        kind: 'custom',
         productId: null,
-        title: null,
-        officeId: null,
-        lifetimeDays: null,
+        title: 'Мойка',
+        officeId: scenario.officeId,
+        lifetimeDays: 7,
         note: '   ',
       }),
     ).rejects.toBeInstanceOf(InvalidManualRewardError);

@@ -96,6 +96,41 @@ export const buildOrderSpendIdempotencyKey = (orderId: string): IdempotencyKey =
 export const buildManualIdempotencyKey = (operationId: string): IdempotencyKey =>
   buildKey('manual', operationId);
 
+/**
+ * Массовое начисление по кампании: `campaign:<slug>:<persons.id>` — одно на человека
+ * в кампании (docs/points.md → «Массовые начисления — своя причина, а не ручная правка»).
+ */
+export const buildCampaignIdempotencyKey = (slug: string, personId: string): IdempotencyKey => {
+  const trimmedSlug = slug.trim();
+
+  // Пустая метка дала бы ключ `campaign::<persons.id>`, общий для всех кампаний человека:
+  // вторая раздача вернулась бы как повтор первой.
+  if (trimmedSlug.length === 0) {
+    throw new Error('ключ кампании: метка пуста');
+  }
+
+  return buildKey('campaign', `${trimmedSlug}:${personId.trim()}`);
+};
+
+/** Приставка метки подарка от Xalq Taxi — по ней подарок узнаётся в журнале. */
+const GIFT_SLUG_PREFIX = 'gift-';
+
+/**
+ * Метка кампании подарка: `gift-<gift_grants.id>` (issue #219). Раздача и есть кампания:
+ * у каждой своя метка, повторное зачисление одной раздачи отсекается ключом, а разные
+ * раздачи одному водителю друг другу не мешают. Одному водителю — та же метка: раздача
+ * из одного человека.
+ */
+export const buildGiftCampaignSlug = (giftGrantId: string): string =>
+  `${GIFT_SLUG_PREFIX}${giftGrantId}`;
+
+/**
+ * Перевод подарка от Xalq Taxi — по ключу, а не по причине: причина у подарка общая
+ * с акциями, `campaign`, а отличает его только метка в ключе.
+ */
+export const isGiftIdempotencyKey = (idempotencyKey: string): boolean =>
+  idempotencyKey.startsWith(`campaign:${GIFT_SLUG_PREFIX}`);
+
 /** Сундук акции в хвосте ключа: сундук дня — с номером дня окна. */
 export type CampaignChestRef =
   | { kind: 'day'; dayNumber: number }

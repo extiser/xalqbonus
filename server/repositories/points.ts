@@ -527,6 +527,11 @@ export type OwnOperationRow = {
   /** Строка журнала. `bigint` в базе, поэтому текстом: JSON таких чисел не знает. */
   entryId: string;
   reason: PointReason;
+  /**
+   * Ключ перевода. Водителю не показывается: по нему причина уточняется словом — подарок
+   * от Xalq Taxi отличается от акции только ключом `campaign:gift-…` (issue #219).
+   */
+  idempotencyKey: string;
   occurredAt: Date;
   delta: bigint;
   /**
@@ -564,9 +569,10 @@ export const listAccountOperationsForOwner = async (
   cursor: OwnOperationsCursor | null,
 ): Promise<OwnOperationRow[]> =>
   db.$queryRaw<OwnOperationRow[]>`
-    SELECT entry."id"::text        AS "entryId",
+    SELECT entry."id"::text             AS "entryId",
            transfer."reason",
-           transfer."occurred_at"  AS "occurredAt",
+           transfer."idempotency_key"   AS "idempotencyKey",
+           transfer."occurred_at"       AS "occurredAt",
            entry."delta",
            "order"."number"        AS "orderNumber"
       FROM xb.point_entries AS entry

@@ -2,7 +2,7 @@ import type { OpenAppButton } from '#server/adapters/telegram/outgoing';
 import type { CampaignParticipantOutcome, Language } from '#server/generated/prisma/enums';
 import { launchButton } from '#server/bot/launchButton';
 import { countedPlainText, formatPoints, text } from '#server/bot/texts';
-import { formatCalendarDate } from '#server/utils/parkTime';
+import { calendarDayMoment, formatCalendarDate, formatDayMonthWord } from '#server/utils/parkTime';
 
 /**
  * Уведомления водителю: что именно система умеет ему написать сама.
@@ -69,6 +69,20 @@ export type Notification =
        */
       template: 'app_relaunch';
       params: Record<string, never>;
+    }
+  | {
+      /**
+       * Подарок от Xalq Taxi ждёт в приложении (issue #219). Уходит в окне 09:00–21:00
+       * по Ташкенту — правило очереди (`server/queues/notifications.ts`).
+       */
+      template: 'gift_received';
+      params: {
+        points: number;
+        /** Повод раздачи: «ко Дню учителя». Раздача не правится, в задании он не устареет. */
+        reason: string;
+        /** День автозачисления, `YYYY-MM-DD`. */
+        untilDate: string;
+      };
     };
 
 /** Приз вскрытого сундука: баллы уже на балансе, товар или произвольный ждёт в офисе. */
@@ -154,12 +168,21 @@ export const renderNotification = (notification: Notification, language: Languag
       return renderChestsRevealed(notification.params, language);
     case 'app_relaunch':
       return text('start_greeting', language);
+    case 'gift_received':
+      return text('notification_gift_received', language, {
+        points: countedPlainText('reward_points', language, notification.params.points),
+        reason: notification.params.reason,
+        date: formatDayMonthWord(calendarDayMoment(notification.params.untilDate), language),
+      });
   }
 };
 
 /**
- * Кнопка под уведомлением. Есть только у `app_relaunch` — та же, что под приветствием бота:
- * остальные уведомления сообщают, а не зовут в приложение.
+ * Кнопка под уведомлением. Есть у тех, что зовут в приложение, — та же, что под приветствием
+ * бота: у `app_relaunch` и у подарка, который забирают в приложении. Остальные уведомления
+ * сообщают, а не зовут.
  */
 export const notificationButton = (notification: Notification, language: Language): OpenAppButton | undefined =>
-  notification.template === 'app_relaunch' ? launchButton(language) : undefined;
+  notification.template === 'app_relaunch' || notification.template === 'gift_received'
+    ? launchButton(language)
+    : undefined;

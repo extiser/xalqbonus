@@ -12,14 +12,14 @@ import { readUuid, requireUuidParam } from '#server/utils/query';
 import { REWARD_GRANT_ROLES } from '#shared/access';
 import type { ManualRewardField, ManualRewardResponse } from '#shared/types/rewards';
 
-// Ручная выдача награды водителю из карточки (issue #172): источник `manual`, автор —
-// вошедший сотрудник. Доступ — ролью, тем же правилом, что ручная правка баллов.
+// Ручная выдача награды водителю (issue #172): источник `manual`, автор — вошедший сотрудник.
+// Доступ — ролью, тем же правилом, что ручная правка баллов. Товар и произвольная; баллы
+// сюда не принимаются — они вручаются подарком (`POST /api/gifts`, issue #219).
 //
 // Отказы доменных правил — строкой при своей ручке и с полем формы, к которому относятся,
 // как у ручной правки баллов (`points.post.ts`).
 type ManualRewardBody = {
   kind?: unknown;
-  points?: unknown;
   productId?: unknown;
   title?: unknown;
   officeId?: unknown;
@@ -28,8 +28,11 @@ type ManualRewardBody = {
 };
 
 const PROBLEMS: Readonly<Record<ManualRewardProblem, { field: ManualRewardField; message: string }>> = {
-  kind_invalid: { field: 'kind', message: 'выберите, что выдаётся: баллы, товар или своя награда' },
-  points_invalid: { field: 'points', message: 'сумма — целое число баллов больше нуля' },
+  kind_invalid: { field: 'kind', message: 'выберите, что выдаётся: товар или своя награда' },
+  points_via_gift: {
+    field: 'kind',
+    message: 'баллы вручаются подарком в разделе «Награды», зачислить сразу — ручной правкой баллов',
+  },
   product_missing: { field: 'productId', message: 'выберите товар' },
   title_missing: { field: 'title', message: 'напишите, что выдаётся' },
   office_missing: { field: 'officeId', message: 'выберите офис, где водитель получит награду' },
@@ -80,7 +83,6 @@ export default defineEventHandler(async (event): Promise<ManualRewardResponse> =
       personId,
       employeeId: employee.employeeId,
       kind: typeof body?.kind === 'string' ? body.kind : '',
-      points: readNumber(body?.points),
       productId: readUuid(body?.productId),
       title: readText(body?.title),
       officeId: readUuid(body?.officeId),

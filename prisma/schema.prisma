@@ -268,10 +268,13 @@ enum RewardKind {
 }
 
 /// Где награда. Путь один и в одну сторону: `awaiting` → `issued` или `expired`;
-/// `credited` — конечное с рождения, у баллов другого не бывает.
+/// `claimable` → `credited` у подарка; у прочих баллов `credited` — конечное с рождения.
 enum RewardStatus {
   /// Баллы зачислены на баланс.
   credited
+  /// Подарок-баллы ждут, пока водитель заберёт: на балансе их ещё нет. Незабранное
+  /// зачисляется само в назначенную дату (issue #219).
+  claimable
   /// Ждёт в офисе, код действует.
   awaiting
   /// Получена на стойке.
@@ -287,8 +290,19 @@ enum RewardStatus {
 enum RewardSource {
   campaign
   manual
+  /// Подарок от Xalq Taxi из раздела «Награды» — раздача `gift_grants` (issue #219).
+  gift
 
   @@map("reward_source")
+  @@schema("xb")
+}
+
+/// Как подарок лёг на баланс: водитель забрал сам или зачислилось по сроку (issue #219).
+enum GiftClaimMode {
+  driver
+  auto
+
+  @@map("gift_claim_mode")
   @@schema("xb")
 }
 
@@ -442,6 +456,7 @@ model Person {
   mailings      MailingRecipient[]
   campaigns     CampaignParticipant[]
   rewards       Reward[]
+  giftGrants    GiftGrant[]
 
   @@map("persons")
   @@schema("xb")
@@ -706,6 +721,7 @@ model Employee {
   campaigns       Campaign[]
   rewardsIssued   Reward[]         @relation("reward_issued_by")
   rewardsGranted  Reward[]         @relation("reward_granted_by")
+  giftGrants      GiftGrant[]
 
   @@map("employees")
   @@schema("xb")
@@ -1548,8 +1564,9 @@ model Segment {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  createdBy Employee   @relation(fields: [createdById], references: [id])
-  campaigns Campaign[]
+  createdBy  Employee    @relation(fields: [createdById], references: [id])
+  campaigns  Campaign[]
+  giftGrants GiftGrant[]
 
   @@map("segments")
   @@schema("xb")
@@ -1796,8 +1813,17 @@ model Reward {
   /// стойки читает его как есть, у ручной выдачи сундука нет, а связь с сундуком держит
   /// `campaign_chests.reward_id`.
   sourceNote String?      @map("source_note")
-  /// Кто вручил — у источника `manual`.
+  /// Кто вручил — у источников `manual` и `gift`.
   grantedByEmployeeId String? @map("granted_by_employee_id") @db.Uuid
+
+  /// Раздача, из которой родился подарок, — у источника `gift` (issue #219).
+  giftGrantId String?        @map("gift_grant_id") @db.Uuid
+  /// Когда подарок лёг на баланс. Заполнено только у зачисленного подарка.
+  claimedAt   DateTime?      @map("claimed_at") @db.Timestamptz(6)
+  /// Забрал сам или зачислилось по сроку — вместе с `claimed_at`.
+  claimMode   GiftClaimMode? @map("claim_mode")
+  /// Водитель видел шторку с этим подарком: второй раз сама она не показывается.
+  giftShownAt DateTime?      @map("gift_shown_at") @db.Timestamptz(6)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -1810,6 +1836,7 @@ model Reward {
   campaign         Campaign? @relation(fields: [campaignId], references: [id], onDelete: Restrict)
   issuedByEmployee Employee? @relation("reward_issued_by", fields: [issuedByEmployeeId], references: [id])
   grantedByEmployee Employee? @relation("reward_granted_by", fields: [grantedByEmployeeId], references: [id])
+  giftGrant         GiftGrant? @relation(fields: [giftGrantId], references: [id], onDelete: Restrict)
 
   movements StockMovement[]
   chest     CampaignChest?
@@ -1820,6 +1847,48 @@ model Reward {
   @@index([officeId, status])
   /// Разбор волны в админке.
   @@index([campaignId])
+  /// Одна награда на человека в раздаче; по нему же считаются исходы раздачи в списке.
+  @@unique([giftGrantId, personId])
   @@map("rewards")
+  @@schema("xb")
+}
+
+/// Раздача подарка от Xalq Taxi: баллы одному водителю или сегменту (issue #219).
+///
+/// Награды раздачи рождаются `claimable` и ложатся на баланс, когда водитель забирает их
+/// сам или наступает `until_date`. Журнал баллов пишется в момент зачисления, а не раздачи,
+/// причиной `campaign` с ключом `campaign:gift-<gift_grants.id>:<persons.id>` (docs/points.md).
+///
+/// Состав сегмента снимается на момент раздачи и дальше не пересчитывается — как у запуска
+/// акции: сколько наград родилось и скольких пропустили, помнят `recipients` и `skipped`.
+///
+/// Получатель ровно один — водитель или сегмент — проверкой в миграции.
+model GiftGrant {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  points    Int
+  /// Повод, который видит водитель: «ко Дню учителя».
+  reason    String
+  /// День автозачисления в зоне парка: незабранное ложится на баланс в конце этих суток.
+  untilDate DateTime @map("until_date") @db.Date
+
+  segmentId String? @map("segment_id") @db.Uuid
+  personId  String? @map("person_id") @db.Uuid
+
+  /// Сколько наград родилось.
+  recipients Int
+  /// Сколько человек из сегмента пропущено: не участники программы.
+  skipped    Int
+
+  grantedByEmployeeId String   @map("granted_by_employee_id") @db.Uuid
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  segment           Segment? @relation(fields: [segmentId], references: [id], onDelete: Restrict)
+  person            Person?  @relation(fields: [personId], references: [id], onDelete: Restrict)
+  grantedByEmployee Employee @relation(fields: [grantedByEmployeeId], references: [id])
+  rewards           Reward[]
+
+  /// Список раздач, свежие первыми.
+  @@index([createdAt(sort: Desc)])
+  @@map("gift_grants")
   @@schema("xb")
 }

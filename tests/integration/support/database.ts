@@ -452,6 +452,14 @@ export const cleanupTestData = async (): Promise<void> => {
           OR "office_id" = ANY(${officeIds}::uuid[])
           OR "product_id" = ANY(${productIds}::uuid[])
     `;
+    // Раздачи подарков — после их наград (`rewards.gift_grant_id` на `RESTRICT`) и до людей,
+    // сегментов и сотрудников, на которых раздача ссылается. Раздача рождается одной транзакцией
+    // со своими наградами, поэтому раздача без наград — это раздача, чьих людей убрали сейчас.
+    await transaction.$executeRaw`
+      DELETE FROM xb.gift_grants AS grant_row
+       WHERE grant_row."person_id" = ANY(${personIds}::uuid[])
+          OR NOT EXISTS (SELECT 1 FROM xb.rewards AS reward WHERE reward."gift_grant_id" = grant_row."id")
+    `;
     await transaction.$executeRaw`
       DELETE FROM xb.order_items
        WHERE "order_id" IN (

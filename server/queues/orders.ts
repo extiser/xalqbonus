@@ -1,12 +1,15 @@
 import { Queue, Worker } from 'bullmq';
 import { consola } from 'consola';
 import { getQueueConnection } from '#server/queues/connection';
+import { creditDueGifts } from '#server/services/gifts/creditDueGifts';
 import { expireOrders } from '#server/services/orders/expireOrders';
 import { expireRewards } from '#server/services/rewards/expireRewards';
 
 /**
- * Очередь заказов. В ней две повторяемые задачи: просрочка заказов и сгорание наград
- * (issue #172). Обе про резерв остатка и обе дешёвые — своей очереди награды не стоят.
+ * Очередь заказов. В ней три повторяемые задачи: просрочка заказов, сгорание наград
+ * (issue #172) и автозачисление подарков (issue #219). Все дешёвые — своей очереди
+ * награды не стоят. Подарок по сроку не сгорает, а ложится на баланс, но живёт рядом
+ * со сгоранием: это та же работа «срок награды наступил», тем же периодом.
  *
  * **Отдельная от синхронизации намеренно.** Очередь `sync` идёт строго по одному прогону
  * из-за узкой квоты Fleet API, а полный обход реестра занимает около получаса: просрочка,
@@ -28,6 +31,7 @@ export const ORDERS_QUEUE_NAME = 'orders';
 /** Постоянные идентификаторы расписаний: по ним они обновляются и снимаются. */
 const EXPIRY_SCHEDULER_ID = 'orders-expiry';
 const REWARD_EXPIRY_SCHEDULER_ID = 'rewards-expiry';
+const GIFT_CREDIT_SCHEDULER_ID = 'gifts-credit';
 
 /**
  * Раз в пять минут.
@@ -44,7 +48,10 @@ const EXPIRY_INTERVAL_MS = 5 * 60 * 1_000;
  */
 const REWARD_EXPIRY_INTERVAL_MS = 60 * 60 * 1_000;
 
-export type OrdersJobData = { kind: 'expire' } | { kind: 'expire_rewards' };
+export type OrdersJobData =
+  | { kind: 'expire' }
+  | { kind: 'expire_rewards' }
+  | { kind: 'credit_gifts' };
 
 export const createOrdersQueue = (): Queue<OrdersJobData> =>
   new Queue<OrdersJobData>(ORDERS_QUEUE_NAME, {
@@ -58,7 +65,11 @@ export const createOrdersQueue = (): Queue<OrdersJobData> =>
     },
   });
 
-/** Заводит расписания просрочки и сгорания. Интервалы постоянные, аргументов у цели нет. */
+/**
+ * Заводит расписания просрочки, сгорания и автозачисления. Интервалы постоянные, аргументов
+ * у цели нет. Автозачисление идёт периодом сгорания: срок подарка — конец суток парка, и час
+ * опоздания ни на что не влияет — баллы придут к утру.
+ */
 export const applyOrdersSchedule = async (queue: Queue<OrdersJobData>): Promise<void> => {
   await queue.upsertJobScheduler(
     EXPIRY_SCHEDULER_ID,
@@ -72,7 +83,13 @@ export const applyOrdersSchedule = async (queue: Queue<OrdersJobData>): Promise<
     { name: 'expire_rewards', data: { kind: 'expire_rewards' } },
   );
 
-  log.info('Расписания просрочки и сгорания заведены', {
+  await queue.upsertJobScheduler(
+    GIFT_CREDIT_SCHEDULER_ID,
+    { every: REWARD_EXPIRY_INTERVAL_MS },
+    { name: 'credit_gifts', data: { kind: 'credit_gifts' } },
+  );
+
+  log.info('Расписания просрочки, сгорания и автозачисления заведены', {
     ordersEverySec: EXPIRY_INTERVAL_MS / 1_000,
     rewardsEverySec: REWARD_EXPIRY_INTERVAL_MS / 1_000,
   });
@@ -84,6 +101,12 @@ export const createOrdersWorker = (): Worker<OrdersJobData> =>
     async (job) => {
       if (job.data.kind === 'expire_rewards') {
         await expireRewards();
+
+        return;
+      }
+
+      if (job.data.kind === 'credit_gifts') {
+        await creditDueGifts();
 
         return;
       }

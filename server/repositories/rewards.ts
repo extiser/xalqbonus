@@ -1,6 +1,7 @@
 import { db } from '#server/db';
 import { Prisma } from '#server/generated/prisma/client';
 import type {
+  GiftClaimMode,
   RewardKind,
   RewardSource,
   RewardStatus,
@@ -195,13 +196,20 @@ type PersonRewardColumns = {
   expiresAt: Date | null;
   issuedAt: Date | null;
   expiredAt: Date | null;
+  /** Когда подарок лёг на баланс. Пусто у всех, кроме зачисленного подарка. */
+  claimedAt: Date | null;
   source: RewardSource;
   sourceNote: string | null;
   campaignTitle: string | null;
   createdAt: Date;
 };
 
-export type PersonRewardRow = PersonRewardColumns & {
+/**
+ * Награда в списке водителя. Ждущий подарок в выборку не входит — условием запроса, и тип
+ * говорит то же: у раздела наград нет ни слова, ни карточки для `claimable` (issue #219).
+ */
+export type PersonRewardRow = Omit<PersonRewardColumns, 'status'> & {
+  status: Exclude<RewardStatus, 'claimable'>;
   /** Офис выдачи целиком — архивный тоже: награда уже родилась с ним. Пуст у баллов. */
   office: OfficeRow | null;
   /** Фото и цена товара из каталога — у награды-товара. У остальных пусто. */
@@ -225,9 +233,11 @@ type PersonRewardQueryRow = Omit<PersonRewardRow, 'office'> & {
 
 /**
  * Награды человека для раздела водителя. Человек входит в условие всегда: чужая награда отсюда
- * не читается ни при каком запросе.
+ * не читается ни при каком запросе. Ждущий подарок сюда не входит — у него своя карточка
+ * и своя выборка (`listPersonClaimableGifts`, issue #219).
  *
- * Ждущие первыми, дальше — по последнему событию награды: выдаче, сгоранию или вручению.
+ * Ждущие первыми, дальше — по последнему событию награды: выдаче, сгоранию, зачислению
+ * подарка или вручению.
  * По вручению выданная у стойки уезжала в истории ниже баллов, вручённых позже неё, хотя
  * случилась последней (прогон PR #222, 25-09-2026). Порядок стоит в запросе, а не на экране:
  * иначе потолок срезал бы не то. Карточка водителя в админке сортируется по-своему.
@@ -247,6 +257,7 @@ export const listPersonRewards = async (
            reward."expires_at"   AS "expiresAt",
            reward."issued_at"    AS "issuedAt",
            reward."expired_at"   AS "expiredAt",
+           reward."claimed_at"   AS "claimedAt",
            reward."source",
            reward."source_note"  AS "sourceNote",
            campaign."title"      AS "campaignTitle",
@@ -268,8 +279,9 @@ export const listPersonRewards = async (
       LEFT JOIN xb.campaigns AS campaign ON campaign."id" = reward."campaign_id"
       LEFT JOIN xb.products  AS product  ON product."id" = reward."product_id"
      WHERE reward."person_id" = ${personId}::uuid
+       AND reward."status" <> 'claimable'
      ORDER BY (reward."status" = 'awaiting') DESC,
-              COALESCE(reward."issued_at", reward."expired_at", reward."created_at") DESC,
+              COALESCE(reward."issued_at", reward."expired_at", reward."claimed_at", reward."created_at") DESC,
               reward."created_at" DESC
      LIMIT ${limit}
   `;
@@ -392,15 +404,17 @@ export type DriverRewardRow = PersonRewardColumns & {
   issuedByName: string | null;
   /** Кто вручил. Пусто у наград акции. */
   grantedByName: string | null;
+  /** Как лёг на баланс подарок — вместе с `claimedAt`. */
+  claimMode: GiftClaimMode | null;
 };
 
 /**
  * Награды человека глазами сотрудника в карточке водителя (issue #175): те же поля, что
  * у раздела водителя, плюс имена сотрудников — кто вручил и кто выдал.
  *
- * Ждущие в офисе идут первыми независимо от даты — за ними водитель придёт, остальное история.
- * Порядок стоит в запросе, а не на экране: иначе потолок срезал бы старую ждущую награду
- * раньше свежей полученной.
+ * Ждущие — в офисе и подарки, которые водитель ещё не забрал, — идут первыми независимо
+ * от даты: про них водитель и звонит, остальное история. Порядок стоит в запросе, а не на экране:
+ * иначе потолок срезал бы старую ждущую награду раньше свежей полученной.
  */
 export const listDriverRewards = async (
   personId: string,
@@ -417,6 +431,8 @@ export const listDriverRewards = async (
            reward."expires_at"  AS "expiresAt",
            reward."issued_at"   AS "issuedAt",
            reward."expired_at"  AS "expiredAt",
+           reward."claimed_at"  AS "claimedAt",
+           reward."claim_mode"  AS "claimMode",
            reward."source",
            reward."source_note" AS "sourceNote",
            campaign."title"     AS "campaignTitle",
@@ -431,6 +447,6 @@ export const listDriverRewards = async (
       LEFT JOIN xb.employees AS issuer   ON issuer."id" = reward."issued_by_employee_id"
       LEFT JOIN xb.employees AS granter  ON granter."id" = reward."granted_by_employee_id"
      WHERE reward."person_id" = ${personId}::uuid
-     ORDER BY (reward."status" = 'awaiting') DESC, reward."created_at" DESC
+     ORDER BY (reward."status" IN ('awaiting', 'claimable')) DESC, reward."created_at" DESC
      LIMIT ${limit}
   `;

@@ -1,12 +1,13 @@
 import { Queue, UnrecoverableError, Worker } from 'bullmq';
 import { consola } from 'consola';
 import { TelegramSendError } from '#server/adapters/telegram/outgoing';
-import type { Notification } from '#server/bot/notifications';
+import type { Notification, NotificationTemplate } from '#server/bot/notifications';
 import { getQueueConnection } from '#server/queues/connection';
 import {
   sendNotification,
   type NotificationOutcome,
 } from '#server/services/notifications/sendNotification';
+import { msUntilParkWindow } from '#server/utils/parkTime';
 
 /**
  * Очередь уведомлений.
@@ -74,6 +75,35 @@ export const getNotificationsQueue = (): Queue<NotificationJobData> => {
   return globalForQueue.notificationsQueue;
 };
 
+/** Окно отправки по часам парка: с 09:00 до 21:00 по Ташкенту. */
+const SEND_WINDOW_START_HOUR = 9;
+const SEND_WINDOW_END_HOUR = 21;
+
+/**
+ * Уведомления, которые ждут окна отправки (docs/decisions.md → «Единичные уведомления —
+ * одна дверь»: правила тишины живут здесь, а не в событиях).
+ *
+ * Пока в списке одно — подарок (issue #219): раздачу могут сделать и в 22:00, а сообщение
+ * о подарке ночью будит водителя ради того, что подождёт до утра. Общее окно на все
+ * уведомления — отдельная задача (T35); она расширит этот список, а не заведёт второе
+ * правило рядом.
+ */
+const WINDOWED_TEMPLATES: ReadonlySet<NotificationTemplate> = new Set(['gift_received']);
+
+/**
+ * Параметры задания: вне окна — задержка до ближайших 09:00. Задержка, а не отдельное
+ * расписание: отложенное задание — то же задание, с теми же повторами и лимитом.
+ */
+const jobOptions = (job: NotificationJobData, now: Date): { delay?: number } => {
+  if (!WINDOWED_TEMPLATES.has(job.template)) {
+    return {};
+  }
+
+  const delay = msUntilParkWindow(now, SEND_WINDOW_START_HOUR, SEND_WINDOW_END_HOUR);
+
+  return delay > 0 ? { delay } : {};
+};
+
 /**
  * Ставит уведомление в очередь.
  *
@@ -84,7 +114,20 @@ export const getNotificationsQueue = (): Queue<NotificationJobData> => {
  * через месяц.
  */
 export const enqueueNotification = async (job: NotificationJobData): Promise<void> => {
-  await getNotificationsQueue().add(job.template, job);
+  await getNotificationsQueue().add(job.template, job, jobOptions(job, new Date()));
+};
+
+/**
+ * Ставит пачку уведомлений одним обращением к Redis — для раздач на тысячи человек, где
+ * четыре тысячи отдельных постановок держали бы ответ ручки секунды. Правила те же, что
+ * у одиночной постановки.
+ */
+export const enqueueNotifications = async (jobs: readonly NotificationJobData[]): Promise<void> => {
+  const now = new Date();
+
+  await getNotificationsQueue().addBulk(
+    jobs.map((job) => ({ name: job.template, data: job, opts: jobOptions(job, now) })),
+  );
 };
 
 /**

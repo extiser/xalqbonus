@@ -20,6 +20,7 @@ type Tone = 'ok' | 'warn' | 'muted';
 
 const STATUS_TONES: Record<DriverReward['status'], Tone> = {
   credited: 'ok',
+  claimable: 'warn',
   awaiting: 'warn',
   issued: 'ok',
   expired: 'muted',
@@ -34,11 +35,21 @@ const title = computed(() => {
     : props.reward.title;
 });
 
-/** Откуда: акция с названием или ручная выдача с автором. */
-const origin = computed(() =>
-  props.reward.source === 'campaign'
-    ? `акция «${props.reward.campaignTitle ?? DASH}»`
-    : `вручную · вручил ${props.reward.grantedByName ?? DASH}`,
+/** Откуда: акция с названием, ручная выдача или подарок — с автором. */
+const origin = computed(() => {
+  switch (props.reward.source) {
+    case 'campaign':
+      return `акция «${props.reward.campaignTitle ?? DASH}»`;
+    case 'manual':
+      return `вручную · вручил ${props.reward.grantedByName ?? DASH}`;
+    case 'gift':
+      return `подарок от Xalq Taxi · вручил ${props.reward.grantedByName ?? DASH}`;
+  }
+});
+
+/** Как подарок лёг на баланс — сотрудник отвечает водителю «вы забрали его сами». */
+const claimText = computed(() =>
+  props.reward.claimMode === 'driver' ? 'забрал сам' : 'зачислено по сроку',
 );
 </script>
 
@@ -67,6 +78,12 @@ const origin = computed(() =>
     </p>
     <p v-else-if="reward.status === 'expired'" class="mt-1 text-sm text-slate-700">
       Срок вышел {{ formatDateTime(reward.expiredAt) }}
+    </p>
+    <p v-else-if="reward.status === 'claimable'" class="mt-1 text-sm text-slate-700">
+      Ждёт в приложении · зачислится сам {{ formatDateTime(reward.expiresAt) }}
+    </p>
+    <p v-else-if="reward.claimedAt !== null" class="mt-1 text-sm text-slate-700">
+      На балансе с {{ formatDateTime(reward.claimedAt) }} · {{ claimText }}
     </p>
 
     <p class="mt-1 text-xs text-slate-500">

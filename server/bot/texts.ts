@@ -106,6 +106,7 @@ export type TextKey =
   | 'reason_expire'
   | 'reason_correction'
   | 'reason_campaign'
+  | 'reason_gift'
   | 'history_order_reason'
   | 'button_exchange_points'
   | 'button_back'
@@ -182,6 +183,11 @@ export type TextKey =
   | 'reward_expired_reason_full'
   | 'reward_origin_manual'
   | 'reward_origin_campaign'
+  | 'reward_origin_gift'
+  | 'gift_reason'
+  | 'gift_deadline'
+  | 'gift_denied_not_found'
+  | 'gift_denied_not_claimable'
   | 'order_denied_office_unavailable'
   | 'order_denied_product_unavailable'
   | 'order_denied_insufficient_stock'
@@ -239,6 +245,7 @@ export type TextKey =
   | 'employee_account'
   | 'check_unavailable'
   | 'notification_welcome_bonus'
+  | 'notification_gift_received'
   | 'notification_campaign_finished_chests'
   | 'notification_campaign_finished_returned'
   | 'notification_campaign_finished_joined'
@@ -693,6 +700,15 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     uz: 'Aksiya',
   },
   /**
+   * Подарок от Xalq Taxi (issue #219). Причина у него `campaign`, как у акции, а отличает его
+   * ключ перевода — `campaign:gift-…`. Повод раздачи в строку истории не входит (решение
+   * Руслана 25-09-2026). Узбекский — черновой.
+   */
+  reason_gift: {
+    ru: 'Подарок от Xalq Taxi',
+    uz: "Xalq Taxi'dan sovg'a",
+  },
+  /**
    * Списание и возврат по заказу — причина и номер, без лишних слов. Номер тот же, что
    * водитель видел на экране заказа, и отменённый заказ читается в истории парой строк.
    */
@@ -1046,6 +1062,32 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     uz: '«{title}» aksiyasi',
   },
 
+  // Подарки от Xalq Taxi (issue #219), русский — по _reference/design/gifts/. Узбекский —
+  // черновой: вычитывает переводчик одной волной ближе к выкату.
+  /** Происхождение подарка: «Xalq Taxi · ко Дню учителя» — повод ставится после точки. */
+  reward_origin_gift: {
+    ru: 'Xalq Taxi',
+    uz: 'Xalq Taxi',
+  },
+  /** Строка происхождения на карточке подарка. */
+  gift_reason: {
+    ru: 'Xalq Taxi · {reason}',
+    uz: 'Xalq Taxi · {reason}',
+  },
+  /** Срок на карточке подарка: после него баллы придут на счёт сами. */
+  gift_deadline: {
+    ru: 'Заберите до {date}',
+    uz: '{date} gacha oling',
+  },
+  gift_denied_not_found: {
+    ru: 'Такого подарка нет.',
+    uz: "Bunday sovg'a yo'q.",
+  },
+  gift_denied_not_claimable: {
+    ru: 'Этот подарок уже на вашем счёте.',
+    uz: "Bu sovg'a allaqachon hisobingizda.",
+  },
+
   // Отказы оформления и отмены. Разведены по причинам: экран обязан сказать, чего именно
   // не хватило, — баллов, товара на полке или открытого офиса, — потому что и действие
   // у водителя в каждом случае своё.
@@ -1367,6 +1409,14 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: '🎁 Вам начислено {points} баллов за первые 5 поездок! Обменять их на подарки можно в любом офисе Xalq Taxi.',
     uz: "🎁 Birinchi 5 ta safaringiz uchun sizga {points} ball hisoblandi! Ularni Xalq Taxi'ning istalgan ofisida sovg'alarga almashtirishingiz mumkin.",
   },
+  /**
+   * Подарок ждёт в приложении (issue #219). `{points}` — «300 баллов» склонением по числу,
+   * `{date}` — день словом месяца. Узбекский — черновой.
+   */
+  notification_gift_received: {
+    ru: 'Xalq Taxi дарит вам {points} — {reason}. Заберите их в приложении до {date}.',
+    uz: "Xalq Taxi sizga {points} sovg'a qiladi — {reason}. Ularni ilovada {date} gacha oling.",
+  },
 
   // Итог и вскрытие акции (issue #182). Обе точки стоят на границах окна отправки 09:00–21:00.
   /** 09:00, у вступившего остались неоткрытые. `{chests}` — «2 неоткрытых сундука». */
@@ -1478,6 +1528,7 @@ type CountedForms = Readonly<{ one: string; few: string; many: string }>;
 
 export type CountedTextKey =
   | 'reward_points'
+  | 'gift_title'
   | 'campaign_week_chest_days'
   | 'campaign_week_last_days'
   | 'campaign_week_days_left'
@@ -1490,6 +1541,19 @@ export type CountedTextKey =
   | 'notification_unopened_chests';
 
 const COUNTED_TEXTS: Readonly<Record<CountedTextKey, Readonly<Record<Language, CountedForms>>>> = {
+  /** Заголовок карточки подарка: «300 баллов в подарок» (issue #219). Узбекский — черновой. */
+  gift_title: {
+    ru: {
+      one: '{count} балл в подарок',
+      few: '{count} балла в подарок',
+      many: '{count} баллов в подарок',
+    },
+    uz: {
+      one: "{count} ball sovg'a",
+      few: "{count} ball sovg'a",
+      many: "{count} ball sovg'a",
+    },
+  },
   /** Награда баллами в разделе «Мои награды»: «300 баллов». */
   reward_points: {
     ru: {

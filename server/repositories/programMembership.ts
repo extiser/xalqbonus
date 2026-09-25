@@ -61,6 +61,30 @@ export const upsertPersonSettings = async (
 };
 
 /**
+ * Кто из перечисленных — участник программы: есть строка `person_settings`. Порядок входа
+ * не сохраняется — идентификаторы по возрастанию.
+ */
+export const listProgramMemberIds = async (
+  personIds: readonly string[],
+  client: Executor = db,
+): Promise<string[]> => {
+  const members: string[] = [];
+
+  for (let offset = 0; offset < personIds.length; offset += CHUNK_SIZE) {
+    const rows = await client.$queryRaw<{ personId: string }[]>`
+      SELECT "person_id" AS "personId"
+        FROM xb.person_settings
+       WHERE "person_id" = ANY(${personIds.slice(offset, offset + CHUNK_SIZE)}::text[]::uuid[])
+       ORDER BY "person_id"
+    `;
+
+    members.push(...rows.map((row) => row.personId));
+  }
+
+  return members;
+};
+
+/**
  * Меняет язык участника. `false` — строки участия нет, менять нечего.
  *
  * Только язык: дата и источник участия остаются теми, с какими человек вошёл в программу.

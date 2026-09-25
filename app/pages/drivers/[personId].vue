@@ -11,13 +11,6 @@ import type {
   ManualPointsRequestBody,
   ManualPointsResponse,
 } from '#shared/types/driver';
-import type {
-  ManualRewardField,
-  ManualRewardRequestBody,
-  ManualRewardResponse,
-  RewardGrantOptionsResponse,
-} from '#shared/types/rewards';
-import type { SelectOption } from '~/types/selectOption';
 
 /**
  * Карточка водителя: после неё на вопрос «откуда у водителя столько баллов» отвечают
@@ -57,7 +50,6 @@ const {
 const {
   data: rewards,
   status: rewardsStatus,
-  refresh: refreshRewards,
 } = await useFetch(() => `/api/drivers/${personId.value}/rewards`);
 
 const cardState = computed(() => toLoadState(cardStatus.value));
@@ -128,83 +120,18 @@ const adjustPoints = async (body: ManualPointsRequestBody): Promise<void> => {
 };
 
 /**
- * Выдачу награды видят роли из `REWARD_GRANT_ROLES` — тем же правилом, что правку баллов, —
- * и только у водителя в программе: человеку вне её награду вручить некуда, он не видит
- * ни раздела, ни кода (issue #172). Решает ручка, проверка здесь только прячет форму.
+ * Вход в раздел «Награды» с этим водителем видят роли из `REWARD_GRANT_ROLES` — и только
+ * у водителя в программе: человеку вне её вручить некуда (issue #219). Форма выдачи живёт
+ * в разделе: там же подарок баллами, товар и своя награда. Решает ручка, проверка здесь
+ * только прячет кнопку.
  */
 const canGrant = computed(
   () =>
     employee.value !== null &&
     REWARD_GRANT_ROLES.includes(employee.value.role) &&
-    card.value?.balance !== null &&
-    card.value?.balance !== undefined,
+    card.value?.membership !== null &&
+    card.value?.membership !== undefined,
 );
-
-// Офисы и товары для формы выдачи — один раз при открытии карточки. Ручка открыта тем же
-// ролям, что и выдача: списки каталога и офисов менеджеру закрыты.
-const { data: grantOptions } = await useFetch<RewardGrantOptionsResponse>(
-  '/api/rewards/grant-options',
-  { immediate: canGrant.value },
-);
-
-const grantOfficeOptions = computed<SelectOption[]>(() =>
-  (grantOptions.value?.offices ?? []).map((office) => ({ value: office.officeId, label: office.name })),
-);
-
-const grantProductOptions = computed<SelectOption[]>(() =>
-  (grantOptions.value?.products ?? []).map((product) => ({
-    value: product.productId,
-    label: product.promo ? `${product.name} — для акции` : product.name,
-  })),
-);
-
-const granting = ref(false);
-const grantError = ref<string | null>(null);
-const grantErrorField = ref<ManualRewardField | null>(null);
-const grantsApplied = ref(0);
-const grantNotice = ref<string | null>(null);
-
-const GRANT_FIELDS: readonly ManualRewardField[] = [
-  'kind',
-  'points',
-  'productId',
-  'title',
-  'officeId',
-  'lifetimeDays',
-  'note',
-];
-
-/**
- * Выдача, затем перечитывание карточки, истории и наград: награда баллами меняет баланс
- * и встаёт строкой в журнал, а любая награда — строкой в разделе наград, и обновить одно
- * без другого значит показать их несогласованными.
- */
-const grantReward = async (body: ManualRewardRequestBody): Promise<void> => {
-  granting.value = true;
-  grantError.value = null;
-  grantErrorField.value = null;
-  grantNotice.value = null;
-
-  try {
-    const result = await $fetch<ManualRewardResponse>(`/api/drivers/${personId.value}/rewards`, {
-      method: 'POST',
-      body,
-    });
-
-    grantsApplied.value += 1;
-    grantNotice.value = result.code
-      ? `Выдано. Код для стойки: ${result.code}`
-      : 'Выдано: баллы зачислены.';
-    historyOffset.value = 0;
-    await Promise.all([refreshCard(), refreshHistory(), refreshRewards()]);
-  } catch (error) {
-    const field = failureField(error);
-    grantError.value = failureText(error);
-    grantErrorField.value = GRANT_FIELDS.find((known) => known === field) ?? null;
-  } finally {
-    granting.value = false;
-  }
-};
 </script>
 
 <template>
@@ -253,17 +180,12 @@ const grantReward = async (body: ManualRewardRequestBody): Promise<void> => {
         :applied-count="adjustmentsApplied"
         @submit="adjustPoints"
       />
-      <OrganismsDriverRewardGrant
-        v-if="canGrant"
-        :office-options="grantOfficeOptions"
-        :product-options="grantProductOptions"
-        :saving="granting"
-        :error="grantError"
-        :error-field="grantErrorField"
-        :applied-count="grantsApplied"
-        :notice="grantNotice"
-        @submit="grantReward"
-      />
+      <div v-if="canGrant">
+        <AtomsActionButton
+          label="Вручить награду"
+          @click="navigateTo({ path: '/rewards', query: { personId } })"
+        />
+      </div>
       <OrganismsDriverRewards :state="rewardsState" :data="rewards ?? null" />
       <OrganismsDriverMembership :card="card" />
       <OrganismsDriverParkProfiles :card="card" />

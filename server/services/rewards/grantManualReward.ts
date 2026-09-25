@@ -1,7 +1,4 @@
-import { randomUUID } from 'node:crypto';
-
 import type { RewardRow } from '#server/repositories/rewards';
-import { buildManualIdempotencyKey } from '#server/services/points/idempotencyKey';
 import { InvalidManualRewardError } from '#server/services/rewards/errors';
 import { grantReward, type RewardGift } from '#server/services/rewards/grantReward';
 
@@ -13,11 +10,11 @@ import { grantReward, type RewardGift } from '#server/services/rewards/grantRewa
  * срок. Рождает награду `grantReward` — одна дверь на все источники.
  *
  * Срок задаёт тот, кто выдаёт, — тем же правилом, что у акции. Постоянного срока в коде нет:
- * сколько держать товар на полке, знает парк, а не программа. У баллов срока нет вовсе.
+ * сколько держать товар на полке, знает парк, а не программа.
  *
- * Баллы идут причиной `manual` с ключом `manual:<uuid>` — тем же, что ручная правка
- * (docs/points.md): это одна операция по одному человеку, заведённая сотрудником. Ключ
- * выдаётся на запрос, а не приходит от клиента, — довод тот же, что у `adjustPointsManually`.
+ * Баллы здесь не вручаются (issue #219): баллы из раздела «Награды» — всегда подарок
+ * с «Забрать» (`services/gifts/grantGift.ts`), и одному водителю тоже, а зачислить сразу —
+ * ручной правкой баллов (решение Руслана 25-09-2026).
  */
 
 export type ManualRewardInput = {
@@ -25,7 +22,6 @@ export type ManualRewardInput = {
   employeeId: string;
   /** Как пришло: вид проверяется здесь. */
   kind: string;
-  points: number | null;
   productId: string | null;
   title: string | null;
   officeId: string | null;
@@ -54,16 +50,7 @@ const requireLifetime = (input: ManualRewardInput): number => {
 
 const buildGift = (input: ManualRewardInput): RewardGift => {
   if (input.kind === 'points') {
-    if (!isPositiveInteger(input.points)) {
-      throw new InvalidManualRewardError('points_invalid');
-    }
-
-    return {
-      kind: 'points',
-      points: input.points,
-      reason: 'manual',
-      idempotencyKey: buildManualIdempotencyKey(randomUUID()),
-    };
+    throw new InvalidManualRewardError('points_via_gift');
   }
 
   if (input.kind === 'product') {

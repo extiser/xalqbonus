@@ -1,9 +1,15 @@
 import { countedPlainText, plainText } from '#server/bot/texts';
 import type { Language } from '#server/generated/prisma/enums';
+import type { MemberGiftRow } from '#server/repositories/gifts';
 import type { PersonRewardRow } from '#server/repositories/rewards';
 import { toMemberOffice } from '#server/services/offices/readMemberOffices';
-import { formatCalendarDate, formatClockTime, formatDayMonthWord } from '#server/utils/parkTime';
-import type { MemberReward, MemberRewardTexts } from '#shared/types/rewards';
+import {
+  calendarDayMoment,
+  formatCalendarDate,
+  formatClockTime,
+  formatDayMonthWord,
+} from '#server/utils/parkTime';
+import type { MemberGift, MemberReward, MemberRewardTexts } from '#shared/types/rewards';
 
 /**
  * Во что превращается награда на экране водителя. Решений здесь нет — только перевод строки
@@ -21,12 +27,24 @@ const formatMoment = (moment: Date): string =>
 const deadline = (row: PersonRewardRow, language: Language): string =>
   row.expiresAt ? formatDayMonthWord(row.expiresAt, language) : '';
 
-/** Откуда награда: источник и пояснение внутри него. */
+/**
+ * Откуда награда: источник и пояснение внутри него. Полной разборкой источника — новый
+ * источник обязан сломать сборку здесь. У подарка пояснение — повод раздачи:
+ * «Xalq Taxi · ко Дню учителя».
+ */
+const sourceText = (row: PersonRewardRow, language: Language): string => {
+  switch (row.source) {
+    case 'campaign':
+      return plainText('reward_origin_campaign', language, { title: row.campaignTitle ?? '' });
+    case 'manual':
+      return plainText('reward_origin_manual', language);
+    case 'gift':
+      return plainText('reward_origin_gift', language);
+  }
+};
+
 const originText = (row: PersonRewardRow, language: Language): string => {
-  const source =
-    row.source === 'campaign'
-      ? plainText('reward_origin_campaign', language, { title: row.campaignTitle ?? '' })
-      : plainText('reward_origin_manual', language);
+  const source = sourceText(row, language);
 
   return row.sourceNote ? `${source} · ${row.sourceNote}` : source;
 };
@@ -38,7 +56,11 @@ const originText = (row: PersonRewardRow, language: Language): string => {
 const stateParts = (row: PersonRewardRow, language: Language): { word: string; hint: string } => {
   switch (row.status) {
     case 'credited':
-      return { word: plainText('reward_state_credited', language), hint: formatCalendarDate(row.createdAt) };
+      // Подарок лёг на баланс в момент зачисления, а не вручения.
+      return {
+        word: plainText('reward_state_credited', language),
+        hint: formatCalendarDate(row.claimedAt ?? row.createdAt),
+      };
     case 'awaiting':
       return {
         word: plainText('reward_word_awaiting', language),
@@ -90,6 +112,19 @@ export const describeMemberReward = (row: PersonRewardRow, language: Language): 
     pricePoints: product ? row.pricePoints : null,
   };
 };
+
+/**
+ * Ждущий подарок на языке водителя. Срок — день раздачи словом месяца: баллы придут сами
+ * в конце этих суток парка.
+ */
+export const describeMemberGift = (row: MemberGiftRow, language: Language): MemberGift => ({
+  rewardId: row.id,
+  title: countedPlainText('gift_title', language, row.points),
+  reasonText: plainText('gift_reason', language, { reason: row.reason }),
+  deadlineText: plainText('gift_deadline', language, {
+    date: formatDayMonthWord(calendarDayMoment(row.untilDate.toISOString().slice(0, 10)), language),
+  }),
+});
 
 /** Тексты раздела и экрана награды на языке участника. */
 export const memberRewardTexts = (language: Language): MemberRewardTexts => ({

@@ -6,6 +6,7 @@
  */
 
 import type {
+  GiftClaimMode,
   RewardKind,
   RewardSource,
   RewardStatus,
@@ -13,7 +14,7 @@ import type {
 import type { MemberOffice } from './miniapp';
 import type { OfficeOrder } from './orders';
 
-export type { RewardKind, RewardSource, RewardStatus };
+export type { GiftClaimMode, RewardKind, RewardSource, RewardStatus };
 
 // ---------------------------------------------------------------------------
 // Стойка
@@ -69,7 +70,8 @@ export type OfficeRewardResponse = {
 export type MemberReward = {
   rewardId: string;
   kind: RewardKind;
-  status: RewardStatus;
+  /** Ждущий подарок сюда не входит: у него своя карточка — `MemberGift`. */
+  status: Exclude<RewardStatus, 'claimable'>;
   /** Что за награда: «300 баллов», название товара или произвольной. */
   title: string;
   /** Откуда: «Акция „…“ · сундук дня» или «Вручил парк · пояснение». */
@@ -102,9 +104,47 @@ export type MemberReward = {
   pricePoints: number | null;
 };
 
-export type MiniAppRewardsResponse = {
-  rewards: MemberReward[];
+/**
+ * Подарок от Xalq Taxi, ждущий водителя (issue #219), — готовыми строками на его языке.
+ * Свой вид, а не `MemberReward`: у подарка нет ни офиса, ни кода, ни слова состояния — только
+ * сумма, повод и срок, после которого баллы придут сами.
+ */
+export type MemberGift = {
+  rewardId: string;
+  /** «300 баллов в подарок». */
+  title: string;
+  /** «Xalq Taxi · ко Дню учителя». */
+  reasonText: string;
+  /** «Заберите до 5 октября». */
+  deadlineText: string;
 };
+
+export type MiniAppRewardsResponse = {
+  /** Награды со своим видом. Ждущие подарки сюда не входят — они в `gifts`. */
+  rewards: MemberReward[];
+  /** Ждущие подарки, свежие первыми. */
+  gifts: MemberGift[];
+  /** Есть подарок, которого водитель ещё не видел в шторке: шторка показывается сама. */
+  giftsUnseen: boolean;
+};
+
+/** «Забрать» (`POST /api/miniapp/gifts/{rewardId}/claim`): баланс после зачисления. */
+export type MiniAppGiftClaimResponse = {
+  balancePoints: number;
+};
+
+/** Тело отметки «шторку видел» (`POST /api/miniapp/gifts/shown`). */
+export type MiniAppGiftsShownBody = {
+  rewardIds: string[];
+};
+
+/**
+ * Отказ «Забрать»: `gift_not_found` — подарка нет или он чужой (`404`), `gift_not_claimable` —
+ * уже зачислен (`409`). Экран решает по коду, текст — водителю на его языке.
+ */
+export type MemberGiftDenialCode = 'gift_not_found' | 'gift_not_claimable';
+
+export type MemberGiftDenialPayload = { code: MemberGiftDenialCode };
 
 /**
  * Тексты раздела и экрана награды на языке участника. Приезжают с экраном участника, как тексты
@@ -144,12 +184,19 @@ export type DriverReward = {
   /** Кто выдал у стойки. */
   issuedByName: string | null;
   expiredAt: string | null;
+  /**
+   * Подарок лёг на баланс (issue #219): когда и как — забрал сам (`driver`) или зачислилось
+   * по сроку (`auto`). Пусто у всех, кроме зачисленного подарка. У ждущего подарка `expiresAt` —
+   * момент, когда он зачислится сам.
+   */
+  claimedAt: string | null;
+  claimMode: GiftClaimMode | null;
   source: RewardSource;
   /** Акция — у источника `campaign`. */
   campaignTitle: string | null;
   /** Пояснение внутри источника: у ручной — пояснение автора, у акции — «сундук дня». */
   sourceNote: string | null;
-  /** Кто вручил — у ручной всегда: вручение без следа в программе не бывает. */
+  /** Кто вручил — у ручной и подарка всегда: вручение без следа в программе не бывает. */
   grantedByName: string | null;
   createdAt: string;
 };
@@ -165,12 +212,11 @@ export type DriverRewardsResponse = {
 
 /**
  * Тело ручной выдачи — то, что набрано в форме, строками. Какие поля нужны, зависит от вида:
- * у баллов — сумма, у товара — товар, офис и срок, у произвольной — название, офис и срок.
- * Пояснение обязательно всегда.
+ * у товара — товар, офис и срок, у произвольной — название, офис и срок. Пояснение обязательно
+ * всегда. Баллы ручной выдачей не вручаются — они подарок (`GiftGrantRequestBody`, issue #219).
  */
 export type ManualRewardRequestBody = {
   kind: string;
-  points: string;
   productId: string;
   title: string;
   officeId: string;
@@ -181,7 +227,6 @@ export type ManualRewardRequestBody = {
 /** Поле формы, к которому относится отказ, — текст встаёт рядом с ним. */
 export type ManualRewardField =
   | 'kind'
-  | 'points'
   | 'productId'
   | 'title'
   | 'officeId'
@@ -191,7 +236,7 @@ export type ManualRewardField =
 export type ManualRewardResponse = {
   rewardId: string;
   kind: RewardKind;
-  /** Код для стойки. Пусто у баллов. */
+  /** Код для стойки. */
   code: string | null;
 };
 
@@ -201,4 +246,61 @@ export type RewardGrantOptionsResponse = {
   offices: { officeId: string; name: string }[];
   /** Опубликованные товары не в архиве; призы помечены. */
   products: { productId: string; name: string; promo: boolean }[];
+};
+
+// ---------------------------------------------------------------------------
+// Подарки от Xalq Taxi
+// ---------------------------------------------------------------------------
+
+/**
+ * Тело раздачи подарка (`POST /api/gifts`, issue #219) — то, что набрано в форме, строками.
+ * Получатель — водитель или сегмент, заполнено поле своего вида.
+ */
+export type GiftGrantRequestBody = {
+  recipientKind: string;
+  personId: string;
+  segmentId: string;
+  points: string;
+  reason: string;
+  /** «Забрать до», `YYYY-MM-DD`. */
+  untilDate: string;
+};
+
+/** Поле формы раздачи, к которому относится отказ. */
+export type GiftGrantField = 'recipient' | 'points' | 'reason' | 'untilDate';
+
+/** Раздача в списке раздела «Награды»: кому, что, кто выдал и что стало с подарками. */
+export type GiftGrant = {
+  giftGrantId: string;
+  createdAt: string;
+  recipientKind: 'person' | 'segment';
+  personId: string | null;
+  /** «Фамилия Имя» из профиля. `null` — профиль без имени или раздача сегменту. */
+  driverName: string | null;
+  segmentId: string | null;
+  segmentName: string | null;
+  points: number;
+  reason: string;
+  /** День автозачисления, `YYYY-MM-DD`. */
+  untilDate: string;
+  grantedByName: string;
+  /** Сколько подарков родилось. */
+  recipients: number;
+  /** Сколько человек из сегмента пропущено: не участники программы. */
+  skipped: number;
+  /** Забрали сами. */
+  claimedByDriver: number;
+  /** Зачислено по сроку. */
+  creditedAuto: number;
+  /** Ещё ждут. */
+  waiting: number;
+};
+
+export type GiftGrantsResponse = {
+  /** Свежие первыми. */
+  grants: GiftGrant[];
+};
+
+export type GiftGrantResponse = {
+  grant: GiftGrant;
 };
