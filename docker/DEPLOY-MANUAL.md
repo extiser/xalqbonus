@@ -600,11 +600,151 @@ bash docker/scripts/pg-backup.sh daily         # копия по расписа�
 
 Копию по расписанию запускает таймер машины — его заводит и правит человек, целью `Makefile`
 она не оформляется: входная дверь `Makefile` — для того, что запускает разработчик
-(`docs/infra.md` → «Единственная входная дверь — Makefile»). Команда таймера:
+(`docs/infra.md` → «Единственная входная дверь — Makefile»).
 
+### Расписание копий: таймер машины и забор на Мак
+
+Заведено 26-09-2026. Копии живут в двух местах: на машине и на Маке Руслана. Хранилища вне машины пока нет — Cloudflare R2 заводится после выката. Всю машину, кроме того, копирует провайдер VDSina.
+
+```mermaid
+flowchart LR
+  subgraph machine["Боевая машина 89.124.107.89"]
+    timer["xalqbonus-backup.timer<br/>04:00 по Ташкенту"] --> service["xalqbonus-backup.service<br/>pg-backup.sh daily"]
+    service --> shelf[("/srv/xalqbonus-backups/<br/>дамп + архив фото, полка 14<br/>pre-migrate/, полка 10")]
+    deploy["make prod-deploy"] -->|pre-migrate| shelf
+  end
+  subgraph mac["Мак Руслана"]
+    agent["LaunchAgent<br/>com.extiser.xalqbonus-pull-backups<br/>05:00, проспал — при пробуждении"] --> script["~/.local/bin/<br/>xalqbonus-pull-backups.sh"]
+    script --> local[("~/git/startups/xalqbonus/<br/>_backup/prod-daily/<br/>без удаления")]
+  end
+  script -->|"rsync по ssh, root, ключ<br/>5 попыток через минуту"| shelf
 ```
-bash /srv/xalqbonus/docker/scripts/pg-backup.sh daily
+
+| Что | Где | Когда | Хранится |
+|---|---|---|---|
+| Дамп базы и архив тома фото | машина, `/srv/xalqbonus-backups/` | 04:00 каждый день | 14 последних |
+| Дамп перед миграцией | машина, `/srv/xalqbonus-backups/pre-migrate/` | каждый выкат | 10 последних |
+| Всё содержимое `/srv/xalqbonus-backups/` | Мак, `~/git/startups/xalqbonus/_backup/prod-daily/` (`_backup/` в `.gitignore`) | 05:00 или при пробуждении | всё, без удаления |
+
+Часы машины идут в `Etc/GMT-5` (+05), поэтому `04:00` в таймере — четыре утра по Ташкенту. Копия на машине снимается раньше забора на Мак на час: к пяти она уже готова.
+
+#### Машина: служба и таймер
+
+`/etc/systemd/system/xalqbonus-backup.service`:
+
+```ini
+[Unit]
+Description=XalqBonus: ежедневная копия базы и тома с фото
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bash /srv/xalqbonus/docker/scripts/pg-backup.sh daily
 ```
+
+`/etc/systemd/system/xalqbonus-backup.timer`:
+
+```ini
+[Unit]
+Description=XalqBonus: копия базы каждый день в 04:00
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+`Persistent=true` — если машина была выключена в 04:00, копия снимается сразу после включения. `Type=oneshot` — служба отрабатывает и завершается.
+
+Включение — `systemctl daemon-reload && systemctl enable --now xalqbonus-backup.timer`.
+
+Проверка:
+
+```bash
+systemctl list-timers xalqbonus-backup.timer          # следующий и прошлый запуск
+systemctl status xalqbonus-backup.service --no-pager  # итог последнего прогона, status=0/SUCCESS
+journalctl -u xalqbonus-backup.service -n 50 --no-pager
+ls -la /srv/xalqbonus-backups/
+```
+
+Снять копию вне расписания — `systemctl start xalqbonus-backup.service`. Выключить расписание — `systemctl disable --now xalqbonus-backup.timer`.
+
+#### Мак: скрипт забора и LaunchAgent
+
+Забор идёт с Мака, а не отправкой с машины: машине не нужно знать ничего о Маке, а у Мака ключ на машину уже есть. `rsync` без `--delete`: полка машины ротируется, на Маке копии копятся.
+
+`~/.local/bin/xalqbonus-pull-backups.sh`:
+
+```bash
+#!/bin/bash
+# Забор копий базы XalqBonus с боевой машины на Мак. Запускает launchd в 05:00;
+# если Мак спал — при пробуждении. Сеть после пробуждения поднимается не сразу,
+# поэтому пять попыток с паузой в минуту. Без --delete: на Маке копии копятся.
+DEST="$HOME/git/startups/xalqbonus/_backup/prod-daily/"
+for attempt in 1 2 3 4 5; do
+  if /usr/bin/rsync -a -e "/usr/bin/ssh -o BatchMode=yes -o ConnectTimeout=20" \
+      root@89.124.107.89:/srv/xalqbonus-backups/ "$DEST"; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') ok, попытка $attempt"
+    exit 0
+  fi
+  echo "$(date '+%Y-%m-%d %H:%M:%S') не вышло, попытка $attempt"
+  sleep 60
+done
+exit 1
+```
+
+`~/Library/LaunchAgents/com.extiser.xalqbonus-pull-backups.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.extiser.xalqbonus-pull-backups</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/extiser/.local/bin/xalqbonus-pull-backups.sh</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>5</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/Users/extiser/Library/Logs/xalqbonus-backups.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/extiser/Library/Logs/xalqbonus-backups.log</string>
+</dict>
+</plist>
+```
+
+`StartCalendarInterval` у `launchd`: Мак спал в 05:00 — задание запускается при пробуждении, один раз. Мак был **выключен** — запуск пропадает до следующего дня, копия этого дня остаётся только на машине (и достанется Маку следующим забором, пока она на полке — 14 дней).
+
+Включение — `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.extiser.xalqbonus-pull-backups.plist`.
+
+Проверка:
+
+```bash
+cat ~/Library/Logs/xalqbonus-backups.log                                   # строка на каждый прогон
+launchctl print gui/$(id -u)/com.extiser.xalqbonus-pull-backups | grep -E 'state|last exit'
+ls -la ~/git/startups/xalqbonus/_backup/prod-daily/
+```
+
+Забрать вне расписания — `launchctl kickstart gui/$(id -u)/com.extiser.xalqbonus-pull-backups`. Выключить — `launchctl bootout gui/$(id -u)/com.extiser.xalqbonus-pull-backups`. Правка plist вступает в силу после `bootout` и повторного `bootstrap`.
+
+#### Известные слабые места
+
+- Мак выключен две недели подряд — копии старше 14 дней уходят с полки машины, не доехав до Мака
+- На Маке копии не удаляются: около 20 МБ в сутки на 26-09-2026, почти всё — архив фото
+- Ключ ssh под `launchd` берётся тот же, что в терминале; ключ с паролем без агента из-под `launchd` не подхватится — строки «не вышло» в логе
+- Всё это закрывается хранилищем вне машины — Cloudflare R2, после выката
 
 ## Копия тома с фото
 
