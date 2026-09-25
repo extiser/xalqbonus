@@ -1912,16 +1912,21 @@ model Reward {
 ///
 /// Получатель ровно один — водитель или сегмент — проверкой в миграции.
 model GiftGrant {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  points    Int
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  points      Int
   /// Повод, который видит водитель, на его языке: «ко Дню учителя». Оба языка обязательны —
   /// сообщение и приложение говорят с водителем на его языке (правка по прогону #232).
-  reasonRu  String   @map("reason_ru")
-  reasonUz  String   @map("reason_uz")
+  reasonRu    String   @map("reason_ru")
+  reasonUz    String   @map("reason_uz")
   /// День автозачисления в зоне парка: незабранное ложится на баланс в конце этих суток.
-  untilDate DateTime @map("until_date") @db.Date
-  /// Обложка — относительный путь на томе, `gifts/<id>.<ext>`. Пусто — без обложки.
-  coverPath String?  @map("cover_path")
+  untilDate   DateTime @map("until_date") @db.Date
+  /// Обложки на каждом языке — относительные пути на томе, `gifts/<id>-ru.<ext>` и `gifts/<id>-uz.<ext>`
+  /// (у раздач до #236 — общий `gifts/<id>.<ext>` в обеих). Обе или ни одной: пусто — без обложки.
+  coverRuPath String?  @map("cover_ru_path")
+  coverUzPath String?  @map("cover_uz_path")
+  /// Свой текст сообщения на каждом языке (#236). Пусто — водителю этого языка уходит системный текст.
+  messageRu   String?  @map("message_ru")
+  messageUz   String?  @map("message_uz")
 
   segmentId String? @map("segment_id") @db.Uuid
   personId  String? @map("person_id") @db.Uuid

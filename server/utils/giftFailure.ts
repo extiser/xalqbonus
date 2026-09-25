@@ -3,6 +3,7 @@ import { createError, type H3Error } from 'h3';
 import {
   GiftRecipientError,
   InvalidGiftGrantError,
+  type GiftGrantLanguage,
   type GiftGrantProblem,
   type GiftRecipientProblem,
 } from '#server/services/gifts/errors';
@@ -23,7 +24,15 @@ import type { GiftGrantField } from '#shared/types/rewards';
 
 type Rejection = { status: 400 | 409; field: GiftGrantField; message: string };
 
-const GRANT_PROBLEMS: Readonly<Record<GiftGrantProblem, Rejection>> = {
+/** Отказы, текст и поле которых зависят от подробностей: какая обложка, сколько знаков лишних. */
+type DetailedGrantProblem =
+  | 'cover_pair_incomplete'
+  | 'cover_type_invalid'
+  | 'cover_too_large'
+  | 'message_ru_too_long'
+  | 'message_uz_too_long';
+
+const GRANT_PROBLEMS: Readonly<Record<Exclude<GiftGrantProblem, DetailedGrantProblem>, Rejection>> = {
   points_invalid: { status: 400, field: 'points', message: 'Сумма — целое число баллов больше нуля.' },
   reason_ru_missing: {
     status: 400,
@@ -45,14 +54,55 @@ const GRANT_PROBLEMS: Readonly<Record<GiftGrantProblem, Rejection>> = {
     field: 'reasonUz',
     message: `Повод на узбекском — не длиннее ${GIFT_REASON_MAX_LENGTH} знаков: это строка карточки подарка.`,
   },
-  cover_type_invalid: { status: 400, field: 'cover', message: 'Обложка — JPEG, PNG или WebP.' },
-  cover_too_large: { status: 400, field: 'cover', message: `Обложка тяжелее ${MAX_PHOTO_MB} МБ.` },
   until_date_invalid: { status: 400, field: 'untilDate', message: 'Дата не читается как день календаря.' },
   until_date_too_early: {
     status: 400,
     field: 'untilDate',
     message: '«Забрать до» — не раньше завтрашнего дня: в этот день незабранное зачислится само.',
   },
+};
+
+const COVER_FIELDS: Readonly<Record<GiftGrantLanguage, GiftGrantField>> = { ru: 'coverRu', uz: 'coverUz' };
+
+/** Язык словом, для середины фразы. */
+const IN_LANGUAGE: Readonly<Record<GiftGrantLanguage, string>> = { ru: 'на русском', uz: 'на узбекском' };
+
+const RUSSIAN_PLURAL = new Intl.PluralRules('ru');
+
+/** «1 знак», «3 знака», «15 знаков». */
+const SIGN_FORMS: Readonly<Partial<Record<Intl.LDMLPluralRule, string>>> = { one: 'знак', few: 'знака' };
+
+const signs = (count: number): string => `${count} ${SIGN_FORMS[RUSSIAN_PLURAL.select(count)] ?? 'знаков'}`;
+
+const messageTooLong = (language: GiftGrantLanguage, excess: number): Rejection => ({
+  status: 400,
+  field: language === 'uz' ? 'messageUz' : 'messageRu',
+  message: `Текст сообщения ${IN_LANGUAGE[language]} длиннее, чем влезет в сообщение: сократите на ${signs(excess)}.`,
+});
+
+const grantRejection = (error: InvalidGiftGrantError): Rejection => {
+  // Сервис называет обложку у каждого `cover_*`; без названия — первое поле, русское.
+  const cover = error.details.cover ?? 'ru';
+  const excess = error.details.excess ?? 0;
+
+  switch (error.problem) {
+    case 'cover_pair_incomplete':
+      return {
+        status: 400,
+        field: COVER_FIELDS[cover],
+        message: `Загрузите обложку и ${IN_LANGUAGE[cover]}.`,
+      };
+    case 'cover_type_invalid':
+      return { status: 400, field: COVER_FIELDS[cover], message: 'Обложка — JPEG, PNG или WebP.' };
+    case 'cover_too_large':
+      return { status: 400, field: COVER_FIELDS[cover], message: `Обложка тяжелее ${MAX_PHOTO_MB} МБ.` };
+    case 'message_ru_too_long':
+      return messageTooLong('ru', excess);
+    case 'message_uz_too_long':
+      return messageTooLong('uz', excess);
+    default:
+      return GRANT_PROBLEMS[error.problem];
+  }
 };
 
 const RECIPIENT_PROBLEMS: Readonly<Record<GiftRecipientProblem, Rejection>> = {
@@ -84,7 +134,7 @@ const reject = ({ status, field, message }: Rejection): H3Error =>
 
 export const explainGiftFailure = (error: unknown): H3Error | null => {
   if (error instanceof InvalidGiftGrantError) {
-    return reject(GRANT_PROBLEMS[error.problem]);
+    return reject(grantRejection(error));
   }
 
   if (error instanceof GiftRecipientError) {

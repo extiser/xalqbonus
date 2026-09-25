@@ -12,6 +12,21 @@ defineProps<{
   grants: GiftGrant[] | null;
 }>();
 
+/** Миниатюры обложек с подписями языков. Обе или ни одной; у раздач до #236 — одна картинка дважды. */
+const coverThumbnails = (grant: GiftGrant): { label: string; url: string }[] =>
+  grant.coverRuUrl && grant.coverUzUrl
+    ? [
+        { label: 'RU', url: grant.coverRuUrl },
+        { label: 'UZ', url: grant.coverUzUrl },
+      ]
+    : [];
+
+/** Языки, на которых написан свой текст: «RU, UZ». Пусто — на обоих ушёл системный. */
+const ownTextLanguages = (grant: GiftGrant): string =>
+  [grant.messageRu === null ? null : 'RU', grant.messageUz === null ? null : 'UZ']
+    .filter((language): language is string => language !== null)
+    .join(', ');
+
 const recipientText = (grant: GiftGrant): string =>
   grant.recipientKind === 'segment'
     ? `сегмент «${grant.segmentName ?? DASH}»`
@@ -40,12 +55,14 @@ const recipientText = (grant: GiftGrant): string =>
         :key="grant.giftGrantId"
         class="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-200 py-3 first:border-t-0"
       >
-        <!-- Обложка — той же рамкой 16:9, что у водителя. -->
-        <div
-          v-if="grant.coverUrl"
-          class="aspect-video w-24 shrink-0 overflow-hidden rounded-md border border-slate-200"
-        >
-          <img :src="grant.coverUrl" alt="Обложка подарка" class="h-full w-full object-cover" />
+        <!-- Обложки — той же рамкой 16:9, что у водителя; обе или ни одной. -->
+        <div v-if="coverThumbnails(grant).length > 0" class="flex shrink-0 gap-2">
+          <figure v-for="cover in coverThumbnails(grant)" :key="cover.label">
+            <div class="aspect-video w-24 overflow-hidden rounded-md border border-slate-200">
+              <img :src="cover.url" :alt="`Обложка подарка, ${cover.label}`" class="h-full w-full object-cover" />
+            </div>
+            <figcaption class="mt-0.5 text-center text-xs text-slate-500">{{ cover.label }}</figcaption>
+          </figure>
         </div>
         <div class="min-w-48 flex-1">
           <p class="text-sm font-semibold text-slate-900">
@@ -53,6 +70,7 @@ const recipientText = (grant: GiftGrant): string =>
             {{ grant.reasonRu }}
           </p>
           <p class="text-sm text-slate-500">{{ grant.reasonUz }}</p>
+          <p v-if="ownTextLanguages(grant)" class="text-sm text-slate-500">Свой текст: {{ ownTextLanguages(grant) }}</p>
           <p class="mt-0.5 text-sm text-slate-700">
             <NuxtLink
               v-if="grant.recipientKind === 'person' && grant.personId"

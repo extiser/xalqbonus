@@ -2,16 +2,22 @@ import { randomUUID } from 'node:crypto';
 
 import { consola } from 'consola';
 import { deleteGiftCover, writeGiftCover } from '#server/adapters/uploads/giftCovers';
+import { buildGiftMessage } from '#server/bot/notifications';
 import { db } from '#server/db';
 import { enqueueNotifications } from '#server/queues/notifications';
 import { insertGiftGrant, insertGiftRewards } from '#server/repositories/gifts';
 import { listProgramMemberIds } from '#server/repositories/programMembership';
 import { findSegment, listSegmentPersonIds } from '#server/repositories/segments';
-import { GiftRecipientError, InvalidGiftGrantError } from '#server/services/gifts/errors';
+import {
+  GiftRecipientError,
+  InvalidGiftGrantError,
+  type GiftGrantLanguage,
+} from '#server/services/gifts/errors';
 import { toSegmentConditions } from '#server/services/segments/fields';
 import { parkDayKey, shiftDayKey } from '#server/utils/parkTime';
 import { isCalendarDay } from '#shared/campaign';
 import { GIFT_REASON_MAX_LENGTH } from '#shared/gift';
+import { mailingMessageLimit } from '#shared/mailing';
 import { MAX_PHOTO_BYTES, PHOTO_EXTENSION_BY_TYPE } from '#shared/photo';
 
 /**
@@ -31,8 +37,10 @@ import { MAX_PHOTO_BYTES, PHOTO_EXTENSION_BY_TYPE } from '#shared/photo';
  * ставятся после фиксации — сообщение о подарке, который откатился, хуже, чем никакого.
  *
  * Повод — на двух языках, оба обязательны: сообщение и приложение говорят с водителем на его
- * языке. Обложка необязательна и ложится на том под идентификатор раздачи до транзакции —
- * как фото рассылки, сначала файл, потом колонка. Не записалась раздача — файл снимается.
+ * языке. Свой текст сообщения и обложка — тоже на каждом языке (issue #236). Текст
+ * необязателен на каждом языке сам по себе: пусто — водителю этого языка уходит системный.
+ * Обложки — обе или ни одной; ложатся на том под идентификатор раздачи до транзакции — как
+ * фото рассылки, сначала файл, потом колонка. Не записалась раздача — файлы снимаются.
  */
 
 const log = consola.withTag('gifts:grant');
@@ -52,7 +60,11 @@ export type GrantGiftInput = {
   reasonUz: string;
   /** «Забрать до», `YYYY-MM-DD`. */
   untilDate: string;
-  cover: GiftCoverUpload | null;
+  /** Свой текст сообщения, как набран. Пусто после обрезки краёв — системный текст. */
+  messageRu: string;
+  messageUz: string;
+  coverRu: GiftCoverUpload | null;
+  coverUz: GiftCoverUpload | null;
   employeeId: string;
 };
 
@@ -65,19 +77,79 @@ export type GrantGiftResult = {
 /** Столбец `points` — `int`: сумма больше него не запишется. */
 const MAX_POINTS = 2_147_483_647;
 
-type ValidGift = { points: number; reasonRu: string; reasonUz: string; untilDate: string };
+type ValidGift = {
+  points: number;
+  reasonRu: string;
+  reasonUz: string;
+  untilDate: string;
+  messageRu: string | null;
+  messageUz: string | null;
+};
 
-const validateCover = (cover: GiftCoverUpload | null): void => {
+const validateCover = (cover: GiftCoverUpload | null, language: GiftGrantLanguage): void => {
   if (cover === null) {
     return;
   }
 
   if (!PHOTO_EXTENSION_BY_TYPE[cover.contentType]) {
-    throw new InvalidGiftGrantError('cover_type_invalid');
+    throw new InvalidGiftGrantError('cover_type_invalid', { cover: language });
   }
 
   if (cover.bytes.byteLength > MAX_PHOTO_BYTES) {
-    throw new InvalidGiftGrantError('cover_too_large');
+    throw new InvalidGiftGrantError('cover_too_large', { cover: language });
+  }
+};
+
+/** Обложки — обе или ни одной. Одна и та же картинка в оба поля — законно. */
+const validateCovers = (input: GrantGiftInput): void => {
+  if (input.coverRu !== null && input.coverUz === null) {
+    throw new InvalidGiftGrantError('cover_pair_incomplete', { cover: 'uz' });
+  }
+
+  if (input.coverRu === null && input.coverUz !== null) {
+    throw new InvalidGiftGrantError('cover_pair_incomplete', { cover: 'ru' });
+  }
+
+  validateCover(input.coverRu, 'ru');
+  validateCover(input.coverUz, 'uz');
+};
+
+const normalizeMessage = (message: string): string | null => {
+  const trimmed = message.trim();
+
+  return trimmed === '' ? null : trimmed;
+};
+
+/**
+ * Свой текст влезает в сообщение. Меряется всё, что уйдёт водителю этого языка: свой текст,
+ * пустая строка и системная строка с суммой и датой этой раздачи — той же сборкой, что при
+ * отправке. С обложкой сообщение становится подписью к фото, и потолок вчетверо ниже.
+ */
+const validateMessage = (
+  gift: Omit<ValidGift, 'messageRu' | 'messageUz'>,
+  message: string | null,
+  language: GiftGrantLanguage,
+  withCover: boolean,
+): void => {
+  if (message === null) {
+    return;
+  }
+
+  const { length } = buildGiftMessage(
+    {
+      points: gift.points,
+      reason: language === 'uz' ? gift.reasonUz : gift.reasonRu,
+      untilDate: gift.untilDate,
+    },
+    message,
+    language,
+  ).text;
+  const limit = mailingMessageLimit(withCover);
+
+  if (length > limit) {
+    throw new InvalidGiftGrantError(language === 'uz' ? 'message_uz_too_long' : 'message_ru_too_long', {
+      excess: length - limit,
+    });
   }
 };
 
@@ -121,17 +193,27 @@ const validate = (input: GrantGiftInput, now: Date): ValidGift => {
     throw new InvalidGiftGrantError('until_date_too_early');
   }
 
-  validateCover(input.cover);
+  validateCovers(input);
 
-  return { points, reasonRu, reasonUz, untilDate };
+  const withCover = input.coverRu !== null;
+  const messageRu = normalizeMessage(input.messageRu);
+  const messageUz = normalizeMessage(input.messageUz);
+
+  validateMessage({ points, reasonRu, reasonUz, untilDate }, messageRu, 'ru', withCover);
+  validateMessage({ points, reasonRu, reasonUz, untilDate }, messageUz, 'uz', withCover);
+
+  return { points, reasonRu, reasonUz, untilDate, messageRu, messageUz };
 };
+
+/** Пути обложек на томе. Обе или ни одной — как их прислали. */
+type CoverPaths = { coverRuPath: string | null; coverUzPath: string | null };
 
 /** Раздача и её подарки одной транзакцией. Получатели — участники программы, снимком. */
 const writeGrant = async (
   input: GrantGiftInput,
   gift: ValidGift,
   giftGrantId: string,
-  coverPath: string | null,
+  covers: CoverPaths,
 ): Promise<{ personIds: string[]; skipped: number }> => {
   const { recipient } = input;
 
@@ -168,8 +250,8 @@ const writeGrant = async (
 
     await insertGiftGrant(transaction, {
       ...gift,
+      ...covers,
       id: giftGrantId,
-      coverPath,
       segmentId: recipient.kind === 'segment' ? recipient.segmentId : null,
       personId: recipient.kind === 'person' ? recipient.personId : null,
       recipients: personIds.length,
@@ -199,20 +281,36 @@ const writeGrant = async (
 export const grantGift = async (input: GrantGiftInput): Promise<GrantGiftResult> => {
   const gift = validate(input, new Date());
   const { recipient } = input;
-  // Идентификатор выдаётся до записи: под него ложится файл обложки.
+  // Идентификатор выдаётся до записи: под него ложатся файлы обложек.
   const giftGrantId = randomUUID();
-  const coverPath = input.cover
-    ? await writeGiftCover(giftGrantId, input.cover.contentType, input.cover.bytes)
-    : null;
+  // Что уже легло на том — снимается, если раздача не запишется.
+  const writtenCoverPaths: string[] = [];
 
+  const writeCover = async (cover: GiftCoverUpload | null, language: GiftGrantLanguage): Promise<string | null> => {
+    if (cover === null) {
+      return null;
+    }
+
+    const coverPath = await writeGiftCover(giftGrantId, language, cover.contentType, cover.bytes);
+
+    writtenCoverPaths.push(coverPath);
+
+    return coverPath;
+  };
+
+  let covers: CoverPaths;
   let written: { personIds: string[]; skipped: number };
 
   try {
-    written = await writeGrant(input, gift, giftGrantId, coverPath);
+    covers = {
+      coverRuPath: await writeCover(input.coverRu, 'ru'),
+      coverUzPath: await writeCover(input.coverUz, 'uz'),
+    };
+    written = await writeGrant(input, gift, giftGrantId, covers);
   } catch (error) {
-    // Раздача не записалась — обложке ссылаться не на что. Отказ снятия не заслоняет
+    // Раздача не записалась — обложкам ссылаться не на что. Отказ снятия не заслоняет
     // исходную причину: она важнее файла, оставшегося на томе.
-    if (coverPath) {
+    for (const coverPath of writtenCoverPaths) {
       await deleteGiftCover(coverPath).catch((cleanupError: unknown) => {
         log.warn('обложка несостоявшейся раздачи не снялась с тома', {
           coverPath,
@@ -246,7 +344,9 @@ export const grantGift = async (input: GrantGiftInput): Promise<GrantGiftResult>
           reasonRu: gift.reasonRu,
           reasonUz: gift.reasonUz,
           untilDate: gift.untilDate,
-          coverPath,
+          messageRu: gift.messageRu,
+          messageUz: gift.messageUz,
+          ...covers,
         },
       })),
     );

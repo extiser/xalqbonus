@@ -264,6 +264,7 @@ export type TextKey =
   | 'check_unavailable'
   | 'notification_welcome_bonus'
   | 'notification_gift_received'
+  | 'notification_gift_received_footer'
   | 'notification_campaign_finished_chests'
   | 'notification_campaign_finished_returned'
   | 'notification_campaign_finished_joined'
@@ -1521,6 +1522,14 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   notification_gift_received: {
     ru: 'Xalq Taxi дарит вам {points} — {reason}. Заберите их в приложении до {date}.',
     uz: "Xalq Taxi sizga {points} sovg'a qiladi — {reason}. Ularni ilovada {date} gacha oling.",
+  },
+  /**
+   * Системная строка под своим текстом подарка (issue #236): сумма и срок не теряются, даже
+   * если их не написали. Значения — те же, что у `notification_gift_received`. Узбекский — черновой.
+   */
+  notification_gift_received_footer: {
+    ru: 'Заберите {points} в приложении до {date}.',
+    uz: '{points}ni ilovada {date} gacha oling.',
   },
 
   // Итог и вскрытие акции (issue #182). Обе точки стоят на границах окна отправки 09:00–21:00.

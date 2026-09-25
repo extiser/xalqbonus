@@ -21,17 +21,36 @@ export type GiftGrantProblem =
   /** Повод длиннее `GIFT_REASON_MAX_LENGTH`: это строка карточки подарка, а не текст сообщения. */
   | 'reason_ru_too_long'
   | 'reason_uz_too_long'
+  /** Обложка на одном языке есть, на другом нет: обе или ни одной (issue #236). */
+  | 'cover_pair_incomplete'
   /** Обложка не JPEG, PNG или WebP. */
   | 'cover_type_invalid'
   /** Обложка тяжелее потолка фото. */
   | 'cover_too_large'
+  /** Своё сообщение вместе с системной строкой не влезает в сообщение Telegram (issue #236). */
+  | 'message_ru_too_long'
+  | 'message_uz_too_long'
   /** «Забрать до» не читается как день календаря. */
   | 'until_date_invalid'
   /** «Забрать до» раньше завтрашнего дня парка: подарок зачислился бы, не успев подождать. */
   | 'until_date_too_early';
 
+/** Язык обложки или текста, к которому относится отказ. */
+export type GiftGrantLanguage = 'ru' | 'uz';
+
+/** Подробности отказа, без которых текст к нему не собрать. */
+export type GiftGrantProblemDetails = {
+  /** Обложка, о которой речь: у `cover_*` — та, что не годится или которой не хватает. */
+  cover?: GiftGrantLanguage;
+  /** Сколько знаков лишних — у `message_*_too_long`. */
+  excess?: number;
+};
+
 export class InvalidGiftGrantError extends GiftsError {
-  constructor(public readonly problem: GiftGrantProblem) {
+  constructor(
+    public readonly problem: GiftGrantProblem,
+    public readonly details: GiftGrantProblemDetails = {},
+  ) {
     super(`раздача подарка не годится: ${problem}`);
   }
 }

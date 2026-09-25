@@ -2,8 +2,12 @@ import type { OpenAppButton } from '#server/adapters/telegram/outgoing';
 import { readGiftCover } from '#server/adapters/uploads/giftCovers';
 import type { CampaignParticipantOutcome, Language } from '#server/generated/prisma/enums';
 import { launchButton } from '#server/bot/launchButton';
-import { countedPlainText, formatPoints, text } from '#server/bot/texts';
+import { countedPlainText, formatPoints, plainText, text } from '#server/bot/texts';
 import { calendarDayMoment, formatCalendarDate, formatDayMonthWord } from '#server/utils/parkTime';
+// Относительным путём, а не через `#shared`: модуль собирается ещё и в воркер,
+// а там из псевдонимов настроен один `#server` (package.json → `build:worker`).
+import { GIFT_MESSAGE_FOOTER_SEPARATOR } from '../../shared/gift';
+import { escapeHtml } from '../../shared/telegramHtml';
 
 /**
  * Уведомления водителю: что именно система умеет ему написать сама.
@@ -78,20 +82,36 @@ export type Notification =
        * с подписью, без неё — текстом.
        */
       template: 'gift_received';
-      params: {
-        points: number;
-        /**
-         * Повод раздачи на обоих языках: «ко Дню учителя». В сообщение идёт один — на языке
-         * человека, прочитанном в момент отправки. Раздача не правится, в задании он не устареет.
-         */
-        reasonRu: string;
-        reasonUz: string;
-        /** День автозачисления, `YYYY-MM-DD`. */
-        untilDate: string;
-        /** Обложка на томе. Пусто — сообщение без фото. */
-        coverPath: string | null;
-      };
+      params: GiftReceivedParams;
     };
+
+/**
+ * Параметры подарка. Всё на обоих языках: в сообщение идёт один — на языке человека,
+ * прочитанном в момент отправки. Раздача не правится, в задании ничто не устареет.
+ */
+type GiftReceivedParams = {
+  points: number;
+  /** Повод раздачи: «ко Дню учителя». */
+  reasonRu: string;
+  reasonUz: string;
+  /** День автозачисления, `YYYY-MM-DD`. */
+  untilDate: string;
+  /** Свой текст сообщения (issue #236). Пусто — на этом языке уходит системный текст. */
+  messageRu: string | null;
+  messageUz: string | null;
+  /** Обложки на томе — обе или ни одной. Пусто — сообщение без фото. */
+  coverRuPath: string | null;
+  coverUzPath: string | null;
+};
+
+/**
+ * Параметры подарка в том виде, в каком их ставили до #236: одна обложка на оба языка,
+ * своего текста нет. Задания, поставленные до выката и отложенные до 09:00, доезжают такими.
+ */
+type LegacyGiftReceivedParams = Omit<
+  GiftReceivedParams,
+  'messageRu' | 'messageUz' | 'coverRuPath' | 'coverUzPath'
+> & { coverPath: string | null };
 
 /** Приз вскрытого сундука: баллы уже на балансе, товар или произвольный ждёт в офисе. */
 export type RevealedPrize = { kind: 'points'; points: number } | { kind: 'office'; title: string };
@@ -163,13 +183,96 @@ const renderChestsRevealed = (
   ].join('\n\n');
 };
 
-type GiftReceivedParams = Extract<Notification, { template: 'gift_received' }>['params'];
+/** Параметры подарка из задания — прежний вид читается как обложка обоих языков без своего текста. */
+const readGiftReceivedParams = (params: GiftReceivedParams | LegacyGiftReceivedParams): GiftReceivedParams => {
+  if ('coverRuPath' in params) {
+    return params;
+  }
 
-const giftReceivedValues = (params: GiftReceivedParams, language: Language): Record<string, string> => ({
-  points: countedPlainText('reward_points', language, params.points),
-  reason: language === 'uz' ? params.reasonUz : params.reasonRu,
-  date: formatDayMonthWord(calendarDayMoment(params.untilDate), language),
+  const { coverPath, ...rest } = params;
+
+  return { ...rest, messageRu: null, messageUz: null, coverRuPath: coverPath, coverUzPath: coverPath };
+};
+
+/** Подстановка вместо суммы, повода или даты, которых ещё нет: предпросмотр формы зовёт сборку на недонабранном. */
+export const GIFT_MESSAGE_MISSING_VALUE = '…';
+
+/**
+ * Значения, которые сообщение о подарке называет водителю. `null` — нет или не читается,
+ * на его месте встаёт `GIFT_MESSAGE_MISSING_VALUE`; у уведомления все три есть всегда.
+ */
+export type GiftMessageValues = {
+  points: number | null;
+  reason: string | null;
+  /** `YYYY-MM-DD`. */
+  untilDate: string | null;
+};
+
+const giftReceivedValues = (values: GiftMessageValues, language: Language): Record<string, string> => ({
+  points:
+    values.points === null ? GIFT_MESSAGE_MISSING_VALUE : countedPlainText('reward_points', language, values.points),
+  reason: values.reason ?? GIFT_MESSAGE_MISSING_VALUE,
+  date:
+    values.untilDate === null
+      ? GIFT_MESSAGE_MISSING_VALUE
+      : formatDayMonthWord(calendarDayMoment(values.untilDate), language),
 });
+
+/** Сообщение так, как его увидит водитель (по нему меряется длина), и то же под `parse_mode: HTML`. */
+export type GiftMessage = { text: string; html: string };
+
+/** Системная строка под своим текстом: «Заберите 300 баллов в приложении до 1 октября.» */
+export const buildGiftMessageFooter = (values: GiftMessageValues, language: Language): string =>
+  plainText('notification_gift_received_footer', language, giftReceivedValues(values, language));
+
+/**
+ * Сообщение о подарке на одном языке (issue #236). Свой текст этого языка есть — он сверху,
+ * под ним пустая строка и системная строка с суммой и сроком: их не потерять, даже если
+ * в своём тексте их не написали. Нет — системный текст целиком, как до #236.
+ *
+ * Одна сборка на три места: отправку, предпросмотр в форме «Вручить» и проверку длины при
+ * раздаче. Разойдись они — форма насчитала бы один остаток, а Telegram отказал бы по другому.
+ *
+ * Свой текст приходит уже обрезанным по краям — таким, каким лёг в раздачу. Экранируется
+ * он, как тексты рассылки: это строка сотрудника, а не разметка.
+ */
+export const buildGiftMessage = (
+  values: GiftMessageValues,
+  customMessage: string | null,
+  language: Language,
+): GiftMessage => {
+  const substitutions = giftReceivedValues(values, language);
+
+  if (customMessage === null) {
+    return {
+      text: plainText('notification_gift_received', language, substitutions),
+      html: text('notification_gift_received', language, substitutions),
+    };
+  }
+
+  return {
+    text: `${customMessage}${GIFT_MESSAGE_FOOTER_SEPARATOR}${buildGiftMessageFooter(values, language)}`,
+    html:
+      escapeHtml(customMessage) +
+      GIFT_MESSAGE_FOOTER_SEPARATOR +
+      text('notification_gift_received_footer', language, substitutions),
+  };
+};
+
+/** Сообщение подарка из параметров задания — на языке получателя. */
+const renderGiftReceived = (stored: GiftReceivedParams | LegacyGiftReceivedParams, language: Language): string => {
+  const params = readGiftReceivedParams(stored);
+
+  return buildGiftMessage(
+    {
+      points: params.points,
+      reason: language === 'uz' ? params.reasonUz : params.reasonRu,
+      untilDate: params.untilDate,
+    },
+    language === 'uz' ? params.messageUz : params.messageRu,
+    language,
+  ).html;
+};
 
 /** Собирает текст уведомления на языке получателя. */
 export const renderNotification = (notification: Notification, language: Language): string => {
@@ -185,7 +288,7 @@ export const renderNotification = (notification: Notification, language: Languag
     case 'app_relaunch':
       return text('start_greeting', language);
     case 'gift_received':
-      return text('notification_gift_received', language, giftReceivedValues(notification.params, language));
+      return renderGiftReceived(notification.params, language);
   }
 };
 
@@ -209,13 +312,17 @@ export type NotificationPhoto = {
   read: () => Promise<{ bytes: Buffer; fileName: string }>;
 };
 
-/** Фото под уведомлением. Есть только у подарка с обложкой — текст тогда уходит подписью. */
-export const notificationPhoto = (notification: Notification): NotificationPhoto | null => {
-  if (notification.template !== 'gift_received' || notification.params.coverPath === null) {
+/**
+ * Фото под уведомлением. Есть только у подарка с обложкой — текст тогда уходит подписью.
+ * Обложка — на языке получателя (issue #236).
+ */
+export const notificationPhoto = (notification: Notification, language: Language): NotificationPhoto | null => {
+  if (notification.template !== 'gift_received') {
     return null;
   }
 
-  const { coverPath } = notification.params;
+  const params = readGiftReceivedParams(notification.params);
+  const coverPath = language === 'uz' ? params.coverUzPath : params.coverRuPath;
 
-  return { path: coverPath, read: () => readGiftCover(coverPath) };
+  return coverPath === null ? null : { path: coverPath, read: () => readGiftCover(coverPath) };
 };

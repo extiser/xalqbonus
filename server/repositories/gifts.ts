@@ -28,7 +28,12 @@ export type GiftGrantInput = {
   reasonUz: string;
   /** День автозачисления в зоне парка, `YYYY-MM-DD`. */
   untilDate: string;
-  coverPath: string | null;
+  /** Обе или ни одной — проверка в базе. */
+  coverRuPath: string | null;
+  coverUzPath: string | null;
+  /** Свой текст сообщения. Пусто — системный. */
+  messageRu: string | null;
+  messageUz: string | null;
   segmentId: string | null;
   personId: string | null;
   recipients: number;
@@ -40,8 +45,9 @@ export type GiftGrantInput = {
 export const insertGiftGrant = async (client: Executor, input: GiftGrantInput): Promise<void> => {
   const rows = await client.$queryRaw<{ id: string }[]>`
     INSERT INTO xb.gift_grants (
-      "id", "points", "reason_ru", "reason_uz", "until_date", "cover_path", "segment_id", "person_id",
-      "recipients", "skipped", "granted_by_employee_id"
+      "id", "points", "reason_ru", "reason_uz", "until_date", "cover_ru_path", "cover_uz_path",
+      "message_ru", "message_uz", "segment_id", "person_id", "recipients", "skipped",
+      "granted_by_employee_id"
     )
     VALUES (
       ${input.id}::uuid,
@@ -49,7 +55,10 @@ export const insertGiftGrant = async (client: Executor, input: GiftGrantInput): 
       ${input.reasonRu},
       ${input.reasonUz},
       ${input.untilDate}::date,
-      ${input.coverPath},
+      ${input.coverRuPath},
+      ${input.coverUzPath},
+      ${input.messageRu},
+      ${input.messageUz},
       ${input.segmentId}::uuid,
       ${input.personId}::uuid,
       ${input.recipients}::int,
@@ -191,7 +200,9 @@ export type MemberGiftRow = {
   reasonRu: string;
   reasonUz: string;
   untilDate: Date;
-  coverPath: string | null;
+  /** Обложка на каждом языке: водителю — на его. */
+  coverRuPath: string | null;
+  coverUzPath: string | null;
   shownAt: Date | null;
 };
 
@@ -206,11 +217,12 @@ export const listPersonClaimableGifts = async (
   client.$queryRaw<MemberGiftRow[]>`
     SELECT reward."id",
            reward."points",
-           grant_row."reason_ru"   AS "reasonRu",
-           grant_row."reason_uz"   AS "reasonUz",
-           grant_row."until_date"  AS "untilDate",
-           grant_row."cover_path"  AS "coverPath",
-           reward."gift_shown_at"  AS "shownAt"
+           grant_row."reason_ru"     AS "reasonRu",
+           grant_row."reason_uz"     AS "reasonUz",
+           grant_row."until_date"    AS "untilDate",
+           grant_row."cover_ru_path" AS "coverRuPath",
+           grant_row."cover_uz_path" AS "coverUzPath",
+           reward."gift_shown_at"    AS "shownAt"
       FROM xb.rewards AS reward
       JOIN xb.gift_grants AS grant_row ON grant_row."id" = reward."gift_grant_id"
      WHERE reward."person_id" = ${personId}::uuid
@@ -240,7 +252,10 @@ export type GiftGrantRow = {
   reasonRu: string;
   reasonUz: string;
   untilDate: Date;
-  coverPath: string | null;
+  coverRuPath: string | null;
+  coverUzPath: string | null;
+  messageRu: string | null;
+  messageUz: string | null;
   segmentId: string | null;
   segmentName: string | null;
   personId: string | null;
@@ -267,19 +282,22 @@ export type GiftGrantRow = {
 const giftGrantSelect = (where: Prisma.Sql, limit: number): Prisma.Sql => Prisma.sql`
   SELECT grant_row."id",
          grant_row."points",
-         grant_row."reason_ru"    AS "reasonRu",
-         grant_row."reason_uz"    AS "reasonUz",
-         grant_row."until_date"   AS "untilDate",
-         grant_row."cover_path"   AS "coverPath",
-         grant_row."segment_id"   AS "segmentId",
-         segment."name"           AS "segmentName",
-         grant_row."person_id"    AS "personId",
+         grant_row."reason_ru"     AS "reasonRu",
+         grant_row."reason_uz"     AS "reasonUz",
+         grant_row."until_date"    AS "untilDate",
+         grant_row."cover_ru_path" AS "coverRuPath",
+         grant_row."cover_uz_path" AS "coverUzPath",
+         grant_row."message_ru"    AS "messageRu",
+         grant_row."message_uz"    AS "messageUz",
+         grant_row."segment_id"    AS "segmentId",
+         segment."name"            AS "segmentName",
+         grant_row."person_id"     AS "personId",
          profile."lastName",
          profile."firstName",
          grant_row."recipients",
          grant_row."skipped",
-         author."full_name"       AS "grantedByName",
-         grant_row."created_at"   AS "createdAt",
+         author."full_name"        AS "grantedByName",
+         grant_row."created_at"    AS "createdAt",
          outcome."claimedByDriver",
          outcome."creditedAuto",
          outcome."waiting"

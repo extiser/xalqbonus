@@ -121,7 +121,7 @@ export const describeMemberReward = (row: PersonRewardRow, language: Language): 
 
 /**
  * Ждущий подарок на языке водителя. Срок — день раздачи словом месяца: баллы придут сами
- * в конце этих суток парка.
+ * в конце этих суток парка. Обложка — тоже на его языке (issue #236).
  */
 export const describeMemberGift = (row: MemberGiftRow, language: Language): MemberGift => ({
   rewardId: row.id,
@@ -132,7 +132,7 @@ export const describeMemberGift = (row: MemberGiftRow, language: Language): Memb
   deadlineText: plainText('gift_deadline', language, {
     date: formatDayMonthWord(calendarDayMoment(row.untilDate.toISOString().slice(0, 10)), language),
   }),
-  coverUrl: giftCoverUrl(row.coverPath),
+  coverUrl: giftCoverUrl(language === 'uz' ? row.coverUzPath : row.coverRuPath),
 });
 
 /** Тексты раздела и экрана награды на языке участника. */

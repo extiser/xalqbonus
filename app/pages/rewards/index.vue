@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useCurrentEmployee } from '~/composables/useCurrentEmployee';
+import { useGiftMessagePreview } from '~/composables/useGiftMessagePreview';
 import { formatNumber, pluralize } from '~/utils/format';
 import { toLoadState } from '~/utils/loadState';
 import { failureField, failureText } from '~/utils/requestError';
@@ -10,9 +11,10 @@ import type { GiftFields, PickedDriver } from '~/types/rewardGrant';
 import type { SelectOption } from '~/types/selectOption';
 import { GIFT_SEGMENT_ROLES } from '#shared/access';
 import type { DriverCardResponse, DriverSearchResponse, DriverSearchRow } from '#shared/types/driver';
-import { GIFT_COVER_FIELD } from '#shared/gift';
+import { GIFT_COVER_RU_FIELD, GIFT_COVER_UZ_FIELD } from '#shared/gift';
 import type {
   GiftGrantRequestBody,
+  GiftMessagePreviewRequestBody,
   GiftGrantResponse,
   GiftGrantsResponse,
   ManualRewardRequestBody,
@@ -183,12 +185,26 @@ const requireRecipient = (): boolean => {
   return false;
 };
 
+/** Сумма, повод и дата подарка из формы — по ним сервер собирает системный текст (issue #236). */
+const giftDraft = ref<GiftMessagePreviewRequestBody>({ points: null, reasonRu: '', reasonUz: '', untilDate: '' });
+const { preview: giftMessagePreview } = useGiftMessagePreview(() => giftDraft.value);
+
 /** Подарок, который ждёт подтверждения раздачи сегменту. */
 const pendingGift = ref<GiftFields | null>(null);
 
 const selectedSegment = computed(() =>
   workingSegments.value.find((segment) => segment.segmentId === segmentId.value) ?? null,
 );
+
+/** Что у подарка помимо суммы и повода — для подтверждения раздачи сегменту. */
+const giftExtrasText = (gift: GiftFields): string => {
+  const ownTexts = [gift.messageRu ? 'RU' : null, gift.messageUz ? 'UZ' : null].filter(Boolean);
+
+  return [
+    gift.coverRu && gift.coverUz ? ', с обложками' : '',
+    ownTexts.length > 0 ? `, свой текст: ${ownTexts.join(', ')}` : '',
+  ].join('');
+};
 
 const confirmMessage = computed(() => {
   const segment = selectedSegment.value;
@@ -200,7 +216,7 @@ const confirmMessage = computed(() => {
 
   return [
     `В сегменте «${segment.name}» сейчас ${formatNumber(segment.total)} чел.`,
-    `Подарок — ${gift.points} ${pluralize(Number(gift.points), 'балл', 'балла', 'баллов')}, «${gift.reasonRu}»${gift.cover ? ', с обложкой' : ''}.`,
+    `Подарок — ${gift.points} ${pluralize(Number(gift.points), 'балл', 'балла', 'баллов')}, «${gift.reasonRu}»${giftExtrasText(gift)}.`,
     'Получат только участники программы, остальные будут пропущены. Каждому придёт сообщение в Telegram.',
     'Раздача не отменяется.',
   ].join('\n');
@@ -217,17 +233,23 @@ const sendGift = async (gift: GiftFields): Promise<void> => {
     reasonRu: gift.reasonRu,
     reasonUz: gift.reasonUz,
     untilDate: gift.untilDate,
+    messageRu: gift.messageRu,
+    messageUz: gift.messageUz,
   };
 
-  // Одним запросом с обложкой: раздача не правится, и черновика под картинку у неё нет.
+  // Одним запросом с обложками: раздача не правится, и черновика под картинку у неё нет.
   const body = new FormData();
 
   for (const [name, value] of Object.entries(fields)) {
     body.append(name, value);
   }
 
-  if (gift.cover) {
-    body.append(GIFT_COVER_FIELD, gift.cover);
+  if (gift.coverRu) {
+    body.append(GIFT_COVER_RU_FIELD, gift.coverRu);
+  }
+
+  if (gift.coverUz) {
+    body.append(GIFT_COVER_UZ_FIELD, gift.coverUz);
   }
 
   try {
@@ -335,8 +357,10 @@ watch([recipientKind, segmentId, driver], resetOutcome);
           :error-field="errorField"
           :applied-count="appliedCount"
           :notice="notice"
+          :message-preview="giftMessagePreview"
           @gift="grantGift"
           @reward="grantReward"
+          @draft="giftDraft = $event"
         />
       </div>
     </MoleculesSectionPanel>
