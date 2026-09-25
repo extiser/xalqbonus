@@ -698,7 +698,9 @@ body { display: flex; justify-content: center; }
    вертикальная или квадратная не вытягивает шторку за экран — показывается её середина.
    В админке — подсказка «горизонтальная, 1280 × 720» и превью в той же рамке 16:9 до выдачи.
    Нет обложки — карточка как была, без пустого места. */
-.gsheet .gc.has-cover { padding: 0; flex-direction: column; align-items: stretch; overflow: hidden; }
+.gsheet .gc.has-cover { padding: 0; gap: 0; flex-direction: column; align-items: stretch; overflow: hidden; }
+/* gap: 0 — у компактной карточки между детьми 12 px; с обложкой они вставали над строкой, и отступ сверху
+   выходил 12 + 13 против 13 снизу (Руслан, 25-09-2026). Отступы строки теперь одинаковые со всех сторон. */
 .gsheet .gc .gcover { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; background: #0F1116; }
 .gsheet .gc.has-cover .gc-row { display: flex; align-items: center; gap: 12px; padding: 13px 14px; }
 </style></head><body>
