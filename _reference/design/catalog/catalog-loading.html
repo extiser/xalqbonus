@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Каталог — загрузка витрины</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&family=Unbounded:wght@200;300;600;700&display=swap">
+<style>
+/* КАТАЛОГ — ЗАГРУЗКА ВИТРИНЫ. T70, состояние, 25-09-2026, сессия 62, прогон #234 (Руслан: «резко
+   исчезает и появляется; на медленном интернете будет пустой экран»). Копия catalog-office-picked.html.
+   Грузится витрина — при входе в каталог, выборе офиса, «Сменить», «Повторить»: шапка, баланс и строка
+   офиса стоят, на месте плиток — скелет в размер плиток (фото 9:10, две строки, счётчик), по нему бежит
+   мягкий блик слева направо, 1.3 с на проход, по всем плиткам одной волной. Итога и «Оформить» нет.
+   Скелет показывается, только если загрузка дольше 0.3 с: быстрый ответ сразу рисует товары, без
+   вспышки. При смене офиса прежние плитки до этих 0.3 с стоят бледными (38 %), дальше — скелет.
+   На входе в каталог строки офиса ещё нет — скелет сразу под шапкой. */
+
+/* КАТАЛОГ, ШАГ 2 — ВИТРИНА ОФИСА. Нарисована 23-09-2026, сессия 55.
+   Решения Руслана 23-09-2026: подложка фото — Б, один светлый фон на все товары; зелёного
+   вокруг выбранного нет; плитка по образцу блока HOT на главной (../artboard/hot-action-block.html):
+   фото на светлом квадрате, пилюли скидки и остатка сверху, название слева и цена справа под фото.
+
+   Снято с кода: `ShowcaseProductTile.vue` и `ShowcaseProduct` (фото, название, цена, `available`),
+   `OfficeShowcase.vue` (итог «сумма / останется на балансе», «Оформить» гаснет с причиной),
+   тексты `cart_total`, `cart_balance_after`, `button_checkout`, `checkout_*` в `server/bot/texts.ts`.
+   Скидка (старая цена, «SALE −60%») — место заложено, механика в T57, в коде её нет.
+
+   Шапка перенесена из ../artboard/section-bar.html и правится ТАМ.
+   Состояние снимка: баланс 2 450, выбраны Power Bank и «Вертолёт» по одной штуке.
+   Предел ширины 520. */
+html, body { background: #0B0D11; margin: 0; }
+body { display: flex; justify-content: center; }
+.screen {
+  position: relative; width: 100%; max-width: 520px; min-height: 100dvh; box-sizing: border-box;
+  background: #0B0D11; color: #F4F6F8; font-family: Manrope, 'Segoe UI', system-ui, sans-serif;
+  display: flex; flex-direction: column;
+}
+.bar {
+  position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 12px;
+  padding: calc(14px + env(safe-area-inset-top)) 16px 14px;
+  background: rgba(11, 13, 17, 0.82); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.bar .back { width: 40px; height: 40px; flex-shrink: 0; border: 0; padding: 0; cursor: pointer; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07); display: flex; align-items: center; justify-content: center; }
+.bar h1 { margin: 0; flex-grow: 1; min-width: 0; font-family: Unbounded, Manrope, sans-serif;
+  font-size: 19px; font-weight: 600; letter-spacing: -0.5px; line-height: 1.25; }
+/* Баланс — в шапке справа, на месте действия (Руслан, 23-09-2026): шапка липкая, и баллы видны
+   всегда, пока водитель листает витрину и набирает корзину. Подпись над числом — чтобы число
+   не читалось как цена или сумма заказа. */
+.bar .bal { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.bar .bal .lbl { font-size: 12px; font-weight: 400; color: #8A93A2; }
+.bar .bal .num { display: flex; align-items: center; gap: 4px; font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* Имя офиса — роль «Офис в каталоге», размер над витриной (README, сессия 55): «Офис · » 15/400 серым,
+   имя 15/700 белым. Та же модель, что в списке офисов каталога, только мельче (Руслан, 23-09-2026).
+   Где я. Офис — чтобы водитель видел, чью витрину смотрит; «Сменить» возвращает к выбору
+   офиса (корзина при этом очищается — так устроен код). Баланс переехал в шапку. */
+.where { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px 4px; }
+.where .office { font-size: 15px; font-weight: 400; color: #A9B2BF; }
+.where .office b { font-weight: 700; color: #F4F6F8; }
+.where .change { margin-left: 8px; border: 0; background: none; padding: 0; cursor: pointer;
+  font-family: Manrope, sans-serif; font-size: 14px; font-weight: 500; color: #A9B2BF;
+  /* Подчёркнутая ссылка — второстепенное действие рядом с текстом, как «Отказаться» на экране приглашения. */
+  text-decoration: underline; text-decoration-color: rgba(169,178,191,.4); text-underline-offset: 3px; }
+.where .bal { display: flex; align-items: center; gap: 4px; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px 16px; padding: 18px 16px 24px; }
+
+/* Плитка — как в HOT. Подложка одна на все товары (вариант Б): фото приходят на белом фоне,
+   и `multiply` растворяет его в подложке. */
+.tile { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+/* Подложка фото #F1F2F4 — новый токен палитры `xb-photo` (README, сессия 55). */
+.ph { position: relative; aspect-ratio: 9 / 10; border-radius: 24px; overflow: hidden; background: #F1F2F4; }
+.ph img { position: absolute; left: 8%; top: 13%; width: 84%; height: 80%; object-fit: contain; mix-blend-mode: multiply; display: block; }
+.pills { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; justify-content: space-between; }
+.pill { height: 24px; display: inline-flex; align-items: center; gap: 3px; padding: 0 9px; border-radius: 999px;
+  background: #FFFFFF; box-shadow: 0 1px 2px rgba(0,0,0,.06); font-size: 12px; font-weight: 600; color: #626A77; }  /* xb-muted вместо #5A606B из HOT — на пробу (Руслан, 23-09-2026) */
+/* Скидка — «SALE −N%» у каждого товара со скидкой, одним видом (Руслан, 23-09-2026). «HOT» с огнём
+   остаётся за блоком на главной: там это выделение сезона, здесь — просто скидка на товар. */
+.pill.sale { font-weight: 700; color: #E8365D; padding-left: 6px; }
+
+.row { display: flex; justify-content: space-between; align-items: flex-end; gap: 6px; padding: 0 4px; }
+.name { font-size: 14px; font-weight: 500; line-height: 1.3; color: #F4F6F8; min-width: 0; }
+.price { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; flex-shrink: 0; }
+.price s { position: relative; top: 1px; font-size: 12px; font-weight: 500; color: #8A93A2; }
+.price span { display: flex; align-items: center; gap: 3px; line-height: 1.1; font-size: 20px; font-weight: 800; letter-spacing: -.3px; font-variant-numeric: tabular-nums; }
+.price .pom { position: relative; top: 2px; flex-shrink: 0; }
+/* ВАРИАНТ 2 КАТАЛОГА — класс .v2 на сетке витрины (Руслан, 24-09-2026, сессия 57).
+   Каталога два вида, в код идёт вариант 1; вариант 2 держим готовым на случай, если названия в каталоге
+   окажутся длинными, — переключение одним классом на сетке, разметка плитки та же.
+   Вариант 1 (без класса): название слева, цена справа, одной строкой.
+   Вариант 2 (.v2): цена первой строкой (старая зачёркнутая справа от новой), под ней название во всю
+   ширину, до трёх строк, дальше многоточие. Экраны — catalog-showcase-v2.html, catalog-showcase-states-v2.html. */
+.grid.v2 .row { flex-direction: column; justify-content: flex-start; align-items: stretch; gap: 4px; }
+.grid.v2 .price { order: -1; flex-direction: row-reverse; justify-content: flex-end; align-items: baseline; gap: 8px; }
+.grid.v2 .price s { top: 0; }
+.grid.v2 .name { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+/* Названия в ряду разной длины — счётчик прижат к низу плитки, кнопки ряда стоят на одной линии */
+.tile .step { margin-top: auto; }
+
+/* Выбор количества — во всю ширину плитки, под ценой, чтобы кнопка однозначно принадлежала
+   своей плитке (замечание Руслана на листе вариантов). У невыбранного и выбранного товара
+   один и тот же счётчик «− N +» (Руслан, 23-09-2026): невыбранный — тёмный, с нулём
+   и погашенным «−»; выбранный — белый. Зелёного нет. Размер и тёмный вид — вторичная кнопка S
+   по шкале: высота 40, контур .14, заливка .05. */
+.step { height: 40px; display: flex; align-items: center; justify-content: space-between; border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.05); color: #F4F6F8; box-sizing: border-box; }
+.step button { width: 44px; height: 38px; border: 0; background: none; cursor: pointer; color: inherit;
+  display: flex; align-items: center; justify-content: center; }
+.step button:disabled { opacity: .3; cursor: default; }
+/* Число в счётчике — обычного веса (Руслан, 23-09-2026): жирное спорило с ценой над ним. */
+.step b { font-size: 16px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.step:not(.on) b { color: #8A93A2; }
+.step.on { background: #F4F6F8; border-color: #F4F6F8; color: #0B0D11; }
+
+/* Итог и «Оформить» — внизу, в зоне большого пальца, липко. Сумма и остаток — как в коде. */
+.checkout {
+  position: sticky; bottom: 0; z-index: 5; margin-top: auto;
+  padding: 14px 16px calc(16px + env(safe-area-inset-bottom));
+  background: rgba(11, 13, 17, 0.9); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+/* Итог корзины — роль шкалы: подпись 14/400 #8A93A2, число 15/700 #F4F6F8. */
+.sum { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 0 2px 12px; font-size: 14px; font-weight: 400; color: #8A93A2; }
+.sum b { display: inline-flex; align-items: center; gap: 3px; font-size: 15px; font-weight: 700; color: #F4F6F8; font-variant-numeric: tabular-nums; }
+/* Основная кнопка L по шкале: во всю ширину, 52, радиус 16, 15/700. */
+.go { position: relative; z-index: 1; width: 100%; height: 52px; border: 0; border-radius: 16px; cursor: pointer;
+  background: #E8365D; color: #FFFFFF; font-family: Manrope, sans-serif; font-size: 15px; font-weight: 700;
+  box-shadow: 0 8px 26px rgba(232,54,93,0.38); } /* гранатовая L одна на всё приложение — Руслан, 24-09-2026, сессия 58 */
+.go:disabled { opacity: 0.55; box-shadow: none; }
+/* Узкие телефоны (320–360): пилюли и итог не переносятся. */
+.pill, .sum span { white-space: nowrap; }
+@media (max-width: 360px) {
+  .pills { top: 8px; left: 8px; right: 8px; }
+  .pill { padding: 0 7px; font-size: 11px; }
+  .sum { font-size: 13px; }
+  /* На 320 «SALE» и остаток в одну строку не влезают: слово уходит, значок процента остаётся. */
+  .pill.sale .w { display: none; }
+}
+.sum .pom { position: relative; top: 1px; }  /* гранат у чисел в баллах без подписи (Руслан, 23-09-2026) */
+/* Итог одной строкой: «Сумма · 2 310» слева, «Останется · 140» справа — точка как разделитель подписи
+   и значения, как в «Офис · Кадышева». Подписи короткие, чтобы строка держалась и на 320 (Руслан, 23-09-2026). */
+.sum { flex-direction: row; }
+
+/* ================================= T70, экран 3 — витрина в выбранном офисе (25-09-2026, сессия 61)
+   Копия catalog-showcase.html. После «Добавить в корзину» в шторке «Где заберёте?»: Шашка Taxi
+   в корзине, офис Кадышева закреплён.
+   - Строка офиса закреплена под шапкой вместе с ней и при прокрутке не уезжает (Руслан)
+   - Товары, которых в офисе нет, не прячутся, а приглушены: фото и цена гаснут, вместо счётчика —
+     «Нет в Кадышева». Каталог не отфильтровывается молча (Руслан, 25-09-2026)
+   - Тултип под строкой офиса — сразу после выбора, один раз: что показано и почему. Лежит поверх
+     витрины и контент не сдвигает; уголок указывает на имя офиса. Уходит при прокрутке, по крестику,
+     по нажатию в любом месте и при смене офиса (Руслан, 25-09-2026).
+   - Приглушённые товары — в конце витрины: сверху всё, что можно взять (Руслан, 25-09-2026). Цвет — приглушённый гранат (Руслан, 25-09-2026): подложка —
+     гранат 12 % поверх #14171D (#2D1B25), рамка гранат 45 %, текст #E4E8EE — светлее уточнения, чтобы
+     читался; золото — цвет наград, в каталоге выбивалось */
+/* Подсказка — гранат целиком (Руслан, 25-09-2026, сессия 62, прогон #234): приглушённый гранат
+   на тёмной витрине не читался. Текст и крестик белые. */
+.where { position: sticky; top: 70px; z-index: 4; background: #0B0D11; padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.06); }
+.tile.out .ph, .tile.out .row, .tile.out .price { opacity: 0.38; }
+.tile.out .ph img { filter: grayscale(1); }
+.nohere { margin-top: auto; height: 44px; border-radius: 99px; border: 1px dashed rgba(255,255,255,0.14);
+  display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 500; color: #8A93A2; }
+.tip { position: absolute; top: calc(100% + 6px); left: 16px; right: 16px; z-index: 6; display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 12px 12px 14px; border-radius: 14px; background: #E8365D; border: 0;
+  box-shadow: 0 14px 34px -10px rgba(0,0,0,0.85), 0 6px 22px rgba(232,54,93,0.35); transition: opacity .2s ease, transform .2s ease; }
+/* Прокрутка, крестик, нажатие мимо — тултип гаснет и больше не показывается. */
+.tip.gone { opacity: 0; transform: translateY(-4px); pointer-events: none; }
+.tip-arrow { position: absolute; top: -7px; left: 92px; width: 12px; height: 12px; transform: rotate(45deg);
+  background: #E8365D; }
+.tip-text { flex-grow: 1; font-size: 13px; font-weight: 500; line-height: 1.45; color: #FFFFFF; }
+.tip-text b { font-weight: 700; color: #FFFFFF; }
+.tip-x { flex-shrink: 0; width: 24px; height: 24px; margin: -2px -2px 0 0; border: 0; border-radius: 99px; padding: 0;
+  background: rgba(255,255,255,0.22); color: #FFFFFF; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+
+/* ---- скелет загрузки */
+.sk { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.sk-ph { aspect-ratio: 9 / 10; border-radius: 24px; }
+.sk-line { height: 12px; border-radius: 6px; margin-left: 4px; }
+.sk-step { height: 40px; border-radius: 99px; margin-top: 2px; }
+.sk-ph, .sk-line, .sk-step {
+  background: rgba(255,255,255,0.05);
+  background-image: linear-gradient(100deg, rgba(255,255,255,0) 30%, rgba(255,255,255,0.09) 50%, rgba(255,255,255,0) 70%);
+  background-size: 250% 100%; background-attachment: fixed;
+  animation: sk-shimmer 1.3s linear infinite;
+}
+@keyframes sk-shimmer { from { background-position: 130% 0; } to { background-position: -30% 0; } }
+@media (prefers-reduced-motion: reduce) { .sk-ph, .sk-line, .sk-step { animation: none; } }
+</style></head><body>
+
+<div class="screen">
+
+  <div class="bar">
+    <button class="back" aria-label="Назад">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M14.5 5.5L8 12l6.5 6.5" stroke="#E4E8EE" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <h1>Каталог</h1>
+    <div class="bal"><span class="lbl">Ваши баллы</span><span class="num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg>2 450</span></div>
+  </div>
+
+  <div class="where">
+    <div><span class="office">Офис · <b>Сергели</b></span><button class="change">Сменить</button></div>
+  </div>
+
+  <div class="grid v2" aria-busy="true">
+      <div class="sk" aria-hidden="true"><div class="sk-ph"></div><div class="sk-line" style="width:46%"></div><div class="sk-line" style="width:72%"></div><div class="sk-step"></div></div>
+      <div class="sk" aria-hidden="true"><div class="sk-ph"></div><div class="sk-line" style="width:46%"></div><div class="sk-line" style="width:72%"></div><div class="sk-step"></div></div>
+      <div class="sk" aria-hidden="true"><div class="sk-ph"></div><div class="sk-line" style="width:46%"></div><div class="sk-line" style="width:72%"></div><div class="sk-step"></div></div>
+      <div class="sk" aria-hidden="true"><div class="sk-ph"></div><div class="sk-line" style="width:46%"></div><div class="sk-line" style="width:72%"></div><div class="sk-step"></div></div>
+  </div>
+
+  
+
+</div>
+<script>
+  // Тултип гаснет при первой прокрутке, по крестику и по нажатию мимо — и больше не показывается.
+  var tip = document.querySelector('.tip');
+  function hideTip() { tip.classList.add('gone'); }
+  window.addEventListener('scroll', hideTip, { once: true, passive: true });
+  document.addEventListener('click', hideTip, { once: true });
+</script>
+</body></html>
