@@ -18,6 +18,7 @@ import type {
   CampaignChestKind,
   CampaignParticipantOutcome,
   CampaignParticipantState,
+  DemoRole,
   EmployeeRole,
   Language,
   LinkAttemptOutcome,
@@ -30,7 +31,7 @@ import type { MemberRewardTexts } from './rewards';
 // Разметке язык нужен так же, как обработчику: на нём стоит переключатель экрана
 // регистрации. Пробрасывается отсюда, чтобы страница не лазила в каталог Prisma
 // относительным путём мимо `#shared`.
-export type { Language };
+export type { DemoRole, Language };
 
 /**
  * Заголовок, которым Mini App передаёт `initData` на каждом запросе.
@@ -262,6 +263,43 @@ export type MiniAppMemberScreen = {
   profile: MemberProfile;
   /** Тексты раздела «Профиль», его шторки сброса и шторки языка. */
   profileTexts: MemberProfileTexts;
+  /** Полоса «Демо-аккаунт». `null` у всех, кто не демо-зритель. */
+  demo: MiniAppDemo | null;
+};
+
+/**
+ * Демо-зритель (issue #205): под какой ролью он смотрит и тексты полосы с шторкой смены роли.
+ *
+ * Тексты — на языке экрана под полосой: у водителя — на его языке, у менеджера — по-русски,
+ * как весь служебный экран (docs/frontend.md → «Язык»).
+ */
+export type MiniAppDemo = {
+  role: DemoRole;
+  texts: MiniAppDemoTexts;
+};
+
+export type MiniAppDemoTexts = {
+  /** «ДЕМО-АККАУНТ» — слева в полосе. */
+  account: string;
+  /** Роль в полосе после точки, строчными: «водитель». */
+  roles: Record<DemoRole, string>;
+  /** «Сменить» — справа в полосе. */
+  change: string;
+  sheetTitle: string;
+  sheetSubtitle: string;
+  /** Строки выбора в шторке: «Водитель». */
+  options: Record<DemoRole, string>;
+  enter: string;
+  close: string;
+};
+
+/**
+ * Смена роли демо-зрителем: `POST /api/miniapp/demo/role`. Чья роль — решает проверенная
+ * `initData`; роль пишется в базу, и остальные запросы приложения её не несут.
+ */
+export type MiniAppDemoRoleRequestBody = {
+  /** Сверяется со словарём: всё, что не `driver` и не `manager`, отвергается. */
+  role: DemoRole;
 };
 
 /**
@@ -802,6 +840,8 @@ export type MiniAppEmployeeScreen = {
   passwordSet: boolean;
   /** Пусто — менеджер ни к одному офису не привязан, и экран говорит об этом словами. */
   offices: EmployeeOffice[];
+  /** Полоса «Демо-аккаунт»: демо-зритель в роли менеджера. `null` у живого сотрудника. */
+  demo: MiniAppDemo | null;
 };
 
 /**

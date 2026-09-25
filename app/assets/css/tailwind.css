@@ -33,7 +33,31 @@
   /* Светлая подложка под фото товара: фото приходят на белом и кладутся умножением
      (`_reference/design/system.md`, «Подложка фото товара»). */
   --color-xb-photo: #F1F2F4;
+  /* Полоса «Демо-аккаунт» (issue #205, `_reference/design/demo/`): тёмно-синяя — не золото
+     акции и не гранат кнопок, с приложением её не спутать. */
+  --color-xb-demo: #1B3350;
+  --color-xb-demo-border: rgba(120, 185, 255, 0.30);
+  --color-xb-demo-text: #CFE4FF;
+  --color-xb-demo-role: #8FB6E3;
+  --color-xb-demo-switch: #A9D1FF;
+
+  /* Высота полосы — 44, под палец (Руслан, 24-09-2026). */
+  --spacing-xb-demo-bar: 44px;
 
   --font-manrope: Manrope, "Segoe UI", system-ui, sans-serif;
   --font-unbounded: Unbounded, Manrope, sans-serif;
+}
+
+/*
+ * Сдвиг липких элементов экранов под полосу «Демо-аккаунт» — одна переменная на корне.
+ * У не-демо она ноль, и шапки липнут к верху, как липли. У демо-зрителя страница ставит
+ * корню класс `xb-demo`, и шапка главной, шапка разделов и строка офиса в каталоге встают
+ * сразу под полосой. Липкие снизу и шторки не сдвигаются: шторка ложится поверх полосы.
+ */
+:root {
+  --xb-demo-offset: 0px;
+}
+
+:root.xb-demo {
+  --xb-demo-offset: var(--spacing-xb-demo-bar);
 }

@@ -92,14 +92,21 @@ const subtitleLines = computed((): readonly string[] => {
 </template>
 
 <style scoped>
-/* Выезд — `transform`, а не `top`: анимация идёт на композиторе и не дёргает раскладку. */
+/* Выезд — `transform`, а не `top`: анимация идёт на композиторе и не дёргает раскладку.
+   Уехавшая шторка прячется целиком, когда уход доигран: тень её верхнего края иначе видна
+   из-под нижней кромки экрана — на светлом экране сотрудника под полосой демо (issue #205). */
 .member-sheet {
   transform: translate(-50%, 100%);
-  transition: transform 0.34s cubic-bezier(0.22, 0.7, 0.3, 1);
+  visibility: hidden;
+  transition:
+    transform 0.34s cubic-bezier(0.22, 0.7, 0.3, 1),
+    visibility 0s linear 0.34s;
 }
 
 .member-sheet-open {
   transform: translate(-50%, 0);
+  visibility: visible;
+  transition: transform 0.34s cubic-bezier(0.22, 0.7, 0.3, 1);
 }
 
 .member-sheet-subtitle {

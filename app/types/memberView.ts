@@ -282,6 +282,15 @@ export interface MemberLanguageOptionView {
   label: string;
 }
 
+/** Роль демо-зрителя (issue #205): под кем он смотрит приложение. */
+export type MemberDemoRole = 'driver' | 'manager';
+
+/** Строка шторки «Войти как» — роль и её название. */
+export interface MemberDemoRoleOptionView {
+  role: MemberDemoRole;
+  label: string;
+}
+
 /** Сундук акции — какой картинкой он рисуется. */
 export type MemberChestKind = 'day' | '3days' | 'week';
 

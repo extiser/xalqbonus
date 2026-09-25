@@ -9,6 +9,7 @@ COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
 .PHONY: help up up-d down restart logs ps shell psql sql migrate migrate-rolled-back migrate-create migrate-diff migrate-sql generate typecheck old-engine-guard test test-db \
         db-restore db-schema invariants license-collisions legacy-vs-api import-legacy \
         employee-owner prod-employee-owner \
+        demo-create prod-demo-create demo-viewer prod-demo-viewer demo-viewer-off prod-demo-viewer-off \
         import-legacy-dump \
         sync-orders sync-registry sync-state \
         prod-up prod-down prod-restart prod-logs prod-ps prod-shell prod-psql prod-invariants prod-migrate prod-migrate-rolled-back \
@@ -134,6 +135,42 @@ prod-employee-owner: ## Завести владельца на проде. make 
 	@test -n "$(name)" || { echo 'укажите имя: make prod-employee-owner phone=$(phone) name="Имя Фамилия" password=<пароль>'; exit 1; }
 	@test -n "$(password)" || { echo 'укажите пароль: make prod-employee-owner phone=$(phone) name="$(name)" password=<пароль>'; exit 1; }
 	$(COMPOSE_PROD) exec -T app node .output/create-owner.mjs "$(phone)" "$(name)" "$(password)"
+
+# Демо-доступ (issue #205): демо-зритель смотрит Mini App глазами демо-водителя или
+# демо-менеджера. Все цели повторяемы — второй прогон ничего не заводит и говорит, что уже есть.
+#
+# Сначала общее демо — ДЕМО ОФИС и демо-менеджер с этим телефоном; пароля и Telegram у него нет,
+# под ним входит зритель, выбравший роль менеджера.
+demo-create: ## Завести ДЕМО ОФИС и демо-менеджера локально. make demo-create manager_phone=+998XXXXXXXXX
+	@test -n "$(manager_phone)" || { echo 'укажите телефон: make demo-create manager_phone=+998XXXXXXXXX'; exit 1; }
+	$(COMPOSE) exec -T app npx tsx scripts/create-demo.ts create "$(manager_phone)"
+
+# Зритель: новому заводится свой демо-водитель — копия баланса участника с самым большим,
+# повторный прогон выключенного включает его с прежним водителем, действующему меняет подпись.
+demo-viewer: ## Внести демо-зрителя локально. make demo-viewer tg=<Telegram ID> label="Xalq Taxi, владелец"
+	@test -n "$(tg)" || { echo 'укажите Telegram: make demo-viewer tg=<Telegram ID> label="кто это"'; exit 1; }
+	@test -n "$(label)" || { echo 'укажите подпись: make demo-viewer tg=$(tg) label="кто это"'; exit 1; }
+	$(COMPOSE) exec -T app npx tsx scripts/create-demo.ts viewer "$(tg)" "$(label)"
+
+# Выключение: привязка к демо-водителю закрывается, водитель и его история остаются.
+demo-viewer-off: ## Выключить демо-зрителя локально. make demo-viewer-off tg=<Telegram ID>
+	@test -n "$(tg)" || { echo 'укажите Telegram: make demo-viewer-off tg=<Telegram ID>'; exit 1; }
+	$(COMPOSE) exec -T app npx tsx scripts/create-demo.ts viewer-off "$(tg)"
+
+# Те же сценарии на боевой машине — собранным бандлом, по той же причине, что у владельца:
+# в боевом образе нет ни исходников, ни tsx (docker/Dockerfile).
+prod-demo-create: ## Завести ДЕМО ОФИС и демо-менеджера на проде. make prod-demo-create manager_phone=+998XXXXXXXXX
+	@test -n "$(manager_phone)" || { echo 'укажите телефон: make prod-demo-create manager_phone=+998XXXXXXXXX'; exit 1; }
+	$(COMPOSE_PROD) exec -T app node .output/create-demo.mjs create "$(manager_phone)"
+
+prod-demo-viewer: ## Внести демо-зрителя на проде. make prod-demo-viewer tg=<Telegram ID> label="Xalq Taxi, владелец"
+	@test -n "$(tg)" || { echo 'укажите Telegram: make prod-demo-viewer tg=<Telegram ID> label="кто это"'; exit 1; }
+	@test -n "$(label)" || { echo 'укажите подпись: make prod-demo-viewer tg=$(tg) label="кто это"'; exit 1; }
+	$(COMPOSE_PROD) exec -T app node .output/create-demo.mjs viewer "$(tg)" "$(label)"
+
+prod-demo-viewer-off: ## Выключить демо-зрителя на проде. make prod-demo-viewer-off tg=<Telegram ID>
+	@test -n "$(tg)" || { echo 'укажите Telegram: make prod-demo-viewer-off tg=<Telegram ID>'; exit 1; }
+	$(COMPOSE_PROD) exec -T app node .output/create-demo.mjs viewer-off "$(tg)"
 
 # Считает по выгрузке реестра из _reference/fleet-api/dumps/ — в репозитории её нет.
 license-collisions: ## Счётчик коллизий номеров ВУ до и после нормализации

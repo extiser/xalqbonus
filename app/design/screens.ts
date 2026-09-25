@@ -8,7 +8,7 @@ export interface DesignScreen {
   slug: string;
   title: string;
   /**
-   * Откуда снято — файл макета. Регистрация, главная, разделы с шапкой, каталог и подарки — пути снимка
+   * Откуда снято — файл макета. Регистрация, главная, разделы с шапкой, каталог, подарки и демо — пути снимка
    * `_reference/design/`; профиль и акция — ещё пути планировочной папки (`product/design/`).
    */
   source: string;
@@ -145,6 +145,15 @@ export const DESIGN_GROUPS: DesignGroup[] = [
       { slug: 'profile', title: 'Профиль — глазик, шторки сброса и языка', source: 'app/profile-screen.html, artboard/language-sheet.html' },
       { slug: 'profile-language', title: 'Открыта шторка языка', source: 'artboard/language-sheet.html' },
       { slug: 'profile-reset', title: 'Открыта шторка сброса', source: 'app/profile-screen.html' },
+    ],
+  },
+  {
+    title: 'Демо-аккаунт',
+    screens: [
+      { slug: 'demo', title: 'Главная демо-водителя — полоса «Демо-аккаунт» над шапкой', source: 'demo/01-main-screen-demo.html' },
+      { slug: 'demo-sheet', title: 'Шторка «Войти как»', source: 'demo/01-main-screen-demo.html' },
+      { slug: 'demo-history', title: 'Раздел под полосой — шапка раздела липнет ниже', source: 'demo/demo.md, home/section-bar.md' },
+      { slug: 'demo-catalog', title: 'Витрина под полосой — строка офиса липнет ниже', source: 'demo/demo.md, catalog/catalog-showcase.html' },
     ],
   },
   {

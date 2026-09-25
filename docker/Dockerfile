@@ -35,6 +35,9 @@ RUN npm run build:worker
 # описанной выше: в `.output/server/node_modules` лежит огрызок `@prisma/client`, и поиск
 # внешних пакетов оттуда до полного дерева не поднимается.
 RUN npm run build:create-owner
+# Демо-доступ (issue #205) — тем же бандлом и по той же причине: цели `make prod-demo-…`
+# зовут собранный файл, исходников и tsx в финальном образе нет.
+RUN npm run build:create-demo
 # Production-зависимости собираются отдельным деревом, а не вычищаются на месте: этот же этап
 # служит образом локального стека (compose.local.yml → target: build), а там нужны tsx, vitest
 # и prisma CLI. Дерево /prod едет в финальный образ, дерево /srv остаётся полным.
@@ -135,6 +138,17 @@ RUN out="$(DATABASE_URL='postgresql://smoke:smoke@127.0.0.1:1/smoke?schema=xb' \
       echo 'бандл владельца поднялся: граф модулей разрешился'; \
     else \
       echo 'бандл владельца не поднялся:'; \
+      echo "$out" | head -c 2000; \
+      exit 1; \
+    fi
+# Проверка бандла демо — тем же способом, что владельца: без аргументов он печатает подсказку
+# и выходит с единицей, до базы не доходя. Подсказка в выводе — граф модулей разрешился.
+RUN out="$(DATABASE_URL='postgresql://smoke:smoke@127.0.0.1:1/smoke?schema=xb' \
+           node .output/create-demo.mjs 2>&1 || true)"; \
+    if echo "$out" | grep -q 'create-demo'; then \
+      echo 'бандл демо поднялся: граф модулей разрешился'; \
+    else \
+      echo 'бандл демо не поднялся:'; \
       echo "$out" | head -c 2000; \
       exit 1; \
     fi

@@ -7,6 +7,7 @@ import {
   findEmployeeByTelegramUserId,
   type EmployeeRow,
 } from '#server/repositories/employees';
+import { readDemoViewer } from '#server/services/demo/readDemoViewer';
 import {
   readSessionSecret,
   SESSION_MAX_AGE_SECONDS,
@@ -93,7 +94,12 @@ const authenticateByInitData = async (initData: string, now: Date): Promise<Auth
     return { outcome: 'invalid_credentials' };
   }
 
-  const employee = await findEmployeeByTelegramUserId(check.user.id);
+  // Демо-зритель в роли менеджера входит под демо-менеджером (issue #205). Дальше путь общий:
+  // выключенная демо-учётка получает тот же `disabled`, что живая. Зритель в роли водителя
+  // сотрудником не становится — его Telegram ни одной учётке не принадлежит.
+  const viewer = await readDemoViewer(check.user.id);
+  const employee =
+    viewer?.role === 'manager' ? viewer.manager : await findEmployeeByTelegramUserId(check.user.id);
 
   if (!employee) {
     return { outcome: 'unknown_employee' };

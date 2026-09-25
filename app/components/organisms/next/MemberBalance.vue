@@ -26,10 +26,18 @@ defineProps<{
 const emit = defineEmits<{ exchange: []; covered: [covered: boolean] }>();
 
 /**
- * Порог, px от верха экрана: верх числа поднялся выше — число ушло под шапку.
+ * Порог, px от верха шапки: верх числа поднялся выше — число ушло под шапку.
  * 61, а не 68 (высота шапки): рамка числа выше цифр на 6–7 px.
  */
 const COVERED_THRESHOLD = 61;
+
+/**
+ * Где верх шапки: у демо-зрителя она липнет под полосой «Демо-аккаунт», ниже на её высоту
+ * (`--xb-demo-offset`, issue #205). Читается при каждой проверке, а не раз при показе:
+ * полоса появляется и уходит вместе с ролью, а число об этом не знает.
+ */
+const headerTop = (): number =>
+  Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--xb-demo-offset')) || 0;
 
 const amountBox = useTemplateRef<HTMLElement>('amountBox');
 
@@ -39,7 +47,7 @@ function check(): void {
   const box = amountBox.value;
   if (!box) return;
 
-  const next = box.getBoundingClientRect().top <= COVERED_THRESHOLD;
+  const next = box.getBoundingClientRect().top <= headerTop() + COVERED_THRESHOLD;
   if (next === covered) return;
 
   covered = next;

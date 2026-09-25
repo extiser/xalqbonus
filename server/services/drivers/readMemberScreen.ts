@@ -8,7 +8,7 @@ import type { LinkedDriver } from '#server/services/drivers/readLinkedDriver';
 import { memberOrderTexts } from '#server/services/orders/memberOrderScreen';
 import { memberRewardTexts } from '#server/services/rewards/memberRewardScreen';
 import { DAY_MS, formatCalendarDate, formatClockTime } from '#server/utils/parkTime';
-import type { MiniAppStateResponse, TripsNote } from '#shared/types/miniapp';
+import type { MiniAppDemo, MiniAppStateResponse, TripsNote } from '#shared/types/miniapp';
 
 /**
  * Экран участника: баланс, имя с позывным, отметка учтённых поездок и обещание бонуса новичку.
@@ -53,11 +53,15 @@ const tripsNote = (syncedAt: Date, language: Language, now: Date): TripsNote => 
  * задаёт его явно, а не ждёт нужного часа.
  *
  * Чат — тот, по которому участник найден: в профиле он стоит как Telegram ID.
+ *
+ * `demo` — полоса демо-зрителя (issue #205); у всех остальных `null`. Сам экран демо-водителя
+ * собирается тем же кодом, что у живого.
  */
 export const readMemberScreen = async (
   driver: LinkedDriver,
   telegramChatId: bigint,
   now: Date,
+  demo: MiniAppDemo | null = null,
 ): Promise<MiniAppStateResponse> => {
   const [hasTrips, syncedAt, profile] = await Promise.all([
     hasTripOperations(driver.personId),
@@ -95,5 +99,6 @@ export const readMemberScreen = async (
     rewardTexts: memberRewardTexts(driver.language),
     profile,
     profileTexts: memberProfileTexts(driver.language),
+    demo,
   };
 };

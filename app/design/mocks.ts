@@ -4,6 +4,8 @@ import type {
   MemberChestCardView,
   MemberChestKind,
   MemberChestRowView,
+  MemberDemoRole,
+  MemberDemoRoleOptionView,
   MemberGiftView,
   MemberHeatStage,
   MemberOperationDayView,
@@ -1818,3 +1820,33 @@ export const catalogExitSheetTexts = {
   stay: 'Остаться',
   exit: 'Выйти',
 };
+
+// ------------------------------------------------------------------------ демо-аккаунт
+
+/** Роль в полосе после точки — строчными, как в `demo/01-main-screen-demo.html`. */
+const DEMO_ROLE_WORDS: Record<MemberDemoRole, string> = { driver: 'водитель', manager: 'менеджер' };
+
+const DEMO_ROLE_OPTIONS: MemberDemoRoleOptionView[] = [
+  { role: 'driver', label: 'Водитель' },
+  { role: 'manager', label: 'Менеджер' },
+];
+
+/**
+ * Полоса «Демо-аккаунт» и шторка «Войти как» — `demo/01-main-screen-demo.html` (issue #205).
+ * Роль держит страница: «Войти» меняет её в полосе, как в скрипте макета.
+ */
+export function demoMock(role: MemberDemoRole) {
+  return {
+    bar: { account: 'ДЕМО-АККАУНТ', role: DEMO_ROLE_WORDS[role], change: 'Сменить' },
+    sheet: {
+      current: role,
+      options: DEMO_ROLE_OPTIONS,
+      texts: {
+        title: 'Войти как',
+        subtitle: 'Демо-аккаунт: приложение глазами водителя или менеджера',
+        enter: 'Войти',
+        close: 'Закрыть',
+      },
+    },
+  };
+}

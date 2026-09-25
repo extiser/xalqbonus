@@ -233,7 +233,7 @@ onBeforeUnmount(() => {
     <div
       v-if="office"
       ref="officeLine"
-      class="sticky top-[calc(69px+env(safe-area-inset-top))] z-[4] border-b border-white/6 bg-xb-screen px-[18px] pb-3 pt-3.5"
+      class="sticky top-[calc(69px+env(safe-area-inset-top)+var(--xb-demo-offset))] z-[4] border-b border-white/6 bg-xb-screen px-[18px] pb-3 pt-3.5"
     >
       <MoleculesNextMemberOfficeLine :label="office.label" :name="office.name" :change-label="office.action" @change="$emit('change')" />
 

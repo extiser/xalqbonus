@@ -67,10 +67,11 @@ defineEmits<{ profile: []; promo: [] }>();
 </template>
 
 <style scoped>
-/* Обёртка — липкость. margin-bottom −68: живой фон верхнего блока начинается от верха и уходит под шапку. */
+/* Обёртка — липкость. margin-bottom −68: живой фон верхнего блока начинается от верха и уходит под шапку.
+   У демо-зрителя шапка липнет под полосой «Демо-аккаунт» — на её высоту (`--xb-demo-offset`). */
 .home-sticky {
   position: sticky;
-  top: 0;
+  top: var(--xb-demo-offset);
   z-index: 7;
   margin-bottom: -68px;
   height: 68px;
