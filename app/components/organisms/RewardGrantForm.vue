@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import type { GiftFields } from '~/types/rewardGrant';
 import type { SelectOption } from '~/types/selectOption';
-import { giftCustomMessageLimit, GIFT_REASON_MAX_LENGTH } from '#shared/gift';
+import { giftCustomMessageLimit, GIFT_FIELD_LABELS, GIFT_REASON_MAX_LENGTH } from '#shared/gift';
 import type {
   GiftMessagePreviewRequestBody,
   GiftMessagePreviewResponse,
@@ -108,7 +108,7 @@ watch(
   },
 );
 
-/** Сумма из поля: пусто и не число — `null`, в системном тексте на её месте встанет «…». */
+/** Сумма из поля: пусто и не число — `null`, в системном тексте на её месте встанет подпись поля. */
 const draftPoints = (): number | null => {
   const parsed = Number(points.value);
 
@@ -217,14 +217,14 @@ const submit = (): void => {
       <div class="grid gap-4 sm:grid-cols-3">
         <MoleculesNumberField
           v-model="points"
-          label="Сумма баллов"
+          :label="GIFT_FIELD_LABELS.points"
           :min="1"
           required
           :error="fieldError('points')"
         />
         <MoleculesFormField
           v-model="untilDate"
-          label="Забрать до"
+          :label="GIFT_FIELD_LABELS.untilDate"
           type="date"
           required
           :error="fieldError('untilDate')"
@@ -237,7 +237,7 @@ const submit = (): void => {
         <div>
           <MoleculesTextAreaField
             v-model="reasonUz"
-            label="Повод на узбекском"
+            :label="GIFT_FIELD_LABELS.reasonUz"
             :rows="2"
             placeholder="O'qituvchilar kuni munosabati bilan"
             required
@@ -250,7 +250,7 @@ const submit = (): void => {
         <div>
           <MoleculesTextAreaField
             v-model="reasonRu"
-            label="Повод на русском"
+            :label="GIFT_FIELD_LABELS.reasonRu"
             :rows="2"
             placeholder="ко Дню учителя"
             required

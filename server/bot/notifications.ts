@@ -6,7 +6,7 @@ import { countedPlainText, formatPoints, plainText, text } from '#server/bot/tex
 import { calendarDayMoment, formatCalendarDate, formatDayMonthWord } from '#server/utils/parkTime';
 // Относительным путём, а не через `#shared`: модуль собирается ещё и в воркер,
 // а там из псевдонимов настроен один `#server` (package.json → `build:worker`).
-import { GIFT_MESSAGE_FOOTER_SEPARATOR } from '../../shared/gift';
+import { GIFT_FIELD_LABELS, GIFT_MESSAGE_FOOTER_SEPARATOR } from '../../shared/gift';
 import { escapeHtml } from '../../shared/telegramHtml';
 
 /**
@@ -194,12 +194,16 @@ const readGiftReceivedParams = (params: GiftReceivedParams | LegacyGiftReceivedP
   return { ...rest, messageRu: null, messageUz: null, coverRuPath: coverPath, coverUzPath: coverPath };
 };
 
-/** Подстановка вместо суммы, повода или даты, которых ещё нет: предпросмотр формы зовёт сборку на недонабранном. */
-export const GIFT_MESSAGE_MISSING_VALUE = '…';
+/**
+ * Подстановка вместо суммы, повода или даты, которых ещё нет, — подпись поля формы в фигурных
+ * скобках: «{Сумма баллов}». Предпросмотр формы зовёт сборку на недонабранном, и сотрудник
+ * видит, что куда встанет. Повод называется полем своего языка.
+ */
+const missingValue = (label: string): string => `{${label}}`;
 
 /**
  * Значения, которые сообщение о подарке называет водителю. `null` — нет или не читается,
- * на его месте встаёт `GIFT_MESSAGE_MISSING_VALUE`; у уведомления все три есть всегда.
+ * на его месте встаёт подпись поля (`missingValue`); у уведомления все три есть всегда.
  */
 export type GiftMessageValues = {
   points: number | null;
@@ -210,11 +214,14 @@ export type GiftMessageValues = {
 
 const giftReceivedValues = (values: GiftMessageValues, language: Language): Record<string, string> => ({
   points:
-    values.points === null ? GIFT_MESSAGE_MISSING_VALUE : countedPlainText('reward_points', language, values.points),
-  reason: values.reason ?? GIFT_MESSAGE_MISSING_VALUE,
+    values.points === null
+      ? missingValue(GIFT_FIELD_LABELS.points)
+      : countedPlainText('reward_points', language, values.points),
+  reason:
+    values.reason ?? missingValue(language === 'uz' ? GIFT_FIELD_LABELS.reasonUz : GIFT_FIELD_LABELS.reasonRu),
   date:
     values.untilDate === null
-      ? GIFT_MESSAGE_MISSING_VALUE
+      ? missingValue(GIFT_FIELD_LABELS.untilDate)
       : formatDayMonthWord(calendarDayMoment(values.untilDate), language),
 });
 
