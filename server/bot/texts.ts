@@ -188,6 +188,13 @@ export type TextKey =
   | 'gift_deadline'
   | 'gift_denied_not_found'
   | 'gift_denied_not_claimable'
+  | 'gift_take_failed'
+  | 'gifts_title_one'
+  | 'gifts_title_many'
+  | 'gifts_subtitle'
+  | 'gift_take'
+  | 'gifts_take_all'
+  | 'gift_tap_hint'
   | 'order_denied_office_unavailable'
   | 'order_denied_product_unavailable'
   | 'order_denied_insufficient_stock'
@@ -1086,6 +1093,37 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   gift_denied_not_claimable: {
     ru: 'Этот подарок уже на вашем счёте.',
     uz: "Bu sovg'a allaqachon hisobingizda.",
+  },
+  /** «Забрать» не прошло не по отказу, а по сбою — сеть или сервер: повтор может помочь. */
+  gift_take_failed: {
+    ru: 'Не удалось забрать подарок. Попробуйте ещё раз.',
+    uz: "Sovg'ani olib bo'lmadi. Qaytadan urinib ko'ring.",
+  },
+  /** Заголовок шторки подарков — по числу. «Подарки…» — ещё и подпись группы в «Моих наградах». */
+  gifts_title_one: {
+    ru: 'Подарок от Xalq Taxi',
+    uz: "Xalq Taxi'dan sovg'a",
+  },
+  gifts_title_many: {
+    ru: 'Подарки от Xalq Taxi',
+    uz: "Xalq Taxi'dan sovg'alar",
+  },
+  gifts_subtitle: {
+    ru: 'Баллы придут на счёт, как только заберёте',
+    uz: "Olganingizdan so'ng ballar hisobingizga tushadi",
+  },
+  gift_take: {
+    ru: 'Забрать',
+    uz: 'Olish',
+  },
+  gifts_take_all: {
+    ru: 'Забрать всё',
+    uz: 'Hammasini olish',
+  },
+  /** Хвост срока у подарка на главной: «Заберите до 5 октября · нажмите, чтобы забрать». */
+  gift_tap_hint: {
+    ru: 'нажмите, чтобы забрать',
+    uz: 'olish uchun bosing',
   },
 
   // Отказы оформления и отмены. Разведены по причинам: экран обязан сказать, чего именно

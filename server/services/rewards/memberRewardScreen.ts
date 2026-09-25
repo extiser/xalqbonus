@@ -141,4 +141,12 @@ export const memberRewardTexts = (language: Language): MemberRewardTexts => ({
   pastGroup: plainText('rewards_group_past', language),
   screenTitle: plainText('reward_screen_title', language),
   codeTitle: plainText('reward_code_title', language),
+  giftsTitleOne: plainText('gifts_title_one', language),
+  giftsTitleMany: plainText('gifts_title_many', language),
+  giftsSubtitle: plainText('gifts_subtitle', language),
+  giftTake: plainText('gift_take', language),
+  giftsTakeAll: plainText('gifts_take_all', language),
+  giftsClose: plainText('button_close', language),
+  giftTapHint: plainText('gift_tap_hint', language),
+  giftTakeFailed: plainText('gift_take_failed', language),
 });
