@@ -1747,6 +1747,20 @@ export function catalogPickedMock(officeId: string, cart: CatalogCart, hintShown
   };
 }
 
+/**
+ * Загрузка витрины — `catalog-loading.html`: строка офиса стоит, на месте плиток скелет (экран
+ * показывает его через 0.3 с загрузки), итога нет.
+ */
+export function catalogLoadingMock(officeId: string | null) {
+  return {
+    state: 'pick' as const,
+    balance: { label: 'Ваши баллы', amount: formatPoints(CATALOG_BALANCE) },
+    office: officeId === null ? undefined : { label: 'Офис', name: catalogOffice(officeId).name, action: 'Сменить' },
+    products: [],
+    texts: CATALOG_TEXTS,
+  };
+}
+
 /** Подтверждение с витрины выбранного офиса. */
 export function catalogPickedConfirmMock(officeId: string, cart: CatalogCart) {
   return confirmMock(officeProducts(officeId), cart, officeId);

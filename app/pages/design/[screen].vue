@@ -51,6 +51,7 @@ import {
   catalogConfirmMock,
   catalogExitSheetTexts,
   catalogInitialCart,
+  catalogLoadingMock,
   catalogNoOfficeMock,
   catalogOfficeSheetMock,
   catalogPickedConfirmMock,
@@ -259,6 +260,7 @@ type NoOfficeSetup = {
 const noOffice = pick<NoOfficeSetup>({
   'catalog-no-office': { officeId: null, sheet: 'none', officeView: 'add', cart: {}, hint: false },
   'catalog-no-office-focus': { officeId: null, sheet: 'none', officeView: 'add', cart: {}, hint: false },
+  'catalog-loading': { officeId: 'sergeli', sheet: 'none', officeView: 'change', cart: {}, hint: false },
   'catalog-pick-office': { officeId: null, sheet: 'office', officeView: 'add', cart: {}, hint: false },
   'catalog-pick-office-sold-out': { officeId: null, sheet: 'office', officeView: 'soldOut', cart: {}, hint: false },
   'catalog-office-picked': { officeId: CATALOG_CURRENT_OFFICE, sheet: 'none', officeView: 'change', cart: { checker: 1 }, hint: true },
@@ -273,6 +275,22 @@ const noOfficeHint = ref(noOffice?.hint ?? false);
 const noOfficeProduct = ref<string>(CATALOG_PICK_PRODUCT);
 const noOfficeSelected = ref<string | null>(null);
 
+/**
+ * Витрина офиса «грузится»: на `catalog-loading` — всё время, после выбора и смены офиса — 1.2 с,
+ * чтобы было видно бледные прежние плитки, скелет и приход товаров.
+ */
+const noOfficeLoading = ref(slug.value === 'catalog-loading');
+
+/** Сколько заглушка «грузит» витрину после выбора офиса — дольше порога скелета в 0.3 с. */
+const NO_OFFICE_LOAD_MS = 1200;
+
+function loadNoOfficeShowcase(): void {
+  noOfficeLoading.value = true;
+  setTimeout(() => {
+    noOfficeLoading.value = false;
+  }, NO_OFFICE_LOAD_MS);
+}
+
 const noOfficeScreen = computed(() => {
   if (!noOffice) {
     return undefined;
@@ -280,6 +298,10 @@ const noOfficeScreen = computed(() => {
 
   // Переход с товара на главной — к шашке, как в `catalog-no-office-focus.html`.
   const focusProductId = slug.value === 'catalog-no-office-focus' ? CATALOG_PICK_PRODUCT : undefined;
+
+  if (noOfficeLoading.value) {
+    return catalogLoadingMock(noOfficeId.value);
+  }
 
   return noOfficeId.value === null
     ? { ...catalogNoOfficeMock(), focusProductId }
@@ -349,8 +371,10 @@ function saveNoOfficeSheet(officeId: string): void {
   } else if (view === 'pick') {
     noOfficeCart.value = {};
     noOfficeHint.value = true;
+    loadNoOfficeShowcase();
   } else if (officeId !== noOfficeId.value) {
     noOfficeCart.value = {};
+    loadNoOfficeShowcase();
   }
 
   noOfficeId.value = officeId;

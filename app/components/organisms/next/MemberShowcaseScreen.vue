@@ -13,7 +13,9 @@ import type { MemberProductView } from '~/types/memberView';
  * Строка закреплена под шапкой и при прокрутке не уезжает; баланс — в липкой шапке справа.
  *
  * Состояния:
- * - `pick` — грузится каталог или витрина офиса: заглушки плиток, без строки офиса и итога;
+ * - `pick` — грузится каталог или витрина офиса (`catalog-loading.html`). Шапка, баланс и строка
+ *   офиса стоят, итога нет. Первые 0.3 с прежние плитки, если были, стоят бледными (38 %) — быстрый
+ *   ответ сразу рисует товары без вспышки; дольше — на месте плиток скелет с бликом;
  * - `ready` — плитки в две колонки. У витрины офиса за ними — товары каталога, которых в офисе
  *   нет, приглушёнными (`missingProducts`), и внизу итог с «Оформить»;
  * - `empty` — товаров нет: текст видом пустого экрана, как в «Моих заказах». Кнопок нет,
@@ -85,8 +87,32 @@ const emit = defineEmits<{
   focused: [];
 }>();
 
-/** Заглушек на загрузке — два ряда. */
-const PLACEHOLDER_COUNT = 4;
+/** Плиток скелета на загрузке — два ряда. */
+const SKELETON_COUNT = 4;
+
+/** Сколько загрузка идёт без скелета: быстрый ответ не должен мигать заглушками. */
+const SKELETON_DELAY_MS = 300;
+
+/** Загрузка дольше `SKELETON_DELAY_MS` — показан скелет. */
+const skeletonShown = ref(false);
+
+/**
+ * Плитки, которые стояли до загрузки, — бледными до появления скелета. Снимок берётся, пока
+ * экран в `ready`: на загрузке страница отдаёт уже пустой список.
+ */
+const lastReady = ref<{ products: MemberProductView[]; missing: MemberProductView[] } | null>(null);
+const staleTiles = ref<{ products: MemberProductView[]; missing: MemberProductView[] } | null>(null);
+
+let skeletonTimer: ReturnType<typeof setTimeout> | undefined;
+
+const startLoading = (): void => {
+  clearTimeout(skeletonTimer);
+  skeletonShown.value = false;
+  skeletonTimer = setTimeout(() => {
+    skeletonShown.value = true;
+    staleTiles.value = null;
+  }, SKELETON_DELAY_MS);
+};
 
 /** Зазор между строкой офиса и плиткой, к которой прокрутили, — верхний отступ сетки. */
 const FOCUS_GAP = 18;
@@ -133,8 +159,37 @@ const stopHintListeners = (): void => {
   document.removeEventListener('click', hideHint);
 };
 
-// Прокрутка и слушатели — только в браузере: на сервере окна нет, а экран `/design` рисуется и там.
+// Прокрутка, таймер и слушатели — только в браузере: на сервере окна нет, а экран `/design` рисуется и там.
 onMounted(() => {
+  if (props.state === 'pick') {
+    startLoading();
+  }
+
+  watch(
+    () => [props.state, props.products, props.missingProducts] as const,
+    ([state, products, missing]) => {
+      if (state === 'ready') {
+        lastReady.value = { products, missing: missing ?? [] };
+      }
+    },
+    { immediate: true },
+  );
+
+  // Загрузка началась — прежние плитки бледнеют и ждут скелета; кончилась — таймер снят.
+  watch(
+    () => props.state,
+    (state, previous) => {
+      if (state === 'pick') {
+        staleTiles.value = previous === 'ready' ? lastReady.value : null;
+        startLoading();
+      } else {
+        clearTimeout(skeletonTimer);
+        skeletonShown.value = false;
+        staleTiles.value = null;
+      }
+    },
+  );
+
   watch(
     () => props.state,
     (state) => {
@@ -164,7 +219,10 @@ onMounted(() => {
   );
 });
 
-onBeforeUnmount(stopHintListeners);
+onBeforeUnmount(() => {
+  stopHintListeners();
+  clearTimeout(skeletonTimer);
+});
 </script>
 
 <template>
@@ -173,7 +231,7 @@ onBeforeUnmount(stopHintListeners);
 
     <!-- Липкая под шапкой: шапка — 69 без выреза сверху (14 + 40 + 14 и граница) -->
     <div
-      v-if="state !== 'pick' && office"
+      v-if="office"
       ref="officeLine"
       class="sticky top-[calc(69px+env(safe-area-inset-top))] z-[4] border-b border-white/6 bg-xb-screen px-[18px] pb-3 pt-3.5"
     >
@@ -190,16 +248,39 @@ onBeforeUnmount(stopHintListeners);
       </div>
     </div>
 
-    <div v-if="state === 'pick'" class="grid grid-cols-2 gap-x-4 gap-y-[22px] px-4 pb-6 pt-[18px]" aria-hidden="true">
-      <div v-for="placeholder in PLACEHOLDER_COUNT" :key="placeholder" class="flex min-w-0 flex-col gap-2.5">
-        <div class="aspect-[9/10] rounded-[24px] bg-white/5" />
-        <div class="flex flex-col gap-1 px-1">
-          <div class="h-3 w-[60%] rounded-md bg-white/6" />
-          <div class="h-3 w-[28%] rounded-md bg-white/6" />
+    <template v-if="state === 'pick'">
+      <div v-if="skeletonShown" class="grid grid-cols-2 gap-x-4 gap-y-[22px] px-4 pb-6 pt-[18px]" aria-busy="true">
+        <div v-for="placeholder in SKELETON_COUNT" :key="placeholder" class="flex min-w-0 flex-col gap-2.5" aria-hidden="true">
+          <div class="member-showcase-skeleton aspect-[9/10] rounded-[24px]" />
+          <div class="member-showcase-skeleton ml-1 h-3 w-[46%] rounded-md" />
+          <div class="member-showcase-skeleton ml-1 h-3 w-[72%] rounded-md" />
+          <div class="member-showcase-skeleton mt-0.5 h-10 rounded-full" />
         </div>
-        <div class="h-10 rounded-full bg-white/6" />
       </div>
-    </div>
+
+      <!-- Прежние плитки — бледными и мёртвыми, пока не пришёл ответ или скелет -->
+      <div
+        v-else-if="staleTiles"
+        class="grid grid-cols-2 gap-x-4 gap-y-[22px] px-4 pb-6 pt-[18px] opacity-38"
+        inert
+        aria-busy="true"
+      >
+        <MoleculesNextMemberProductTile
+          v-for="product in staleTiles.products"
+          :key="product.id"
+          mode="showcase"
+          :product="product"
+          :texts="{ sale: texts.sale, stepper: { decrease: texts.decrease, increase: texts.increase, increaseMore: texts.increaseMore } }"
+        />
+        <MoleculesNextMemberProductTile
+          v-for="product in staleTiles.missing"
+          :key="product.id"
+          mode="showcase"
+          :product="product"
+          :texts="{ sale: texts.sale }"
+        />
+      </div>
+    </template>
 
     <template v-else-if="state === 'ready'">
       <div class="grow">
@@ -253,3 +334,31 @@ onBeforeUnmount(stopHintListeners);
     />
   </div>
 </template>
+
+<style scoped>
+/* Скелет плитки — `catalog-loading.html`: блик слева направо, 1.3 с на проход. Фон привязан к окну
+   (`background-attachment: fixed`), поэтому по всем плиткам бежит одна волна, а не своя у каждой. */
+.member-showcase-skeleton {
+  background-color: rgba(255, 255, 255, 0.05);
+  background-image: linear-gradient(100deg, rgba(255, 255, 255, 0) 30%, rgba(255, 255, 255, 0.09) 50%, rgba(255, 255, 255, 0) 70%);
+  background-size: 250% 100%;
+  background-attachment: fixed;
+  animation: member-showcase-shimmer 1.3s linear infinite;
+}
+
+@keyframes member-showcase-shimmer {
+  from {
+    background-position: 130% 0;
+  }
+
+  to {
+    background-position: -30% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .member-showcase-skeleton {
+    animation: none;
+  }
+}
+</style>

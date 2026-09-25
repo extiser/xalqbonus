@@ -1117,12 +1117,12 @@ const homeView = computed(() => {
  * не прочитался — ошибка с повтором, пуст — `catalog_empty`. Прочитан — «Офис · Выбрать»
  * и все товары без остатка, итога нет. Строки офиса у пустого и у ошибки нет: выбирать не из чего.
  *
- * С офисом — за витрину офиса, как было (issue #218): пока она в пути, те же заглушки без строки
- * офиса и итога; прочиталась — её товары, за ними приглушённые товары каталога, которых в офисе
+ * С офисом — за витрину офиса, как было (issue #218): пока она в пути — загрузка со строкой офиса,
+ * без итога; прочиталась — её товары, за ними приглушённые товары каталога, которых в офисе
  * нет, и итог. Пустая витрина — без приглушённых (решение Руслана 25-09-2026).
  *
- * Строка офиса у ошибки — из списка офисов каталога: ответа витрины нет, а водитель должен видеть,
- * чья витрина не открылась, и сменить офис строкой выше.
+ * Строка офиса у загрузки и ошибки — из списка офисов каталога: ответа витрины нет, а водитель
+ * должен видеть, чья витрина грузится или не открылась, и сменить офис строкой выше.
  */
 const catalogScreen = computed(() => {
   const current = member.value;
@@ -1179,18 +1179,19 @@ const catalogScreen = computed(() => {
   }
 
   const showcaseState = memberOrders.showcaseState.value;
+  const pinned = catalog?.offices.find((entry) => entry.officeId === officeId);
+  const pinnedLine = pinned ? { label: texts.officeLabel, name: pinned.name, action: orderTexts.officeChange } : undefined;
 
+  // Строка офиса стоит и на загрузке: водитель видит, чья витрина грузится (`catalog-loading.html`).
   if (showcaseState === 'loading') {
-    return { ...base, state: 'pick' as const };
+    return { ...base, state: 'pick' as const, office: pinnedLine };
   }
 
   if (showcaseState === 'error' || !showcase) {
-    const office = catalog?.offices.find((entry) => entry.officeId === officeId);
-
     return {
       ...base,
       state: 'error' as const,
-      office: office ? { label: texts.officeLabel, name: office.name, action: orderTexts.officeChange } : undefined,
+      office: pinnedLine,
       // Отказ сервера — своими словами: архивный офис говорит, что здесь ничего не взять.
       texts: { ...base.texts, error: memberOrders.showcaseError.value ?? orderTexts.showcaseFailed },
     };
