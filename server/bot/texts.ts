@@ -129,6 +129,7 @@ export type TextKey =
   | 'order_cancel_reason_expired'
   | 'button_cancel_order'
   | 'cancel_order_question'
+  | 'cancel_order_hint'
   | 'orders_title'
   | 'orders_all'
   | 'orders_group_pending'
@@ -758,9 +759,15 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Отменить заказ',
     uz: 'Buyurtmani bekor qilish',
   },
+  /** Заголовок шторки отмены. Что станет с баллами — отдельной строкой под ним, `cancel_order_hint`. */
   cancel_order_question: {
-    ru: 'Отменить заказ? Баллы вернутся на баланс.',
-    uz: 'Buyurtma bekor qilinsinmi? Ballar hisobingizga qaytadi.',
+    ru: 'Отменить заказ?',
+    uz: 'Buyurtma bekor qilinsinmi?',
+  },
+  /** Подзаголовок шторки отмены: последствие отдельно от вопроса, чтобы его прочитали (Руслан, 25-09-2026). */
+  cancel_order_hint: {
+    ru: 'Баллы вернутся на баланс.',
+    uz: 'Ballar hisobingizga qaytadi.',
   },
   orders_title: {
     ru: 'Мои заказы',

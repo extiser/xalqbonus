@@ -151,6 +151,8 @@ export type MemberScreenTexts = {
   orderTotal: string;
   cancelOrder: string;
   cancelQuestion: string;
+  /** «Баллы вернутся на баланс.» — под вопросом шторки отмены. */
+  cancelHint: string;
   yes: string;
   no: string;
 };

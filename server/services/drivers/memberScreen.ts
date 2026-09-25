@@ -154,6 +154,7 @@ export const memberScreenTexts = (language: Language): MemberScreenTexts => ({
   orderTotal: plainText('cart_total', language),
   cancelOrder: plainText('button_cancel_order', language),
   cancelQuestion: plainText('cancel_order_question', language),
+  cancelHint: plainText('cancel_order_hint', language),
   yes: plainText('button_yes', language),
   no: plainText('button_no', language),
 });

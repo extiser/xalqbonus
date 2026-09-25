@@ -761,9 +761,10 @@ export const orderIssuedMock = { order: ORDER_ISSUED, balance: BAR_BALANCE, text
 export const orderCancelledMock = { order: ORDER_CANCELLED, balance: BAR_BALANCE, texts: ORDER_TEXTS };
 export const orderExpiredMock = { order: ORDER_EXPIRED, balance: BAR_BALANCE, texts: ORDER_TEXTS };
 
-/** Шторка отмены заказа (issue #210): вопрос — заголовком, «Да» и «Нет». */
+/** Шторка отмены заказа (issue #210): вопрос — заголовком, последствие — под ним, «Да» и «Нет». */
 export const orderCancelSheetTexts = {
-  question: 'Отменить заказ? Баллы вернутся на баланс.',
+  question: 'Отменить заказ?',
+  hint: 'Баллы вернутся на баланс.',
   yes: 'Да',
   no: 'Нет',
 };

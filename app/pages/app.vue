@@ -691,7 +691,7 @@ const orderScreen = computed(() => {
       total: texts.orderTotal,
       cancel: texts.cancelOrder,
     },
-    sheetTexts: { question: texts.cancelQuestion, yes: texts.yes, no: texts.no },
+    sheetTexts: { question: texts.cancelQuestion, hint: texts.cancelHint, yes: texts.yes, no: texts.no },
   };
 });
 
