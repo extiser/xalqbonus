@@ -184,6 +184,18 @@ body { display: flex; justify-content: center; }
 .order.expired .foot { color: #8A93A2; }
 .order.expired .foot svg path { stroke: #8A93A2; }
 
+
+/* ---- ЗОЛОТО (T67, Руслан, 25-09-2026, сессия 61): всё про награды — золотое, всё про товары
+   и заказы — зелёное. На главной ждущая награда уже золотая (main-screen.html, .reward.compact.tone-gold);
+   зелёный раздел выглядел другим разделом. Ждущая награда — рамка, фон, слово и «Код для выдачи —
+   внутри» теми же золотыми, что компактная карточка главной. Остальные строки не меняются. */
+.order.pending {
+  border-color: rgba(255, 220, 140, 0.40);
+  background: linear-gradient(180deg, rgba(255, 214, 120, 0.08) 0%, rgba(20, 23, 29, 1) 62%);
+}
+.order.pending .state { color: #FFD98A; }
+.order.pending .foot { color: #FFD98A; }
+.order.pending .foot svg path { stroke: #FFD98A; }
 </style></head><body>
 
 <div class="screen">

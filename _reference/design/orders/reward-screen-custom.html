@@ -195,6 +195,24 @@ body { display: flex; justify-content: center; }
 .card.order .origin { font-size: 14px; font-weight: 500; color: #F4F6F8; margin-bottom: 6px; }
 /* Значок подарка вместо фото: у произвольной награды фото нет, а место в строке держим. */
 .th.gift { background: rgba(255,255,255,.06); display: flex; align-items: center; justify-content: center; }
+
+/* ---- ЗОЛОТО (T67, Руслан, 25-09-2026, сессия 61): всё про награды — золотое, всё про товары
+   и заказы — зелёное. Карточка с кодом ждущей награды — рамка, фон, слово «Ждёт в офисе»,
+   подпись над кодом и сам код — теми же золотыми, что ждущая карточка раздела
+   (rewards-screen.html) и компактная карточка главной. Экран заказа остаётся зелёным. */
+.card.order {
+  border-color: rgba(255, 220, 140, 0.40);
+  background: linear-gradient(180deg, rgba(255, 214, 120, 0.08) 0%, rgba(20, 23, 29, 1) 68%);
+}
+.order .state b { color: #FFD98A; }
+.order .code-zone { border-top-color: rgba(255, 220, 140, 0.20); }
+.order .code-title { color: #FFD98A; }
+.order .code { color: #FFD98A; }
+
+/* Зачёркнутая цена — с гранатом, как «0» рядом (Руслан, 25-09-2026): без значка число
+   читалось просто числом, а не ценой в баллах. Гранат приглушён вместе с ценой. */
+.cst.disc s { display: inline-flex; align-items: center; gap: 3px; }
+.cst.disc s .pom { opacity: 0.55; top: 0; }
 </style></head><body>
 
 <div class="screen">

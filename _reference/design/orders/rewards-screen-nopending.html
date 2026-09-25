@@ -133,6 +133,18 @@ body { display: block !important; }
    до строки и от строки до следующей группы (2 + зазор 10 + 24 сверху; 8 + зазор 10 + 18 снизу). */
 .zero { padding: 24px 4px 8px; text-align: center; font-size: 15px; font-weight: 300; color: #8A93A2; }
 
+
+/* ---- ЗОЛОТО (T67, Руслан, 25-09-2026, сессия 61): всё про награды — золотое, всё про товары
+   и заказы — зелёное. На главной ждущая награда уже золотая (main-screen.html, .reward.compact.tone-gold);
+   зелёный раздел выглядел другим разделом. Ждущая награда — рамка, фон, слово и «Код для выдачи —
+   внутри» теми же золотыми, что компактная карточка главной. Остальные строки не меняются. */
+.order.pending {
+  border-color: rgba(255, 220, 140, 0.40);
+  background: linear-gradient(180deg, rgba(255, 214, 120, 0.08) 0%, rgba(20, 23, 29, 1) 62%);
+}
+.order.pending .state { color: #FFD98A; }
+.order.pending .foot { color: #FFD98A; }
+.order.pending .foot svg path { stroke: #FFD98A; }
 </style></head><body><div class="sheetwrap">
 <div style="font-family:Unbounded,Manrope,sans-serif;font-size:20px;font-weight:600;letter-spacing:-.4px">Мои награды: ждущих нет</div>
 <div class="nt">Награды были, но все получены, зачислены или сгорели. Группа «Ждут в офисе» остаётся с нулём.</div>
