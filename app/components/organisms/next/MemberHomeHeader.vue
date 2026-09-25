@@ -38,7 +38,8 @@ defineEmits<{ profile: []; promo: [] }>();
 
 <template>
   <div class="home-sticky">
-    <div class="home-bar" :class="surface ? 'home-bar-surface' : ''">
+    <div class="home-backdrop" :class="surface ? 'home-backdrop-surface' : ''" aria-hidden="true" />
+    <div class="home-bar">
       <AtomsNextMemberIconButton :label="texts.profile" size="m" @click="$emit('profile')">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true">
           <circle cx="12" cy="8.5" r="3.6" stroke="currentColor" stroke-width="1.8" />
@@ -76,30 +77,38 @@ defineEmits<{ profile: []; promo: [] }>();
   height: 68px;
 }
 
+/* Подложка — отдельный слой под строкой, соседом, а не предком: Chromium (Android WebView) не размывал
+   фон, пока `backdrop-filter` стоял на одном элементе с `clip-path` строки (#243). Ни `clip-path`, ни
+   `filter`, ни `opacity`, ни маски на этом слое и на `.home-sticky` быть не должно. */
+.home-backdrop {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  border-bottom: 1px solid transparent;
+  transition: background-color 0.2s ease-out, border-color 0.2s ease-out;
+}
+
+/* Подложка — один в один как у шапки раздела (`MemberSectionBar`). */
+.home-backdrop-surface {
+  background: rgba(11, 13, 17, 0.82);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+}
+
 /* Высота 68 = 14 + 40 + 14, поля 16. clip-path срезает всё, что свисает ниже края (пыль пилюли),
-   вверх и вбок свечение не режется. */
+   вверх и вбок свечение не режется. Прозрачная рамка — на месте рамки подложки: содержимое стоит
+   там же, где стояло, когда рамка была у самой строки. */
 .home-bar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
   box-sizing: border-box;
   height: 68px;
   padding: calc(14px + env(safe-area-inset-top)) 16px 14px;
-  clip-path: inset(-40px -40px 0 -40px);
-  transition: background-color 0.2s ease-out, border-color 0.2s ease-out;
-}
-
-/* Без подложки — прозрачная рамка на месте рамки подложки: высота не прыгает, когда она включится. */
-.home-bar:not(.home-bar-surface) {
   border-bottom: 1px solid transparent;
-}
-
-/* Подложка — один в один как у шапки раздела (`MemberSectionBar`). */
-.home-bar-surface {
-  background: rgba(11, 13, 17, 0.82);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  clip-path: inset(-40px -40px 0 -40px);
 }
 
 /* Баланс в шапке — по тому же `surface`, что подложка: гаснет сразу, проявляется за 0,15 с. */
