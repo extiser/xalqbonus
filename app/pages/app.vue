@@ -17,6 +17,7 @@ import {
 } from '#shared/types/miniapp';
 import { useCountUp } from '~/composables/useCountUp';
 import { useEmployeePassword } from '~/composables/useEmployeePassword';
+import { useLiveScreenPoll } from '~/composables/useLiveScreenPoll';
 import { useMemberGifts } from '~/composables/useMemberGifts';
 import { useMemberHistory } from '~/composables/useMemberHistory';
 import { useMemberOrders } from '~/composables/useMemberOrders';
@@ -1065,6 +1066,53 @@ const openRewardMap = (): void => {
   }
 };
 
+/**
+ * Открытый заказ — копия, и перечитанный список её сам не меняет: после каждого перечитывания
+ * она заменяется свежей строкой с тем же номером. Строки нет — остаётся прежняя.
+ *
+ * Ждущим ответ опроса не делает заказ, который уже выдан или отменён: такой ответ ушёл раньше,
+ * чем пришла отмена, — выдача и отмена назад не ходят.
+ */
+watch(memberOrders.orders, (orders) => {
+  const shown = currentOrder.value;
+  const fresh = shown && orders.find((entry) => entry.orderId === shown.orderId);
+
+  if (!shown || !fresh || (shown.status !== 'pending' && fresh.status === 'pending')) {
+    return;
+  }
+
+  currentOrder.value = fresh;
+});
+
+// Заказ выдали или отменили, пока открыта шторка отмены, — отменять нечего. Отмена в пути —
+// шторка ждёт своего ответа.
+watch(
+  () => currentOrder.value?.status,
+  (status) => {
+    if (status !== 'pending' && !memberOrders.cancelling.value) {
+      cancelSheetOpen.value = false;
+    }
+  },
+);
+
+// Экран ждущего заказа и ждущей награды перечитывает себя сам: выдали у стойки — код исчезает
+// без касаний (issue #237). На остальных экранах опроса нет (issue #210).
+useLiveScreenPoll(
+  computed(
+    () => stage.value === 'member' && currentScreen.value === 'order' && currentOrder.value?.status === 'pending',
+  ),
+  memberOrders.reloadOrders,
+);
+useLiveScreenPoll(
+  computed(
+    () =>
+      stage.value === 'member' &&
+      currentScreen.value === 'reward' &&
+      memberRewards.rewards.value.find((entry) => entry.rewardId === currentRewardId.value)?.status === 'awaiting',
+  ),
+  memberRewards.reload,
+);
+
 /** Баланс в шапке разделов: «Ваши баллы» и число в наборе. */
 const sectionBalance = computed(() =>
   member.value ? { label: member.value.texts.balanceTitle, amount: balanceAmount.value } : undefined,
@@ -1818,8 +1866,8 @@ const resetSession = async (): Promise<void> => {
 
 /**
  * Возврат в приложение из фона: пока Telegram был свёрнут, баллы могли прийти. На любом экране
- * участника перечитывается баланс, на главной — ещё её блоки, в разделе заказов — список,
- * в разделе и на экране награды — список наград: награду могли выдать у стойки. В каталоге —
+ * участника перечитывается баланс, на главной — ещё её блоки, в разделе и на экране заказа — список
+ * заказов, в разделе и на экране награды — список наград: заказ и награду могли выдать у стойки. В каталоге —
  * только баланс: витрина и корзина остаются, какими водитель их оставил.
  */
 const onVisibilityChange = (): void => {
@@ -1835,7 +1883,7 @@ const onVisibilityChange = (): void => {
 
   void reloadMember();
 
-  if (currentScreen.value === 'orders') {
+  if (currentScreen.value === 'orders' || currentScreen.value === 'order') {
     void memberOrders.reloadOrders();
   } else if (currentScreen.value === 'rewards' || currentScreen.value === 'reward') {
     void memberRewards.reload();
