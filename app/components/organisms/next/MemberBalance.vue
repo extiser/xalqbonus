@@ -10,8 +10,8 @@ import { onBeforeUnmount, onMounted, useTemplateRef } from 'vue';
  * зарево ложится на неё сверху.
  *
  * Число — опора липкой шапки главной: когда его верх уходит под шапку, у неё появляются
- * подложка и баланс (`section-bar.md`, «Шапка главной»). Баланс включает таймлайн прокрутки
- * по числу без скрипта, подложку — проверка ниже, событием `covered`.
+ * подложка и баланс (`section-bar.md`, «Шапка главной»). Включает их одна проверка ниже,
+ * событием `covered`.
  */
 defineProps<{
   /** Число готовой строкой, уже в наборе. */
@@ -27,7 +27,6 @@ const emit = defineEmits<{ exchange: []; covered: [covered: boolean] }>();
 
 /**
  * Порог, px от верха экрана: верх числа поднялся выше — число ушло под шапку.
- * Тот же порог записан в CSS ниже, у `view-timeline-inset`: меняешь один — меняй оба.
  * 61, а не 68 (высота шапки): рамка числа выше цифр на 6–7 px.
  */
 const COVERED_THRESHOLD = 61;
@@ -59,7 +58,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', check));
   <div class="relative flex flex-col items-center gap-5">
     <div class="flex flex-col items-center gap-2.5">
       <AtomsNextMemberEyebrow :label="texts.title" />
-      <div ref="amountBox" class="balance-amount flex flex-col">
+      <div ref="amountBox" class="flex flex-col">
         <AtomsNextMemberBigNumber :value="amount" />
       </div>
     </div>
@@ -69,14 +68,3 @@ onBeforeUnmount(() => window.removeEventListener('scroll', check));
     </div>
   </div>
 </template>
-
-<style scoped>
-/* Таймлайн числа — его читает липкая шапка главной (`MemberHomeHeader`), область видимости
-   имени открывает `MemberHome`. 61 — тот же порог, что COVERED_THRESHOLD в скрипте выше. */
-@supports (animation-timeline: view()) {
-  .balance-amount {
-    view-timeline: --amount block;
-    view-timeline-inset: 61px 0px;
-  }
-}
-</style>

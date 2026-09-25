@@ -98,8 +98,8 @@ const barSurface = ref(false);
 <template>
   <!-- overflow-x: clip — золотая пыль пилюли акции свисает за правый край экрана на 10–18 px,
        и без обрезки у главной появлялась бы прокрутка вбок (в эталоне она есть). clip, а не hidden:
-       контейнером прокрутки обёртка не становится, липкость шапки и таймлайн числа работают -->
-  <div class="home-screen relative flex min-h-dvh flex-col overflow-x-clip bg-xb-screen font-manrope leading-[normal] text-xb-text">
+       контейнером прокрутки обёртка не становится, и липкость шапки работает -->
+  <div class="relative flex min-h-dvh flex-col overflow-x-clip bg-xb-screen font-manrope leading-[normal] text-xb-text">
     <OrganismsNextMemberHomeHeader
       :name="name"
       :callsign="callsign"
@@ -111,8 +111,8 @@ const barSurface = ref(false);
       @promo="$emit('promo')"
     />
 
-    <!-- overflow: clip, а не hidden: hidden делает блок контейнером прокрутки, и таймлайн числа
-         баллов считал бы прокрутку внутри него, которой нет, — баланс в шапке не появлялся бы -->
+    <!-- overflow: clip, а не hidden: живой фон обрезается по блоку, а контейнером прокрутки
+         блок не становится -->
     <div class="relative z-[6] flex flex-col gap-[34px] overflow-clip px-5 pt-[104px]" :class="props.invite ? 'pb-4' : 'pb-11'">
       <AtomsNextMemberLiveBackdrop variant="home" />
 
@@ -191,12 +191,3 @@ const barSurface = ref(false);
     />
   </div>
 </template>
-
-<style scoped>
-/* Область имени таймлайна числа: число — в `MemberBalance`, читает его шапка — `MemberHomeHeader`. */
-@supports (animation-timeline: view()) {
-  .home-screen {
-    timeline-scope: --amount;
-  }
-}
-</style>

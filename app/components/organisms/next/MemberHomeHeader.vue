@@ -11,12 +11,12 @@
  * Шапка стоит всегда, с первого кадра, и не уезжает; живой фон верхнего блока начинается
  * от верха экрана и уходит под неё — отсюда `margin-bottom: −68`. Пока крупное число видно,
  * шапка прозрачная и баланса в ней нет: он крупно в центре. Верх числа ушёл под шапку —
- * подложка и баланс появляются вместе:
+ * подложка и баланс появляются вместе, по одному `surface`: его считает скрипт у числа
+ * (`MemberBalance`, порог 61). Баланс проявляется переходом 0,15 с, гаснет сразу.
  *
- * - подложку включает `surface` — его считает скрипт у числа (`MemberBalance`, порог 61);
- * - баланс включает без скрипта таймлайн прокрутки по числу (`--amount`): анимация ставит
- *   целое `--home-balance-on`, проявление — переход 0,15 с по запросу стиля. Где таймлайнов
- *   нет (Safari до 26, Telegram на старой iOS), баланс в шапке виден всегда.
+ * Одним признаком, а не таймлайном прокрутки для баланса: в WebKit без таймлайнов (Telegram
+ * на iOS и macOS) запасной путь показывал баланс с первого кадра, рядом с крупным числом
+ * (прогон #210 на стенде).
  */
 defineProps<{
   name: string;
@@ -51,7 +51,7 @@ defineEmits<{ profile: []; promo: [] }>();
       </div>
 
       <div class="flex shrink-0 items-center gap-3.5">
-        <span class="home-bar-balance flex shrink-0">
+        <span class="home-bar-balance flex shrink-0" :class="surface ? 'home-bar-balance-on' : ''">
           <AtomsNextMemberBarBalance :label="balance.label" :amount="balance.amount" />
         </span>
         <MoleculesNextMemberPromoPill
@@ -102,47 +102,21 @@ defineEmits<{ profile: []; promo: [] }>();
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-/* Появление баланса: таймлайн числа (`MemberBalance`, область — `MemberHome`) переключает
-   целое на обёртке, проявление — переход по запросу стиля. Появляется, когда верх числа дошёл
-   до низа шапки, гаснет сразу. Выкинуть анимацию — удалить отсюда до конца файла, кроме
-   reduced-motion: баланс останется видимым всегда. */
-@property --home-balance-on {
-  syntax: '<integer>';
-  inherits: false;
-  initial-value: 0;
+/* Баланс в шапке — по тому же `surface`, что подложка: гаснет сразу, проявляется за 0,15 с. */
+.home-bar-balance {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 
-@keyframes home-balance-flag {
-  from { --home-balance-on: 0; }
-  to { --home-balance-on: 1; }
-}
-
-@supports (animation-timeline: view()) {
-  .home-sticky {
-    container-name: home-sticky;
-    animation: home-balance-flag linear both;
-    animation-timeline: --amount;
-    animation-range: exit 0% exit 2%;
-  }
-
-  .home-bar-balance {
-    opacity: 0;
-    transform: translateY(-4px);
-    transition: none;
-  }
-
-  @container home-sticky style(--home-balance-on: 1) {
-    .home-bar-balance {
-      opacity: 1;
-      transform: none;
-      transition: opacity 0.15s ease-out, transform 0.15s ease-out;
-    }
-  }
+.home-bar-balance-on {
+  opacity: 1;
+  transform: none;
+  transition: opacity 0.15s ease-out, transform 0.15s ease-out;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .home-bar-balance {
-    transform: none !important;
+    transform: none;
     transition: none !important;
   }
 }
