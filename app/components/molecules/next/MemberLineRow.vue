@@ -12,7 +12,9 @@
  * (`reward-screen-custom.html`), цены нет тоже.
  *
  * Зачёркнутая цена — у награды-товара: цена из каталога мелко сверху, под ней «0» — сколько
- * стоил бы подарок в баллах (`reward-screen.html`, Руслан, 24-09-2026).
+ * стоил бы подарок в баллах (`reward-screen.html`, Руслан, 24-09-2026). Зачёркнутая — тоже
+ * с гранатом, приглушённым вместе с ней: без значка число читалось просто числом, а не ценой
+ * в баллах (Руслан, 25-09-2026).
  *
  * В подтверждении заказа (`_reference/design/catalog/catalog-confirm.html`) под названием
  * вместо подписи стоит счётчик — он приходит слотом. Там строка первая в списке, и черты
@@ -63,7 +65,10 @@ defineProps<{
       v-if="price && oldPrice"
       class="flex shrink-0 flex-col items-end gap-px text-[15px] font-semibold tabular-nums text-xb-secondary"
     >
-      <s class="text-[12px] font-medium text-xb-grey">{{ oldPrice }}</s>
+      <s class="inline-flex items-center gap-[3px] text-[12px] font-medium text-xb-grey">
+        <span class="flex text-xb-garnet opacity-55"><AtomsNextMemberPointsIcon :size="11" /></span>
+        {{ oldPrice }}
+      </s>
       <span class="inline-flex items-center gap-1">
         <span class="relative top-px flex text-xb-garnet"><AtomsNextMemberPointsIcon :size="13" /></span>
         {{ price }}
