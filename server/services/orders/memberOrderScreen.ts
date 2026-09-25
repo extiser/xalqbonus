@@ -1,7 +1,8 @@
 import { plainText, type TextKey } from '#server/bot/texts';
-import type { Language, OrderCancelReason } from '#server/generated/prisma/enums';
+import type { Language, OrderCancelReason, OrderStatus } from '#server/generated/prisma/enums';
 import type { OrderLineRow, PersonOrderRow } from '#server/repositories/orders';
-import { formatCalendarDate, formatClockTime } from '#server/utils/parkTime';
+import { toMemberOffice } from '#server/services/offices/readMemberOffices';
+import { formatCalendarDate, formatClockTime, formatDayMonth } from '#server/utils/parkTime';
 import type { MemberOrder, MemberOrderTexts } from '#shared/types/miniapp';
 
 /**
@@ -22,22 +23,34 @@ const CANCEL_REASON_KEYS: Readonly<Record<OrderCancelReason, TextKey>> = {
   expired: 'order_cancel_reason_expired',
 };
 
-/** Момент в зоне парка: «15.09.2026 14:32». Цифрами — одинаково на обоих языках. */
-const formatMoment = (moment: Date): string =>
-  `${formatCalendarDate(moment)} ${formatClockTime(moment)}`;
+/**
+ * Слово состояния — полной таблицей, как причины: новый статус обязан сломать сборку здесь.
+ * Без даты: момент стоит отдельно, после точки (`stateHint`).
+ */
+const STATE_WORD_KEYS: Readonly<Record<OrderStatus, TextKey>> = {
+  pending: 'order_status_pending',
+  issued: 'order_state_issued',
+  cancelled: 'order_state_cancelled',
+};
 
-const statusText = (row: PersonOrderRow, language: Language): string => {
-  if (row.status === 'issued' && row.issuedAt) {
-    return plainText('order_status_issued', language, { moment: formatMoment(row.issuedAt) });
+/**
+ * Момент в зоне парка. Цифрами — одинаково на обоих языках. Срок висящего — «23.09, 14:32»:
+ * заказ живёт сутки, и год при нём лишний. Момент закрытия — «20.09.2026, 16:10»: к закрытому
+ * заказу возвращаются и через месяц.
+ */
+const formatShortMoment = (moment: Date): string => `${formatDayMonth(moment)}, ${formatClockTime(moment)}`;
+
+const formatMoment = (moment: Date): string => `${formatCalendarDate(moment)}, ${formatClockTime(moment)}`;
+
+const stateHint = (row: PersonOrderRow, language: Language): string => {
+  switch (row.status) {
+    case 'pending':
+      return plainText('order_expires_short', language, { moment: formatShortMoment(row.expiresAt) });
+    case 'issued':
+      return row.issuedAt ? formatMoment(row.issuedAt) : '';
+    case 'cancelled':
+      return row.cancelledAt ? formatMoment(row.cancelledAt) : '';
   }
-
-  if (row.status === 'cancelled' && row.cancelledAt) {
-    return plainText('order_status_cancelled', language, {
-      moment: formatMoment(row.cancelledAt),
-    });
-  }
-
-  return plainText('order_status_pending', language);
 };
 
 export const describeMemberOrder = (
@@ -52,22 +65,21 @@ export const describeMemberOrder = (
     number: row.number,
     title: plainText('order_title', language, { number: String(row.number) }),
     status: row.status,
-    officeName: row.officeName,
-    officeAddress: row.officeAddress,
+    office: toMemberOffice(row.office),
     totalPoints: row.totalPoints,
     lines: lines.map((line) => ({
       productId: line.productId,
       name: line.name,
       quantity: line.quantity,
       unitPoints: line.unitPoints,
+      photoPath: line.photoPath,
+      photoUpdatedAt: line.photoUpdatedAt.toISOString(),
     })),
     // Код выданного и отменённого освобождён частичным индексом и может уже принадлежать
     // чужому висящему заказу — показывать его незачем.
     code: pending ? row.code : null,
-    expiresNote: pending
-      ? plainText('order_expires', language, { moment: formatMoment(row.expiresAt) })
-      : null,
-    statusText: statusText(row, language),
+    stateWord: plainText(STATE_WORD_KEYS[row.status], language),
+    stateHint: stateHint(row, language),
     reasonText:
       row.status === 'cancelled' && row.cancelReason
         ? plainText(CANCEL_REASON_KEYS[row.cancelReason], language)
@@ -91,8 +103,6 @@ export const groupLinesByOrder = (lines: OrderLineRow[]): Map<string, OrderLineR
 
 /** Тексты витрины и заказа на языке участника. */
 export const memberOrderTexts = (language: Language): MemberOrderTexts => ({
-  exchangePoints: plainText('button_exchange_points', language),
-  myOrders: plainText('button_my_orders', language),
   back: plainText('button_back', language),
   requestFailed: plainText('request_failed', language),
   officesTitle: plainText('offices_title', language),
@@ -114,12 +124,4 @@ export const memberOrderTexts = (language: Language): MemberOrderTexts => ({
   confirmNote: plainText('confirm_note', language),
   placeOrder: plainText('button_place_order', language),
   editOrder: plainText('button_edit_order', language),
-  codeTitle: plainText('order_code_title', language),
-  cancelOrder: plainText('button_cancel_order', language),
-  cancelQuestion: plainText('cancel_order_question', language),
-  cancelYes: plainText('button_cancel_order_yes', language),
-  cancelNo: plainText('button_cancel_order_no', language),
-  ordersTitle: plainText('orders_title', language),
-  ordersEmpty: plainText('orders_empty', language),
-  ordersFailed: plainText('orders_failed', language),
 });

@@ -65,7 +65,6 @@ export const describeMemberReward = (row: PersonRewardRow, language: Language): 
 
 /** Тексты раздела на языке участника. */
 export const memberRewardTexts = (language: Language): MemberRewardTexts => ({
-  myRewards: plainText('button_my_rewards', language),
   rewardsTitle: plainText('rewards_title', language),
   rewardsEmpty: plainText('rewards_empty', language),
   rewardsFailed: plainText('rewards_failed', language),

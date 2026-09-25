@@ -19,6 +19,11 @@ import type {
  * Подарки от Xalq Taxi — первыми карточками в блоке наград (`_reference/design/gifts/main-screen-gift.html`),
  * нажатие отдаётся наружу `gift`: шторку подарков держит страница.
  *
+ * Каталога может не быть: без выбранного офиса товары главной пока не отдаёт ни одна ручка, и рабочее
+ * приложение блок не показывает (issue #210). Нет `catalog` — нет блока, остальные на своих местах.
+ * Подписи пилюли акции, подарков и каталога поэтому необязательны: у элемента, которого нет, подписывать
+ * нечего.
+ *
  * Число баллов набирается здесь, один раз на крупное и на баланс в шапке: они считаются вместе.
  */
 const props = defineProps<{
@@ -31,11 +36,13 @@ const props = defineProps<{
   invite?: { kicker: string; title: string; when: string };
   orders: { state: MemberViewLoad; items: MemberOrderRowView[] };
   rewards: { state: MemberViewLoad; items: MemberRewardView[]; gifts?: MemberGiftView[] };
-  catalog: { state: MemberViewLoad; products: MemberProductView[] };
+  /** Блок каталога. Нет — блока нет. */
+  catalog?: { state: MemberViewLoad; products: MemberProductView[] };
   history: { state: MemberViewLoad; days: MemberOperationDayView[] };
   texts: {
     profile: string;
-    promo: string;
+    /** Подпись пилюли акции. Нужна, когда есть `promo`. */
+    promo?: string;
     balanceTitle: string;
     exchange: string;
     updated: string;
@@ -45,14 +52,16 @@ const props = defineProps<{
     ordersError: string;
     rewardsTitle: string;
     rewardsAll: string;
-    rewardsGiftHint: string;
+    /** «нажмите, чтобы забрать» у подарка. Нужна, когда есть подарки. */
+    rewardsGiftHint?: string;
     rewardsEmpty: string;
     rewardsError: string;
-    catalogTitle: string;
-    catalogAll: string;
-    catalogSale: string;
-    catalogEmpty: string;
-    catalogError: string;
+    /** Подписи блока каталога. Нужны, когда есть `catalog`. */
+    catalogTitle?: string;
+    catalogAll?: string;
+    catalogSale?: string;
+    catalogEmpty?: string;
+    catalogError?: string;
     historyTitle: string;
     historyAll: string;
     historyEmpty: string;
@@ -89,21 +98,21 @@ const barSurface = ref(false);
 <template>
   <!-- overflow-x: clip — золотая пыль пилюли акции свисает за правый край экрана на 10–18 px,
        и без обрезки у главной появлялась бы прокрутка вбок (в эталоне она есть). clip, а не hidden:
-       контейнером прокрутки обёртка не становится, липкость шапки и таймлайн числа работают -->
-  <div class="home-screen relative flex min-h-dvh flex-col overflow-x-clip bg-xb-screen font-manrope leading-[normal] text-xb-text">
+       контейнером прокрутки обёртка не становится, и липкость шапки работает -->
+  <div class="relative flex min-h-dvh flex-col overflow-x-clip bg-xb-screen font-manrope leading-[normal] text-xb-text">
     <OrganismsNextMemberHomeHeader
       :name="name"
       :callsign="callsign"
       :promo="promo"
       :balance="{ label: texts.balanceTitle, amount }"
       :surface="barSurface"
-      :texts="{ profile: texts.profile, promo: texts.promo }"
+      :texts="{ profile: texts.profile, promo: texts.promo ?? '' }"
       @profile="$emit('profile')"
       @promo="$emit('promo')"
     />
 
-    <!-- overflow: clip, а не hidden: hidden делает блок контейнером прокрутки, и таймлайн числа
-         баллов считал бы прокрутку внутри него, которой нет, — баланс в шапке не появлялся бы -->
+    <!-- overflow: clip, а не hidden: живой фон обрезается по блоку, а контейнером прокрутки
+         блок не становится -->
     <div class="relative z-[6] flex flex-col gap-[34px] overflow-clip px-5 pt-[104px]" :class="props.invite ? 'pb-4' : 'pb-11'">
       <AtomsNextMemberLiveBackdrop variant="home" />
 
@@ -139,7 +148,7 @@ const barSurface = ref(false);
       :texts="{
         title: texts.rewardsTitle,
         all: texts.rewardsAll,
-        giftHint: texts.rewardsGiftHint,
+        giftHint: texts.rewardsGiftHint ?? '',
         empty: texts.rewardsEmpty,
         error: texts.rewardsError,
         retry: texts.retry,
@@ -151,14 +160,15 @@ const barSurface = ref(false);
     />
 
     <OrganismsNextMemberCatalogBlock
+      v-if="catalog"
       :state="catalog.state"
       :products="catalog.products"
       :texts="{
-        title: texts.catalogTitle,
-        all: texts.catalogAll,
-        sale: texts.catalogSale,
-        empty: texts.catalogEmpty,
-        error: texts.catalogError,
+        title: texts.catalogTitle ?? '',
+        all: texts.catalogAll ?? '',
+        sale: texts.catalogSale ?? '',
+        empty: texts.catalogEmpty ?? '',
+        error: texts.catalogError ?? '',
         retry: texts.retry,
       }"
       @all="$emit('catalog')"
@@ -181,12 +191,3 @@ const barSurface = ref(false);
     />
   </div>
 </template>
-
-<style scoped>
-/* Область имени таймлайна числа: число — в `MemberBalance`, читает его шапка — `MemberHomeHeader`. */
-@supports (animation-timeline: view()) {
-  .home-screen {
-    timeline-scope: --amount;
-  }
-}
-</style>

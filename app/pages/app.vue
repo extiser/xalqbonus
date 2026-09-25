@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { formatPhone, type FormattedPhone } from '#shared/phone';
 import {
   INIT_DATA_HEADER,
@@ -13,13 +13,21 @@ import {
   type MiniAppStateResponse,
   type RegistrationScreenTexts,
 } from '#shared/types/miniapp';
+import { useCountUp } from '~/composables/useCountUp';
 import { useEmployeePassword } from '~/composables/useEmployeePassword';
-import { useMemberCampaign } from '~/composables/useMemberCampaign';
 import { useMemberHistory } from '~/composables/useMemberHistory';
 import { useMemberOrders } from '~/composables/useMemberOrders';
 import { useMemberRewards } from '~/composables/useMemberRewards';
 import { useOfficeDesk } from '~/composables/useOfficeDesk';
 import type { MemberManagerIdsView, MemberOfficeView } from '~/types/memberView';
+import {
+  HOME_HISTORY_SIZE,
+  historyView,
+  homeOrdersView,
+  homeRewardsView,
+  orderDetailView,
+  ordersScreenView,
+} from '~/utils/memberViews';
 import { failureDenial } from '~/utils/requestError';
 import {
   hasSignedInitData,
@@ -44,9 +52,11 @@ import {
  */
 
 /**
- * Раскладка выбирается стадией, а не одна на страницу: загрузка, заглушки, регистрация
- * и отказ выключенному сотруднику уже на новых макетах (`miniapp-next`), экраны участника
- * и сотрудника — ещё на старых (`miniapp`).
+ * Раскладка выбирается стадией и экраном, а не одна на страницу: загрузка, заглушки, регистрация,
+ * отказ выключенному сотруднику, а у участника главная, история, заказы и экран заказа — уже
+ * на новых макетах (`miniapp-next`). Цепочка обмена, раздел наград и экран сотрудника — ещё
+ * на старых (`miniapp`), до своих задач. Смена оформления при переходе между старым и новым
+ * экраном участника — ожидаемое временное состояние (issue #210).
  *
  * Своим `<NuxtLayout :name>` в шаблоне, а не `setPageLayout`: раскладку страницы Nuxt рисует
  * с ключом по её имени, и смена имени пересоздаёт страницу целиком — вместе с состоянием
@@ -58,6 +68,17 @@ definePageMeta({ layout: false });
 
 useHead({
   title: 'XalqBonus',
+  /**
+   * Mini App не масштабируется: двойной тап и щипок увеличивали экран, и вернуть его назад
+   * водитель в поездке не мог. Здесь, а не в `nuxt.config.ts`: веб-админку это не касается.
+   * Щипок в iOS этим не выключается — его гасит обработчик жестов ниже.
+   */
+  meta: [
+    {
+      name: 'viewport',
+      content: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover',
+    },
+  ],
   /**
    * Скрипт Telegram — тегом в `<head>` этой страницы, и только этой: веб-морда парка
    * ходить на `telegram.org` не должна, поэтому не `nuxt.config.ts`.
@@ -116,7 +137,7 @@ const OPEN_FROM_TELEGRAM: StubView = {
 };
 
 /**
- * Заглушка «не загрузилось» одной строкой — запасной текст отказа витрины и акции на случай,
+ * Заглушка «не загрузилось» одной строкой — запасной текст отказа витрины и заказа на случай,
  * если тексты участника ещё не пришли.
  */
 const LOAD_FAILED_TEXT = LOAD_FAILED.blocks
@@ -136,10 +157,8 @@ type Stage = 'loading' | 'error' | 'member' | 'registration' | 'employee' | 'emp
 
 const stage = ref<Stage>('loading');
 
-/** Стадии на новых макетах. Остальные — экраны участника и сотрудника — ещё на старых. */
+/** Стадии на новых макетах целиком. У участника раскладка — по экрану, сотрудник — ещё на старых. */
 const NEXT_LAYOUT_STAGES: ReadonlySet<Stage> = new Set<Stage>(['loading', 'error', 'registration', 'employee_denied']);
-
-const layout = computed(() => (NEXT_LAYOUT_STAGES.has(stage.value) ? 'miniapp-next' : 'miniapp'));
 
 /** Заглушка на стадии `error`. */
 const stub = ref<StubView | null>(null);
@@ -177,8 +196,14 @@ const onLoadingLeft = (): void => {
   loadingLeaving.value = false;
 };
 
-/** Экран участника: баланс, имя, отметка свежести и обещание бонуса новичку. */
+/** Экран участника: баланс, имя, отметки свежести и тексты. */
 const member = ref<MiniAppMemberScreen | null>(null);
+
+/**
+ * Баланс в шапках разделов — тем же набором, что крупное число главной: ключ общий, и число
+ * меняется набором от показанного, а без изменения стоит как есть.
+ */
+const balanceAmount = useCountUp(() => member.value?.balancePoints ?? 0);
 
 /**
  * Регистрация: шаг 1 — язык, шаг 2 — номер, после отправки — экран исхода.
@@ -217,25 +242,9 @@ let webApp: TelegramWebApp | null = null;
  */
 let initData = '';
 
-/** Перечитывание экрана кнопкой в пути: второе нажатие не отправляет тот же запрос дважды. */
-const refreshing = ref(false);
-
-/** Последнее обновление по кнопке не удалось. Снимается следующим удачным. */
-const refreshFailed = ref(false);
-
 /**
- * Сообщение об отказе обновления — тем же текстом, которым отвечает неудавшаяся история.
- *
- * Своего текста у отказа нет намеренно: по смыслу это то же самое — данные не прочитались,
- * попробуйте ещё раз, — а два текста про одно и то же однажды разойдутся.
- */
-const refreshFailedNote = computed(() =>
-  refreshFailed.value ? (member.value?.texts.historyFailed ?? null) : null,
-);
-
-/**
- * История участника. Своим запросом, а не полем экрана: экран читается один раз, а история
- * листается кнопкой, и пересобирать ради каждой страницы весь экран незачем.
+ * История участника. Своим запросом, а не полем экрана: история листается прокруткой,
+ * и пересобирать ради каждой страницы весь экран незачем.
  */
 const memberHistory = useMemberHistory(() => initData);
 
@@ -248,17 +257,11 @@ const memberOrders = useMemberOrders(
   () => member.value?.orderTexts.requestFailed ?? LOAD_FAILED_TEXT,
 );
 
-/** Раздел «Мои награды» (issue #172). Читается при открытии раздела и при возврате в него. */
-const memberRewards = useMemberRewards(() => initData);
-
 /**
- * Акция участника (issue #166). Читается вместе с экраном участника: первое чтение и есть
- * «открыл экран акции». Запасной текст отказа — тот же, что у витрины.
+ * Награды участника: блок на главной и раздел «Мои награды» (issue #172). Акция на главной
+ * не читается до своей задачи: пилюли и плашки там пока нет (issue #210).
  */
-const memberCampaign = useMemberCampaign(
-  () => initData,
-  () => member.value?.orderTexts.requestFailed ?? LOAD_FAILED_TEXT,
-);
+const memberRewards = useMemberRewards(() => initData);
 
 /**
  * Экран сотрудника: его офисы, выбранный офис и стойка выдачи.
@@ -389,14 +392,28 @@ const cancelEmployeeOrder = async (): Promise<void> => {
  * строку, и роутер при переходе портит её (issue #90, #105). «Назад» — своей кнопкой экрана:
  * системная кнопка Telegram в приложении не используется.
  */
-type MemberScreenName = 'home' | 'offices' | 'showcase' | 'confirm' | 'order' | 'orders' | 'rewards';
+type MemberScreenName = 'home' | 'history' | 'offices' | 'showcase' | 'confirm' | 'order' | 'orders' | 'rewards';
 
 /** Путь по экранам. Последний — показанный; «назад» снимает его. */
 const screens = ref<MemberScreenName[]>(['home']);
 const currentScreen = computed<MemberScreenName>(() => screens.value.at(-1) ?? 'home');
 
+/** Экраны участника на новых макетах. У них «назад» — в шапке, у старых — кнопкой внизу. */
+const NEXT_MEMBER_SCREENS: ReadonlySet<MemberScreenName> = new Set<MemberScreenName>(['home', 'history', 'orders', 'order']);
+
+const layout = computed(() => {
+  if (stage.value === 'member') {
+    return NEXT_MEMBER_SCREENS.has(currentScreen.value) ? 'miniapp-next' : 'miniapp';
+  }
+
+  return NEXT_LAYOUT_STAGES.has(stage.value) ? 'miniapp-next' : 'miniapp';
+});
+
 /** Заказ, открытый на экране заказа: только что оформленный или выбранный из списка. */
 const currentOrder = ref<MemberOrder | null>(null);
+
+/** Шторка «Отменить заказ?» открыта. */
+const cancelSheetOpen = ref(false);
 
 const openScreen = (screen: MemberScreenName): void => {
   screens.value = [...screens.value, screen];
@@ -415,11 +432,12 @@ const goBack = (): void => {
 
   screens.value = screens.value.slice(0, -1);
 
-  // Экран, на который вернулись, мог устареть: заказ отменили, баллы списались.
+  // Экран, на который вернулись, мог устареть: заказ отменили, баллы списались. Главная
+  // и заказы перечитываются тихо — водитель ничего не просил, и мигать загрузкой незачем.
   if (currentScreen.value === 'home') {
-    void refresh();
+    void reloadHome();
   } else if (currentScreen.value === 'orders') {
-    void memberOrders.loadOrders();
+    void memberOrders.reloadOrders();
   } else if (currentScreen.value === 'rewards') {
     void memberRewards.load();
   }
@@ -449,9 +467,18 @@ const openExchange = (): void => {
   void memberOrders.loadOffices();
 };
 
+/**
+ * Раздел заказов. Список уже прочитан для главной — тогда он перечитывается тихо, и раздел
+ * открывается сразу с заказами; не прочитался — с загрузкой, как в первый раз.
+ */
 const openOrders = (): void => {
   openScreen('orders');
-  void memberOrders.loadOrders();
+  void (memberOrders.ordersState.value === 'ready' ? memberOrders.reloadOrders() : memberOrders.loadOrders());
+};
+
+/** Раздел истории: страницы уже читает главная, раздел показывает их все и листает дальше. */
+const openHistory = (): void => {
+  openScreen('history');
 };
 
 const openRewards = (): void => {
@@ -481,18 +508,43 @@ const placeOrder = async (): Promise<void> => {
   }
 
   currentOrder.value = order;
+  cancelSheetOpen.value = false;
   // Назад с экрана оформленного заказа — на экран участника, а не в витрину: корзина пуста,
-  // а подтверждать тот же заказ второй раз незачем.
+  // а подтверждать тот же заказ второй раз незачем. Экран заказа — уже новый, как у заказа
+  // из списка.
   screens.value = ['home', 'order'];
-  void refresh();
+  void reloadMember();
 };
 
-const openOrder = (order: MemberOrder): void => {
+/** Заказ из блока главной или из раздела: карточка отдаёт номер, заказ берётся из списка. */
+const openOrder = (orderId: string): void => {
+  const order = memberOrders.orders.value.find((entry) => entry.orderId === orderId);
+
+  if (!order) {
+    return;
+  }
+
   currentOrder.value = order;
-  memberOrders.resetCancelError();
+  cancelSheetOpen.value = false;
   openScreen('order');
 };
 
+const askCancelOrder = (): void => {
+  memberOrders.resetCancelError();
+  cancelSheetOpen.value = true;
+};
+
+/** «Нет» и Escape. Пока отмена в пути, шторка не закрывается: запрос уже ушёл. */
+const closeCancelSheet = (): void => {
+  if (!memberOrders.cancelling.value) {
+    cancelSheetOpen.value = false;
+  }
+};
+
+/**
+ * «Да» в шторке. Удача — шторка закрывается, экран показывает ответ сервера, баланс
+ * перечитывается и набирается к новому значению. Отказ — текстом в той же шторке, она открыта.
+ */
 const cancelCurrentOrder = async (): Promise<void> => {
   const order = currentOrder.value;
 
@@ -504,15 +556,151 @@ const cancelCurrentOrder = async (): Promise<void> => {
 
   if (cancelled) {
     currentOrder.value = cancelled;
-    void refresh();
+    cancelSheetOpen.value = false;
+    void reloadMember();
   }
 };
+
+/** Карта офиса заказа — наружу, в Яндекс Картах или браузере, а не поверх приложения. */
+const openOrderMap = (): void => {
+  const mapUrl = currentOrder.value?.office.mapUrl;
+
+  if (mapUrl) {
+    window.open(mapUrl, '_blank', 'noopener');
+  }
+};
+
+/** Баланс в шапке разделов: «Ваши баллы» и число в наборе. */
+const sectionBalance = computed(() =>
+  member.value ? { label: member.value.texts.balanceTitle, amount: balanceAmount.value } : undefined,
+);
+
+/**
+ * Главная — свойствами `MemberHome`. Акции, приглашения, подарков и каталога нет: пилюлю
+ * и плашку подключает задача акции, а товары без выбранного офиса не отдаёт ни одна ручка.
+ */
+const homeView = computed(() => {
+  const current = member.value;
+
+  if (!current) {
+    return null;
+  }
+
+  const { texts } = current;
+
+  return {
+    name: current.name,
+    callsign: current.callsign ?? undefined,
+    points: current.balancePoints,
+    orders: homeOrdersView(memberOrders.ordersState.value, memberOrders.orders.value, texts),
+    rewards: homeRewardsView(memberRewards.state.value, memberRewards.rewards.value, texts),
+    history: historyView(memberHistory.state.value, memberHistory.operations.value.slice(0, HOME_HISTORY_SIZE)),
+    texts: {
+      profile: texts.profile,
+      balanceTitle: texts.balanceTitle,
+      exchange: texts.exchange,
+      updated: current.updatedNote,
+      ordersTitle: texts.ordersTitle,
+      ordersAll: texts.ordersAll,
+      ordersEmpty: texts.ordersEmpty,
+      ordersError: texts.ordersFailed,
+      rewardsTitle: texts.rewardsTitle,
+      rewardsAll: texts.rewardsAll,
+      rewardsEmpty: texts.rewardsEmpty,
+      rewardsError: texts.rewardsFailed,
+      historyTitle: texts.historyTitle,
+      historyAll: texts.historyAll,
+      historyEmpty: texts.historyEmpty,
+      historyError: texts.historyFailed,
+      retry: texts.retry,
+    },
+  };
+});
+
+/** Раздел «История баллов»: все загруженные страницы по дням. */
+const historyScreenView = computed(() => {
+  const current = member.value;
+
+  if (!current) {
+    return null;
+  }
+
+  return {
+    ...historyView(memberHistory.state.value, memberHistory.operations.value),
+    hasMore: memberHistory.nextCursor.value !== null,
+    loadingMore: memberHistory.loadingMore.value,
+    moreFailed: memberHistory.moreFailed.value,
+    balance: sectionBalance.value,
+    texts: {
+      title: current.texts.historyTitle,
+      back: current.texts.back,
+      synced: current.tripsNote.text,
+      empty: current.texts.historyEmpty,
+      error: current.texts.historyFailed,
+      retry: current.texts.retry,
+    },
+  };
+});
+
+/** Раздел «Мои заказы». */
+const ordersScreen = computed(() => {
+  const current = member.value;
+
+  if (!current) {
+    return null;
+  }
+
+  const { texts } = current;
+
+  return {
+    ...ordersScreenView(memberOrders.ordersState.value, memberOrders.orders.value, texts),
+    balance: sectionBalance.value,
+    texts: {
+      title: texts.ordersTitle,
+      back: texts.back,
+      pendingGroup: texts.ordersGroupPending,
+      pastGroup: texts.ordersGroupPast,
+      groupEmpty: texts.groupEmpty,
+      empty: texts.ordersEmpty,
+      error: texts.ordersFailed,
+      retry: texts.retry,
+    },
+  };
+});
+
+/** Экран заказа и его шторка отмены. */
+const orderScreen = computed(() => {
+  const current = member.value;
+  const order = currentOrder.value;
+
+  if (!current || !order) {
+    return null;
+  }
+
+  const { texts } = current;
+
+  return {
+    order: orderDetailView(order, texts),
+    balance: sectionBalance.value,
+    texts: {
+      back: texts.back,
+      codeTitle: texts.orderCodeTitle,
+      officeTitle: texts.orderOfficeTitle,
+      map: texts.officeMap,
+      linesTitle: texts.orderLinesTitle,
+      total: texts.orderTotal,
+      cancel: texts.cancelOrder,
+    },
+    sheetTexts: { question: texts.cancelQuestion, hint: texts.cancelHint, yes: texts.yes, no: texts.no },
+  };
+});
 
 /**
  * Показывает то, что ответил сервер.
  *
- * Историю поднимает вызывающий, а не этот код: первая загрузка экрана и обновление
- * по кнопке читают её по-разному — с состоянием загрузки и тихо (issue #107).
+ * Блоки главной поднимает вызывающий, а не этот код: первая загрузка экрана и перечитывание
+ * читают их по-разному — с состоянием загрузки и тихо (issue #107). Путь по экранам участника
+ * здесь не трогается: перечитывание меняет данные, а не экран, на котором стоит водитель.
  */
 const applyState = (state: MiniAppStateResponse): void => {
   if (state.screen === 'member') {
@@ -572,6 +760,7 @@ const resetScreenWork = (): void => {
   employeePassword.reset();
   screens.value = ['home'];
   currentOrder.value = null;
+  cancelSheetOpen.value = false;
 };
 
 /** Заглушка вместо экрана. */
@@ -591,7 +780,7 @@ const retry = async (): Promise<void> => {
   await loadState();
 };
 
-/** Запрос состояния экрана. Один на первую загрузку и на кнопку обновления: спрашивается то же. */
+/** Запрос состояния экрана. Один на первую загрузку и на перечитывание: спрашивается то же. */
 const fetchState = (): Promise<MiniAppStateResponse> =>
   $fetch<MiniAppStateResponse>('/api/miniapp/me', {
     headers: { [INIT_DATA_HEADER]: initData },
@@ -605,10 +794,11 @@ const loadState = async (): Promise<void> => {
     showNext(() => applyState(state));
 
     if (state.screen === 'member') {
-      // История догружается следом, своим состоянием: её отказ гасит список, а не экран
-      // с балансом — баланс уже прочитан и врать о нём нечему. Акция — так же.
+      // Блоки главной догружаются следом, каждый своим состоянием: отказ гасит блок, а не экран
+      // с балансом — баланс уже прочитан и врать о нём нечему.
+      void memberOrders.loadOrders();
+      void memberRewards.load();
       void memberHistory.loadFirstPage();
-      void memberCampaign.load();
     }
   } catch (error) {
     // Текст на экране прежний — причина отказа водителю ничего не чинит. Но в консоли
@@ -643,45 +833,71 @@ const reportDoorDenial = (error: unknown): boolean => {
 };
 
 /**
- * Перечитывает экран участника по кнопке: баланс, отметку свежести и первую страницу истории.
+ * Перечитывает экран участника тихо: баланс, имя и отметки свежести.
  *
- * Отдельно от `loadState`, потому что отказ здесь значит другое. При первой загрузке
- * показывать нечего, и отказ — это весь экран; при обновлении на экране уже стоит
- * прочитанный баланс, и увести его в красный текст значило бы стереть верные данные
- * в ответ на просьбу их обновить. Баланс, имя и отметка свежести поэтому остаются
- * прежними — они верные, и отметка честна: ничего не обновилось.
- *
- * Сказать об отказе при этом обязательно. Молчащая кнопка, которая покрутилась и погасла,
- * от неработающей неотличима, и следующим шагом человек идёт в меню Telegram к «Обновить
- * страницу» — ровно туда, откуда эта правка его уводит (issue #105).
+ * Кнопки обновления нет (решение Руслана 25-09-2026, issue #210): экран перечитывается сам —
+ * при возврате на главную, при возврате в приложение из фона и после отмены заказа. Отдельно
+ * от `loadState`, потому что отказ здесь значит другое: на экране уже стоит прочитанный баланс,
+ * и увести его в заглушку значило бы стереть верные данные в ответ на перечитывание, которого
+ * водитель не просил. Отказ остаётся в консоли, экран — прежним.
  */
-const refresh = async (): Promise<void> => {
-  if (refreshing.value) {
+const reloadMember = async (): Promise<void> => {
+  try {
+    applyState(await fetchState());
+  } catch (error) {
+    console.error('[miniapp] не удалось перечитать экран участника', error);
+  }
+};
+
+/** Главная целиком и тихо: экран участника и три блока — заказы, награды, первая страница истории. */
+const reloadHome = async (): Promise<void> => {
+  await Promise.all([
+    reloadMember(),
+    memberOrders.reloadOrders(),
+    memberRewards.reload(),
+    memberHistory.reloadFirstPage().catch((error: unknown) => {
+      console.error('[miniapp] не удалось перечитать историю', error);
+    }),
+  ]);
+};
+
+/**
+ * Возврат в приложение из фона: пока Telegram был свёрнут, баллы могли прийти. На новых экранах
+ * участника перечитывается баланс, на главной — ещё её блоки, в разделе заказов — список.
+ * Старые экраны не трогаются: в цепочке обмена перечитывание сбило бы корзину.
+ */
+const onVisibilityChange = (): void => {
+  if (document.visibilityState !== 'visible' || stage.value !== 'member') {
     return;
   }
 
-  refreshing.value = true;
+  if (currentScreen.value === 'home') {
+    void reloadHome();
+  } else if (NEXT_MEMBER_SCREENS.has(currentScreen.value)) {
+    void reloadMember();
 
-  try {
-    const state = await fetchState();
-
-    applyState(state);
-
-    if (state.screen === 'member') {
-      // Тихо: строки истории стоят на экране, пока не пришли новые. Кнопка крутится,
-      // и этого признака довольно — мигание списка им никогда не было (issue #107).
-      // Акция перечитывается рядом: окно могло открыться или кончиться, пока экран лежал.
-      await Promise.all([memberHistory.reloadFirstPage(), memberCampaign.load()]);
+    if (currentScreen.value === 'orders') {
+      void memberOrders.reloadOrders();
     }
-
-    refreshFailed.value = false;
-  } catch (error) {
-    console.error('[miniapp] не удалось перечитать экран участника', error);
-    refreshFailed.value = true;
-  } finally {
-    refreshing.value = false;
   }
 };
+
+/** Щипок в iOS: `user-scalable=no` Safari не слушает, жест гасится здесь. */
+const preventGesture = (event: Event): void => {
+  event.preventDefault();
+};
+
+onMounted(() => {
+  document.addEventListener('visibilitychange', onVisibilityChange);
+  document.addEventListener('gesturestart', preventGesture);
+  document.addEventListener('gesturechange', preventGesture);
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', onVisibilityChange);
+  document.removeEventListener('gesturestart', preventGesture);
+  document.removeEventListener('gesturechange', preventGesture);
+});
 
 onMounted(async () => {
   webApp = await loadTelegramWebApp();
@@ -971,110 +1187,104 @@ const openMap = (office: MemberOfficeView): void => {
       </div>
     </div>
 
-    <div v-else-if="stage === 'member' && member" class="flex flex-col gap-2">
-      <template v-if="currentScreen === 'home'">
-        <OrganismsMemberCampaign
-          v-if="memberCampaign.campaign.value"
-          :campaign="memberCampaign.campaign.value"
-          :acting="memberCampaign.acting.value"
-          :error="memberCampaign.error.value"
-          :prize="memberCampaign.prize.value"
-          @join="memberCampaign.join"
-          @decline="memberCampaign.decline"
-          @open-chest="memberCampaign.openChest"
-          @dismiss-prize="memberCampaign.dismissPrize"
-        />
+    <template v-else-if="stage === 'member' && member">
+      <!-- Аватар ничего не открывает: профиль подключает своя задача -->
+      <OrganismsNextMemberHome
+        v-if="currentScreen === 'home' && homeView"
+        v-bind="homeView"
+        @exchange="openExchange"
+        @orders="openOrders"
+        @order="openOrder"
+        @rewards="openRewards"
+        @reward="openRewards"
+        @history="openHistory"
+        @retry-orders="memberOrders.loadOrders()"
+        @retry-rewards="memberRewards.load()"
+        @retry-history="memberHistory.loadFirstPage()"
+      />
 
-        <OrganismsMemberSummary
-          :balance-title="member.texts.balanceTitle"
-          :balance="member.balance"
-          :name="member.name"
-          :trips-note="member.tripsNote"
-          :promise="member.promise"
-          :refresh-label="member.texts.refresh"
-          :refreshing="refreshing"
-          :refresh-failed-note="refreshFailedNote"
-          :exchange-label="member.orderTexts.exchangePoints"
-          :orders-label="member.orderTexts.myOrders"
-          :rewards-label="member.rewardTexts.myRewards"
-          @refresh="refresh"
-          @exchange="openExchange"
-          @orders="openOrders"
-          @rewards="openRewards"
-        />
+      <OrganismsNextMemberHistoryScreen
+        v-else-if="currentScreen === 'history' && historyScreenView"
+        v-bind="historyScreenView"
+        @back="goBack"
+        @more="memberHistory.loadMore()"
+        @retry="memberHistory.loadFirstPage()"
+      />
 
-        <OrganismsMemberHistory
-          :state="memberHistory.state.value"
-          :operations="memberHistory.operations.value"
-          :has-more="memberHistory.nextCursor.value !== null"
-          :loading-more="memberHistory.loadingMore.value"
-          :more-failed="memberHistory.moreFailed.value"
-          :texts="member.texts"
-          @more="memberHistory.loadMore()"
+      <OrganismsNextMemberOrdersScreen
+        v-else-if="currentScreen === 'orders' && ordersScreen"
+        v-bind="ordersScreen"
+        @back="goBack"
+        @open="openOrder"
+        @retry="memberOrders.loadOrders()"
+      />
+
+      <template v-else-if="currentScreen === 'order' && orderScreen">
+        <OrganismsNextMemberOrderScreen
+          :order="orderScreen.order"
+          :balance="orderScreen.balance"
+          :texts="orderScreen.texts"
+          @back="goBack"
+          @map="openOrderMap"
+          @cancel="askCancelOrder"
+        />
+        <OrganismsNextMemberCancelOrderSheet
+          :open="cancelSheetOpen"
+          :busy="memberOrders.cancelling.value"
+          :error="memberOrders.cancelError.value ?? undefined"
+          :texts="orderScreen.sheetTexts"
+          @confirm="cancelCurrentOrder"
+          @cancel="closeCancelSheet"
         />
       </template>
 
-      <OrganismsMemberOfficePicker
-        v-else-if="currentScreen === 'offices'"
-        :state="memberOrders.officesState.value"
-        :offices="memberOrders.offices.value"
-        :texts="member.orderTexts"
-        @select="selectOffice"
-      />
+      <div v-else class="flex flex-col gap-2">
+        <OrganismsMemberOfficePicker
+          v-if="currentScreen === 'offices'"
+          :state="memberOrders.officesState.value"
+          :offices="memberOrders.offices.value"
+          :texts="member.orderTexts"
+          @select="selectOffice"
+        />
 
-      <OrganismsOfficeShowcase
-        v-else-if="currentScreen === 'showcase'"
-        :state="memberOrders.showcaseState.value"
-        :showcase="memberOrders.showcase.value"
-        :error-message="memberOrders.showcaseError.value"
-        :quantities="memberOrders.quantities.value"
-        :total="memberOrders.cartTotal.value"
-        :texts="member.orderTexts"
-        @increment="changeQuantity($event, 1)"
-        @decrement="changeQuantity($event, -1)"
-        @checkout="openConfirm"
-      />
+        <OrganismsOfficeShowcase
+          v-else-if="currentScreen === 'showcase'"
+          :state="memberOrders.showcaseState.value"
+          :showcase="memberOrders.showcase.value"
+          :error-message="memberOrders.showcaseError.value"
+          :quantities="memberOrders.quantities.value"
+          :total="memberOrders.cartTotal.value"
+          :texts="member.orderTexts"
+          @increment="changeQuantity($event, 1)"
+          @decrement="changeQuantity($event, -1)"
+          @checkout="openConfirm"
+        />
 
-      <OrganismsOrderConfirmation
-        v-else-if="currentScreen === 'confirm' && memberOrders.showcase.value"
-        :office="memberOrders.showcase.value.office"
-        :lines="memberOrders.cartLines.value"
-        :total="memberOrders.cartTotal.value"
-        :placing="memberOrders.placing.value"
-        :error-message="memberOrders.placeError.value"
-        :texts="member.orderTexts"
-        @place="placeOrder"
-        @edit="goBack"
-      />
+        <OrganismsOrderConfirmation
+          v-else-if="currentScreen === 'confirm' && memberOrders.showcase.value"
+          :office="memberOrders.showcase.value.office"
+          :lines="memberOrders.cartLines.value"
+          :total="memberOrders.cartTotal.value"
+          :placing="memberOrders.placing.value"
+          :error-message="memberOrders.placeError.value"
+          :texts="member.orderTexts"
+          @place="placeOrder"
+          @edit="goBack"
+        />
 
-      <OrganismsMemberOrderCard
-        v-else-if="currentScreen === 'order' && currentOrder"
-        :order="currentOrder"
-        :cancelling="memberOrders.cancelling.value"
-        :cancel-error="memberOrders.cancelError.value"
-        :texts="member.orderTexts"
-        @cancel="cancelCurrentOrder"
-      />
+        <OrganismsMemberRewardList
+          v-else-if="currentScreen === 'rewards'"
+          :state="memberRewards.state.value"
+          :rewards="memberRewards.rewards.value"
+          :texts="member.rewardTexts"
+        />
 
-      <OrganismsMemberOrderList
-        v-else-if="currentScreen === 'orders'"
-        :state="memberOrders.ordersState.value"
-        :orders="memberOrders.orders.value"
-        :texts="member.orderTexts"
-        @open="openOrder"
-      />
-
-      <OrganismsMemberRewardList
-        v-else-if="currentScreen === 'rewards'"
-        :state="memberRewards.state.value"
-        :rewards="memberRewards.rewards.value"
-        :texts="member.rewardTexts"
-      />
-
-      <div v-if="currentScreen !== 'home'" class="pt-4">
-        <AtomsMiniAppButton variant="secondary" :label="member.orderTexts.back" @click="goBack" />
+        <!-- «Назад» внизу — только у старых экранов: у новых он в шапке раздела -->
+        <div class="pt-4">
+          <AtomsMiniAppButton variant="secondary" :label="member.orderTexts.back" @click="goBack" />
+        </div>
       </div>
-    </div>
+    </template>
 
     <template v-else-if="(stage === 'registration' || stage === 'employee_denied') && currentTexts">
       <OrganismsNextMemberRegistrationOutcome

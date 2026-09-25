@@ -89,6 +89,7 @@ const createDrivers = async (count: number): Promise<string[]> => {
 const asDriver = (personId: string, language: Language = 'ru'): LinkedDriver => ({
   personId,
   name: 'Тест',
+  callsign: null,
   points: 0n,
   language,
 });

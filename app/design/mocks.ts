@@ -349,7 +349,6 @@ const HISTORY_TEXTS = {
   title: 'История баллов',
   back: BACK,
   synced: 'Поездки учтены до 22.09, 14:31',
-  more: 'Показать ещё',
   empty: 'Здесь будет история начислений',
   error: 'Не удалось загрузить историю. Попробуйте ещё раз.',
   retry: RETRY,
@@ -434,6 +433,10 @@ export const historyReasonsMock = { ...historyMock, days: HISTORY_ALL_REASONS, h
 export const historyEmptyMock = { ...historyMock, state: 'empty' as const, days: [], hasMore: false };
 export const historyErrorMock = { ...historyMock, state: 'error' as const, days: [], hasMore: false };
 export const historyLoadingMock = { ...historyMock, state: 'loading' as const, days: [], hasMore: false };
+/** Долистал до конца — следующая страница в пути: внизу три строки ожидания. */
+export const historyMoreLoadingMock = { ...historyMock, hasMore: true, loadingMore: true };
+/** Следующая страница не пришла: отказ строкой и «Повторить» под ним. */
+export const historyMoreFailedMock = { ...historyMock, hasMore: true, moreFailed: true };
 
 // ---------------------------------------------------------------------- мои награды
 
@@ -757,6 +760,17 @@ export const orderMock = { order: ORDER_PENDING, balance: BAR_BALANCE, texts: OR
 export const orderIssuedMock = { order: ORDER_ISSUED, balance: BAR_BALANCE, texts: ORDER_TEXTS };
 export const orderCancelledMock = { order: ORDER_CANCELLED, balance: BAR_BALANCE, texts: ORDER_TEXTS };
 export const orderExpiredMock = { order: ORDER_EXPIRED, balance: BAR_BALANCE, texts: ORDER_TEXTS };
+
+/** Шторка отмены заказа (issue #210): вопрос — заголовком, последствие — под ним, «Да» и «Нет». */
+export const orderCancelSheetTexts = {
+  question: 'Отменить заказ?',
+  hint: 'Баллы вернутся на баланс.',
+  yes: 'Да',
+  no: 'Нет',
+};
+
+/** Отказ отмены — текст `order_denied_not_pending`: заказ выдали, пока шторка была открыта. */
+export const ORDER_CANCEL_DENIED = 'Этот заказ уже выдан или отменён.';
 
 // --------------------------------------------------------------------- экран награды
 

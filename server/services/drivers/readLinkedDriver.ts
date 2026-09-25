@@ -14,6 +14,8 @@ import { findDisplayProfile } from '#server/repositories/registry';
 export type LinkedDriver = {
   personId: string;
   name: string;
+  /** Позывной из того же профиля, что имя. `null` — позывного в учётке нет. */
+  callsign: string | null;
   points: bigint;
   /** Язык участника из `person_settings` — тот, который он выбрал при регистрации. */
   language: Language;
@@ -32,6 +34,18 @@ export const displayName = (firstName: string, lastName: string): string => {
   const name = firstName.trim() === '' ? lastName.trim() : firstName.trim();
 
   return name === '' ? 'водитель' : name;
+};
+
+/**
+ * Позывной для показа: пустая строка из реестра — то же, что его отсутствие.
+ *
+ * Реестр приходит из чужой системы, и пустое поле там бывает строкой, а не `null`; показать
+ * его значило бы нарисовать пустой позывной рядом с именем.
+ */
+export const displayCallsign = (callsign: string | null): string | null => {
+  const trimmed = callsign?.trim() ?? '';
+
+  return trimmed === '' ? null : trimmed;
 };
 
 /**
@@ -60,6 +74,7 @@ export const readLinkedDriver = async (telegramChatId: bigint): Promise<LinkedDr
   return {
     personId: link.personId,
     name: displayName(profile?.firstName ?? '', profile?.lastName ?? ''),
+    callsign: displayCallsign(profile?.callsign ?? null),
     points: account?.balance ?? 0n,
     language: settings?.language ?? FALLBACK_LANGUAGE,
   };

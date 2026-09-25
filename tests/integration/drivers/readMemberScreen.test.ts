@@ -33,7 +33,7 @@ const readNote = async (
   await insertSucceededSyncRun('orders', new Date(finishedAt.getTime() - 60_000), finishedAt);
 
   const screen = await readMemberScreen(
-    { personId, name: 'Тест', points: 0n, language },
+    { personId, name: 'Тест', callsign: null, points: 0n, language },
     NOW,
   );
 
@@ -102,7 +102,7 @@ describe('отметка поездок на экране участника', (
     const { personId } = await createTestPerson({ inProgram: true });
 
     const screen = await readMemberScreen(
-      { personId, name: 'Тест', points: 0n, language: 'ru' },
+      { personId, name: 'Тест', callsign: null, points: 0n, language: 'ru' },
       NOW,
     );
 

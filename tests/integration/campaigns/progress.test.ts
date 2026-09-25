@@ -66,6 +66,7 @@ type Setup = {
 const asDriver = (personId: string): LinkedDriver => ({
   personId,
   name: 'Тест',
+  callsign: null,
   points: 0n,
   language: 'ru',
 });

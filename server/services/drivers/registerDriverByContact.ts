@@ -13,7 +13,7 @@ import {
 } from '#server/repositories/programMembership';
 import { findActiveProfilesByPhone, type ProfileByPhoneRow } from '#server/repositories/registry';
 import { insertTelegramLinkAttempt } from '#server/repositories/telegramLinkAttempts';
-import { displayName, type LinkedDriver } from '#server/services/drivers/readLinkedDriver';
+import { displayCallsign, displayName, type LinkedDriver } from '#server/services/drivers/readLinkedDriver';
 import { ensureDriverAccount } from '#server/services/points/ensureDriverAccount';
 import {
   ParkLookupFailedError,
@@ -425,6 +425,7 @@ export const registerDriverByContact = async (
     driver: {
       personId: profile.personId,
       name: displayName(profile.firstName, profile.lastName),
+      callsign: displayCallsign(profile.callsign),
       points,
       // У нового участника это только что выбранный язык — он же уехал в `person_settings`.
       // У существующего участия берётся язык из него: перезаписывать его нельзя, а ответить

@@ -568,6 +568,7 @@ export type ProfileByPhoneRow = {
   workStatus: string;
   firstName: string;
   lastName: string;
+  callsign: string | null;
 };
 
 /**
@@ -597,7 +598,8 @@ export const findActiveProfilesByPhone = async (
            profile."person_id"   AS "personId",
            profile."work_status" AS "workStatus",
            profile."first_name"  AS "firstName",
-           profile."last_name"   AS "lastName"
+           profile."last_name"   AS "lastName",
+           profile."callsign"
       FROM xb.park_profiles AS profile
      WHERE EXISTS (
            SELECT 1
@@ -616,6 +618,7 @@ export type DisplayProfileRow = {
   firstName: string;
   lastName: string;
   workStatus: string;
+  callsign: string | null;
 };
 
 /**
@@ -631,7 +634,8 @@ export const findDisplayProfile = async (personId: string): Promise<DisplayProfi
     SELECT "profile_id"  AS "profileId",
            "first_name"  AS "firstName",
            "last_name"   AS "lastName",
-           "work_status" AS "workStatus"
+           "work_status" AS "workStatus",
+           "callsign"
       FROM xb.park_profiles
      WHERE "person_id" = ${personId}::uuid
      ORDER BY ("work_status" = 'working') DESC, "api_updated_at" DESC

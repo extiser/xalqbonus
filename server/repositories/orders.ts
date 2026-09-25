@@ -6,6 +6,7 @@ import {
   deskDriverJoins,
   type DeskDriverColumns,
 } from '#server/repositories/deskDriver';
+import type { OfficeRow } from '#server/repositories/offices';
 
 /**
  * Заказы за баллы и их позиции.
@@ -261,8 +262,24 @@ export type PersonOrderRow = {
   issuedAt: Date | null;
   cancelledAt: Date | null;
   cancelReason: OrderCancelReason | null;
+  /**
+   * Офис заказа целиком — водитель едет туда за товаром. Читается у любого заказа, архивный
+   * офис тоже: заказ уже случился, и где он был, не меняется.
+   */
+  office: OfficeRow;
+};
+
+/** Строка запроса как она приходит из базы: офис плоскими колонками с приставкой. */
+type PersonOrderQueryRow = Omit<PersonOrderRow, 'office'> & {
+  officeId: string;
   officeName: string;
   officeAddress: string;
+  officeMapUrl: string | null;
+  officeWorkHours: string | null;
+  officePhoneE164: string | null;
+  officeTelegram: string | null;
+  officeArchivedAt: Date | null;
+  officeUpdatedAt: Date;
 };
 
 export type ListPersonOrdersInput = {
@@ -282,8 +299,8 @@ export type ListPersonOrdersInput = {
 export const listPersonOrders = async (
   input: ListPersonOrdersInput,
   client: Prisma.TransactionClient = db,
-): Promise<PersonOrderRow[]> =>
-  client.$queryRaw<PersonOrderRow[]>`
+): Promise<PersonOrderRow[]> => {
+  const rows = await client.$queryRaw<PersonOrderQueryRow[]>`
     SELECT "order"."id",
            "order"."number",
            "order"."status",
@@ -293,8 +310,15 @@ export const listPersonOrders = async (
            "order"."issued_at"     AS "issuedAt",
            "order"."cancelled_at"  AS "cancelledAt",
            "order"."cancel_reason" AS "cancelReason",
+           office."id"             AS "officeId",
            office."name"           AS "officeName",
-           office."address"        AS "officeAddress"
+           office."address"        AS "officeAddress",
+           office."map_url"        AS "officeMapUrl",
+           office."work_hours"     AS "officeWorkHours",
+           office."phone_e164"     AS "officePhoneE164",
+           office."telegram"       AS "officeTelegram",
+           office."archived_at"    AS "officeArchivedAt",
+           office."updated_at"     AS "officeUpdatedAt"
       FROM xb.orders AS "order"
       JOIN xb.offices AS office ON office."id" = "order"."office_id"
      WHERE "order"."person_id" = ${input.personId}::uuid
@@ -303,15 +327,48 @@ export const listPersonOrders = async (
      LIMIT ${input.limit}
   `;
 
+  return rows.map(
+    ({
+      officeId,
+      officeName,
+      officeAddress,
+      officeMapUrl,
+      officeWorkHours,
+      officePhoneE164,
+      officeTelegram,
+      officeArchivedAt,
+      officeUpdatedAt,
+      ...order
+    }) => ({
+      ...order,
+      office: {
+        id: officeId,
+        name: officeName,
+        address: officeAddress,
+        mapUrl: officeMapUrl,
+        workHours: officeWorkHours,
+        phoneE164: officePhoneE164,
+        telegram: officeTelegram,
+        archivedAt: officeArchivedAt,
+        updatedAt: officeUpdatedAt,
+      },
+    }),
+  );
+};
+
 export type OrderLineRow = {
   orderId: string;
   productId: string;
   name: string;
   quantity: number;
   unitPoints: number;
+  /** Фото товара — текущее, из каталога: у позиции своего нет. */
+  photoPath: string | null;
+  /** Время правки товара — версия адреса фото (`ProductPhoto`). */
+  photoUpdatedAt: Date;
 };
 
-/** Позиции нескольких заказов с названиями товаров — одним запросом на весь список. */
+/** Позиции нескольких заказов с названиями и фото товаров — одним запросом на весь список. */
 export const listOrderLines = async (
   orderIds: string[],
   client: Prisma.TransactionClient = db,
@@ -321,7 +378,9 @@ export const listOrderLines = async (
            item."product_id"  AS "productId",
            product."name",
            item."quantity",
-           item."unit_points" AS "unitPoints"
+           item."unit_points" AS "unitPoints",
+           product."photo_path" AS "photoPath",
+           product."updated_at" AS "photoUpdatedAt"
       FROM xb.order_items AS item
       JOIN xb.products AS product ON product."id" = item."product_id"
      WHERE item."order_id" = ANY(${orderIds}::uuid[])

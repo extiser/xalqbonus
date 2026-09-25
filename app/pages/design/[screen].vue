@@ -14,6 +14,8 @@ import {
   historyErrorMock,
   historyLoadingMock,
   historyMock,
+  historyMoreFailedMock,
+  historyMoreLoadingMock,
   historyReasonsMock,
   rewardsEmptyMock,
   rewardsErrorMock,
@@ -31,6 +33,8 @@ import {
   orderExpiredMock,
   orderIssuedMock,
   orderMock,
+  ORDER_CANCEL_DENIED,
+  orderCancelSheetTexts,
   profileMock,
   promoHeroMock,
   campaignMock,
@@ -109,6 +113,8 @@ const history = computed(() =>
     'history-empty': historyEmptyMock,
     'history-error': historyErrorMock,
     'history-loading': historyLoadingMock,
+    'history-more-loading': historyMoreLoadingMock,
+    'history-more-failed': historyMoreFailedMock,
   }),
 );
 
@@ -136,8 +142,16 @@ const order = computed(() =>
     'order-issued': orderIssuedMock,
     'order-cancelled': orderCancelledMock,
     'order-expired': orderExpiredMock,
+    'order-cancel': orderMock,
+    'order-cancel-busy': orderMock,
+    'order-cancel-failed': orderMock,
   }),
 );
+
+/** Шторка отмены на экране заказа: открыта сразу на своих листах, у живого заказа — по кнопке. */
+const orderCancelOpen = ref(slug.value.startsWith('order-cancel'));
+const orderCancelBusy = slug.value === 'order-cancel-busy';
+const orderCancelError = slug.value === 'order-cancel-failed' ? ORDER_CANCEL_DENIED : undefined;
 
 const reward = computed(() =>
   pick({
@@ -578,7 +592,17 @@ function go(target: string): void {
 
       <OrganismsNextMemberOrdersScreen v-else-if="orders" v-bind="orders" @back="go('home')" @open="openOrder" />
 
-      <OrganismsNextMemberOrderScreen v-else-if="order" v-bind="order" @back="go('orders')" />
+      <template v-else-if="order">
+        <OrganismsNextMemberOrderScreen v-bind="order" @back="go('orders')" @cancel="orderCancelOpen = true" />
+        <OrganismsNextMemberCancelOrderSheet
+          :open="orderCancelOpen"
+          :busy="orderCancelBusy"
+          :error="orderCancelError"
+          :texts="orderCancelSheetTexts"
+          @confirm="go('order-cancelled')"
+          @cancel="orderCancelOpen = false"
+        />
+      </template>
 
       <OrganismsNextMemberRewardScreen v-else-if="reward" v-bind="reward" @back="go('rewards')" />
 

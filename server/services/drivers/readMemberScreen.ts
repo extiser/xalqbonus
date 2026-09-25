@@ -1,5 +1,5 @@
 import type { Language } from '#server/generated/prisma/enums';
-import { formatPoints, plainText } from '#server/bot/texts';
+import { plainText } from '#server/bot/texts';
 import { hasTripOperations } from '#server/repositories/points';
 import { findLastSuccessfulRunFinishedAt } from '#server/repositories/syncRuns';
 import { memberScreenTexts } from '#server/services/drivers/memberScreen';
@@ -10,10 +10,10 @@ import { DAY_MS, formatCalendarDate, formatClockTime } from '#server/utils/parkT
 import type { MiniAppStateResponse, TripsNote } from '#shared/types/miniapp';
 
 /**
- * Экран участника: баланс, имя, отметка учтённых поездок и обещание бонуса новичку.
+ * Экран участника: баланс, имя с позывным, отметка учтённых поездок и обещание бонуса новичку.
  *
  * Истории здесь нет — она приезжает своей ручкой и листается: страница экрана читается
- * один раз, а история догружается кнопкой, и пересобирать ради этого весь экран незачем.
+ * один раз, а история догружается прокруткой, и пересобирать ради этого весь экран незачем.
  *
  * Баланс берётся со счёта и нигде не пересчитывается: он производная от журнала,
  * и второе место, которое его считает, — это второй ответ на вопрос «сколько у меня
@@ -60,17 +60,25 @@ export const readMemberScreen = async (
     findLastSuccessfulRunFinishedAt(FRESHNESS_KIND),
   ]);
 
+  // Успешных прогонов не было ни одного — строка говорит, что данных ещё нет. Пустота
+  // здесь не работает: пустое место под балансом читается поломкой (docs/frontend.md →
+  // «Пустое место объясняется словами»).
+  const notReceived = plainText('trips_not_received', driver.language);
+
   return {
     screen: 'member',
     language: driver.language,
     name: driver.name,
-    balance: formatPoints(driver.points),
-    // Успешных прогонов не было ни одного — строка говорит, что данных ещё нет. Пустота
-    // здесь не работает: рядом стоит кнопка обновления, и одна она читается поломкой.
-    tripsNote:
+    callsign: driver.callsign,
+    // Баллов у водителя не бывает столько, чтобы число вышло за точность `number`.
+    balancePoints: Number(driver.points),
+    // Без даты, как в макете главной, и без предупреждения об устаревании: признак живёт
+    // в разделе истории, в `tripsNote` (Руслан, 25-09-2026).
+    updatedNote:
       syncedAt === null
-        ? { text: plainText('trips_not_received', driver.language), stale: false }
-        : tripsNote(syncedAt, driver.language, now),
+        ? notReceived
+        : plainText('balance_updated', driver.language, { time: formatClockTime(syncedAt) }),
+    tripsNote: syncedAt === null ? { text: notReceived, stale: false } : tripsNote(syncedAt, driver.language, now),
     // Обещание первых пяти поездок — тому, у кого в журнале нет ни одной. Не по факту
     // сегодняшней регистрации: перенесённый из старой базы приходит сюда с тысячей
     // поездок за спиной, и обещать ему бонус за первые пять — враньё (issue #101).
