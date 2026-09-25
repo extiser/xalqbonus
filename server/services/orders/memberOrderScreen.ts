@@ -101,20 +101,27 @@ export const groupLinesByOrder = (lines: OrderLineRow[]): Map<string, OrderLineR
   return result;
 };
 
-/** Тексты витрины и заказа на языке участника. */
+/** Тексты каталога на языке участника. */
 export const memberOrderTexts = (language: Language): MemberOrderTexts => ({
-  back: plainText('button_back', language),
   requestFailed: plainText('request_failed', language),
-  officesTitle: plainText('offices_title', language),
+  catalogTitle: plainText('catalog_title', language),
+  catalogAll: plainText('catalog_all', language),
+  catalogEmpty: plainText('catalog_empty', language),
+  sale: plainText('sale_label', language),
   officesEmpty: plainText('offices_empty', language),
   officesFailed: plainText('offices_failed', language),
-  openMap: plainText('office_open_map', language),
+  officeSheetTitle: plainText('office_sheet_title', language),
+  officeSheetSubtitle: plainText('office_sheet_subtitle', language),
+  officeChange: plainText('office_change', language),
+  officeChangeWarning: plainText('office_change_warning', language),
+  save: plainText('button_save', language),
+  cancel: plainText('button_cancel', language),
   showcaseEmpty: plainText('showcase_empty', language),
   showcaseFailed: plainText('showcase_failed', language),
-  noPhoto: plainText('product_no_photo', language),
-  pieces: plainText('unit_pieces', language),
-  points: plainText('unit_points', language),
-  inStock: plainText('showcase_in_stock', language),
+  stockPieces: plainText('stock_pieces', language),
+  decrease: plainText('stepper_decrease', language),
+  increase: plainText('stepper_increase', language),
+  increaseMore: plainText('stepper_increase_more', language),
   cartTotal: plainText('cart_total', language),
   balanceAfter: plainText('cart_balance_after', language),
   checkout: plainText('button_checkout', language),
@@ -123,5 +130,4 @@ export const memberOrderTexts = (language: Language): MemberOrderTexts => ({
   confirmTitle: plainText('confirm_title', language),
   confirmNote: plainText('confirm_note', language),
   placeOrder: plainText('button_place_order', language),
-  editOrder: plainText('button_edit_order', language),
 });

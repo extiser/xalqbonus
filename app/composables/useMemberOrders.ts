@@ -4,6 +4,7 @@ import {
   type MemberOffice,
   type MemberOrder,
   type MemberOrderLine,
+  type MiniAppLatestProductsResponse,
   type MiniAppOfficesResponse,
   type MiniAppOrderResponse,
   type MiniAppOrdersResponse,
@@ -14,7 +15,8 @@ import type { LoadState } from '~/types/loadState';
 import { failureMessage } from '~/utils/requestError';
 
 /**
- * Обмен баллов в Mini App: офисы, витрина с корзиной, оформление, «Мои заказы» и отмена.
+ * Обмен баллов в Mini App: товары для блока каталога на главной, офисы, витрина с корзиной,
+ * оформление, «Мои заказы» и отмена.
  *
  * Запросы живут здесь, а не в компонентах: экраны получают готовое свойствами и отдают
  * нажатия событиями (docs/frontend.md → «Данные в компоненты не ходят»).
@@ -31,6 +33,40 @@ export const useMemberOrders = (readInitData: () => string, readRequestFailed: (
 
   /** Текст отказа: присланный сервером, а если ответа не было — свой запасной. */
   const failureTextOf = (error: unknown): string => failureMessage(error) ?? readRequestFailed();
+
+  // Блок каталога на главной ----------------------------------------------
+
+  const latestState = ref<LoadState>('loading');
+  const latestProducts = ref<MiniAppLatestProductsResponse['products']>([]);
+
+  const fetchLatest = async (): Promise<void> => {
+    const response = await $fetch<MiniAppLatestProductsResponse>('/api/miniapp/catalog/latest', {
+      headers: headers(),
+    });
+
+    latestProducts.value = response.products;
+    latestState.value = 'ready';
+  };
+
+  const loadLatest = async (): Promise<void> => {
+    latestState.value = 'loading';
+
+    try {
+      await fetchLatest();
+    } catch (error) {
+      console.error('[miniapp] не удалось загрузить товары главной', error);
+      latestState.value = 'error';
+    }
+  };
+
+  /** Тихое перечитывание — тем же правилом, что у заказов: отказ показанное не гасит. */
+  const reloadLatest = async (): Promise<void> => {
+    try {
+      await fetchLatest();
+    } catch (error) {
+      console.error('[miniapp] не удалось перечитать товары главной', error);
+    }
+  };
 
   // Офисы ------------------------------------------------------------------
 
@@ -126,6 +162,18 @@ export const useMemberOrders = (readInitData: () => string, readRequestFailed: (
     } catch (error) {
       console.error('[miniapp] не удалось перечитать витрину', error);
     }
+  };
+
+  /**
+   * Забывает витрину и корзину — при уходе из каталога. Последний офис не запоминается
+   * (`_reference/design/catalog/catalog.md`, «Путь водителя»): следующий вход — снова с выбора.
+   */
+  const closeShowcase = (): void => {
+    showcaseState.value = 'loading';
+    showcase.value = null;
+    showcaseError.value = null;
+    quantities.value = {};
+    placeError.value = null;
   };
 
   /** Ставит количество товара в пределах от нуля до доступного остатка. */
@@ -285,6 +333,10 @@ export const useMemberOrders = (readInitData: () => string, readRequestFailed: (
   };
 
   return {
+    latestState,
+    latestProducts,
+    loadLatest,
+    reloadLatest,
     officesState,
     offices,
     loadOffices,
@@ -293,6 +345,7 @@ export const useMemberOrders = (readInitData: () => string, readRequestFailed: (
     showcaseError,
     quantities,
     openShowcase,
+    closeShowcase,
     setQuantity,
     cartLines,
     cartTotal,

@@ -110,16 +110,12 @@ export type TextKey =
   | 'button_exchange_points'
   | 'button_back'
   | 'request_failed'
-  | 'offices_title'
   | 'offices_empty'
   | 'offices_failed'
-  | 'office_open_map'
   | 'showcase_empty'
   | 'showcase_failed'
-  | 'product_no_photo'
   | 'unit_pieces'
   | 'unit_points'
-  | 'showcase_in_stock'
   | 'cart_total'
   | 'cart_balance_after'
   | 'button_checkout'
@@ -128,7 +124,18 @@ export type TextKey =
   | 'confirm_title'
   | 'confirm_note'
   | 'button_place_order'
-  | 'button_edit_order'
+  | 'catalog_title'
+  | 'catalog_all'
+  | 'catalog_empty'
+  | 'office_sheet_title'
+  | 'office_sheet_subtitle'
+  | 'office_change'
+  | 'office_change_warning'
+  | 'stock_pieces'
+  | 'sale_label'
+  | 'stepper_decrease'
+  | 'stepper_increase'
+  | 'stepper_increase_more'
   | 'order_title'
   | 'order_code_title'
   | 'order_expires_short'
@@ -711,10 +718,6 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Приложение не ответило. Проверьте связь и попробуйте ещё раз.',
     uz: "Ilova javob bermadi. Aloqani tekshirib, qaytadan urinib ko'ring.",
   },
-  offices_title: {
-    ru: 'Выберите офис',
-    uz: 'Ofisni tanlang',
-  },
   offices_empty: {
     ru: 'Офисы, где можно обменять баллы, пока не открыты.',
     uz: "Ballarni almashtirish mumkin bo'lgan ofislar hozircha ochilmagan.",
@@ -723,22 +726,14 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Не удалось загрузить офисы. Попробуйте ещё раз.',
     uz: "Ofislarni yuklab bo'lmadi. Qaytadan urinib ko'ring.",
   },
-  office_open_map: {
-    ru: 'На карте',
-    uz: 'Xaritada',
-  },
   /** Пустая витрина говорит словами, а не показывает пустую сетку. */
   showcase_empty: {
-    ru: 'В этом офисе пока нечего взять.',
-    uz: "Bu ofisda hozircha olish mumkin bo'lgan mahsulot yo'q.",
+    ru: 'Здесь появятся товары, которые можно взять за баллы в этом офисе. Сейчас их нет — загляните в другой офис.',
+    uz: "Bu yerda shu ofisda ballarga olish mumkin bo'lgan mahsulotlar paydo bo'ladi. Hozircha ular yo'q — boshqa ofisga qarab ko'ring.",
   },
   showcase_failed: {
     ru: 'Не удалось загрузить товары. Попробуйте ещё раз.',
     uz: "Mahsulotlarni yuklab bo'lmadi. Qaytadan urinib ko'ring.",
-  },
-  product_no_photo: {
-    ru: 'без фото',
-    uz: 'rasmsiz',
   },
   unit_pieces: {
     ru: 'шт.',
@@ -748,17 +743,14 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'баллов',
     uz: 'ball',
   },
-  showcase_in_stock: {
-    ru: 'В наличии',
-    uz: 'Mavjud',
-  },
   cart_total: {
     ru: 'Сумма',
     uz: 'Jami',
   },
+  /** Итог на витрине одной строкой: «Сумма · 2 310», «Останется · 140» — короткие, чтобы держались на 320. */
   cart_balance_after: {
-    ru: 'Останется на балансе',
-    uz: 'Hisobda qoladi',
+    ru: 'Останется',
+    uz: 'Qoladi',
   },
   button_checkout: {
     ru: 'Оформить',
@@ -785,9 +777,64 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Оформить заказ',
     uz: 'Buyurtma berish',
   },
-  button_edit_order: {
-    ru: 'Изменить',
+  /** Шапка каталога и блок каталога на главной. */
+  catalog_title: {
+    ru: 'Каталог',
+    uz: 'Katalog',
+  },
+  catalog_all: {
+    ru: 'Весь каталог',
+    uz: 'Butun katalog',
+  },
+  /** Блок каталога на главной, когда товаров нет ни в одном офисе. */
+  catalog_empty: {
+    ru: 'Здесь появятся товары, которые можно взять за баллы.',
+    uz: "Bu yerda ballarga olish mumkin bo'lgan mahsulotlar paydo bo'ladi.",
+  },
+  /** Шторка выбора офиса — и при первом входе в каталог, и при смене. */
+  office_sheet_title: {
+    ru: 'Где заберёте товары?',
+    uz: 'Mahsulotlarni qayerdan olasiz?',
+  },
+  office_sheet_subtitle: {
+    ru: 'Выберите офис. В каждом свой набор, и заказ забирается там, где вы его оформили.',
+    uz: "Ofisni tanlang. Har birida o'z to'plami bor, buyurtma esa rasmiylashtirilgan joydan olinadi.",
+  },
+  /** Смена офиса со строки «Офис · …» над витриной. */
+  office_change: {
+    ru: 'Сменить',
     uz: "O'zgartirish",
+  },
+  /** Над кнопками шторки офиса: отмечен другой офис, а корзина не пуста. */
+  office_change_warning: {
+    ru: 'Корзина очистится: в другом офисе свой набор',
+    uz: "Savat tozalanadi: boshqa ofisda o'z to'plami bor",
+  },
+  /**
+   * Остаток на пилюле плитки: «8 шт». Подставляет экран — число приходит с витриной,
+   * а тексты раньше неё, с экраном участника.
+   */
+  stock_pieces: {
+    ru: '{count} шт',
+    uz: '{count} dona',
+  },
+  /** Слово на пилюле скидки. Одно на оба языка — так в макете. */
+  sale_label: {
+    ru: 'SALE',
+    uz: 'SALE',
+  },
+  /** Подписи кнопок счётчика «− N +» — для экранного чтеца: на экране слов нет. */
+  stepper_decrease: {
+    ru: 'Убрать одну',
+    uz: 'Bittasini olib tashlash',
+  },
+  stepper_increase: {
+    ru: 'Добавить',
+    uz: "Qo'shish",
+  },
+  stepper_increase_more: {
+    ru: 'Добавить ещё',
+    uz: "Yana qo'shish",
   },
   order_title: {
     ru: 'Заказ № {number}',

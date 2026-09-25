@@ -249,3 +249,49 @@ export const listOfficeShowcase = async (
        AND product."price_points" IS NOT NULL
      ORDER BY product."name"
   `;
+
+export type LatestProductRow = {
+  productId: string;
+  name: string;
+  photoPath: string | null;
+  /** Есть всегда: товар без цены на витрину не попадает. */
+  pricePoints: number;
+  updatedAt: Date;
+};
+
+/**
+ * Самые свежие товары для блока каталога на главной — не больше `limit`.
+ *
+ * Условия товара — те же, что у `listOfficeShowcase`: главная не обещает того, чего нет
+ * ни на одной витрине. Офис на главной не выбран, поэтому остаток — хотя бы в одном работающем
+ * офисе, и товар из нескольких офисов идёт одной строкой: `EXISTS`, а не `JOIN`.
+ *
+ * Свежесть — `published_at`: четыре последних опубликованных (решение Руслана 25-09-2026,
+ * issue #218). Настраиваемая витрина главной — отдельный проход.
+ */
+export const listLatestProducts = async (
+  limit: number,
+  client: Prisma.TransactionClient = db,
+): Promise<LatestProductRow[]> =>
+  client.$queryRaw<LatestProductRow[]>`
+    SELECT product."id"           AS "productId",
+           product."name",
+           product."photo_path"   AS "photoPath",
+           product."price_points" AS "pricePoints",
+           product."updated_at"   AS "updatedAt"
+      FROM xb.products AS product
+     WHERE product."published_at" IS NOT NULL
+       AND product."archived_at" IS NULL
+       AND NOT product."hidden_in_catalog"
+       AND product."price_points" IS NOT NULL
+       AND EXISTS (
+             SELECT 1
+               FROM xb.office_stock AS stock
+               JOIN xb.offices AS office ON office."id" = stock."office_id"
+              WHERE stock."product_id" = product."id"
+                AND stock."on_hand" > 0
+                AND office."archived_at" IS NULL
+           )
+     ORDER BY product."published_at" DESC, product."id"
+     LIMIT ${limit}
+  `;

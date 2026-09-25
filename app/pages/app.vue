@@ -22,20 +22,26 @@ import { useMemberOrders } from '~/composables/useMemberOrders';
 import { useMemberRewards } from '~/composables/useMemberRewards';
 import { useOfficeDesk } from '~/composables/useOfficeDesk';
 import type {
+  MemberCatalogOfficeView,
   MemberLanguageOptionView,
   MemberManagerIdsView,
   MemberOfficeView,
   MemberProfileFieldView,
 } from '~/types/memberView';
 import {
+  cartLinesView,
+  formatPoints,
   HOME_HISTORY_SIZE,
   historyView,
+  homeCatalogView,
   homeOrdersView,
   homeRewardsView,
   orderDetailView,
   ordersScreenView,
   rewardDetailView,
   rewardsScreenView,
+  showcaseCheckoutView,
+  showcaseProductsView,
 } from '~/utils/memberViews';
 import { failureDenial } from '~/utils/requestError';
 import {
@@ -62,11 +68,9 @@ import {
  */
 
 /**
- * Раскладка выбирается стадией и экраном, а не одна на страницу: загрузка, заглушки, регистрация,
- * отказ выключенному сотруднику, а у участника главная, история, заказы, награды, их экраны
- * и профиль — уже на новых макетах (`miniapp-next`). Цепочка обмена и экран сотрудника — ещё на старых
- * (`miniapp`), до своих задач. Смена оформления при переходе между старым и новым экраном
- * участника — ожидаемое временное состояние (issue #210, #215).
+ * Раскладка выбирается стадией, а не одна на страницу: загрузка, заглушки, регистрация, отказ
+ * выключенному сотруднику и все экраны участника — на новых макетах (`miniapp-next`). Экран
+ * сотрудника — ещё на старых (`miniapp`), до своей задачи. Каталог переехал последним (issue #218).
  *
  * Своим `<NuxtLayout :name>` в шаблоне, а не `setPageLayout`: раскладку страницы Nuxt рисует
  * с ключом по её имени, и смена имени пересоздаёт страницу целиком — вместе с состоянием
@@ -167,8 +171,14 @@ type Stage = 'loading' | 'error' | 'member' | 'registration' | 'employee' | 'emp
 
 const stage = ref<Stage>('loading');
 
-/** Стадии на новых макетах целиком. У участника раскладка — по экрану, сотрудник — ещё на старых. */
-const NEXT_LAYOUT_STAGES: ReadonlySet<Stage> = new Set<Stage>(['loading', 'error', 'registration', 'employee_denied']);
+/** Стадии на новых макетах. Сотрудник — ещё на старых. */
+const NEXT_LAYOUT_STAGES: ReadonlySet<Stage> = new Set<Stage>([
+  'loading',
+  'error',
+  'registration',
+  'employee_denied',
+  'member',
+]);
 
 /** Заглушка на стадии `error`. */
 const stub = ref<StubView | null>(null);
@@ -259,8 +269,8 @@ let initData = '';
 const memberHistory = useMemberHistory(() => initData);
 
 /**
- * Обмен баллов: офисы, витрина, оформление и заказы. Запасной текст отказа — из текстов
- * экрана участника: к моменту первого запроса витрины они уже загружены.
+ * Обмен баллов: товары главной, офисы, витрина, оформление и заказы. Запасной текст отказа —
+ * из текстов экрана участника: к моменту первого запроса витрины они уже загружены.
  */
 const memberOrders = useMemberOrders(
   () => initData,
@@ -402,40 +412,13 @@ const cancelEmployeeOrder = async (): Promise<void> => {
  * строку, и роутер при переходе портит её (issue #90, #105). «Назад» — своей кнопкой экрана:
  * системная кнопка Telegram в приложении не используется.
  */
-type MemberScreenName =
-  | 'home'
-  | 'history'
-  | 'offices'
-  | 'showcase'
-  | 'confirm'
-  | 'order'
-  | 'orders'
-  | 'rewards'
-  | 'reward'
-  | 'profile';
+type MemberScreenName = 'home' | 'history' | 'catalog' | 'order' | 'orders' | 'rewards' | 'reward' | 'profile';
 
 /** Путь по экранам. Последний — показанный; «назад» снимает его. */
 const screens = ref<MemberScreenName[]>(['home']);
 const currentScreen = computed<MemberScreenName>(() => screens.value.at(-1) ?? 'home');
 
-/** Экраны участника на новых макетах. У них «назад» — в шапке, у старых — кнопкой внизу. */
-const NEXT_MEMBER_SCREENS: ReadonlySet<MemberScreenName> = new Set<MemberScreenName>([
-  'home',
-  'history',
-  'orders',
-  'order',
-  'rewards',
-  'reward',
-  'profile',
-]);
-
-const layout = computed(() => {
-  if (stage.value === 'member') {
-    return NEXT_MEMBER_SCREENS.has(currentScreen.value) ? 'miniapp-next' : 'miniapp';
-  }
-
-  return NEXT_LAYOUT_STAGES.has(stage.value) ? 'miniapp-next' : 'miniapp';
-});
+const layout = computed(() => (NEXT_LAYOUT_STAGES.has(stage.value) ? 'miniapp-next' : 'miniapp'));
 
 /** Заказ, открытый на экране заказа: только что оформленный или выбранный из списка. */
 const currentOrder = ref<MemberOrder | null>(null);
@@ -461,6 +444,27 @@ const savingLanguage = ref(false);
 
 /** Сброс сессии в пути: «Сбросить» ждёт, «Отменить» гаснет. */
 const resetting = ref(false);
+
+/**
+ * Каталог: офис витрины, шторка офиса с отметкой и шторка подтверждения. Держит страница,
+ * а не экран: уход из каталога сбрасывает всё вместе с корзиной — последний офис
+ * не запоминается (`_reference/design/catalog/catalog.md`, «Путь водителя»).
+ *
+ * Офиса нет — первый вход: витрина с заглушками и шторка выбора поверх. Двух шторок сразу
+ * не бывает: обе модальные, и открыть одну можно только с витрины.
+ */
+const catalogOfficeId = ref<string | null>(null);
+const officeSheetOpen = ref(false);
+const officeSheetSelected = ref<string | null>(null);
+const confirmSheetOpen = ref(false);
+
+const resetCatalog = (): void => {
+  catalogOfficeId.value = null;
+  officeSheetOpen.value = false;
+  officeSheetSelected.value = null;
+  confirmSheetOpen.value = false;
+  memberOrders.closeShowcase();
+};
 
 const openScreen = (screen: MemberScreenName): void => {
   screens.value = [...screens.value, screen];
@@ -496,6 +500,13 @@ watch(currentScreen, () => {
   window.scrollTo(0, 0);
 });
 
+// Уход из каталога — вместе с корзиной, офисом и шторками.
+watch(currentScreen, (screen) => {
+  if (screen !== 'catalog') {
+    resetCatalog();
+  }
+});
+
 // Уход с профиля сбрасывает раскрытый номер и шторку.
 watch(currentScreen, (screen) => {
   if (screen !== 'profile') {
@@ -518,9 +529,30 @@ watch(employeeCanGoBack, () => {
   window.scrollTo(0, 0);
 });
 
-const openExchange = (): void => {
-  openScreen('offices');
-  void memberOrders.loadOffices();
+/**
+ * Офисы каталога — один раз на вход: «Сменить» берёт тот же список. Шторка открывается, когда
+ * список пришёл и в нём есть что выбрать; пока он в пути, не пришёл или пуст — это показывает
+ * витрина под шторкой (решение Руслана 25-09-2026, issue #218).
+ */
+const loadCatalogOffices = async (): Promise<void> => {
+  await memberOrders.loadOffices();
+
+  if (
+    currentScreen.value === 'catalog' &&
+    catalogOfficeId.value === null &&
+    memberOrders.officesState.value === 'ready' &&
+    memberOrders.offices.value.length > 0
+  ) {
+    officeSheetSelected.value = null;
+    officeSheetOpen.value = true;
+  }
+};
+
+/** Вход в каталог — «Обменять баллы», «Весь каталог» и любая плитка главной: всегда с выбора офиса. */
+const openCatalog = (): void => {
+  resetCatalog();
+  openScreen('catalog');
+  void loadCatalogOffices();
 };
 
 /**
@@ -564,20 +596,85 @@ const openReward = (rewardId: string): void => {
   openScreen('reward');
 };
 
-const selectOffice = (officeId: string): void => {
-  openScreen('showcase');
+/** «Сменить» на строке офиса: та же шторка, отметка — на текущем офисе. */
+const openOfficeSheet = (): void => {
+  officeSheetSelected.value = catalogOfficeId.value;
+  officeSheetOpen.value = true;
+};
+
+/**
+ * «Сохранить» в шторке офиса. Шторка гасит кнопку на текущем офисе, поэтому сюда приходит
+ * только другой: корзина очищается, витрина нового офиса загружается (`openShowcase`).
+ */
+const saveCatalogOffice = (officeId: string): void => {
+  officeSheetOpen.value = false;
+
+  if (officeId === catalogOfficeId.value) {
+    return;
+  }
+
+  catalogOfficeId.value = officeId;
   void memberOrders.openShowcase(officeId);
+};
+
+/** «Отменить» и Escape. На первом входе — уход из каталога: витрины без офиса нет. */
+const cancelOfficeSheet = (): void => {
+  officeSheetOpen.value = false;
+
+  if (catalogOfficeId.value === null) {
+    goBack();
+  }
+};
+
+/**
+ * «Повторить» на витрине: до выбора офиса не прочитались офисы — перечитываются они и открывают
+ * шторку; после — не прочиталась витрина, и повторяется тот же офис.
+ */
+const retryCatalog = (): void => {
+  if (catalogOfficeId.value === null) {
+    void loadCatalogOffices();
+  } else {
+    void memberOrders.openShowcase(catalogOfficeId.value);
+  }
 };
 
 const changeQuantity = (productId: string, step: number): void => {
   memberOrders.setQuantity(productId, (memberOrders.quantities.value[productId] ?? 0) + step);
 };
 
+// Баланс витрины свежее экрана участника: он прочитан только что. Шапка набирает к нему.
+watch(memberOrders.showcase, (showcase) => {
+  if (showcase && member.value) {
+    member.value.balancePoints = showcase.balancePoints;
+  }
+});
+
+// В шторке подтверждения ушла последняя строка — шторка закрывается, водитель на витрине.
+watch(
+  () => memberOrders.cartLines.value.length,
+  (count) => {
+    if (count === 0) {
+      confirmSheetOpen.value = false;
+    }
+  },
+);
+
 const openConfirm = (): void => {
   memberOrders.resetPlaceError();
-  openScreen('confirm');
+  confirmSheetOpen.value = true;
 };
 
+/** «Отменить» и Escape. Пока заказ оформляется, шторка стоит: запрос уже ушёл. */
+const closeConfirmSheet = (): void => {
+  if (!memberOrders.placing.value) {
+    confirmSheetOpen.value = false;
+  }
+};
+
+/**
+ * «Оформить заказ». Удача — шторка закрывается, открывается экран заказа, баланс перечитывается
+ * и набирается к новому значению. Отказ — текстом в той же шторке, она открыта.
+ */
 const placeOrder = async (): Promise<void> => {
   const order = await memberOrders.place();
 
@@ -585,11 +682,11 @@ const placeOrder = async (): Promise<void> => {
     return;
   }
 
+  confirmSheetOpen.value = false;
   currentOrder.value = order;
   cancelSheetOpen.value = false;
-  // Назад с экрана оформленного заказа — на экран участника, а не в витрину: корзина пуста,
-  // а подтверждать тот же заказ второй раз незачем. Экран заказа — уже новый, как у заказа
-  // из списка.
+  // Назад с экрана оформленного заказа — на главную, а не в витрину: корзина пуста,
+  // а подтверждать тот же заказ второй раз незачем.
   screens.value = ['home', 'order'];
   void reloadMember();
 };
@@ -663,8 +760,8 @@ const sectionBalance = computed(() =>
 );
 
 /**
- * Главная — свойствами `MemberHome`. Акции, приглашения, подарков и каталога нет: пилюлю
- * и плашку подключает задача акции, а товары без выбранного офиса не отдаёт ни одна ручка.
+ * Главная — свойствами `MemberHome`. Акции, приглашения и подарков нет: пилюлю и плашку
+ * подключает задача акции. Каталог — четыре самых свежих товара (issue #218).
  */
 const homeView = computed(() => {
   const current = member.value;
@@ -673,7 +770,7 @@ const homeView = computed(() => {
     return null;
   }
 
-  const { texts } = current;
+  const { texts, orderTexts } = current;
 
   return {
     name: current.name,
@@ -681,6 +778,7 @@ const homeView = computed(() => {
     points: current.balancePoints,
     orders: homeOrdersView(memberOrders.ordersState.value, memberOrders.orders.value, texts),
     rewards: homeRewardsView(memberRewards.state.value, memberRewards.rewards.value, texts),
+    catalog: homeCatalogView(memberOrders.latestState.value, memberOrders.latestProducts.value),
     history: historyView(memberHistory.state.value, memberHistory.operations.value.slice(0, HOME_HISTORY_SIZE)),
     texts: {
       profile: texts.profile,
@@ -695,11 +793,160 @@ const homeView = computed(() => {
       rewardsAll: texts.rewardsAll,
       rewardsEmpty: texts.rewardsEmpty,
       rewardsError: texts.rewardsFailed,
+      catalogTitle: orderTexts.catalogTitle,
+      catalogAll: orderTexts.catalogAll,
+      catalogSale: orderTexts.sale,
+      catalogEmpty: orderTexts.catalogEmpty,
+      catalogError: orderTexts.showcaseFailed,
       historyTitle: texts.historyTitle,
       historyAll: texts.historyAll,
       historyEmpty: texts.historyEmpty,
       historyError: texts.historyFailed,
       retry: texts.retry,
+    },
+  };
+});
+
+/**
+ * Витрина каталога — свойствами `MemberShowcaseScreen`.
+ *
+ * До выбора офиса витрина говорит за список офисов: грузится — заглушки `pick`, не прочитался —
+ * ошибка с повтором, пуст — пустота. После выбора — за витрину, и пока она в пути, те же заглушки
+ * без строки офиса и итога (решение Руслана 25-09-2026, issue #218).
+ *
+ * Строка офиса у ошибки — из списка офисов: ответа витрины нет, а водитель должен видеть, чья
+ * витрина не открылась, и сменить офис строкой выше.
+ */
+const catalogScreen = computed(() => {
+  const current = member.value;
+
+  if (!current) {
+    return null;
+  }
+
+  const { texts, orderTexts } = current;
+  const officeId = catalogOfficeId.value;
+  const showcase = memberOrders.showcase.value;
+  const base = {
+    balance: { label: texts.balanceTitle, amount: balanceAmount.value },
+    products: [],
+    texts: {
+      title: orderTexts.catalogTitle,
+      back: texts.back,
+      change: orderTexts.officeChange,
+      sale: orderTexts.sale,
+      decrease: orderTexts.decrease,
+      increase: orderTexts.increase,
+      increaseMore: orderTexts.increaseMore,
+      total: orderTexts.cartTotal,
+      remaining: orderTexts.balanceAfter,
+      checkout: orderTexts.checkout,
+      empty: orderTexts.showcaseEmpty,
+      error: orderTexts.showcaseFailed,
+      retry: texts.retry,
+    },
+  };
+
+  if (officeId === null) {
+    const officesState = memberOrders.officesState.value;
+
+    if (officesState === 'error') {
+      return { ...base, state: 'error' as const, texts: { ...base.texts, error: orderTexts.officesFailed } };
+    }
+
+    if (officesState === 'ready' && memberOrders.offices.value.length === 0) {
+      return { ...base, state: 'empty' as const, texts: { ...base.texts, empty: orderTexts.officesEmpty } };
+    }
+
+    return { ...base, state: 'pick' as const };
+  }
+
+  const showcaseState = memberOrders.showcaseState.value;
+
+  if (showcaseState === 'loading') {
+    return { ...base, state: 'pick' as const };
+  }
+
+  if (showcaseState === 'error' || !showcase) {
+    const office = memberOrders.offices.value.find((entry) => entry.officeId === officeId);
+
+    return {
+      ...base,
+      state: 'error' as const,
+      office: office ? { label: texts.officeLabel, name: office.name } : undefined,
+      // Отказ сервера — своими словами: архивный офис говорит, что здесь ничего не взять.
+      texts: { ...base.texts, error: memberOrders.showcaseError.value ?? orderTexts.showcaseFailed },
+    };
+  }
+
+  const office = { label: texts.officeLabel, name: showcase.office.name };
+
+  if (showcase.products.length === 0) {
+    return { ...base, state: 'empty' as const, office };
+  }
+
+  return {
+    ...base,
+    state: 'ready' as const,
+    office,
+    products: showcaseProductsView(showcase.products, memberOrders.quantities.value, orderTexts),
+    checkout: showcaseCheckoutView(memberOrders.cartTotal.value, showcase.balancePoints, orderTexts),
+  };
+});
+
+/** Шторка «Где заберёте товары?»: офисы из списка входа, отметку держит страница. */
+const officeSheet = computed(() => {
+  const current = member.value;
+
+  if (!current) {
+    return null;
+  }
+
+  const offices: MemberCatalogOfficeView[] = memberOrders.offices.value.map((office) => ({
+    id: office.officeId,
+    name: office.name,
+    address: office.address,
+  }));
+
+  return {
+    offices,
+    current: catalogOfficeId.value,
+    selected: officeSheetSelected.value,
+    cartFilled: memberOrders.cartLines.value.length > 0,
+    texts: {
+      title: current.orderTexts.officeSheetTitle,
+      subtitle: current.orderTexts.officeSheetSubtitle,
+      office: current.texts.officeLabel,
+      warning: current.orderTexts.officeChangeWarning,
+      save: current.orderTexts.save,
+      cancel: current.orderTexts.cancel,
+    },
+  };
+});
+
+/** Шторка «Проверьте заказ»: офис витрины с адресом и корзина со счётчиками. */
+const confirmSheet = computed(() => {
+  const current = member.value;
+  const showcase = memberOrders.showcase.value;
+
+  if (!current || !showcase) {
+    return null;
+  }
+
+  const { texts, orderTexts } = current;
+
+  return {
+    office: { label: texts.officeLabel, name: showcase.office.name, address: showcase.office.address },
+    lines: cartLinesView(showcase.products, memberOrders.quantities.value, texts),
+    total: formatPoints(memberOrders.cartTotal.value),
+    texts: {
+      title: orderTexts.confirmTitle,
+      total: orderTexts.cartTotal,
+      note: orderTexts.confirmNote,
+      place: orderTexts.placeOrder,
+      cancel: orderTexts.cancel,
+      decrease: orderTexts.decrease,
+      increase: orderTexts.increase,
     },
   };
 });
@@ -996,6 +1243,7 @@ const resetScreenWork = (): void => {
   cancelSheetOpen.value = false;
   licenseRevealed.value = false;
   profileSheet.value = 'none';
+  resetCatalog();
 };
 
 /** Заглушка вместо экрана. */
@@ -1033,6 +1281,7 @@ const loadState = async (): Promise<void> => {
       // с балансом — баланс уже прочитан и врать о нём нечему.
       void memberOrders.loadOrders();
       void memberRewards.load();
+      void memberOrders.loadLatest();
       void memberHistory.loadFirstPage();
     }
   } catch (error) {
@@ -1084,12 +1333,13 @@ const reloadMember = async (): Promise<void> => {
   }
 };
 
-/** Главная целиком и тихо: экран участника и три блока — заказы, награды, первая страница истории. */
+/** Главная целиком и тихо: экран участника и четыре блока — заказы, награды, каталог, первая страница истории. */
 const reloadHome = async (): Promise<void> => {
   await Promise.all([
     reloadMember(),
     memberOrders.reloadOrders(),
     memberRewards.reload(),
+    memberOrders.reloadLatest(),
     memberHistory.reloadFirstPage().catch((error: unknown) => {
       console.error('[miniapp] не удалось перечитать историю', error);
     }),
@@ -1100,7 +1350,7 @@ const reloadHome = async (): Promise<void> => {
  * «Сохранить» в шторке языка.
  *
  * Удача — перечитывается всё, что уже загружено и несёт готовые строки сервера: экран участника
- * и списки главной — заказы, награды, история. Иначе экран собрался бы из двух языков: тексты
+ * и списки главной — заказы, награды, каталог, история. Иначе экран собрался бы из двух языков: тексты
  * `/me` на новом, строки списков на старом (прогон `#215`, 25-09-2026). Шторка закрывается,
  * когда перечитанное пришло: экран под ней меняет язык целиком, а не по частям.
  *
@@ -1164,10 +1414,10 @@ const resetSession = async (): Promise<void> => {
 };
 
 /**
- * Возврат в приложение из фона: пока Telegram был свёрнут, баллы могли прийти. На новых экранах
+ * Возврат в приложение из фона: пока Telegram был свёрнут, баллы могли прийти. На любом экране
  * участника перечитывается баланс, на главной — ещё её блоки, в разделе заказов — список,
- * в разделе и на экране награды — список наград: награду могли выдать у стойки.
- * Старые экраны не трогаются: в цепочке обмена перечитывание сбило бы корзину.
+ * в разделе и на экране награды — список наград: награду могли выдать у стойки. В каталоге —
+ * только баланс: витрина и корзина остаются, какими водитель их оставил.
  */
 const onVisibilityChange = (): void => {
   if (document.visibilityState !== 'visible' || stage.value !== 'member') {
@@ -1176,14 +1426,16 @@ const onVisibilityChange = (): void => {
 
   if (currentScreen.value === 'home') {
     void reloadHome();
-  } else if (NEXT_MEMBER_SCREENS.has(currentScreen.value)) {
-    void reloadMember();
 
-    if (currentScreen.value === 'orders') {
-      void memberOrders.reloadOrders();
-    } else if (currentScreen.value === 'rewards' || currentScreen.value === 'reward') {
-      void memberRewards.reload();
-    }
+    return;
+  }
+
+  void reloadMember();
+
+  if (currentScreen.value === 'orders') {
+    void memberOrders.reloadOrders();
+  } else if (currentScreen.value === 'rewards' || currentScreen.value === 'reward') {
+    void memberRewards.reload();
   }
 };
 
@@ -1497,14 +1749,17 @@ const openMap = (office: MemberOfficeView): void => {
         v-if="currentScreen === 'home' && homeView"
         v-bind="homeView"
         @profile="openProfile"
-        @exchange="openExchange"
+        @exchange="openCatalog"
         @orders="openOrders"
         @order="openOrder"
         @rewards="openRewards"
         @reward="openReward"
+        @catalog="openCatalog"
+        @product="openCatalog"
         @history="openHistory"
         @retry-orders="memberOrders.loadOrders()"
         @retry-rewards="memberRewards.load()"
+        @retry-catalog="memberOrders.loadLatest()"
         @retry-history="memberHistory.loadFirstPage()"
       />
 
@@ -1571,45 +1826,36 @@ const openMap = (office: MemberOfficeView): void => {
         @close="closeProfileSheet"
       />
 
-      <div v-else class="flex flex-col gap-2">
-        <OrganismsMemberOfficePicker
-          v-if="currentScreen === 'offices'"
-          :state="memberOrders.officesState.value"
-          :offices="memberOrders.offices.value"
-          :texts="member.orderTexts"
-          @select="selectOffice"
-        />
-
-        <OrganismsOfficeShowcase
-          v-else-if="currentScreen === 'showcase'"
-          :state="memberOrders.showcaseState.value"
-          :showcase="memberOrders.showcase.value"
-          :error-message="memberOrders.showcaseError.value"
-          :quantities="memberOrders.quantities.value"
-          :total="memberOrders.cartTotal.value"
-          :texts="member.orderTexts"
-          @increment="changeQuantity($event, 1)"
-          @decrement="changeQuantity($event, -1)"
+      <template v-else-if="currentScreen === 'catalog' && catalogScreen">
+        <OrganismsNextMemberShowcaseScreen
+          v-bind="catalogScreen"
+          @back="goBack"
+          @change="openOfficeSheet"
+          @inc="changeQuantity($event, 1)"
+          @dec="changeQuantity($event, -1)"
           @checkout="openConfirm"
+          @retry="retryCatalog"
         />
-
-        <OrganismsOrderConfirmation
-          v-else-if="currentScreen === 'confirm' && memberOrders.showcase.value"
-          :office="memberOrders.showcase.value.office"
-          :lines="memberOrders.cartLines.value"
-          :total="memberOrders.cartTotal.value"
-          :placing="memberOrders.placing.value"
-          :error-message="memberOrders.placeError.value"
-          :texts="member.orderTexts"
+        <OrganismsNextMemberOfficeSheet
+          v-if="officeSheet"
+          :open="officeSheetOpen"
+          v-bind="officeSheet"
+          @select="officeSheetSelected = $event"
+          @save="saveCatalogOffice"
+          @cancel="cancelOfficeSheet"
+        />
+        <OrganismsNextMemberConfirmSheet
+          v-if="confirmSheet"
+          :open="confirmSheetOpen"
+          v-bind="confirmSheet"
+          :busy="memberOrders.placing.value"
+          :error="memberOrders.placeError.value ?? undefined"
+          @inc="changeQuantity($event, 1)"
+          @dec="changeQuantity($event, -1)"
           @place="placeOrder"
-          @edit="goBack"
+          @cancel="closeConfirmSheet"
         />
-
-        <!-- «Назад» внизу — только у старых экранов: у новых он в шапке раздела -->
-        <div class="pt-4">
-          <AtomsMiniAppButton variant="secondary" :label="member.orderTexts.back" @click="goBack" />
-        </div>
-      </div>
+      </template>
     </template>
 
     <template v-else-if="(stage === 'registration' || stage === 'employee_denied') && currentTexts">
