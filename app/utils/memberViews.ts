@@ -8,10 +8,11 @@ import type {
   MiniAppLatestProductsResponse,
   ShowcaseProduct,
 } from '#shared/types/miniapp';
-import type { MemberReward } from '#shared/types/rewards';
+import type { MemberGift, MemberReward } from '#shared/types/rewards';
 import type { LoadState } from '~/types/loadState';
 import type {
   MemberCartLineView,
+  MemberGiftView,
   MemberOperationDayView,
   MemberOfficeView,
   MemberOrderDetailView,
@@ -264,27 +265,41 @@ const homeRewardView = (reward: MemberReward, texts: MemberScreenTexts): MemberR
     : { ...rewardRowView(reward, texts), state: reward.stateText, hint: undefined };
 
 /** Награды на главной — тем же правилом, что заказы: все ждущие, иначе одна первая, иначе пусто. */
+/** Подарок от Xalq Taxi — свойствами карточки подарка: строки уже собраны сервером. */
+export const giftView = (gift: MemberGift): MemberGiftView => ({
+  id: gift.rewardId,
+  title: gift.title,
+  reason: gift.reasonText,
+  deadline: gift.deadlineText,
+  cover: gift.coverUrl,
+});
+
+/** Блок наград на главной. Подарки считаются наградами: есть один подарок — блок не пуст. */
 export const homeRewardsView = (
   state: LoadState,
   rewards: readonly MemberReward[],
+  gifts: readonly MemberGift[],
   texts: MemberScreenTexts,
-): { state: MemberViewLoad; items: MemberRewardView[] } => {
+): { state: MemberViewLoad; items: MemberRewardView[]; gifts: MemberGiftView[] } => {
   const awaiting = rewards.filter((reward) => reward.status === 'awaiting');
   const shown = awaiting.length > 0 ? awaiting : rewards.slice(0, 1);
 
   return {
-    state: viewLoad(state, rewards.length),
+    state: viewLoad(state, rewards.length + gifts.length),
     items: shown.map((reward) => homeRewardView(reward, texts)),
+    gifts: gifts.map(giftView),
   };
 };
 
-/** Раздел «Мои награды»: ждущие в офисе — сверху, остальные — в порядке ответа. */
+/** Раздел «Мои награды»: подарки и ждущие в офисе — сверху, остальные — в порядке ответа. */
 export const rewardsScreenView = (
   state: LoadState,
   rewards: readonly MemberReward[],
+  gifts: readonly MemberGift[],
   texts: MemberScreenTexts,
-): { state: MemberViewLoad; awaiting: MemberRewardView[]; past: MemberRewardView[] } => ({
-  state: viewLoad(state, rewards.length),
+): { state: MemberViewLoad; gifts: MemberGiftView[]; awaiting: MemberRewardView[]; past: MemberRewardView[] } => ({
+  state: viewLoad(state, rewards.length + gifts.length),
+  gifts: gifts.map(giftView),
   awaiting: rewards.filter((reward) => reward.status === 'awaiting').map((reward) => rewardRowView(reward, texts)),
   past: rewards.filter((reward) => reward.status !== 'awaiting').map((reward) => rewardRowView(reward, texts)),
 });

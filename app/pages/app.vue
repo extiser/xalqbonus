@@ -17,6 +17,7 @@ import {
 } from '#shared/types/miniapp';
 import { useCountUp } from '~/composables/useCountUp';
 import { useEmployeePassword } from '~/composables/useEmployeePassword';
+import { useMemberGifts } from '~/composables/useMemberGifts';
 import { useMemberHistory } from '~/composables/useMemberHistory';
 import { useMemberOrders } from '~/composables/useMemberOrders';
 import { useMemberRewards } from '~/composables/useMemberRewards';
@@ -31,6 +32,7 @@ import type {
 import {
   cartLinesView,
   formatPoints,
+  giftView,
   HOME_HISTORY_SIZE,
   historyView,
   homeCatalogView,
@@ -278,10 +280,32 @@ const memberOrders = useMemberOrders(
 );
 
 /**
- * Награды участника: блок на главной и раздел «Мои награды» (issue #172). Акция на главной
- * не читается до своей задачи: пилюли и плашки там пока нет (issue #210).
+ * Награды участника: блок на главной и раздел «Мои награды» (issue #172), с ними — подарки
+ * от Xalq Taxi (issue #220). Акция на главной не читается до своей задачи: пилюли и плашки
+ * там пока нет (issue #210).
+ *
+ * Какие подарки держать в списке, пока их нет в свежем ответе, решает «Забрать» ниже: к первому
+ * перечитыванию он уже существует.
  */
-const memberRewards = useMemberRewards(() => initData);
+const memberRewards = useMemberRewards(
+  () => initData,
+  (rewardId) => memberGifts.holds(rewardId),
+);
+
+/**
+ * «Забрать» подарок — одно состояние на шторку, главную и раздел. Баланс из ответа ложится
+ * в экран участника, и шапка с главной набирают к нему.
+ */
+const memberGifts = useMemberGifts(() => initData, {
+  setBalance: (balancePoints) => {
+    if (member.value) {
+      member.value.balancePoints = balancePoints;
+    }
+  },
+  reload: () => memberRewards.reload(),
+  remove: (rewardId) => memberRewards.removeGift(rewardId),
+  readTakeFailed: () => member.value?.rewardTexts.giftTakeFailed ?? LOAD_FAILED_TEXT,
+});
 
 /**
  * Экран сотрудника: его офисы, выбранный офис и стойка выдачи.
@@ -513,6 +537,96 @@ watch(currentScreen, (screen) => {
     licenseRevealed.value = false;
     profileSheet.value = 'none';
   }
+});
+
+/**
+ * Шторка подарков на главной (issue #220). Открывается нажатием на подарок в блоке наград или сама.
+ *
+ * `giftsSeen` — подарки, которые шторка уже показала за этот заход. Сама она открывается только
+ * ради подарка, которого здесь нет: перечитывание, пришедшее раньше отметки «видел» на сервере,
+ * иначе открыло бы её второй раз.
+ */
+const giftSheetOpen = ref(false);
+const giftsSeen = ref<readonly string[]>([]);
+
+/** Шторка уезжает 0.34 с (`MemberSheet`): отказанные карточки уходят, когда её уже не видно. */
+const GIFT_SHEET_LEAVE_MS = 340;
+
+let giftSheetLeaveTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Подарки в открытой шторке — показанные: здесь и на сервере. Новых нет — отмечать нечего. */
+const markGiftsSeen = (): void => {
+  const rewardIds = memberRewards.gifts.value.map((gift) => gift.rewardId);
+
+  if (rewardIds.some((rewardId) => !giftsSeen.value.includes(rewardId))) {
+    giftsSeen.value = [...new Set([...giftsSeen.value, ...rewardIds])];
+    memberGifts.markShown(rewardIds);
+  }
+};
+
+/** Открывает шторку — нажатием на подарок или сама — и отмечает её подарки показанными. */
+const openGiftSheet = (): void => {
+  if (memberRewards.gifts.value.length === 0) {
+    return;
+  }
+
+  clearTimeout(giftSheetLeaveTimer);
+  giftSheetOpen.value = true;
+  markGiftsSeen();
+};
+
+/** «Закрыть», Escape и лопание последнего подарка. */
+const closeGiftSheet = (): void => {
+  giftSheetOpen.value = false;
+  clearTimeout(giftSheetLeaveTimer);
+  giftSheetLeaveTimer = setTimeout(() => memberGifts.dismissDenied(), GIFT_SHEET_LEAVE_MS);
+};
+
+// Подарок, пришедший перечитыванием при открытой шторке, показан в ней же: иначе после «Закрыть»
+// она открылась бы ради него второй раз. Перечитывание унесло все подарки — зачислились по сроку —
+// пустой шторке стоять незачем.
+watch(
+  () => memberRewards.gifts.value,
+  (gifts) => {
+    if (!giftSheetOpen.value) {
+      return;
+    }
+
+    if (gifts.length === 0) {
+      closeGiftSheet();
+    } else {
+      markGiftsSeen();
+    }
+  },
+);
+
+/**
+ * Шторка открывается сама (решение Руслана 25-09-2026): только на главной и когда поверх неё ничего
+ * нет — ни загрузчика, ни другой шторки. Условие считается заново после каждого перечитывания
+ * главной — при открытии, при возврате с другого экрана и из фона, — и подарок, пришедший, пока
+ * водитель был в каталоге, всплывает, когда он вернётся. Других шторок у главной пока нет; появятся —
+ * их открытость встаёт в условие, и шторка подарков дождётся, пока они закроются.
+ */
+const giftSheetDue = computed(
+  () =>
+    stage.value === 'member' &&
+    currentScreen.value === 'home' &&
+    !giftSheetOpen.value &&
+    memberRewards.giftsUnseen.value &&
+    memberRewards.gifts.value.some((gift) => !giftsSeen.value.includes(gift.rewardId)),
+);
+
+watch(giftSheetDue, (due) => {
+  if (due) {
+    openGiftSheet();
+  }
+});
+
+// Уход с экрана: карточек подарков под ним больше нет — забранные и отказанные уходят из списка,
+// шторка закрыта.
+watch(currentScreen, () => {
+  giftSheetOpen.value = false;
+  memberGifts.settle();
 });
 
 // Пункт пароля открывается с начала экрана. Отдельно от наблюдателя ниже: со стойки из нескольких
@@ -760,8 +874,9 @@ const sectionBalance = computed(() =>
 );
 
 /**
- * Главная — свойствами `MemberHome`. Акции, приглашения и подарков нет: пилюлю и плашку
- * подключает задача акции. Каталог — четыре самых свежих товара (issue #218).
+ * Главная — свойствами `MemberHome`. Акции и приглашения нет: пилюлю и плашку подключает задача
+ * акции. Каталог — четыре самых свежих товара (issue #218). Подарки — первыми карточками блока
+ * наград (issue #220).
  */
 const homeView = computed(() => {
   const current = member.value;
@@ -777,7 +892,7 @@ const homeView = computed(() => {
     callsign: current.callsign ?? undefined,
     points: current.balancePoints,
     orders: homeOrdersView(memberOrders.ordersState.value, memberOrders.orders.value, texts),
-    rewards: homeRewardsView(memberRewards.state.value, memberRewards.rewards.value, texts),
+    rewards: homeRewardsView(memberRewards.state.value, memberRewards.rewards.value, memberRewards.gifts.value, texts),
     catalog: homeCatalogView(memberOrders.latestState.value, memberOrders.latestProducts.value),
     history: historyView(memberHistory.state.value, memberHistory.operations.value.slice(0, HOME_HISTORY_SIZE)),
     texts: {
@@ -791,6 +906,7 @@ const homeView = computed(() => {
       ordersError: texts.ordersFailed,
       rewardsTitle: texts.rewardsTitle,
       rewardsAll: texts.rewardsAll,
+      rewardsGiftHint: current.rewardTexts.giftTapHint,
       rewardsEmpty: texts.rewardsEmpty,
       rewardsError: texts.rewardsFailed,
       catalogTitle: orderTexts.catalogTitle,
@@ -1030,8 +1146,8 @@ const orderScreen = computed(() => {
 });
 
 /**
- * Раздел «Мои награды». Подарков от Xalq Taxi здесь нет — их подключает своя задача, и тексты
- * их группы пусты: без подарков экран их не рисует.
+ * Раздел «Мои награды». Подарки от Xalq Taxi — группой сверху, с «Забрать» у каждого; «Забрать всё»
+ * здесь нет — только в шторке (Руслан, 24-09-2026).
  */
 const rewardsScreen = computed(() => {
   const current = member.value;
@@ -1043,19 +1159,48 @@ const rewardsScreen = computed(() => {
   const { texts, rewardTexts } = current;
 
   return {
-    ...rewardsScreenView(memberRewards.state.value, memberRewards.rewards.value, texts),
+    ...rewardsScreenView(memberRewards.state.value, memberRewards.rewards.value, memberRewards.gifts.value, texts),
+    giftsBusy: memberGifts.busy.value,
+    giftsPopping: memberGifts.popping.value,
+    giftErrors: memberGifts.errors.value,
     balance: sectionBalance.value,
     texts: {
       title: texts.rewardsTitle,
       back: texts.back,
-      giftsGroup: '',
-      take: '',
+      giftsGroup: rewardTexts.giftsTitleMany,
+      take: rewardTexts.giftTake,
       awaitingGroup: rewardTexts.awaitingGroup,
       pastGroup: rewardTexts.pastGroup,
       groupEmpty: texts.groupEmpty,
       empty: texts.rewardsEmpty,
       error: texts.rewardsFailed,
       retry: texts.retry,
+    },
+  };
+});
+
+/**
+ * Шторка подарков: все ждущие подарки, заголовок по числу. Подарков стало меньше двух — «Забрать
+ * всё» уходит само, заголовок становится единственным числом.
+ */
+const giftSheet = computed(() => {
+  const current = member.value;
+
+  if (!current) {
+    return null;
+  }
+
+  const { rewardTexts } = current;
+  const gifts = memberRewards.gifts.value.map(giftView);
+
+  return {
+    gifts,
+    texts: {
+      title: gifts.length <= 1 ? rewardTexts.giftsTitleOne : rewardTexts.giftsTitleMany,
+      subtitle: rewardTexts.giftsSubtitle,
+      take: rewardTexts.giftTake,
+      takeAll: rewardTexts.giftsTakeAll,
+      close: rewardTexts.giftsClose,
     },
   };
 });
@@ -1243,6 +1388,8 @@ const resetScreenWork = (): void => {
   cancelSheetOpen.value = false;
   licenseRevealed.value = false;
   profileSheet.value = 'none';
+  giftSheetOpen.value = false;
+  memberGifts.settle();
   resetCatalog();
 };
 
@@ -1745,23 +1892,39 @@ const openMap = (office: MemberOfficeView): void => {
     </div>
 
     <template v-else-if="stage === 'member' && member">
-      <OrganismsNextMemberHome
-        v-if="currentScreen === 'home' && homeView"
-        v-bind="homeView"
-        @profile="openProfile"
-        @exchange="openCatalog"
-        @orders="openOrders"
-        @order="openOrder"
-        @rewards="openRewards"
-        @reward="openReward"
-        @catalog="openCatalog"
-        @product="openCatalog"
-        @history="openHistory"
-        @retry-orders="memberOrders.loadOrders()"
-        @retry-rewards="memberRewards.load()"
-        @retry-catalog="memberOrders.loadLatest()"
-        @retry-history="memberHistory.loadFirstPage()"
-      />
+      <template v-if="currentScreen === 'home' && homeView">
+        <OrganismsNextMemberHome
+          v-bind="homeView"
+          @profile="openProfile"
+          @exchange="openCatalog"
+          @orders="openOrders"
+          @order="openOrder"
+          @rewards="openRewards"
+          @reward="openReward"
+          @gift="openGiftSheet"
+          @catalog="openCatalog"
+          @product="openCatalog"
+          @history="openHistory"
+          @retry-orders="memberOrders.loadOrders()"
+          @retry-rewards="memberRewards.load()"
+          @retry-catalog="memberOrders.loadLatest()"
+          @retry-history="memberHistory.loadFirstPage()"
+        />
+        <OrganismsNextMemberGiftSheet
+          v-if="giftSheet"
+          :open="giftSheetOpen"
+          :gifts="giftSheet.gifts"
+          :busy="memberGifts.busy.value"
+          :popping="memberGifts.popping.value"
+          :errors="memberGifts.errors.value"
+          :taking-all="memberGifts.takingAll.value"
+          :texts="giftSheet.texts"
+          @take="memberGifts.take"
+          @take-all="memberGifts.takeAll(giftSheet.gifts.map((gift) => gift.id))"
+          @popped="memberGifts.popped"
+          @close="closeGiftSheet"
+        />
+      </template>
 
       <OrganismsNextMemberHistoryScreen
         v-else-if="currentScreen === 'history' && historyScreenView"
@@ -1803,6 +1966,8 @@ const openMap = (office: MemberOfficeView): void => {
         v-bind="rewardsScreen"
         @back="goBack"
         @open="openReward"
+        @take="memberGifts.take"
+        @popped="memberGifts.popped"
         @retry="memberRewards.load()"
       />
 
