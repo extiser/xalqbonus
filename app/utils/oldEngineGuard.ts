@@ -26,6 +26,11 @@ import { INIT_DATA_HEADER } from '#shared/types/miniapp';
  *   4. Телефон с подписанной строкой — пишет вход в лог устройств (`POST /api/miniapp/device`)
  *      на каждом открытии. Основной код этого запроса не повторяет. На старом движке ответ
  *      несёт офисы; не ответил или офисов нет — экран без них, повторного запроса нет.
+ *   5. Ссылки наружу — «Открыть Google Play» и «Открыть в Яндекс Картах» — открываются через
+ *      `Telegram.WebApp.openLink`, во внешнем браузере. Переход внутри окна Mini App не годится:
+ *      Google Play перебрасывает на `market://`, и Telegram показывает
+ *      `net::ERR_UNKNOWN_URL_SCHEME` (прогон на стенде 26-09-2026, Android 11, WebView 87).
+ *      Без `openLink` — `window.open`, а не открылось и оно — остаётся `href` самой ссылки.
  *
  * Разметка и CSS — из макетов `_reference/design/registration/state-old-browser-*.html` как
  * есть: CSS нарочно старый (без flex gap, `inset`, `dvh`, `@layer`, `oklch`), и переписывать
@@ -290,7 +295,46 @@ export const OLD_ENGINE_GUARD_SCRIPT = `(function () {
     help.className = 'help';
     help.innerHTML = html;
     screenRoot.insertBefore(help, screenRoot.querySelector('.foot'));
+    bindExternalLinks(help);
     applyLanguage();
+  }
+
+  function preventDefault(event) {
+    if (event && typeof event.preventDefault === 'function') {
+      event.preventDefault();
+    }
+  }
+
+  function onExternalLinkClick(event) {
+    var url = this.getAttribute('href');
+
+    if (webApp && typeof webApp.openLink === 'function') {
+      try {
+        webApp.openLink(url);
+        preventDefault(event);
+
+        return false;
+      } catch (error) {
+        // Клиент отказал — дальше window.open.
+      }
+    }
+
+    if (window.open(url, '_blank')) {
+      preventDefault(event);
+
+      return false;
+    }
+
+    return true;
+  }
+
+  function bindExternalLinks(root) {
+    var links = root.querySelectorAll('a.send, a.map');
+    var index;
+
+    for (index = 0; index < links.length; index++) {
+      links[index].onclick = onExternalLinkClick;
+    }
   }
 
   function onLanguageClick() {
@@ -326,6 +370,7 @@ export const OLD_ENGINE_GUARD_SCRIPT = `(function () {
     for (index = 0; index < buttons.length; index++) {
       buttons[index].onclick = onLanguageClick;
     }
+    bindExternalLinks(screenRoot);
     applyLanguage();
 
     if (pendingOffices !== null) {
