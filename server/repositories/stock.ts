@@ -250,6 +250,56 @@ export const listOfficeShowcase = async (
      ORDER BY product."name"
   `;
 
+export type CatalogProductRow = {
+  productId: string;
+  name: string;
+  description: string | null;
+  photoPath: string | null;
+  /** Есть всегда: товар без цены в каталог не попадает. */
+  pricePoints: number;
+  updatedAt: Date;
+  /** Работающий офис, где товар есть. */
+  officeId: string;
+  /** Свободный остаток этого офиса. */
+  available: number;
+};
+
+/**
+ * Общий каталог без офиса: товары, которые можно взять хотя бы в одном работающем офисе,
+ * строкой на пару «товар — офис» (issue #234).
+ *
+ * Условия товара — те же, что у `listOfficeShowcase`, условия остатка — те же, что
+ * у `listLatestProducts`: каталог не обещает того, чего нет ни на одной витрине. Строкой
+ * на пару, а не товаром с массивом офисов: шторка «Где заберёте?» показывает офисы товара
+ * с остатком каждого, и собрать их проще в сервисе, чем агрегатом в SQL.
+ *
+ * Порядок — по `name` товара, как у витрины офиса; порядок офисов внутри товара ставит
+ * сервис — порядком списка офисов.
+ */
+export const listCatalogProducts = async (
+  client: Prisma.TransactionClient = db,
+): Promise<CatalogProductRow[]> =>
+  client.$queryRaw<CatalogProductRow[]>`
+    SELECT product."id"           AS "productId",
+           product."name",
+           product."description",
+           product."photo_path"   AS "photoPath",
+           product."price_points" AS "pricePoints",
+           product."updated_at"   AS "updatedAt",
+           stock."office_id"      AS "officeId",
+           stock."on_hand"        AS "available"
+      FROM xb.office_stock AS stock
+      JOIN xb.products AS product ON product."id" = stock."product_id"
+      JOIN xb.offices AS office ON office."id" = stock."office_id"
+     WHERE stock."on_hand" > 0
+       AND office."archived_at" IS NULL
+       AND product."published_at" IS NOT NULL
+       AND product."archived_at" IS NULL
+       AND NOT product."hidden_in_catalog"
+       AND product."price_points" IS NOT NULL
+     ORDER BY product."name", product."id"
+  `;
+
 export type LatestProductRow = {
   productId: string;
   name: string;

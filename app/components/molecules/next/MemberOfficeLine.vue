@@ -11,13 +11,16 @@
  * Строчная, как `.office` в макете: высоту строки задаёт блок, в котором она стоит. Над витриной
  * это блок кеглем 16 (`.where > div`) — строка 22, в подтверждении блок кеглем 15 (`.office`) —
  * строка 21. Свой кегль 15 на блоке давал бы 21 везде, и витрина поднималась бы на 1 px.
+ *
+ * Без имени — каталог без офиса (`catalog-no-office.html`): «Офис · » и ссылка действия,
+ * «Выбрать» (issue #234). Офис есть, и он ещё не выбран.
  */
 defineProps<{
   /** Подпись перед именем: «Офис». */
   label: string;
-  /** Имя офиса из базы: «Кадышева». */
-  name: string;
-  /** Подпись ссылки смены офиса. Нет — ссылки нет. */
+  /** Имя офиса из базы: «Кадышева». Нет — офис не выбран, и после «Офис · » стоит только ссылка. */
+  name?: string;
+  /** Подпись ссылки действия: «Сменить», «Выбрать». Нет — ссылки нет. */
   changeLabel?: string;
 }>();
 
@@ -26,7 +29,8 @@ defineEmits<{ change: [] }>();
 
 <template>
   <span class="font-manrope leading-[normal]">
-    <span class="text-[15px] font-normal text-xb-light">{{ label }} · <b class="font-bold text-xb-text">{{ name }}</b></span>
+    <!-- Без имени пробела после точки нет: до ссылки отступ ставит она сама, как `.change` в макете -->
+    <span class="text-[15px] font-normal text-xb-light">{{ name ? `${label} · ` : `${label} ·` }}<b v-if="name" class="font-bold text-xb-text">{{ name }}</b></span>
     <button
       v-if="changeLabel"
       type="button"

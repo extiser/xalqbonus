@@ -19,6 +19,11 @@ import type { MemberProductView } from '~/types/memberView';
  * плитки, чтобы в ряду с названиями разной длины кнопки стояли на одной линии. `home` —
  * в блоке на главной: офис там не выбран, поэтому ни остатка, ни счётчика — вся плитка
  * нажимается и ведёт в каталог.
+ *
+ * Товар, которого нет в офисе витрины (`product.missing`), — `catalog-office-picked.html`,
+ * `.tile.out`: фото серое, фото и строка цены с названием гаснут до 38 %, цена внутри неё —
+ * ещё раз, как в макете; вместо счётчика — пунктирная плашка «Нет в Кадышева». Пилюли остатка
+ * нет, плитка не нажимается (issue #234).
  */
 type TileMode = 'showcase' | 'home';
 
@@ -48,6 +53,8 @@ const name = computed(() =>
 );
 
 const count = computed(() => props.product.count ?? 0);
+
+const missing = computed(() => props.product.missing !== undefined);
 </script>
 
 <template>
@@ -62,8 +69,14 @@ const count = computed(() => props.product.count ?? 0);
          (прогон PR #231). В квадрате только абсолютная картинка, и ширину ему даёт растяжение
          родителя; движок, не растягивающий содержимое кнопки, оставил бы его без размера.
          В WebKit 26.6 поломка не воспроизвелась — это страховка, а не найденная причина -->
-    <div class="relative aspect-[9/10] w-full overflow-hidden rounded-[24px] bg-xb-photo">
-      <img v-if="product.image" :src="product.image" alt="" class="absolute left-[8%] top-[13%] block h-[80%] w-[84%] object-contain mix-blend-multiply" />
+    <div class="relative aspect-[9/10] w-full overflow-hidden rounded-[24px] bg-xb-photo" :class="missing ? 'opacity-38' : ''">
+      <img
+        v-if="product.image"
+        :src="product.image"
+        alt=""
+        class="absolute left-[8%] top-[13%] block h-[80%] w-[84%] object-contain mix-blend-multiply"
+        :class="missing ? 'grayscale' : ''"
+      />
       <div class="member-product-tile-pills absolute flex justify-between">
         <AtomsNextMemberTilePill v-if="product.discount" kind="sale" :label="product.discount" :word="texts.sale" />
         <span v-else />
@@ -72,8 +85,8 @@ const count = computed(() => props.product.count ?? 0);
       </div>
     </div>
 
-    <div class="flex flex-col gap-1 px-1">
-      <div class="flex items-baseline gap-2">
+    <div class="flex flex-col gap-1 px-1" :class="missing ? 'opacity-38' : ''">
+      <div class="flex items-baseline gap-2" :class="missing ? 'opacity-38' : ''">
         <span class="flex items-center gap-[3px] text-[20px] font-extrabold leading-[1.1] tracking-[-0.3px] tabular-nums">
           <span class="relative top-[2px] flex text-xb-garnet"><AtomsNextMemberPointsIcon :size="15" /></span>
           {{ product.price }}
@@ -83,7 +96,14 @@ const count = computed(() => props.product.count ?? 0);
       <div class="line-clamp-3 min-w-0 text-[14px] font-medium leading-[1.3] [overflow-wrap:anywhere]">{{ name }}</div>
     </div>
 
-    <div v-if="mode === 'showcase' && texts.stepper" class="mt-auto">
+    <div
+      v-if="mode === 'showcase' && product.missing"
+      class="mt-auto box-border flex h-11 items-center justify-center rounded-full border border-dashed border-white/14 text-[13px] font-medium text-xb-grey"
+    >
+      {{ product.missing }}
+    </div>
+
+    <div v-else-if="mode === 'showcase' && texts.stepper" class="mt-auto">
       <AtomsNextMemberQtyStepper
         size="tile"
         :count="count"

@@ -68,7 +68,11 @@ export const DESIGN_GROUPS: DesignGroup[] = [
   {
     title: 'Каталог',
     screens: [
-      { slug: 'catalog-first', title: 'Первый вход — шторка выбора офиса', source: 'catalog/catalog-office-sheet-first.html' },
+      { slug: 'catalog-no-office', title: 'Каталог без офиса', source: 'catalog/catalog-no-office.html' },
+      { slug: 'catalog-pick-office', title: 'Шторка «Где заберёте?» — офисы товара с остатком', source: 'catalog/catalog-pick-office.html' },
+      { slug: 'catalog-pick-office-sold-out', title: 'Шторка «Где заберёте?» — товар закончился', source: 'catalog/catalog-pick-office-sold-out.html' },
+      { slug: 'catalog-office-picked', title: 'Витрина выбранного офиса — приглушённые и подсказка', source: 'catalog/catalog-office-picked.html' },
+      { slug: 'catalog-exit', title: 'Шторка «Выйти из каталога?»', source: 'catalog/catalog-exit-sheet.html' },
       { slug: 'catalog', title: 'Витрина офиса', source: 'catalog/catalog-showcase.html' },
       { slug: 'catalog-nothing', title: 'Витрина 1: ничего не выбрано', source: 'catalog/catalog-showcase-states.html' },
       { slug: 'catalog-over-balance', title: 'Витрина 2: сумма больше баланса', source: 'catalog/catalog-showcase-states.html' },

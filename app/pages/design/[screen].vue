@@ -47,10 +47,17 @@ import {
   rewardsGiftsMock,
   CATALOG_CURRENT_OFFICE,
   CATALOG_ORDER_DENIED,
+  CATALOG_PICK_PRODUCT,
   catalogConfirmMock,
+  catalogExitSheetTexts,
   catalogInitialCart,
+  catalogNoOfficeMock,
   catalogOfficeSheetMock,
+  catalogPickedConfirmMock,
+  catalogPickedMock,
+  catalogPickSheetMock,
   catalogShowcaseMock,
+  catalogSoldOutSheetMock,
   loadFailedMock,
   notTelegramMock,
   outdatedTelegramMock,
@@ -169,7 +176,6 @@ const reward = computed(() =>
  */
 const catalogScene = ref(
   pick<CatalogScene>({
-    'catalog-first': 'first',
     catalog: 'showcase',
     'catalog-nothing': 'nothing',
     'catalog-over-balance': 'overBalance',
@@ -183,11 +189,10 @@ const catalogScene = ref(
     'catalog-confirm-denied': 'showcase',
   }),
 );
-const catalogOfficeId = ref<string | null>(slug.value === 'catalog-first' ? null : CATALOG_CURRENT_OFFICE);
+const catalogOfficeId = ref<string>(CATALOG_CURRENT_OFFICE);
 const catalogCart = ref<CatalogCart>(catalogScene.value ? catalogInitialCart(catalogScene.value) : {});
 const catalogSheet = ref<'none' | 'office' | 'confirm'>(
   pick<'office' | 'confirm'>({
-    'catalog-first': 'office',
     'catalog-office': 'office',
     'catalog-office-other': 'office',
     'catalog-confirm': 'confirm',
@@ -195,16 +200,16 @@ const catalogSheet = ref<'none' | 'office' | 'confirm'>(
     'catalog-confirm-denied': 'confirm',
   }) ?? 'none',
 );
-/** Отметка в шторке офиса: при первом входе её нет, на `catalog-office-other` отмечен Сергели. */
+/** Отметка в шторке офиса: на текущем офисе, на `catalog-office-other` — Сергели. */
 const catalogSelected = ref<string | null>(slug.value === 'catalog-office-other' ? 'sergeli' : catalogOfficeId.value);
 const catalogPlacing = ref(slug.value === 'catalog-confirm-placing');
 const catalogDenied = slug.value === 'catalog-confirm-denied' ? CATALOG_ORDER_DENIED : undefined;
 
 const catalogShowcase = computed(() =>
-  catalogScene.value ? catalogShowcaseMock(catalogScene.value, catalogCart.value, catalogOfficeId.value ?? CATALOG_CURRENT_OFFICE) : undefined,
+  catalogScene.value ? catalogShowcaseMock(catalogScene.value, catalogCart.value, catalogOfficeId.value) : undefined,
 );
 const catalogConfirm = computed(() =>
-  catalogScene.value ? catalogConfirmMock(catalogScene.value, catalogCart.value, catalogOfficeId.value ?? CATALOG_CURRENT_OFFICE) : undefined,
+  catalogScene.value ? catalogConfirmMock(catalogScene.value, catalogCart.value, catalogOfficeId.value) : undefined,
 );
 const catalogCartFilled = computed(() => Object.keys(catalogCart.value).length > 0);
 
@@ -227,28 +232,135 @@ function openCatalogOffices(): void {
   catalogSheet.value = 'office';
 }
 
-/** Другой офис — корзина очищается: в другом офисе свой набор. После первого входа — витрина. */
+/** Другой офис — корзина очищается: в другом офисе свой набор. */
 function saveCatalogOffice(officeId: string): void {
   if (officeId !== catalogOfficeId.value) {
     catalogCart.value = {};
-  }
-
-  if (catalogScene.value === 'first') {
-    catalogScene.value = 'showcase';
   }
 
   catalogOfficeId.value = officeId;
   catalogSheet.value = 'none';
 }
 
-/** «Отменить» при первом входе уводит из каталога: без офиса витрины нет. */
-function cancelCatalogOffice(): void {
-  if (catalogOfficeId.value === null) {
-    go('home');
+/**
+ * Каталог без офиса на входе (T70, issue #234): каталог без офиса, шторка «Где заберёте?» с первого
+ * «+» и со ссылки «Выбрать», витрина выбранного офиса с приглушёнными и подсказкой, шторка выхода.
+ * Путь работает целиком: «+» спрашивает офис, «Добавить в корзину» закрепляет его, «Назад» с корзиной
+ * спрашивает, уходить ли.
+ */
+type NoOfficeSetup = {
+  officeId: string | null;
+  sheet: 'none' | 'office' | 'exit';
+  officeView: 'add' | 'soldOut' | 'pick' | 'change';
+  cart: CatalogCart;
+  hint: boolean;
+};
+
+const noOffice = pick<NoOfficeSetup>({
+  'catalog-no-office': { officeId: null, sheet: 'none', officeView: 'add', cart: {}, hint: false },
+  'catalog-pick-office': { officeId: null, sheet: 'office', officeView: 'add', cart: {}, hint: false },
+  'catalog-pick-office-sold-out': { officeId: null, sheet: 'office', officeView: 'soldOut', cart: {}, hint: false },
+  'catalog-office-picked': { officeId: CATALOG_CURRENT_OFFICE, sheet: 'none', officeView: 'change', cart: { checker: 1 }, hint: true },
+  'catalog-exit': { officeId: CATALOG_CURRENT_OFFICE, sheet: 'exit', officeView: 'change', cart: { checker: 1 }, hint: false },
+});
+
+const noOfficeId = ref<string | null>(noOffice?.officeId ?? null);
+const noOfficeSheet = ref<'none' | 'office' | 'confirm' | 'exit'>(noOffice?.sheet ?? 'none');
+const noOfficeView = ref<NoOfficeSetup['officeView']>(noOffice?.officeView ?? 'add');
+const noOfficeCart = ref<CatalogCart>({ ...(noOffice?.cart ?? {}) });
+const noOfficeHint = ref(noOffice?.hint ?? false);
+const noOfficeProduct = ref<string>(CATALOG_PICK_PRODUCT);
+const noOfficeSelected = ref<string | null>(null);
+
+const noOfficeScreen = computed(() => {
+  if (!noOffice) {
+    return undefined;
+  }
+
+  return noOfficeId.value === null ? catalogNoOfficeMock() : catalogPickedMock(noOfficeId.value, noOfficeCart.value, noOfficeHint.value);
+});
+
+const noOfficeSheetView = computed(() => {
+  switch (noOfficeView.value) {
+    case 'add':
+      return catalogPickSheetMock(noOfficeProduct.value);
+    case 'soldOut':
+      return catalogSoldOutSheetMock;
+    case 'pick':
+      return catalogPickSheetMock(null);
+    case 'change':
+      return {
+        ...catalogOfficeSheetMock,
+        current: noOfficeId.value,
+        cartFilled: Object.keys(noOfficeCart.value).length > 0,
+      };
+  }
+});
+
+const noOfficeConfirm = computed(() =>
+  noOfficeId.value === null ? undefined : catalogPickedConfirmMock(noOfficeId.value, noOfficeCart.value),
+);
+
+/** «+» без офиса открывает шторку «Где заберёте?», с офисом — прибавляет в пределах остатка. */
+function changeNoOfficeCount(productId: string, delta: number): void {
+  if (noOfficeId.value === null) {
+    if (delta > 0) {
+      noOfficeProduct.value = productId;
+      noOfficeView.value = 'add';
+      noOfficeSelected.value = null;
+      noOfficeSheet.value = 'office';
+    }
+
     return;
   }
 
-  catalogSheet.value = 'none';
+  const screenView = noOfficeScreen.value;
+  const available = screenView?.products.find((product) => product.id === productId)?.available ?? 0;
+  const count = Math.min((noOfficeCart.value[productId] ?? 0) + delta, available);
+  const { [productId]: _removed, ...rest } = noOfficeCart.value;
+
+  noOfficeCart.value = count > 0 ? { ...rest, [productId]: count } : rest;
+
+  if (noOfficeSheet.value === 'confirm' && Object.keys(noOfficeCart.value).length === 0) {
+    noOfficeSheet.value = 'none';
+  }
+}
+
+/** Ссылка в строке офиса: «Выбрать» — все офисы, «Сменить» — шторка смены. */
+function openNoOfficeLine(): void {
+  noOfficeView.value = noOfficeId.value === null ? 'pick' : 'change';
+  noOfficeSelected.value = noOfficeId.value;
+  noOfficeHint.value = false;
+  noOfficeSheet.value = 'office';
+}
+
+function saveNoOfficeSheet(officeId: string): void {
+  const view = noOfficeView.value;
+
+  if (view === 'add' || view === 'soldOut') {
+    noOfficeCart.value = { [noOfficeProduct.value]: 1 };
+    noOfficeHint.value = true;
+  } else if (view === 'pick') {
+    noOfficeCart.value = {};
+    noOfficeHint.value = true;
+  } else if (officeId !== noOfficeId.value) {
+    noOfficeCart.value = {};
+  }
+
+  noOfficeId.value = officeId;
+  noOfficeSheet.value = 'none';
+}
+
+/** «Назад» с корзиной — шторка выхода, без неё — главная. */
+function leaveNoOffice(): void {
+  if (Object.keys(noOfficeCart.value).length > 0) {
+    noOfficeHint.value = false;
+    noOfficeSheet.value = 'exit';
+
+    return;
+  }
+
+  go('home');
 }
 
 /** Заказ оформляется столько же, сколько проверяется номер, и открывается экран заказа. */
@@ -535,8 +647,8 @@ function go(target: string): void {
           @gift="openGiftSheet"
           @rewards="go('gifts-rewards')"
           @reward="go('gifts-rewards')"
-          @catalog="go('catalog-first')"
-          @product="go('catalog-first')"
+          @catalog="go('catalog-no-office')"
+          @product="go('catalog-no-office')"
           @history="go('history')"
           @orders="go('orders')"
           @order="openOrder"
@@ -574,8 +686,8 @@ function go(target: string): void {
       <OrganismsNextMemberHome
         v-else-if="home"
         v-bind="home"
-        @catalog="go('catalog-first')"
-        @product="go('catalog-first')"
+        @catalog="go('catalog-no-office')"
+        @product="go('catalog-no-office')"
         @history="go('history')"
         @rewards="go('rewards')"
         @reward="go('rewards')"
@@ -606,6 +718,42 @@ function go(target: string): void {
 
       <OrganismsNextMemberRewardScreen v-else-if="reward" v-bind="reward" @back="go('rewards')" />
 
+      <template v-else-if="noOfficeScreen">
+        <OrganismsNextMemberShowcaseScreen
+          v-bind="noOfficeScreen"
+          @back="leaveNoOffice"
+          @change="openNoOfficeLine"
+          @inc="(productId) => changeNoOfficeCount(productId, 1)"
+          @dec="(productId) => changeNoOfficeCount(productId, -1)"
+          @checkout="noOfficeSheet = 'confirm'"
+          @hint-close="noOfficeHint = false"
+        />
+        <OrganismsNextMemberOfficeSheet
+          :open="noOfficeSheet === 'office'"
+          v-bind="noOfficeSheetView"
+          :selected="noOfficeSelected"
+          @select="(officeId) => (noOfficeSelected = officeId)"
+          @save="saveNoOfficeSheet"
+          @cancel="noOfficeSheet = 'none'"
+        />
+        <OrganismsNextMemberConfirmSheet
+          v-if="noOfficeConfirm"
+          :open="noOfficeSheet === 'confirm'"
+          v-bind="noOfficeConfirm"
+          :busy="catalogPlacing"
+          @inc="(lineId) => changeNoOfficeCount(lineId, 1)"
+          @dec="(lineId) => changeNoOfficeCount(lineId, -1)"
+          @place="placeCatalogOrder"
+          @cancel="noOfficeSheet = 'none'"
+        />
+        <OrganismsNextMemberCatalogExitSheet
+          :open="noOfficeSheet === 'exit'"
+          :texts="catalogExitSheetTexts"
+          @stay="noOfficeSheet = 'none'"
+          @exit="go('home')"
+        />
+      </template>
+
       <template v-else-if="catalogShowcase && catalogConfirm">
         <OrganismsNextMemberShowcaseScreen
           v-bind="catalogShowcase"
@@ -623,7 +771,7 @@ function go(target: string): void {
           :cart-filled="catalogCartFilled"
           @select="(officeId) => (catalogSelected = officeId)"
           @save="saveCatalogOffice"
-          @cancel="cancelCatalogOffice"
+          @cancel="catalogSheet = 'none'"
         />
         <OrganismsNextMemberConfirmSheet
           :open="catalogSheet === 'confirm'"

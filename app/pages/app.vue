@@ -31,6 +31,7 @@ import type {
 } from '~/types/memberView';
 import {
   cartLinesView,
+  catalogProductsView,
   formatPoints,
   giftView,
   HOME_HISTORY_SIZE,
@@ -38,6 +39,7 @@ import {
   homeCatalogView,
   homeOrdersView,
   homeRewardsView,
+  missingProductsView,
   orderDetailView,
   ordersScreenView,
   rewardDetailView,
@@ -271,7 +273,7 @@ let initData = '';
 const memberHistory = useMemberHistory(() => initData);
 
 /**
- * Обмен баллов: товары главной, офисы, витрина, оформление и заказы. Запасной текст отказа —
+ * Обмен баллов: товары главной, общий каталог, витрина офиса, оформление и заказы. Запасной текст отказа —
  * из текстов экрана участника: к моменту первого запроса витрины они уже загружены.
  */
 const memberOrders = useMemberOrders(
@@ -470,23 +472,64 @@ const savingLanguage = ref(false);
 const resetting = ref(false);
 
 /**
- * Каталог: офис витрины, шторка офиса с отметкой и шторка подтверждения. Держит страница,
- * а не экран: уход из каталога сбрасывает всё вместе с корзиной — последний офис
- * не запоминается (`_reference/design/catalog/catalog.md`, «Путь водителя»).
+ * Каталог: офис витрины, открытая шторка, корзина и подсказка под строкой офиса. Держит страница,
+ * а не экран: уход из каталога сбрасывает всё вместе с корзиной — ни офис, ни корзина
+ * не запоминаются (`_reference/design/catalog/catalog-no-office.md`).
  *
- * Офиса нет — первый вход: витрина с заглушками и шторка выбора поверх. Двух шторок сразу
- * не бывает: обе модальные, и открыть одну можно только с витрины.
+ * Офиса нет — каталог без офиса: все товары, которые есть хотя бы в одном офисе. Офис
+ * закрепляется первым «+» через шторку «Где заберёте?» или ссылкой «Выбрать» (issue #234).
+ *
+ * Шторка одна на всё: двух сразу не бывает, все модальные, и открыть любую можно только
+ * с витрины. Шторка офиса — в одном из трёх видов (`officeSheetMode`); вид держится и после
+ * закрытия, чтобы уезжающая шторка не меняла текст на ходу.
  */
+type CatalogSheet = 'none' | 'office' | 'confirm' | 'exit';
+
+/**
+ * Вид шторки офиса: `add` — первый «+», офисы нажатого товара с остатком; `pick` — «Выбрать»
+ * в строке офиса, все офисы; `change` — «Сменить», прежняя шторка смены офиса.
+ */
+type OfficeSheetMode = 'add' | 'pick' | 'change';
+
 const catalogOfficeId = ref<string | null>(null);
-const officeSheetOpen = ref(false);
+const catalogSheet = ref<CatalogSheet>('none');
+const officeSheetMode = ref<OfficeSheetMode>('change');
 const officeSheetSelected = ref<string | null>(null);
-const confirmSheetOpen = ref(false);
+
+/** Товар, «+» которого открыл шторку «Где заберёте?». */
+const addProductId = ref<string | null>(null);
+
+/** «Добавить в корзину» проверяет витрину офиса: кнопка ждёт, закрыть шторку нельзя. */
+const officeSheetBusy = ref(false);
+
+/**
+ * Строка над кнопками шторки: товар закончился или витрина не прочиталась. Держится до следующего
+ * нажатия «Добавить в корзину» или закрытия шторки.
+ */
+const officeSheetNotice = ref<string | null>(null);
+
+/** Товар с главной, к которому витрина прокручивается при первом показе каталога. */
+const catalogFocusProductId = ref<string | null>(null);
+
+/**
+ * Подсказка под строкой офиса — один раз за заход, после первого закрепления офиса.
+ * `hintUsed` — уже показана; `hintPending` — офис закреплён «Выбрать», и подсказка ждёт витрину.
+ */
+const hintShown = ref(false);
+const hintUsed = ref(false);
+const hintPending = ref(false);
 
 const resetCatalog = (): void => {
   catalogOfficeId.value = null;
-  officeSheetOpen.value = false;
+  catalogSheet.value = 'none';
   officeSheetSelected.value = null;
-  confirmSheetOpen.value = false;
+  addProductId.value = null;
+  officeSheetBusy.value = false;
+  officeSheetNotice.value = null;
+  catalogFocusProductId.value = null;
+  hintShown.value = false;
+  hintUsed.value = false;
+  hintPending.value = false;
   memberOrders.closeShowcase();
 };
 
@@ -644,29 +687,14 @@ watch(employeeCanGoBack, () => {
 });
 
 /**
- * Офисы каталога — один раз на вход: «Сменить» берёт тот же список. Шторка открывается, когда
- * список пришёл и в нём есть что выбрать; пока он в пути, не пришёл или пуст — это показывает
- * витрина под шторкой (решение Руслана 25-09-2026, issue #218).
+ * Вход в каталог — «Обменять баллы», «Весь каталог» и плитка главной: без офиса и без шторки.
+ * С плитки главной витрина прокручивается к её товару (issue #234).
  */
-const loadCatalogOffices = async (): Promise<void> => {
-  await memberOrders.loadOffices();
-
-  if (
-    currentScreen.value === 'catalog' &&
-    catalogOfficeId.value === null &&
-    memberOrders.officesState.value === 'ready' &&
-    memberOrders.offices.value.length > 0
-  ) {
-    officeSheetSelected.value = null;
-    officeSheetOpen.value = true;
-  }
-};
-
-/** Вход в каталог — «Обменять баллы», «Весь каталог» и любая плитка главной: всегда с выбора офиса. */
-const openCatalog = (): void => {
+const openCatalog = (productId?: string): void => {
   resetCatalog();
+  catalogFocusProductId.value = productId ?? null;
   openScreen('catalog');
-  void loadCatalogOffices();
+  void memberOrders.loadCatalog();
 };
 
 /**
@@ -710,56 +738,212 @@ const openReward = (rewardId: string): void => {
   openScreen('reward');
 };
 
-/** «Сменить» на строке офиса: та же шторка, отметка — на текущем офисе. */
-const openOfficeSheet = (): void => {
-  officeSheetSelected.value = catalogOfficeId.value;
-  officeSheetOpen.value = true;
-};
-
-/**
- * «Сохранить» в шторке офиса. Шторка гасит кнопку на текущем офисе, поэтому сюда приходит
- * только другой: корзина очищается, витрина нового офиса загружается (`openShowcase`).
- */
-const saveCatalogOffice = (officeId: string): void => {
-  officeSheetOpen.value = false;
-
-  if (officeId === catalogOfficeId.value) {
+/** Подсказка под строкой офиса — если за этот заход её ещё не было. */
+const showHint = (): void => {
+  if (hintUsed.value) {
     return;
   }
 
+  hintUsed.value = true;
+  hintShown.value = true;
+};
+
+/** Открывает шторку офиса в нужном виде — с чистой строкой над кнопками. */
+const openOfficeSheet = (mode: OfficeSheetMode, selected: string | null): void => {
+  officeSheetMode.value = mode;
+  officeSheetSelected.value = selected;
+  officeSheetNotice.value = null;
+  hintShown.value = false;
+  catalogSheet.value = 'office';
+};
+
+/** Ссылка в строке офиса: без офиса — «Выбрать» со всеми офисами, с офисом — «Сменить». */
+const onOfficeLine = (): void => {
+  if (catalogOfficeId.value === null) {
+    openOfficeSheet('pick', null);
+  } else {
+    openOfficeSheet('change', catalogOfficeId.value);
+  }
+};
+
+/** Закрепляет офис и грузит его витрину с пустой корзиной (`openShowcase`). */
+const pinOffice = (officeId: string): void => {
   catalogOfficeId.value = officeId;
   void memberOrders.openShowcase(officeId);
 };
 
-/** «Отменить» и Escape. На первом входе — уход из каталога: витрины без офиса нет. */
-const cancelOfficeSheet = (): void => {
-  officeSheetOpen.value = false;
+/**
+ * «Добавить в корзину» в шторке «Где заберёте?». Витрина отмеченного офиса сначала читается
+ * и не ставится, пока не проверена: товар мог закончиться, пока водитель выбирал.
+ *
+ * Товар есть — офис закреплён, товар в корзине, шторка закрывается, всплывает подсказка. Товара
+ * нет — шторка остаётся: каталог перечитывается тихо, список — офисы товара из свежего ответа,
+ * отметка снята, над кнопками — где закончился. Витрина не прочиталась — шторка и отметка
+ * остаются, над кнопками текст отказа, нажать можно снова.
+ */
+const addToCart = async (officeId: string): Promise<void> => {
+  const productId = addProductId.value;
+  const current = member.value;
 
-  if (catalogOfficeId.value === null) {
-    goBack();
+  if (officeSheetBusy.value || !productId || !current) {
+    return;
+  }
+
+  officeSheetBusy.value = true;
+  officeSheetNotice.value = null;
+
+  try {
+    const result = await memberOrders.readShowcase(officeId);
+
+    if ('error' in result) {
+      officeSheetNotice.value = result.error ?? current.orderTexts.showcaseFailed;
+
+      return;
+    }
+
+    const { showcase } = result;
+
+    if (showcase.products.some((product) => product.productId === productId)) {
+      catalogOfficeId.value = officeId;
+      memberOrders.applyShowcase(showcase);
+      memberOrders.setQuantity(productId, 1);
+      catalogSheet.value = 'none';
+      showHint();
+
+      return;
+    }
+
+    await memberOrders.reloadCatalog();
+
+    const inCatalog = memberOrders.catalog.value?.products.some((product) => product.productId === productId) ?? false;
+
+    officeSheetSelected.value = null;
+    officeSheetNotice.value = inCatalog
+      ? current.orderTexts.productSoldOutInOffice.replaceAll('{office}', showcase.office.name)
+      : current.orderTexts.productSoldOut;
+  } finally {
+    officeSheetBusy.value = false;
   }
 };
 
 /**
- * «Повторить» на витрине: до выбора офиса не прочитались офисы — перечитываются они и открывают
- * шторку; после — не прочиталась витрина, и повторяется тот же офис.
+ * Кнопка сохранения шторки офиса — по её виду. «Выбрать» закрепляет офис с пустой корзиной,
+ * подсказка ждёт витрину. «Сохранить» приходит только с другим офисом (шторка гасит кнопку
+ * на текущем): корзина очищается, витрина нового офиса грузится, подсказки нет.
+ */
+const saveOfficeSheet = (officeId: string): void => {
+  if (officeSheetMode.value === 'add') {
+    void addToCart(officeId);
+
+    return;
+  }
+
+  catalogSheet.value = 'none';
+
+  if (officeSheetMode.value === 'pick') {
+    hintPending.value = true;
+    pinOffice(officeId);
+
+    return;
+  }
+
+  if (officeId !== catalogOfficeId.value) {
+    hintPending.value = false;
+    pinOffice(officeId);
+  }
+};
+
+/** «Отменить» и Escape: ничего не выбрано, ничего не добавлено. Пока офис проверяется, шторка стоит. */
+const cancelOfficeSheet = (): void => {
+  if (officeSheetBusy.value) {
+    return;
+  }
+
+  catalogSheet.value = 'none';
+  officeSheetNotice.value = null;
+};
+
+// Витрина офиса, закреплённого «Выбрать», пришла — с товарами или пустой: время подсказки.
+watch(memberOrders.showcaseState, (state) => {
+  if (state === 'ready' && hintPending.value) {
+    hintPending.value = false;
+    showHint();
+  }
+});
+
+/**
+ * «Повторить» на витрине: без офиса не прочитался каталог — перечитывается он; с офисом —
+ * не прочиталась витрина, и повторяется тот же офис.
  */
 const retryCatalog = (): void => {
   if (catalogOfficeId.value === null) {
-    void loadCatalogOffices();
+    void memberOrders.loadCatalog();
   } else {
     void memberOrders.openShowcase(catalogOfficeId.value);
   }
 };
 
+/** «+» в каталоге без офиса не прибавляет, а спрашивает офис — шторкой «Где заберёте?». */
 const changeQuantity = (productId: string, step: number): void => {
+  if (catalogOfficeId.value === null) {
+    if (step > 0) {
+      addProductId.value = productId;
+      openOfficeSheet('add', null);
+    }
+
+    return;
+  }
+
   memberOrders.setQuantity(productId, (memberOrders.quantities.value[productId] ?? 0) + step);
 };
 
-// Баланс витрины свежее экрана участника: он прочитан только что. Шапка набирает к нему.
+/** Корзина не пуста — уход из каталога её сотрёт. */
+const catalogCartFilled = computed(() => memberOrders.cartLines.value.length > 0);
+
+/** «Назад» в шапке каталога: с корзиной — спросить шторкой, без неё — уйти сразу. */
+const leaveCatalog = (): void => {
+  if (catalogCartFilled.value) {
+    hintShown.value = false;
+    catalogSheet.value = 'exit';
+
+    return;
+  }
+
+  goBack();
+};
+
+/** «Выйти» в шторке выхода: уход тем же путём, корзина сбрасывается вместе с каталогом. */
+const exitCatalog = (): void => {
+  catalogSheet.value = 'none';
+  goBack();
+};
+
+/**
+ * Системный жест «назад» не перехватывается: `BackButton` Telegram в приложении не используется,
+ * `popstate` не слушается. Пока в каталоге лежит корзина, закрытие приложения жестом или свайпом
+ * спрашивает Telegram своим текстом. Корзина опустела, заказ оформлен, водитель ушёл — вопроса нет.
+ */
+watch(
+  () => stage.value === 'member' && currentScreen.value === 'catalog' && catalogCartFilled.value,
+  (guarded) => {
+    if (guarded) {
+      webApp?.enableClosingConfirmation?.();
+    } else {
+      webApp?.disableClosingConfirmation?.();
+    }
+  },
+);
+
+// Баланс каталога и витрины свежее экрана участника: он прочитан только что. Шапка набирает к нему.
 watch(memberOrders.showcase, (showcase) => {
   if (showcase && member.value) {
     member.value.balancePoints = showcase.balancePoints;
+  }
+});
+
+watch(memberOrders.catalog, (catalog) => {
+  if (catalog && member.value) {
+    member.value.balancePoints = catalog.balancePoints;
   }
 });
 
@@ -767,21 +951,21 @@ watch(memberOrders.showcase, (showcase) => {
 watch(
   () => memberOrders.cartLines.value.length,
   (count) => {
-    if (count === 0) {
-      confirmSheetOpen.value = false;
+    if (count === 0 && catalogSheet.value === 'confirm') {
+      catalogSheet.value = 'none';
     }
   },
 );
 
 const openConfirm = (): void => {
   memberOrders.resetPlaceError();
-  confirmSheetOpen.value = true;
+  catalogSheet.value = 'confirm';
 };
 
 /** «Отменить» и Escape. Пока заказ оформляется, шторка стоит: запрос уже ушёл. */
 const closeConfirmSheet = (): void => {
   if (!memberOrders.placing.value) {
-    confirmSheetOpen.value = false;
+    catalogSheet.value = 'none';
   }
 };
 
@@ -796,7 +980,7 @@ const placeOrder = async (): Promise<void> => {
     return;
   }
 
-  confirmSheetOpen.value = false;
+  catalogSheet.value = 'none';
   currentOrder.value = order;
   cancelSheetOpen.value = false;
   // Назад с экрана оформленного заказа — на главную, а не в витрину: корзина пуста,
@@ -924,14 +1108,18 @@ const homeView = computed(() => {
 });
 
 /**
- * Витрина каталога — свойствами `MemberShowcaseScreen`.
+ * Каталог — свойствами `MemberShowcaseScreen`.
  *
- * До выбора офиса витрина говорит за список офисов: грузится — заглушки `pick`, не прочитался —
- * ошибка с повтором, пуст — пустота. После выбора — за витрину, и пока она в пути, те же заглушки
- * без строки офиса и итога (решение Руслана 25-09-2026, issue #218).
+ * Без офиса экран говорит за общий каталог (issue #234): грузится — заглушки `pick`,
+ * не прочитался — ошибка с повтором, пуст — `catalog_empty`. Прочитан — «Офис · Выбрать»
+ * и все товары без остатка, итога нет. Строки офиса у пустого и у ошибки нет: выбирать не из чего.
  *
- * Строка офиса у ошибки — из списка офисов: ответа витрины нет, а водитель должен видеть, чья
- * витрина не открылась, и сменить офис строкой выше.
+ * С офисом — за витрину офиса, как было (issue #218): пока она в пути, те же заглушки без строки
+ * офиса и итога; прочиталась — её товары, за ними приглушённые товары каталога, которых в офисе
+ * нет, и итог. Пустая витрина — без приглушённых (решение Руслана 25-09-2026).
+ *
+ * Строка офиса у ошибки — из списка офисов каталога: ответа витрины нет, а водитель должен видеть,
+ * чья витрина не открылась, и сменить офис строкой выше.
  */
 const catalogScreen = computed(() => {
   const current = member.value;
@@ -942,14 +1130,15 @@ const catalogScreen = computed(() => {
 
   const { texts, orderTexts } = current;
   const officeId = catalogOfficeId.value;
+  const catalog = memberOrders.catalog.value;
   const showcase = memberOrders.showcase.value;
   const base = {
     balance: { label: texts.balanceTitle, amount: balanceAmount.value },
     products: [],
+    focusProductId: catalogFocusProductId.value ?? undefined,
     texts: {
       title: orderTexts.catalogTitle,
       back: texts.back,
-      change: orderTexts.officeChange,
       sale: orderTexts.sale,
       decrease: orderTexts.decrease,
       increase: orderTexts.increase,
@@ -964,17 +1153,26 @@ const catalogScreen = computed(() => {
   };
 
   if (officeId === null) {
-    const officesState = memberOrders.officesState.value;
+    const catalogState = memberOrders.catalogState.value;
 
-    if (officesState === 'error') {
-      return { ...base, state: 'error' as const, texts: { ...base.texts, error: orderTexts.officesFailed } };
+    if (catalogState === 'error') {
+      return { ...base, state: 'error' as const };
     }
 
-    if (officesState === 'ready' && memberOrders.offices.value.length === 0) {
-      return { ...base, state: 'empty' as const, texts: { ...base.texts, empty: orderTexts.officesEmpty } };
+    if (catalogState === 'loading' || !catalog) {
+      return { ...base, state: 'pick' as const };
     }
 
-    return { ...base, state: 'pick' as const };
+    if (catalog.products.length === 0) {
+      return { ...base, state: 'empty' as const, texts: { ...base.texts, empty: orderTexts.catalogEmpty } };
+    }
+
+    return {
+      ...base,
+      state: 'ready' as const,
+      office: { label: texts.officeLabel, action: orderTexts.officePick },
+      products: catalogProductsView(catalog.products),
+    };
   }
 
   const showcaseState = memberOrders.showcaseState.value;
@@ -984,33 +1182,42 @@ const catalogScreen = computed(() => {
   }
 
   if (showcaseState === 'error' || !showcase) {
-    const office = memberOrders.offices.value.find((entry) => entry.officeId === officeId);
+    const office = catalog?.offices.find((entry) => entry.officeId === officeId);
 
     return {
       ...base,
       state: 'error' as const,
-      office: office ? { label: texts.officeLabel, name: office.name } : undefined,
+      office: office ? { label: texts.officeLabel, name: office.name, action: orderTexts.officeChange } : undefined,
       // Отказ сервера — своими словами: архивный офис говорит, что здесь ничего не взять.
       texts: { ...base.texts, error: memberOrders.showcaseError.value ?? orderTexts.showcaseFailed },
     };
   }
 
-  const office = { label: texts.officeLabel, name: showcase.office.name };
+  const office = { label: texts.officeLabel, name: showcase.office.name, action: orderTexts.officeChange };
+  const hint = hintUsed.value
+    ? { shown: hintShown.value, text: orderTexts.officeHint, office: showcase.office.name, closeLabel: orderTexts.officeHintClose }
+    : undefined;
 
   if (showcase.products.length === 0) {
-    return { ...base, state: 'empty' as const, office };
+    return { ...base, state: 'empty' as const, office, hint };
   }
 
   return {
     ...base,
     state: 'ready' as const,
     office,
+    hint,
     products: showcaseProductsView(showcase.products, memberOrders.quantities.value, orderTexts),
+    missingProducts: missingProductsView(showcase.missingProducts, showcase.office.name, orderTexts),
     checkout: showcaseCheckoutView(memberOrders.cartTotal.value, showcase.balancePoints, orderTexts),
   };
 });
 
-/** Шторка «Где заберёте товары?»: офисы из списка входа, отметку держит страница. */
+/**
+ * Шторка офиса в трёх видах (`officeSheetMode`). Офисы — из ответа каталога: у «Где заберёте?»
+ * с первого «+» — только офисы нажатого товара, с его остатком, у «Выбрать» и «Сменить» — все,
+ * без остатков.
+ */
 const officeSheet = computed(() => {
   const current = member.value;
 
@@ -1018,26 +1225,61 @@ const officeSheet = computed(() => {
     return null;
   }
 
-  const offices: MemberCatalogOfficeView[] = memberOrders.offices.value.map((office) => ({
-    id: office.officeId,
-    name: office.name,
-    address: office.address,
-  }));
+  const { texts, orderTexts } = current;
+  const catalog = memberOrders.catalog.value;
+  const allOffices = catalog?.offices ?? [];
+  const mode = officeSheetMode.value;
+  let offices: MemberCatalogOfficeView[];
+
+  if (mode === 'add') {
+    // Товара нет в свежем каталоге — закончился везде: список пуст, остаётся «Отменить».
+    const product = catalog?.products.find((entry) => entry.productId === addProductId.value);
+
+    offices = (product?.offices ?? []).flatMap((stock) => {
+      const office = allOffices.find((entry) => entry.officeId === stock.officeId);
+
+      return office
+        ? [
+            {
+              id: office.officeId,
+              name: office.name,
+              address: office.address,
+              stock: orderTexts.stockPieces.replaceAll('{count}', String(stock.available)),
+            },
+          ]
+        : [];
+    });
+  } else {
+    offices = allOffices.map((office) => ({ id: office.officeId, name: office.name, address: office.address }));
+  }
+
+  const change = mode === 'change';
 
   return {
     offices,
-    current: catalogOfficeId.value,
+    current: change ? catalogOfficeId.value : null,
     selected: officeSheetSelected.value,
-    cartFilled: memberOrders.cartLines.value.length > 0,
+    cartFilled: change && catalogCartFilled.value,
+    busy: officeSheetBusy.value,
+    notice: officeSheetNotice.value ?? undefined,
     texts: {
-      title: current.orderTexts.officeSheetTitle,
-      subtitle: current.orderTexts.officeSheetSubtitle,
-      office: current.texts.officeLabel,
-      warning: current.orderTexts.officeChangeWarning,
-      save: current.orderTexts.save,
-      cancel: current.orderTexts.cancel,
+      title: change ? orderTexts.officeSheetTitle : orderTexts.officePickTitle,
+      subtitle: change ? orderTexts.officeSheetSubtitle : orderTexts.officePickSubtitle,
+      office: texts.officeLabel,
+      warning: orderTexts.officeChangeWarning,
+      save: mode === 'add' ? orderTexts.addToCart : mode === 'pick' ? orderTexts.officePick : orderTexts.save,
+      cancel: orderTexts.cancel,
     },
   };
+});
+
+/** Шторка «Выйти из каталога?». */
+const exitSheetTexts = computed(() => {
+  const orderTexts = member.value?.orderTexts;
+
+  return orderTexts
+    ? { title: orderTexts.catalogExitTitle, hint: orderTexts.catalogExitHint, stay: orderTexts.stay, exit: orderTexts.exit }
+    : null;
 });
 
 /** Шторка «Проверьте заказ»: офис витрины с адресом и корзина со счётчиками. */
@@ -1896,13 +2138,13 @@ const openMap = (office: MemberOfficeView): void => {
         <OrganismsNextMemberHome
           v-bind="homeView"
           @profile="openProfile"
-          @exchange="openCatalog"
+          @exchange="openCatalog()"
           @orders="openOrders"
           @order="openOrder"
           @rewards="openRewards"
           @reward="openReward"
           @gift="openGiftSheet"
-          @catalog="openCatalog"
+          @catalog="openCatalog()"
           @product="openCatalog"
           @history="openHistory"
           @retry-orders="memberOrders.loadOrders()"
@@ -1994,24 +2236,25 @@ const openMap = (office: MemberOfficeView): void => {
       <template v-else-if="currentScreen === 'catalog' && catalogScreen">
         <OrganismsNextMemberShowcaseScreen
           v-bind="catalogScreen"
-          @back="goBack"
-          @change="openOfficeSheet"
+          @back="leaveCatalog"
+          @change="onOfficeLine"
           @inc="changeQuantity($event, 1)"
           @dec="changeQuantity($event, -1)"
           @checkout="openConfirm"
           @retry="retryCatalog"
+          @hint-close="hintShown = false"
         />
         <OrganismsNextMemberOfficeSheet
           v-if="officeSheet"
-          :open="officeSheetOpen"
+          :open="catalogSheet === 'office'"
           v-bind="officeSheet"
-          @select="officeSheetSelected = $event"
-          @save="saveCatalogOffice"
+          @select="!officeSheetBusy && (officeSheetSelected = $event)"
+          @save="saveOfficeSheet"
           @cancel="cancelOfficeSheet"
         />
         <OrganismsNextMemberConfirmSheet
           v-if="confirmSheet"
-          :open="confirmSheetOpen"
+          :open="catalogSheet === 'confirm'"
           v-bind="confirmSheet"
           :busy="memberOrders.placing.value"
           :error="memberOrders.placeError.value ?? undefined"
@@ -2019,6 +2262,13 @@ const openMap = (office: MemberOfficeView): void => {
           @dec="changeQuantity($event, -1)"
           @place="placeOrder"
           @cancel="closeConfirmSheet"
+        />
+        <OrganismsNextMemberCatalogExitSheet
+          v-if="exitSheetTexts"
+          :open="catalogSheet === 'exit'"
+          :texts="exitSheetTexts"
+          @stay="catalogSheet = 'none'"
+          @exit="exitCatalog"
         />
       </template>
     </template>
