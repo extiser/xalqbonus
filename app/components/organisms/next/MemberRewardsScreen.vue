@@ -112,7 +112,7 @@ function itemCard(reward: MemberRewardView) {
       <div class="px-0.5 pb-0.5 pt-[18px]">
         <AtomsNextMemberGroupLabel :label="texts.awaitingGroup" :count="awaiting.length" />
       </div>
-      <MoleculesNextMemberItemCard v-for="reward in awaiting" :key="reward.id" v-bind="itemCard(reward)" @open="$emit('open', reward.id)" />
+      <MoleculesNextMemberItemCard v-for="reward in awaiting" :key="reward.id" v-bind="itemCard(reward)" accent="gold" @open="$emit('open', reward.id)" />
       <div v-if="awaiting.length === 0" class="px-1 pb-2 pt-6">
         <AtomsNextMemberEmptyLine :label="texts.groupEmpty" />
       </div>
@@ -121,7 +121,7 @@ function itemCard(reward: MemberRewardView) {
         <div class="px-0.5 pb-0.5 pt-[18px]">
           <AtomsNextMemberGroupLabel :label="texts.pastGroup" />
         </div>
-        <MoleculesNextMemberItemCard v-for="reward in past" :key="reward.id" v-bind="itemCard(reward)" @open="$emit('open', reward.id)" />
+        <MoleculesNextMemberItemCard v-for="reward in past" :key="reward.id" v-bind="itemCard(reward)" accent="gold" @open="$emit('open', reward.id)" />
       </template>
     </div>
 

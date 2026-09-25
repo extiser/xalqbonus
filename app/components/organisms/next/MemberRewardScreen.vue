@@ -50,6 +50,7 @@ const TONES: Record<MemberRewardDetailView['status'], Exclude<MemberItemTone, 'c
         :reason="reward.reason"
         :code="reward.code"
         :code-title="texts.codeTitle"
+        accent="gold"
       />
 
       <MoleculesNextMemberOfficeCard

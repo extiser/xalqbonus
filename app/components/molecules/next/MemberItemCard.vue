@@ -18,49 +18,59 @@ import type { MemberItemTone } from '~/types/memberView';
  *
  * Закрытые не гасятся прозрачностью: это запись, к которой возвращаются с вопросом
  * «что я тогда заказывал».
+ *
+ * `accent` — цвет ждущей: зелёный у заказа, золотой у награды — всё про награды золотое, как
+ * на главной (`rewards-screen.html`, Руслан, 25-09-2026). Красит только ждущую: «Получена»,
+ * «Выдан», «На балансе» — зелёные и у награды, это «закончилось хорошо», а не «ещё ждёт».
  */
-const props = defineProps<{
-  title: string;
-  /** Откуда награда: «Акция «Неделя возвращения» · сундук недели». */
-  origin?: string;
-  /** Слово состояния: «Ждёт выдачи», «Получена». */
-  state: string;
-  /** Уточнение после точки: срок или дата. */
-  hint?: string;
-  tone: MemberItemTone;
-  /** Причина отдельной строкой: «Вы отменили заказ». */
-  reason?: string;
-  /** Сумма справа: «900 баллов». */
-  amount?: string;
-  /** Подпись под суммой: «списано со счёта», «вернулось на счёт». */
-  amountCaption?: string;
-  /** «Офис · Чиланзар». */
-  office?: string;
-  /** Строка-действие внизу: «Код для выдачи — внутри», «Просмотреть». */
-  action?: string;
-}>();
+type ItemAccent = 'green' | 'gold';
+
+const props = withDefaults(
+  defineProps<{
+    title: string;
+    /** Откуда награда: «Акция «Неделя возвращения» · сундук недели». */
+    origin?: string;
+    /** Слово состояния: «Ждёт выдачи», «Получена». */
+    state: string;
+    /** Уточнение после точки: срок или дата. */
+    hint?: string;
+    tone: MemberItemTone;
+    /** Причина отдельной строкой: «Вы отменили заказ». */
+    reason?: string;
+    /** Сумма справа: «900 баллов». */
+    amount?: string;
+    /** Подпись под суммой: «списано со счёта», «вернулось на счёт». */
+    amountCaption?: string;
+    /** «Офис · Чиланзар». */
+    office?: string;
+    /** Строка-действие внизу: «Код для выдачи — внутри», «Просмотреть». */
+    action?: string;
+    accent?: ItemAccent;
+  }>(),
+  { accent: 'green' },
+);
 
 defineEmits<{ open: [] }>();
 
-const STATE_TONES: Record<MemberItemTone, 'green' | 'scarlet'> = {
-  waiting: 'green',
+const STATE_TONES: Record<Exclude<MemberItemTone, 'waiting'>, 'green' | 'scarlet'> = {
   issued: 'green',
   credited: 'green',
   cancelled: 'scarlet',
 };
 
 const isWaiting = computed(() => props.tone === 'waiting');
+const stateTone = computed(() => (props.tone === 'waiting' ? props.accent : STATE_TONES[props.tone]));
 </script>
 
 <template>
-  <AtomsNextMemberCard :tone="isWaiting ? 'green' : 'plain'" :clickable="Boolean(action)" @click="$emit('open')">
+  <AtomsNextMemberCard :tone="isWaiting ? accent : 'plain'" :clickable="Boolean(action)" @click="$emit('open')">
     <span class="flex flex-col gap-[3px] px-4 py-3.5 leading-[normal]">
       <span class="flex items-start gap-3">
         <span class="flex min-w-0 grow flex-col">
           <span class="text-[16px]" :class="tone === 'issued' ? 'font-semibold' : 'font-bold'">{{ title }}</span>
           <span v-if="origin" class="mt-0.5 text-[13px] font-light text-xb-grey">{{ origin }}</span>
           <span class="mt-[5px]">
-            <AtomsNextMemberStateLine :tone="STATE_TONES[tone]" :state="state" :hint="hint" />
+            <AtomsNextMemberStateLine :tone="stateTone" :state="state" :hint="hint" />
           </span>
           <span v-if="reason" class="text-[13px] font-light text-xb-grey">{{ reason }}</span>
         </span>
@@ -71,7 +81,7 @@ const isWaiting = computed(() => props.tone === 'waiting');
       </span>
       <span v-if="office" class="mt-1.5 text-[13px] font-light text-xb-grey">{{ office }}</span>
       <span v-if="action" class="mt-3">
-        <AtomsNextMemberCardAction :label="action" :tone="isWaiting ? 'green' : 'grey'" />
+        <AtomsNextMemberCardAction :label="action" :tone="isWaiting ? accent : 'grey'" />
       </span>
     </span>
   </AtomsNextMemberCard>
