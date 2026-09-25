@@ -102,6 +102,13 @@ body { display: flex; justify-content: center; }
 .ids .value { font-size: 15px; font-weight: 600; color: #F4F6F8; font-variant-numeric: tabular-nums; letter-spacing: 0.3px; }
 .ids .copy { width: 32px; height: 32px; border: 0; padding: 0; border-radius: 999px; background: rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center; cursor: pointer; margin-right: -6px; flex-shrink: 0; }
 .ids .copy.done { background: rgba(95,208,138,0.16); }
+.ids .copy .ic-check { display: none; }
+/* Скопировано (Руслан, 25-09-2026, сессия 61): подсветки фона не хватало — её не замечали. Значок
+   копирования сменяется зелёной галочкой на полторы секунды, фон — зелёный, как был. Слов нет.
+   Перенесено копией из registration-refused.html. */
+.ids .copy.done .ic-copy { display: none; }
+.ids .copy.done .ic-check { display: block; }
+
 
 /* ------------------------------------------------------------------- низ
    Действие одно — внизу, во всю ширину, как главное действие шторки. Просьба номера
@@ -176,8 +183,8 @@ body { display: flex; justify-content: center; }
   <div class="body">
     <div class="cap" data-t="ids">Покажите менеджеру</div>
     <div class="card ids">
-      <div class="row"><span class="label" data-t="phone">Телефон</span><span class="value">+998 90 123-45-67</span><button class="copy" type="button" aria-label="Скопировать номер" data-v="+998901234567"><svg viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="8.5" y="8.5" width="11" height="11" rx="2.5" stroke="#C2C9D3" stroke-width="1.7"/><path d="M15.5 8.5V6.5a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2" stroke="#C2C9D3" stroke-width="1.7"/></svg></button></div>
-      <div class="row"><span class="label">Telegram ID</span><span class="value">5812345670</span><button class="copy" type="button" aria-label="Скопировать Telegram ID" data-v="5812345670"><svg viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="8.5" y="8.5" width="11" height="11" rx="2.5" stroke="#C2C9D3" stroke-width="1.7"/><path d="M15.5 8.5V6.5a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2" stroke="#C2C9D3" stroke-width="1.7"/></svg></button></div>
+      <div class="row"><span class="label" data-t="phone">Телефон</span><span class="value">+998 90 123-45-67</span><button class="copy" type="button" aria-label="Скопировать номер" data-v="+998901234567"><svg class="ic-copy" viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="8.5" y="8.5" width="11" height="11" rx="2.5" stroke="#C2C9D3" stroke-width="1.7"/><path d="M15.5 8.5V6.5a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2" stroke="#C2C9D3" stroke-width="1.7"/></svg><svg class="ic-check" viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M5.5 12.5l4.2 4.2 8.8-9.2" stroke="#5FD08A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
+      <div class="row"><span class="label">Telegram ID</span><span class="value">5812345670</span><button class="copy" type="button" aria-label="Скопировать Telegram ID" data-v="5812345670"><svg class="ic-copy" viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="8.5" y="8.5" width="11" height="11" rx="2.5" stroke="#C2C9D3" stroke-width="1.7"/><path d="M15.5 8.5V6.5a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2" stroke="#C2C9D3" stroke-width="1.7"/></svg><svg class="ic-check" viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M5.5 12.5l4.2 4.2 8.8-9.2" stroke="#5FD08A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
     </div>
 
     <div class="cap" data-t="offices">Офисы Xalq Taxi</div>
@@ -269,7 +276,7 @@ body { display: flex; justify-content: center; }
   // Макет: копирование подсвечивает кнопку на секунду.
   document.querySelectorAll('.copy').forEach(b => b.addEventListener('click', () => {
     try { navigator.clipboard && navigator.clipboard.writeText(b.dataset.v); } catch (e) {}
-    b.classList.add('done'); setTimeout(() => b.classList.remove('done'), 1000);
+    b.classList.add('done'); setTimeout(() => b.classList.remove('done'), 1500);
   }));
 </script>
 </body></html>
