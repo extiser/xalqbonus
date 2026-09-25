@@ -95,3 +95,57 @@ export const DAY_MS = 24 * 60 * 60 * 1_000;
 /** День перед этим — в зоне парка. Нужен, чтобы подписать вчерашние строки словом. */
 export const previousDayKey = (moment: Date): string =>
   formatDayKey(new Date(moment.getTime() - DAY_MS));
+
+/**
+ * Сутки парка момента — `2026-09-25` — с началом в 05:00 (docs/decisions.md → «Сутки —
+ * с 05:00 до 05:00 по Ташкенту»). То же правило, что `parkDaySql` в сыром SQL: сдвиг
+ * на начало суток и дата в зоне парка.
+ */
+export const parkDayKey = (moment: Date): string =>
+  formatDayKey(new Date(moment.getTime() - PARK_DAY_START_HOUR * 60 * 60 * 1_000));
+
+/**
+ * Календарный день `YYYY-MM-DD` моментом, который форматтеры парка покажут этим же днём, —
+ * полдень по UTC: в Ташкенте это 17:00 того же числа. Нужен, чтобы день, пришедший датой,
+ * назвать словом месяца (`formatDayMonthWord`).
+ */
+export const calendarDayMoment = (day: string): Date => new Date(`${day}T12:00:00Z`);
+
+/** Прибавляет к дню `YYYY-MM-DD` целые сутки. Календарная арифметика, зона не участвует. */
+export const shiftDayKey = (day: string, days: number): string => {
+  const moment = calendarDayMoment(day);
+
+  return new Date(moment.getTime() + days * DAY_MS).toISOString().slice(0, 10);
+};
+
+const CLOCK_PARTS = new Intl.DateTimeFormat('en-GB', {
+  timeZone: PARK_TIME_ZONE,
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23',
+});
+
+/**
+ * Сколько ждать до окна `[startHour, endHour)` по часам парка. Внутри окна — ноль, после
+ * его конца — до начала завтрашнего, до его начала — до сегодняшнего.
+ *
+ * Счёт идёт от времени суток, а не от дат: перевода часов в Узбекистане нет, и сутки
+ * в зоне парка всегда ровно 24 часа.
+ */
+export const msUntilParkWindow = (moment: Date, startHour: number, endHour: number): number => {
+  const parts = CLOCK_PARTS.formatToParts(moment);
+  const part = (type: Intl.DateTimeFormatPartTypes): number =>
+    Number(parts.find((candidate) => candidate.type === type)?.value ?? 0);
+  const hour = part('hour');
+
+  if (hour >= startHour && hour < endHour) {
+    return 0;
+  }
+
+  const elapsedMs =
+    ((hour * 60 + part('minute')) * 60 + part('second')) * 1_000 + moment.getMilliseconds();
+  const targetMs = startHour * 60 * 60 * 1_000 + (hour >= endHour ? DAY_MS : 0);
+
+  return targetMs - elapsedMs;
+};

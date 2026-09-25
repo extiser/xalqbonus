@@ -4,6 +4,7 @@ import {
   CATALOG_ROLES,
   MAILING_ROLES,
   ORDER_ROLES,
+  REWARD_GRANT_ROLES,
   SEGMENT_ROLES,
   STAFF_ROLES,
   SYNC_ROLES,
@@ -33,6 +34,8 @@ const SERVICE_NAVIGATION: NavigationItem[] = [
   // Раздел называется «Каталог», а адрес — по сущности, которой он управляет: страница
   // и ручка под ней читаются одним словом (`/products` ↔ `/api/products`), как у водителей.
   { title: 'Каталог', path: '/products', roles: CATALOG_ROLES },
+  // Вручение наград и подарков — одному водителю и сегменту, со списком раздач (issue #219).
+  { title: 'Награды', path: '/rewards', roles: REWARD_GRANT_ROLES },
   // Свой раздел, а не блок у водителей: экран водителей — поиск человека, а срез парка —
   // другая работа, и следом за ним идёт рассылка (issue #165).
   { title: 'Сегменты', path: '/segments', roles: SEGMENT_ROLES },

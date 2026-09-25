@@ -1,5 +1,6 @@
 import { consola } from 'consola';
 import { readUploadsDir } from '#server/adapters/uploads/config';
+import { ensureGiftCoverDir } from '#server/adapters/uploads/giftCovers';
 import { ensureMailingPhotoDir } from '#server/adapters/uploads/mailingPhotos';
 import { ensureUploadsWritable } from '#server/adapters/uploads/productPhotos';
 
@@ -30,6 +31,7 @@ export default defineNitroPlugin(() => {
   try {
     ensureUploadsWritable();
     ensureMailingPhotoDir();
+    ensureGiftCoverDir();
   } catch (error) {
     log.error('том с файлами недоступен: приложение не поднимается', {
       dir,

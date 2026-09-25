@@ -1,6 +1,17 @@
 import { consola } from 'consola';
-import { sendTelegramMessage, TelegramSendError } from '#server/adapters/telegram/outgoing';
-import { notificationButton, renderNotification, type Notification } from '#server/bot/notifications';
+import {
+  sendTelegramMessage,
+  sendTelegramPhoto,
+  TelegramSendError,
+  type OpenAppButton,
+} from '#server/adapters/telegram/outgoing';
+import {
+  notificationButton,
+  notificationPhoto,
+  renderNotification,
+  type Notification,
+  type NotificationPhoto,
+} from '#server/bot/notifications';
 import { readBotToken } from '#server/bot/config';
 import { closeTelegramLink, findNotificationRecipient } from '#server/repositories/programMembership';
 
@@ -36,6 +47,44 @@ export type NotificationOutcome =
   | 'bot_disabled';
 
 export type SendNotificationInput = { personId: string } & Notification;
+
+/**
+ * `file_id` уже выгруженных фото, по пути на томе — как у рассылки
+ * (`services/mailings/deliverMailingMessage.ts`). Раздача на тысячи человек иначе выгружала
+ * бы одну и ту же обложку тысячи раз. Держится в памяти воркера: после рестарта картинка
+ * выгрузится ещё раз, и дальше снова пойдёт ссылкой. Файл по своему пути не меняется.
+ */
+const uploadedPhotoFileIds = new Map<string, string>();
+
+type Delivery = {
+  token: string;
+  telegramChatId: bigint;
+  text: string;
+  openAppButton: OpenAppButton | undefined;
+};
+
+/** Сообщение текстом или фото с подписью — чем уведомление велит. */
+const deliver = async (delivery: Delivery, photo: NotificationPhoto | null): Promise<void> => {
+  if (photo === null) {
+    await sendTelegramMessage(delivery);
+
+    return;
+  }
+
+  const cachedFileId = uploadedPhotoFileIds.get(photo.path);
+  const sent = await sendTelegramPhoto({
+    token: delivery.token,
+    telegramChatId: delivery.telegramChatId,
+    photo:
+      cachedFileId === undefined
+        ? { kind: 'upload', ...(await photo.read()) }
+        : { kind: 'file_id', fileId: cachedFileId },
+    caption: delivery.text,
+    openAppButton: delivery.openAppButton,
+  });
+
+  uploadedPhotoFileIds.set(photo.path, sent.fileId);
+};
 
 export const sendNotification = async (
   input: SendNotificationInput,
@@ -80,12 +129,15 @@ export const sendNotification = async (
   }
 
   try {
-    await sendTelegramMessage({
-      token,
-      telegramChatId: recipient.telegramChatId,
-      text: renderNotification(input, recipient.language),
-      openAppButton: notificationButton(input, recipient.language),
-    });
+    await deliver(
+      {
+        token,
+        telegramChatId: recipient.telegramChatId,
+        text: renderNotification(input, recipient.language),
+        openAppButton: notificationButton(input, recipient.language),
+      },
+      notificationPhoto(input),
+    );
   } catch (error) {
     // Единственное, что мы узнаём о смерти канала связи: водитель, заблокировавший бота,
     // об этом не сообщит, и до следующего `/start` привязка иначе осталась бы активной,

@@ -26,6 +26,8 @@ const toDriverReward = (row: DriverRewardRow): DriverReward => ({
   issuedAt: row.issuedAt?.toISOString() ?? null,
   issuedByName: row.issuedByName,
   expiredAt: row.expiredAt?.toISOString() ?? null,
+  claimedAt: row.claimedAt?.toISOString() ?? null,
+  claimMode: row.claimMode,
   source: row.source,
   campaignTitle: row.campaignTitle,
   sourceNote: row.sourceNote,

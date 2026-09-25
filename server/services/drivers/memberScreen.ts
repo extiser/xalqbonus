@@ -1,6 +1,7 @@
 import { plainText, type TextKey } from '#server/bot/texts';
 import type { Language, PointReason } from '#server/generated/prisma/enums';
 import type { OwnOperationRow } from '#server/repositories/points';
+import { isGiftIdempotencyKey } from '#server/services/points/idempotencyKey';
 import {
   formatCalendarDate,
   formatClockTime,
@@ -59,6 +60,15 @@ const reasonText = (reason: PointReason, delta: bigint, language: Language): str
 };
 
 /**
+ * Текст причины строки. Подарок от Xalq Taxi — причина `campaign`, как у акции, а узнаётся
+ * по ключу перевода (issue #219): водитель знает его как подарок, а не как акцию.
+ */
+const operationReasonText = (row: OwnOperationRow, language: Language): string =>
+  row.reason === 'campaign' && isGiftIdempotencyKey(row.idempotencyKey)
+    ? plainText('reason_gift', language)
+    : reasonText(row.reason, row.delta, language);
+
+/**
  * Подпись дня над группой строк.
  *
  * Сегодняшний и вчерашний дни подписываются словами, остальные — датой. Слова не украшение:
@@ -106,9 +116,9 @@ export const describeOperation = (
     // и читаются они парой только по номеру. Журнал при этом не переписывается.
     reason:
       row.orderNumber === null
-        ? reasonText(row.reason, row.delta, language)
+        ? operationReasonText(row, language)
         : plainText('history_order_reason', language, {
-            reason: reasonText(row.reason, row.delta, language),
+            reason: operationReasonText(row, language),
             number: String(row.orderNumber),
           }),
     delta: Number(row.delta),

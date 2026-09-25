@@ -6,7 +6,7 @@ COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
 
 .DEFAULT_GOAL := help
 
-.PHONY: help up up-d down restart logs ps shell psql sql migrate migrate-rolled-back migrate-create migrate-diff generate typecheck test test-db \
+.PHONY: help up up-d down restart logs ps shell psql sql migrate migrate-rolled-back migrate-create migrate-diff migrate-sql generate typecheck test test-db \
         db-restore db-schema invariants license-collisions legacy-vs-api import-legacy \
         employee-owner prod-employee-owner \
         import-legacy-dump \
@@ -208,6 +208,13 @@ sync-state: ## Показать отметки синхронизации и п�
 # так две задачи (issue #120).
 migrate-diff: ## Показать расхождение schema.prisma с локальной БД
 	$(COMPOSE) exec -T app npx prisma migrate diff --from-schema prisma/schema.prisma --to-config-datasource --exit-code
+
+# Черновик миграции без терминала: `migrate-create` зовёт `migrate dev`, а тот отказывается
+# работать вне интерактивной сессии. Печатает SQL, приводящий локальную БД к схеме, —
+# его кладут в `prisma/migrations/<метка>_<имя>/migration.sql` и дописывают руками то,
+# чего Prisma выразить не умеет.
+migrate-sql: ## Напечатать SQL, приводящий локальную БД к schema.prisma (черновик миграции)
+	$(COMPOSE) exec -T app npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script
 
 typecheck: ## Проверить типы (nuxt typecheck)
 	npm run typecheck

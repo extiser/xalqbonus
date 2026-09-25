@@ -101,3 +101,12 @@ export const POINTS_ADJUST_ROLES: readonly EmployeeRole[] = ALL_EMPLOYEE_ROLES;
  * автор и пояснение обязательны и видны на карточке у стойки.
  */
 export const REWARD_GRANT_ROLES: readonly EmployeeRole[] = POINTS_ADJUST_ROLES;
+
+/**
+ * Раздача подарка сегменту (issue #219) — владельцу и админу, тем же списком, что сегменты.
+ *
+ * Сам раздел «Награды» открыт `REWARD_GRANT_ROLES`, и одному водителю подарок вручает
+ * и менеджер. Сегменту — нет: раздача на тысячи человек — это решение того, кто говорит
+ * от имени парка, и выбрать сегмент менеджеру всё равно не из чего — раздел сегментов ему закрыт.
+ */
+export const GIFT_SEGMENT_ROLES: readonly EmployeeRole[] = SEGMENT_ROLES;

@@ -7,18 +7,27 @@ import type { OfficeReward } from '#shared/types/rewards';
  * в контракт, как `officeOrderView.ts` у заказа.
  */
 
+/** Источник словами карточки стойки. Полной разборкой: новый источник обязан сломать сборку. */
+const sourceText = (row: OfficeRewardRow): string => {
+  switch (row.source) {
+    case 'manual':
+      return 'Награда — вручную';
+    case 'campaign':
+      return row.campaignTitle ? `Награда — акция «${row.campaignTitle}»` : 'Награда — акция';
+    // Подарок — баллы без офиса, на стойку он не приходит (issue #219); ветка — ради полноты.
+    case 'gift':
+      return 'Подарок от Xalq Taxi';
+  }
+};
+
 /**
  * Почему выдаётся — строкой для карточки стойки. Сотрудник сверяет её с тем, что говорит
  * водитель: «мне за сундук» и «Награда — вручную» — повод переспросить.
  */
 const reasonText = (row: OfficeRewardRow): string => {
-  if (row.source === 'manual') {
-    return row.sourceNote ? `Награда — вручную, ${row.sourceNote}` : 'Награда — вручную';
-  }
+  const source = sourceText(row);
 
-  const campaign = row.campaignTitle ? `акция «${row.campaignTitle}»` : 'акция';
-
-  return row.sourceNote ? `Награда — ${campaign}, ${row.sourceNote}` : `Награда — ${campaign}`;
+  return row.sourceNote ? `${source}, ${row.sourceNote}` : source;
 };
 
 export const describeOfficeReward = (row: OfficeRewardRow): OfficeReward => ({

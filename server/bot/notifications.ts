@@ -1,8 +1,9 @@
 import type { OpenAppButton } from '#server/adapters/telegram/outgoing';
+import { readGiftCover } from '#server/adapters/uploads/giftCovers';
 import type { CampaignParticipantOutcome, Language } from '#server/generated/prisma/enums';
 import { launchButton } from '#server/bot/launchButton';
 import { countedPlainText, formatPoints, text } from '#server/bot/texts';
-import { formatCalendarDate } from '#server/utils/parkTime';
+import { calendarDayMoment, formatCalendarDate, formatDayMonthWord } from '#server/utils/parkTime';
 
 /**
  * Уведомления водителю: что именно система умеет ему написать сама.
@@ -69,6 +70,27 @@ export type Notification =
        */
       template: 'app_relaunch';
       params: Record<string, never>;
+    }
+  | {
+      /**
+       * Подарок от Xalq Taxi ждёт в приложении (issue #219). Уходит в окне 09:00–21:00
+       * по Ташкенту — правило очереди (`server/queues/notifications.ts`). С обложкой — фото
+       * с подписью, без неё — текстом.
+       */
+      template: 'gift_received';
+      params: {
+        points: number;
+        /**
+         * Повод раздачи на обоих языках: «ко Дню учителя». В сообщение идёт один — на языке
+         * человека, прочитанном в момент отправки. Раздача не правится, в задании он не устареет.
+         */
+        reasonRu: string;
+        reasonUz: string;
+        /** День автозачисления, `YYYY-MM-DD`. */
+        untilDate: string;
+        /** Обложка на томе. Пусто — сообщение без фото. */
+        coverPath: string | null;
+      };
     };
 
 /** Приз вскрытого сундука: баллы уже на балансе, товар или произвольный ждёт в офисе. */
@@ -141,6 +163,14 @@ const renderChestsRevealed = (
   ].join('\n\n');
 };
 
+type GiftReceivedParams = Extract<Notification, { template: 'gift_received' }>['params'];
+
+const giftReceivedValues = (params: GiftReceivedParams, language: Language): Record<string, string> => ({
+  points: countedPlainText('reward_points', language, params.points),
+  reason: language === 'uz' ? params.reasonUz : params.reasonRu,
+  date: formatDayMonthWord(calendarDayMoment(params.untilDate), language),
+});
+
 /** Собирает текст уведомления на языке получателя. */
 export const renderNotification = (notification: Notification, language: Language): string => {
   switch (notification.template) {
@@ -154,12 +184,38 @@ export const renderNotification = (notification: Notification, language: Languag
       return renderChestsRevealed(notification.params, language);
     case 'app_relaunch':
       return text('start_greeting', language);
+    case 'gift_received':
+      return text('notification_gift_received', language, giftReceivedValues(notification.params, language));
   }
 };
 
 /**
- * Кнопка под уведомлением. Есть только у `app_relaunch` — та же, что под приветствием бота:
- * остальные уведомления сообщают, а не зовут в приложение.
+ * Кнопка под уведомлением. Есть у тех, что зовут в приложение, — та же, что под приветствием
+ * бота: у `app_relaunch` и у подарка, который забирают в приложении. Остальные уведомления
+ * сообщают, а не зовут.
  */
 export const notificationButton = (notification: Notification, language: Language): OpenAppButton | undefined =>
-  notification.template === 'app_relaunch' ? launchButton(language) : undefined;
+  notification.template === 'app_relaunch' || notification.template === 'gift_received'
+    ? launchButton(language)
+    : undefined;
+
+/**
+ * Фото уведомления: где оно лежит и как прочитать его байты. Путь — ключ, по которому дверь
+ * помнит `file_id` уже выгруженной картинки; чтение — забота шаблона, потому что знает, в каком
+ * подкаталоге тома лежит его картинка, только он.
+ */
+export type NotificationPhoto = {
+  path: string;
+  read: () => Promise<{ bytes: Buffer; fileName: string }>;
+};
+
+/** Фото под уведомлением. Есть только у подарка с обложкой — текст тогда уходит подписью. */
+export const notificationPhoto = (notification: Notification): NotificationPhoto | null => {
+  if (notification.template !== 'gift_received' || notification.params.coverPath === null) {
+    return null;
+  }
+
+  const { coverPath } = notification.params;
+
+  return { path: coverPath, read: () => readGiftCover(coverPath) };
+};

@@ -197,6 +197,8 @@ export const stockMovementKindLabel = (kind: StockMovementEntry['kind']): string
  */
 const REWARD_STATUS_LABELS: Record<OfficeReward['status'], string> = {
   credited: 'зачислена на баланс',
+  // Подарок-баллы (issue #219): офиса у него нет, и на стойку он не приходит.
+  claimable: 'ждёт в приложении',
   awaiting: 'ждёт выдачи',
   issued: 'выдана',
   expired: 'сгорела',
@@ -212,6 +214,7 @@ export const rewardStatusLabel = (status: OfficeReward['status']): string =>
  */
 const DRIVER_REWARD_STATUS_LABELS: Record<OfficeReward['status'], string> = {
   credited: 'на балансе',
+  claimable: 'ждёт, водитель не забрал',
   awaiting: 'ждёт в офисе',
   issued: 'получена',
   expired: 'срок вышел',
