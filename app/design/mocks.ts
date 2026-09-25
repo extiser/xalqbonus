@@ -1794,7 +1794,7 @@ export const catalogSoldOutSheetMock = {
   notice: 'Этот товар в Кадышева закончился — выберите другой офис',
 };
 
-/** Товар для шторки на листе `catalog-pick-office.html`. */
+/** Товар для шторки на листе `catalog-pick-office.html` и отмеченный на `catalog-no-office-focus.html`. */
 export const CATALOG_PICK_PRODUCT = CHECKER.id;
 
 /** Шторка «Выйти из каталога?» — `catalog-exit-sheet.html`. */

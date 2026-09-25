@@ -69,6 +69,7 @@ export const DESIGN_GROUPS: DesignGroup[] = [
     title: 'Каталог',
     screens: [
       { slug: 'catalog-no-office', title: 'Каталог без офиса', source: 'catalog/catalog-no-office.html' },
+      { slug: 'catalog-no-office-focus', title: 'Каталог без офиса — переход с товара на главной', source: 'catalog/catalog-no-office-focus.html' },
       { slug: 'catalog-pick-office', title: 'Шторка «Где заберёте?» — офисы товара с остатком', source: 'catalog/catalog-pick-office.html' },
       { slug: 'catalog-pick-office-sold-out', title: 'Шторка «Где заберёте?» — товар закончился', source: 'catalog/catalog-pick-office-sold-out.html' },
       { slug: 'catalog-office-picked', title: 'Витрина выбранного офиса — приглушённые и подсказка', source: 'catalog/catalog-office-picked.html' },

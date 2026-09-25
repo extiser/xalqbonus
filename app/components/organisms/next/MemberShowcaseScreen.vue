@@ -53,7 +53,8 @@ const props = defineProps<{
   /**
    * Товар, к которому витрина прокручивается, когда впервые становится `ready`: водитель нажал
    * на него на главной. Плитка встаёт целиком под закреплённую строку офиса, без плавной
-   * прокрутки. Такого товара нет — витрина остаётся наверху.
+   * прокрутки, и фото её один раз мягко увеличивается — видно, куда пришёл. Такого товара нет —
+   * витрина остаётся наверху.
    */
   focusProductId?: string;
   texts: {
@@ -94,6 +95,9 @@ const grid = ref<HTMLElement | null>(null);
 /** Прокрутка к товару — одна на жизнь экрана: следующие `ready` водителя уже не двигают. */
 let focusDone = false;
 
+/** Плитка, фото которой отмечено увеличением после прокрутки. */
+const pulseProductId = ref<string | null>(null);
+
 const scrollToFocus = async (): Promise<void> => {
   focusDone = true;
   await nextTick();
@@ -109,6 +113,7 @@ const scrollToFocus = async (): Promise<void> => {
   const top = tile.getBoundingClientRect().top + window.scrollY - lineBottom - FOCUS_GAP;
 
   window.scrollTo({ top: Math.max(0, top), behavior: 'instant' });
+  pulseProductId.value = props.focusProductId ?? null;
 };
 
 const hideHint = (): void => {
@@ -194,6 +199,7 @@ onBeforeUnmount(stopHintListeners);
             :data-product-id="product.id"
             mode="showcase"
             :product="product"
+            :pulse="product.id === pulseProductId"
             :texts="{ sale: texts.sale, stepper: { decrease: texts.decrease, increase: texts.increase, increaseMore: texts.increaseMore } }"
             @inc="$emit('inc', product.id)"
             @dec="$emit('dec', product.id)"

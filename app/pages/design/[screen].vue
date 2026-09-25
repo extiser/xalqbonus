@@ -258,6 +258,7 @@ type NoOfficeSetup = {
 
 const noOffice = pick<NoOfficeSetup>({
   'catalog-no-office': { officeId: null, sheet: 'none', officeView: 'add', cart: {}, hint: false },
+  'catalog-no-office-focus': { officeId: null, sheet: 'none', officeView: 'add', cart: {}, hint: false },
   'catalog-pick-office': { officeId: null, sheet: 'office', officeView: 'add', cart: {}, hint: false },
   'catalog-pick-office-sold-out': { officeId: null, sheet: 'office', officeView: 'soldOut', cart: {}, hint: false },
   'catalog-office-picked': { officeId: CATALOG_CURRENT_OFFICE, sheet: 'none', officeView: 'change', cart: { checker: 1 }, hint: true },
@@ -277,7 +278,12 @@ const noOfficeScreen = computed(() => {
     return undefined;
   }
 
-  return noOfficeId.value === null ? catalogNoOfficeMock() : catalogPickedMock(noOfficeId.value, noOfficeCart.value, noOfficeHint.value);
+  // Переход с товара на главной — к шашке, как в `catalog-no-office-focus.html`.
+  const focusProductId = slug.value === 'catalog-no-office-focus' ? CATALOG_PICK_PRODUCT : undefined;
+
+  return noOfficeId.value === null
+    ? { ...catalogNoOfficeMock(), focusProductId }
+    : { ...catalogPickedMock(noOfficeId.value, noOfficeCart.value, noOfficeHint.value), focusProductId };
 });
 
 const noOfficeSheetView = computed(() => {

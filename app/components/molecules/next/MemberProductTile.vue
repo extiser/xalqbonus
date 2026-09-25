@@ -24,6 +24,10 @@ import type { MemberProductView } from '~/types/memberView';
  * `.tile.out`: фото серое, фото и строка цены с названием гаснут до 38 %, цена внутри неё —
  * ещё раз, как в макете; вместо счётчика — пунктирная плашка «Нет в Кадышева». Пилюли остатка
  * нет, плитка не нажимается (issue #234).
+ *
+ * Товар, к которому пришли с главной (`pulse`), — `catalog-no-office-focus.html`: фото один раз
+ * мягко увеличивается и возвращается, 1 → 1.06 → 1 за 0.7 с. Трансформацией, поэтому соседи
+ * в сетке не двигаются; рамки и свечения нет (Руслан, прогон #234, 25-09-2026).
  */
 type TileMode = 'showcase' | 'home';
 
@@ -32,6 +36,8 @@ const NAME_LIMIT = 30;
 const props = defineProps<{
   mode: TileMode;
   product: MemberProductView;
+  /** Фото один раз увеличивается и возвращается — отметка товара, к которому пришли с главной. */
+  pulse?: boolean;
   texts: {
     /** Слово на пилюле скидки: «SALE». */
     sale: string;
@@ -69,7 +75,10 @@ const missing = computed(() => props.product.missing !== undefined);
          (прогон PR #231). В квадрате только абсолютная картинка, и ширину ему даёт растяжение
          родителя; движок, не растягивающий содержимое кнопки, оставил бы его без размера.
          В WebKit 26.6 поломка не воспроизвелась — это страховка, а не найденная причина -->
-    <div class="relative aspect-[9/10] w-full overflow-hidden rounded-[24px] bg-xb-photo" :class="missing ? 'opacity-38' : ''">
+    <div
+      class="relative aspect-[9/10] w-full overflow-hidden rounded-[24px] bg-xb-photo"
+      :class="[missing ? 'opacity-38' : '', pulse ? 'member-product-tile-pulse' : '']"
+    >
       <img
         v-if="product.image"
         :src="product.image"
@@ -117,6 +126,32 @@ const missing = computed(() => props.product.missing !== undefined);
 </template>
 
 <style scoped>
+/* Отметка товара с главной — как в макете: 0.3 с вверх, 0.4 с обратно, с задержкой 0.4 с, один раз. */
+.member-product-tile-pulse {
+  transform-origin: 50% 50%;
+  animation: member-product-tile-pulse 0.7s ease-in-out 0.4s 1;
+}
+
+@keyframes member-product-tile-pulse {
+  0% {
+    transform: scale(1);
+  }
+
+  43% {
+    transform: scale(1.06);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .member-product-tile-pulse {
+    animation: none;
+  }
+}
+
 /* Пилюли — 10 от краёв фото, до 360 px — 8: пилюли там мельче. */
 .member-product-tile-pills {
   top: 10px;

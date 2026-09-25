@@ -6,10 +6,10 @@ import { computed } from 'vue';
  * (issue #234).
  *
  * Показывается один раз за заход в каталог, сразу после первого выбора офиса: что на витрине
- * и почему — один заказ, один офис. Цвет — приглушённый гранат из набора: подложка `#2D1B25`
- * (гранат 12 % поверх `#14171D`), рамка гранат 45 %, текст `#E4E8EE`, офис белым жирным,
- * крестик `#FF7089` на гранате 16 %. Золото — цвет наград, в каталоге выбивалось (Руслан,
- * 25-09-2026).
+ * и почему — один заказ, один офис. Цвет — гранат целиком: подложка `#E8365D` без рамки,
+ * гранатовое свечение под ней, текст белый 13 / 500, офис белым жирным, крестик белый на белом
+ * 22 %. Приглушённый гранат на тёмной витрине не читался (Руслан, прогон #234, 25-09-2026);
+ * золото — цвет наград, в каталоге выбивалось.
  *
  * Уголок сверху стоит там же, где в макете, — под именем офиса в строке над подсказкой.
  * Где лежит сама подсказка — поверх витрины, не сдвигая её, — решает контейнер.
@@ -42,20 +42,20 @@ const parts = computed(() => {
     role="note"
     :inert="!shown"
     :aria-hidden="!shown"
-    class="member-office-hint relative flex items-start gap-2.5 rounded-[14px] border border-[rgba(232,54,93,0.45)] bg-[#2D1B25] py-3 pl-3.5 pr-3 font-manrope leading-[normal] shadow-[0_14px_34px_-10px_rgba(0,0,0,0.85)]"
+    class="member-office-hint relative flex items-start gap-2.5 rounded-[14px] bg-xb-garnet py-3 pl-3.5 pr-3 font-manrope leading-[normal] shadow-[0_14px_34px_-10px_rgba(0,0,0,0.85),0_6px_22px_rgba(232,54,93,0.35)]"
     :class="shown ? '' : 'member-office-hint-gone'"
   >
     <span
-      class="absolute left-[92px] top-[-7px] size-3 rotate-45 border-l border-t border-[rgba(232,54,93,0.45)] bg-[#2D1B25]"
+      class="absolute left-[92px] top-[-7px] size-3 rotate-45 bg-xb-garnet"
       aria-hidden="true"
     />
-    <span class="grow text-[13px] font-normal leading-[1.45] text-[#E4E8EE]">
+    <span class="grow text-[13px] font-medium leading-[1.45] text-white">
       {{ parts.before }}<b v-if="parts.hasOffice" class="font-bold text-white">{{ office }}</b>{{ parts.after }}
     </span>
     <button
       type="button"
       :aria-label="closeLabel"
-      class="-mr-0.5 -mt-0.5 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-[rgba(232,54,93,0.16)] p-0 text-xb-scarlet-soft"
+      class="-mr-0.5 -mt-0.5 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-white/22 p-0 text-white"
       @click="$emit('close')"
     >
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true">
