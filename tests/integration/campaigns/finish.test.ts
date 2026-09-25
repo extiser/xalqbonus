@@ -443,7 +443,7 @@ describe('завершение акции и вскрытие сундуков',
     const { rewards } = await readMemberRewards({ personId: scenario.personId, language: 'ru' });
     const wash = rewards.find((reward) => reward.title === 'Мойка');
 
-    expect(wash).toMatchObject({ kind: 'custom', status: 'awaiting', officeName: 'Тестовый офис' });
+    expect(wash).toMatchObject({ kind: 'custom', status: 'awaiting', office: { name: 'Тестовый офис' } });
     expect(wash?.code).toMatch(/^[5-9]\d{4}$/);
 
     const revealNotifications = notificationsOf(revealed.notifications, scenario.personId);

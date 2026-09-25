@@ -1,3 +1,5 @@
+import type { Language } from '#server/generated/prisma/enums';
+
 /**
  * Время, каким его видит водитель, — в зоне парка.
  *
@@ -54,6 +56,16 @@ const DAY_MONTH = new Intl.DateTimeFormat('ru-RU', {
 });
 
 /**
+ * День и месяц словом — «5 октября», «5-oktabr» — срок ждущей награды: она ждёт неделями,
+ * и «до 05.10» читается хуже слова. Форму слова даёт `Intl` на языке водителя, склонение
+ * вручную не подбирается.
+ */
+const DAY_MONTH_WORD: Readonly<Record<Language, Intl.DateTimeFormat>> = {
+  ru: new Intl.DateTimeFormat('ru-RU', { timeZone: PARK_TIME_ZONE, day: 'numeric', month: 'long' }),
+  uz: new Intl.DateTimeFormat('uz-Latn-UZ', { timeZone: PARK_TIME_ZONE, day: 'numeric', month: 'long' }),
+};
+
+/**
  * День вида `2026-09-12` — ключ, по которому строки истории собираются в группы.
  *
  * `en-CA` даёт ISO-порядок готовым; собирать его из частей вручную значит писать то же
@@ -71,6 +83,9 @@ export const formatClockTime = (moment: Date): string => CLOCK.format(moment);
 export const formatCalendarDate = (moment: Date): string => CALENDAR_DATE.format(moment);
 
 export const formatDayMonth = (moment: Date): string => DAY_MONTH.format(moment);
+
+export const formatDayMonthWord = (moment: Date, language: Language): string =>
+  DAY_MONTH_WORD[language].format(moment);
 
 export const formatDayKey = (moment: Date): string => DAY_KEY.format(moment);
 
