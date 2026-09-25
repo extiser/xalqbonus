@@ -1,5 +1,6 @@
 import type { OfficeRewardEvent, StockMovementEntry } from '#shared/types/catalog';
 import type {
+  ClientPlatform,
   DriverMembership,
   DriverOperation,
   DriverOperationCounterparty,
@@ -362,3 +363,28 @@ export const participantOutcomeLabel = (outcome: CampaignParticipantOutcome): st
 /** Половина Б при делении — контроль: подпись говорит это, чтобы её нули не читались провалом. */
 export const campaignHalfLabel = (half: 'a' | 'b'): string =>
   half === 'a' ? 'Половина А' : 'Половина Б — контроль';
+
+/** Откуда открыт Mini App — строка устройства в карточке водителя (issue #223). */
+const CLIENT_PLATFORM_LABELS: Record<ClientPlatform, string> = {
+  android: 'Android',
+  ios: 'iOS',
+  desktop: 'Компьютер',
+  other: 'Другое',
+};
+
+export const clientPlatformLabel = (platform: ClientPlatform): string =>
+  CLIENT_PLATFORM_LABELS[platform];
+
+/**
+ * Движок по платформе: встроенный браузер Android — Android System WebView, у iPhone — Safari.
+ * У остальных движок не разбирается.
+ */
+const CLIENT_ENGINE_LABELS: Record<ClientPlatform, string | null> = {
+  android: 'WebView',
+  ios: 'Safari',
+  desktop: null,
+  other: null,
+};
+
+export const clientEngineLabel = (platform: ClientPlatform): string | null =>
+  CLIENT_ENGINE_LABELS[platform];

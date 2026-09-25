@@ -52,9 +52,16 @@ const {
   status: rewardsStatus,
 } = await useFetch(() => `/api/drivers/${personId.value}/rewards`);
 
+// Устройства — своей ручкой, как награды: с чего водитель открывал приложение (issue #223).
+const {
+  data: devices,
+  status: devicesStatus,
+} = await useFetch(() => `/api/drivers/${personId.value}/devices`);
+
 const cardState = computed(() => toLoadState(cardStatus.value));
 const historyState = computed(() => toLoadState(historyStatus.value));
 const rewardsState = computed(() => toLoadState(rewardsStatus.value));
+const devicesState = computed(() => toLoadState(devicesStatus.value));
 
 /** Человека нет — это ответ, а не отказ запроса, и звучать он обязан по-разному. */
 const isMissing = computed(() => cardError.value?.statusCode === 404);
@@ -189,6 +196,7 @@ const canGrant = computed(
       <OrganismsDriverRewards :state="rewardsState" :data="rewards ?? null" />
       <OrganismsDriverMembership :card="card" />
       <OrganismsDriverParkProfiles :card="card" />
+      <OrganismsDriverDevices :state="devicesState" :data="devices ?? null" />
       <OrganismsDriverOperations
         :state="historyState"
         :data="history ?? null"

@@ -280,3 +280,33 @@ export type DriverHistoryResponse = {
   limit: number;
   offset: number;
 };
+
+/** Откуда открыт Mini App. Зеркало перечисления `ClientPlatform` схемы. */
+export type ClientPlatform = 'android' | 'ios' | 'desktop' | 'other';
+
+/**
+ * Устройство, с которого водитель открывал Mini App (issue #223): строка лога на сочетание
+ * Telegram-аккаунта и строки браузера.
+ */
+export type DriverDevice = {
+  deviceId: string;
+  platform: ClientPlatform;
+  /** «9», «16.3». Нет — строка браузера не разобралась. */
+  osVersion: string | null;
+  /** Major движка: WebView у Android, Safari у iOS. */
+  engineVersion: number | null;
+  /** Версия Bot API клиента Telegram. */
+  botApiVersion: string | null;
+  /** Итог проверки движка на последнем входе. */
+  engineOk: boolean;
+  /** Строка браузера целиком — для разбора того, что не разобрал сервер. */
+  userAgent: string;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  visits: number;
+};
+
+export type DriverDevicesResponse = {
+  /** Свежие входы первыми. */
+  devices: DriverDevice[];
+};
