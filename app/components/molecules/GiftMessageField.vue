@@ -7,7 +7,8 @@ import { MAILING_TEXT_MAX_LENGTH } from '#shared/mailing';
  *
  * Поле необязательно, и над ним стоит то, что уйдёт, если его не заполнить, — системный
  * текст этого языка с суммой, поводом и датой из формы. Заполненное уходит сверху, а под ним
- * системная строка: об этом строка под полем, и счётчик меряет остаток уже за её вычетом.
+ * системная строка: об этом строка под заполненным полем. Счётчик стоит всегда, и у пустого
+ * поля тоже, и меряет остаток уже за вычетом системной строки.
  */
 const props = defineProps<{
   label: string;
@@ -43,10 +44,12 @@ const tooLong = computed(() => props.limit !== null && length.value > props.limi
         :invalid="error !== null || tooLong"
       />
     </label>
-    <template v-if="length > 0 && footer !== null && limit !== null">
-      <p class="mt-1 text-sm text-slate-500">Под вашим текстом добавится: „{{ footer }}“</p>
-      <MoleculesLengthCounter :length="length" :limit="limit" />
-    </template>
+    <p v-if="length > 0 && footer !== null" class="mt-1 text-sm text-slate-500">
+      Под вашим текстом добавится: „{{ footer }}“
+    </p>
+    <!-- Счётчик — и у пустого поля, как у повода: сколько влезет, видно до первого знака.
+         Предела нет, только пока предпросмотр не пришёл: он зависит от системной строки. -->
+    <MoleculesLengthCounter v-if="limit !== null" :length="length" :limit="limit" />
     <p v-if="error" class="mt-1 text-sm text-red-700">{{ error }}</p>
   </div>
 </template>
