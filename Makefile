@@ -6,7 +6,7 @@ COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
 
 .DEFAULT_GOAL := help
 
-.PHONY: help up up-d down restart logs ps shell psql sql migrate migrate-rolled-back migrate-create migrate-diff migrate-sql generate typecheck test test-db \
+.PHONY: help up up-d down restart logs ps shell psql sql migrate migrate-rolled-back migrate-create migrate-diff migrate-sql generate typecheck old-engine-guard test test-db \
         db-restore db-schema invariants license-collisions legacy-vs-api import-legacy \
         employee-owner prod-employee-owner \
         import-legacy-dump \
@@ -218,6 +218,14 @@ migrate-sql: ## Напечатать SQL, приводящий локальну�
 
 typecheck: ## Проверить типы (nuxt typecheck)
 	npm run typecheck
+
+# Скрипт проверки движка Mini App (issue #223) — строка, которую сборщик не транспилирует:
+# выполниться он обязан на браузере, который не понимает остальное приложение. Цель проверяет
+# его текст — `esbuild --target=es5` без ошибок, без переписанного синтаксиса и без вызовов
+# новее ES5. На хосте, как `typecheck`: базе и контейнеру здесь делать нечего. Конфиг — Nuxt:
+# в нём живут псевдонимы `#shared` и `~`, которыми скрипт собирается.
+old-engine-guard: ## Проверить, что скрипт проверки движка Mini App написан на ES5
+	npx tsx --tsconfig .nuxt/tsconfig.app.json scripts/check-old-engine-guard.ts
 
 # Отдельная база под тесты, в том же контейнере. Схему в ней создаёт та же миграция —
 # второго описания структуры не заводится. Цель идемпотентна: базу создаёт, только если

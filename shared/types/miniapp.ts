@@ -591,6 +591,40 @@ export type MiniAppOfficesResponse = {
 };
 
 /**
+ * Вход с телефона: `POST /api/miniapp/device` (issue #223). Шлёт его не основной код, а скрипт
+ * проверки движка (`app/utils/oldEngineGuard.ts`) — на каждом открытии.
+ *
+ * Поля — то, что сказал клиент, и ничьей личностью не являются: чей это вход, решает
+ * проверенная `initData`.
+ */
+export type MiniAppDeviceRequestBody = {
+  /** `Telegram.WebApp.platform`, а если его нет — платформа по строке браузера. */
+  platform: string;
+  /** `Telegram.WebApp.version`. */
+  botApiVersion: string;
+  /** Итог проверки движка: `false` — старый, на экране «обновите». */
+  engineOk: boolean;
+};
+
+/**
+ * Офис на экране «обновите». Экран рисует скрипт без основного кода, поэтому телефон приходит
+ * уже в показном виде: `formatPhone` скрипту недоступен.
+ */
+export type OldEngineOffice = {
+  name: string;
+  address: string;
+  workHours: string | null;
+  phoneE164: string | null;
+  phoneDisplay: string | null;
+  mapUrl: string | null;
+};
+
+export type MiniAppDeviceResponse = {
+  /** Работающие офисы при `engineOk === false`, иначе пусто: новому движку они не нужны. */
+  offices: OldEngineOffice[];
+};
+
+/**
  * Товар витрины.
  *
  * Сумм и себестоимости здесь нет и быть не может: водителю цена — в баллах, а цена в сумах

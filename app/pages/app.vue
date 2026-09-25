@@ -47,6 +47,7 @@ import {
   showcaseCheckoutView,
   showcaseProductsView,
 } from '~/utils/memberViews';
+import { OLD_ENGINE_FORCE_ALLOWED_SCRIPT, OLD_ENGINE_GUARD_SCRIPT } from '~/utils/oldEngineGuard';
 import { failureDenial } from '~/utils/requestError';
 import {
   forgetInitData,
@@ -105,8 +106,17 @@ useHead({
    * исполняется до гидрации, то есть до того, как Vue Router тронет адрес и раскодирует
    * хеш с подписанной строкой. Вставка того же скрипта из `onMounted` опаздывает
    * ровно на это и получает огрызок вместо личности (issue #90).
+   *
+   * Сразу за ним — проверка движка (issue #223): на старом браузере телефона она рисует экран
+   * «обновите» и пишет вход в лог устройств до основного кода, который там не выполняется.
+   * Встроенным классическим скриптом, а не модулем: сборка его не трогает. Разрешение показать
+   * экран принудительно (`?old-engine=android|ios`) ставится перед ней только под `nuxt dev`.
    */
-  script: [{ src: TELEGRAM_SDK_URL }],
+  script: [
+    { src: TELEGRAM_SDK_URL },
+    ...(import.meta.dev ? [{ innerHTML: OLD_ENGINE_FORCE_ALLOWED_SCRIPT }] : []),
+    { innerHTML: OLD_ENGINE_GUARD_SCRIPT },
+  ],
 });
 
 /** Заглушка вместо экрана — свойства `MemberStubScreen`. */
@@ -1850,6 +1860,12 @@ onBeforeUnmount(() => {
 });
 
 onMounted(async () => {
+  // Старый движок: на экране «обновите» от проверки в `<head>`, и загрузка не начинается вовсе —
+  // ни `/me`, ни регистрации. Вход в лог устройств проверка уже записала (issue #223).
+  if (window.__xbOldEngine === true) {
+    return;
+  }
+
   webApp = await loadTelegramWebApp();
   initData = resolveInitData(webApp);
 

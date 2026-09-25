@@ -431,6 +431,21 @@ enum CampaignChestOpenSource {
   @@schema("xb")
 }
 
+/// Откуда открыт Mini App — по `Telegram.WebApp.platform` (issue #223). Сырое значение
+/// Telegram не хранится: его словарь шире (`tdesktop`, `macos`, `weba`, `webk`…), а вопрос
+/// к логу один — телефон это или нет.
+enum ClientPlatform {
+  android
+  ios
+  /// `tdesktop` и `macos`.
+  desktop
+  /// Всё прочее, включая веб-версии Telegram и пустое значение.
+  other
+
+  @@map("client_platform")
+  @@schema("xb")
+}
+
 // ---------------------------------------------------------------------------
 // Люди и учётки
 // ---------------------------------------------------------------------------
@@ -621,6 +636,39 @@ model PersonSettings {
   person Person @relation(fields: [personId], references: [id])
 
   @@map("person_settings")
+  @@schema("xb")
+}
+
+/// Лог устройств Mini App: с чего человек открывал приложение и прошёл ли его браузер
+/// проверку движка (issue #223). Строка — на сочетание Telegram-аккаунта и строки браузера:
+/// обновился WebView или iOS — строка браузера новая, и рядом со старой записью появляется
+/// новая. Так в карточке видно, что водитель обновился.
+///
+/// Хранится по `telegram_user_id`, а не по человеку: пишется и незарегистрированный,
+/// и тот, кто в программе не состоит. Человек находится через привязки — открытые и закрытые.
+model ClientDevice {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  telegramUserId BigInt         @map("telegram_user_id")
+  /// Заголовок `User-Agent` запроса целиком — по нему разбирают то, чего не разобрал сервис.
+  userAgent      String         @map("user_agent")
+  platform       ClientPlatform
+  /// «9», «16.3». Пусто — строка браузера не разобралась.
+  osVersion      String?        @map("os_version")
+  /// Major движка: Chrome/WebView у Android, Safari у iOS.
+  engineVersion  Int?           @map("engine_version")
+  /// `Telegram.WebApp.version` — версия Bot API, которую поддерживает клиент. Версии самого
+  /// приложения Telegram у Mini App нет.
+  botApiVersion  String?        @map("bot_api_version")
+  /// Итог проверки движка на последнем входе.
+  engineOk       Boolean        @map("engine_ok")
+  firstSeenAt    DateTime       @map("first_seen_at") @db.Timestamptz(6)
+  lastSeenAt     DateTime       @map("last_seen_at") @db.Timestamptz(6)
+  /// Не меньше единицы — проверкой в миграции.
+  visits         Int
+
+  @@unique([telegramUserId, userAgent])
+  @@index([telegramUserId])
+  @@map("client_devices")
   @@schema("xb")
 }
 
