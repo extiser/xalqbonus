@@ -353,15 +353,26 @@ describe('подарки от Xalq Taxi', () => {
       }),
     ).rejects.toMatchObject({ problem: 'reason_uz_missing' });
 
-    // С обложкой сообщение — подпись к фото, до 1024 знаков: повод в 1000 знаков в неё
-    // не влезает, хотя текстом без обложки ушёл бы.
+    // Повод — строка карточки подарка, не длиннее 60 знаков на каждом языке.
+    await expect(
+      grantGift({
+        recipient: { kind: 'person', personId },
+        points: 100,
+        reasonRu: 'п'.repeat(61),
+        reasonUz: 'sabab',
+        cover: null,
+        untilDate: FAR_UNTIL_DATE,
+        employeeId,
+      }),
+    ).rejects.toMatchObject({ problem: 'reason_ru_too_long' });
+
     await expect(
       grantGift({
         recipient: { kind: 'person', personId },
         points: 100,
         reasonRu: 'повод',
-        reasonUz: 'a'.repeat(1_000),
-        cover: { contentType: 'image/png', bytes: Buffer.from('png') },
+        reasonUz: 'a'.repeat(61),
+        cover: null,
         untilDate: FAR_UNTIL_DATE,
         employeeId,
       }),
@@ -401,8 +412,9 @@ describe('подарки от Xalq Taxi', () => {
     const tomorrow = await grantGift({
       recipient: { kind: 'person', personId },
       points: 100,
-      reasonRu: 'повод',
-      reasonUz: 'повод',
+      // Ровно 60 знаков — годится.
+      reasonRu: 'п'.repeat(60),
+      reasonUz: 'a'.repeat(60),
       cover: null,
       untilDate: shiftDayKey(parkDayKey(new Date()), 1),
       employeeId,

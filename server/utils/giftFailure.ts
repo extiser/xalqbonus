@@ -6,7 +6,7 @@ import {
   type GiftGrantProblem,
   type GiftRecipientProblem,
 } from '#server/services/gifts/errors';
-import { MAILING_CAPTION_MAX_LENGTH, MAILING_TEXT_MAX_LENGTH } from '#shared/mailing';
+import { GIFT_REASON_MAX_LENGTH } from '#shared/gift';
 import { MAX_PHOTO_MB } from '#shared/photo';
 import type { GiftGrantField } from '#shared/types/rewards';
 
@@ -38,12 +38,12 @@ const GRANT_PROBLEMS: Readonly<Record<GiftGrantProblem, Rejection>> = {
   reason_ru_too_long: {
     status: 400,
     field: 'reasonRu',
-    message: `Сообщение на русском с этим поводом не примет Telegram: с обложкой — не больше ${MAILING_CAPTION_MAX_LENGTH} знаков, без неё — ${MAILING_TEXT_MAX_LENGTH}. Сократите повод.`,
+    message: `Повод на русском — не длиннее ${GIFT_REASON_MAX_LENGTH} знаков: это строка карточки подарка.`,
   },
   reason_uz_too_long: {
     status: 400,
     field: 'reasonUz',
-    message: `Сообщение на узбекском с этим поводом не примет Telegram: с обложкой — не больше ${MAILING_CAPTION_MAX_LENGTH} знаков, без неё — ${MAILING_TEXT_MAX_LENGTH}. Сократите повод.`,
+    message: `Повод на узбекском — не длиннее ${GIFT_REASON_MAX_LENGTH} знаков: это строка карточки подарка.`,
   },
   cover_type_invalid: { status: 400, field: 'cover', message: 'Обложка — JPEG, PNG или WebP.' },
   cover_too_large: { status: 400, field: 'cover', message: `Обложка тяжелее ${MAX_PHOTO_MB} МБ.` },

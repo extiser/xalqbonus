@@ -2,9 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { consola } from 'consola';
 import { deleteGiftCover, writeGiftCover } from '#server/adapters/uploads/giftCovers';
-import { giftReceivedLength } from '#server/bot/notifications';
 import { db } from '#server/db';
-import type { Language } from '#server/generated/prisma/enums';
 import { enqueueNotifications } from '#server/queues/notifications';
 import { insertGiftGrant, insertGiftRewards } from '#server/repositories/gifts';
 import { listProgramMemberIds } from '#server/repositories/programMembership';
@@ -13,7 +11,7 @@ import { GiftRecipientError, InvalidGiftGrantError } from '#server/services/gift
 import { toSegmentConditions } from '#server/services/segments/fields';
 import { parkDayKey, shiftDayKey } from '#server/utils/parkTime';
 import { isCalendarDay } from '#shared/campaign';
-import { mailingMessageLimit } from '#shared/mailing';
+import { GIFT_REASON_MAX_LENGTH } from '#shared/gift';
 import { MAX_PHOTO_BYTES, PHOTO_EXTENSION_BY_TYPE } from '#shared/photo';
 
 /**
@@ -69,24 +67,6 @@ const MAX_POINTS = 2_147_483_647;
 
 type ValidGift = { points: number; reasonRu: string; reasonUz: string; untilDate: string };
 
-/**
- * Влезает ли сообщение о подарке на каждом языке в то, что примет Telegram: с обложкой текст
- * становится подписью, и потолок у неё вчетверо ниже — тем же правилом, что у рассылки
- * (`shared/mailing.ts`). Проверяется до записи: отказ Telegram в очереди не чинится ничем.
- */
-const TOO_LONG_PROBLEM = { ru: 'reason_ru_too_long', uz: 'reason_uz_too_long' } as const;
-
-const requireFittingMessage = (gift: ValidGift, withCover: boolean): void => {
-  const limit = mailingMessageLimit(withCover);
-  const params = { ...gift, coverPath: withCover ? 'cover' : null };
-
-  for (const language of ['ru', 'uz'] as const satisfies readonly Language[]) {
-    if (giftReceivedLength(params, language) > limit) {
-      throw new InvalidGiftGrantError(TOO_LONG_PROBLEM[language]);
-    }
-  }
-};
-
 const validateCover = (cover: GiftCoverUpload | null): void => {
   if (cover === null) {
     return;
@@ -119,6 +99,16 @@ const validate = (input: GrantGiftInput, now: Date): ValidGift => {
     throw new InvalidGiftGrantError('reason_uz_missing');
   }
 
+  // Повод — строка карточки подарка. С ним и сообщение о подарке заведомо влезает в подпись
+  // к фото: шаблон и сумма с датой — около сотни знаков при потолке подписи 1024.
+  if (reasonRu.length > GIFT_REASON_MAX_LENGTH) {
+    throw new InvalidGiftGrantError('reason_ru_too_long');
+  }
+
+  if (reasonUz.length > GIFT_REASON_MAX_LENGTH) {
+    throw new InvalidGiftGrantError('reason_uz_too_long');
+  }
+
   const untilDate = input.untilDate.trim();
 
   if (!isCalendarDay(untilDate)) {
@@ -131,12 +121,9 @@ const validate = (input: GrantGiftInput, now: Date): ValidGift => {
     throw new InvalidGiftGrantError('until_date_too_early');
   }
 
-  const gift = { points, reasonRu, reasonUz, untilDate };
-
   validateCover(input.cover);
-  requireFittingMessage(gift, input.cover !== null);
 
-  return gift;
+  return { points, reasonRu, reasonUz, untilDate };
 };
 
 /** Раздача и её подарки одной транзакцией. Получатели — участники программы, снимком. */

@@ -2,7 +2,7 @@ import type { OpenAppButton } from '#server/adapters/telegram/outgoing';
 import { readGiftCover } from '#server/adapters/uploads/giftCovers';
 import type { CampaignParticipantOutcome, Language } from '#server/generated/prisma/enums';
 import { launchButton } from '#server/bot/launchButton';
-import { countedPlainText, formatPoints, plainText, text } from '#server/bot/texts';
+import { countedPlainText, formatPoints, text } from '#server/bot/texts';
 import { calendarDayMoment, formatCalendarDate, formatDayMonthWord } from '#server/utils/parkTime';
 
 /**
@@ -170,14 +170,6 @@ const giftReceivedValues = (params: GiftReceivedParams, language: Language): Rec
   reason: language === 'uz' ? params.reasonUz : params.reasonRu,
   date: formatDayMonthWord(calendarDayMoment(params.untilDate), language),
 });
-
-/**
- * Длина сообщения о подарке так, как её меряет Telegram, — после разбора разметки, без
- * экранирования. По ней раздача проверяет повод до записи: сообщение, которое Telegram
- * отклонит, в очереди не чинится ничем.
- */
-export const giftReceivedLength = (params: GiftReceivedParams, language: Language): number =>
-  plainText('notification_gift_received', language, giftReceivedValues(params, language)).length;
 
 /** Собирает текст уведомления на языке получателя. */
 export const renderNotification = (notification: Notification, language: Language): string => {

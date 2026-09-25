@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import type { GiftFields } from '~/types/rewardGrant';
 import type { SelectOption } from '~/types/selectOption';
-import { MAILING_TEXT_MAX_LENGTH } from '#shared/mailing';
+import { GIFT_REASON_MAX_LENGTH } from '#shared/gift';
 import type { ManualRewardRequestBody } from '#shared/types/rewards';
 
 /**
@@ -169,9 +169,10 @@ const submit = (): void => {
             :rows="2"
             placeholder="O'qituvchilar kuni munosabati bilan"
             required
-            :maxlength="MAILING_TEXT_MAX_LENGTH"
-            :invalid="fieldError('reasonUz') !== null"
+            :maxlength="GIFT_REASON_MAX_LENGTH"
+            :invalid="fieldError('reasonUz') !== null || reasonUz.trim().length > GIFT_REASON_MAX_LENGTH"
           />
+          <MoleculesLengthCounter :length="reasonUz.trim().length" :limit="GIFT_REASON_MAX_LENGTH" />
           <p v-if="fieldError('reasonUz')" class="mt-1 text-sm text-red-700">{{ fieldError('reasonUz') }}</p>
         </div>
         <div>
@@ -181,15 +182,16 @@ const submit = (): void => {
             :rows="2"
             placeholder="ко Дню учителя"
             required
-            :maxlength="MAILING_TEXT_MAX_LENGTH"
-            :invalid="fieldError('reasonRu') !== null"
+            :maxlength="GIFT_REASON_MAX_LENGTH"
+            :invalid="fieldError('reasonRu') !== null || reasonRu.trim().length > GIFT_REASON_MAX_LENGTH"
           />
+          <MoleculesLengthCounter :length="reasonRu.trim().length" :limit="GIFT_REASON_MAX_LENGTH" />
           <p v-if="fieldError('reasonRu')" class="mt-1 text-sm text-red-700">{{ fieldError('reasonRu') }}</p>
         </div>
       </div>
       <p class="text-sm text-slate-500">
-        Оба обязательны. Водитель видит повод на своём языке — в сообщении и в приложении:
-        «Xalq Taxi · ко Дню учителя».
+        Оба обязательны. Короткой строкой: водитель видит повод на своём языке в карточке подарка
+        и в сообщении — «Xalq Taxi · ко Дню учителя».
       </p>
 
       <MoleculesGiftCoverField v-model="cover" :error="fieldError('cover')" />
