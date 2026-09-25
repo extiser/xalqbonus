@@ -224,8 +224,13 @@ type PersonRewardQueryRow = Omit<PersonRewardRow, 'office'> & {
 };
 
 /**
- * Награды человека, свежие первыми. Человек входит в условие всегда: чужая награда отсюда
+ * Награды человека для раздела водителя. Человек входит в условие всегда: чужая награда отсюда
  * не читается ни при каком запросе.
+ *
+ * Ждущие первыми, дальше — по последнему событию награды: выдаче, сгоранию или вручению.
+ * По вручению выданная у стойки уезжала в истории ниже баллов, вручённых позже неё, хотя
+ * случилась последней (прогон PR #222, 25-09-2026). Порядок стоит в запросе, а не на экране:
+ * иначе потолок срезал бы не то. Карточка водителя в админке сортируется по-своему.
  */
 export const listPersonRewards = async (
   personId: string,
@@ -263,7 +268,9 @@ export const listPersonRewards = async (
       LEFT JOIN xb.campaigns AS campaign ON campaign."id" = reward."campaign_id"
       LEFT JOIN xb.products  AS product  ON product."id" = reward."product_id"
      WHERE reward."person_id" = ${personId}::uuid
-     ORDER BY reward."created_at" DESC
+     ORDER BY (reward."status" = 'awaiting') DESC,
+              COALESCE(reward."issued_at", reward."expired_at", reward."created_at") DESC,
+              reward."created_at" DESC
      LIMIT ${limit}
   `;
 

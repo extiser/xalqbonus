@@ -39,6 +39,7 @@ import {
 import { cleanupTestEmployees, createTestEmployee, setTestProfilePhone } from '../support/employees';
 import { grantPoints } from '../support/points';
 import {
+  backdateTestReward,
   countRewardsByPerson,
   expireTestReward,
   listRewardMovements,
@@ -325,6 +326,39 @@ describe('награды', () => {
     expect(rewards[0]?.stateText).toMatch(/^Получена · \d{2}\.\d{2}\.\d{4}, \d{2}:\d{2}$/);
 
     await expectStockInvariantsHold();
+  });
+
+  it('раздел водителя: ждущие первыми, дальше по последнему событию — выданная позже вручения выше вручённой между ними', async () => {
+    const scenario = await prizeScenario();
+    const waiting = await grantCustom(scenario, 'Мойка');
+    const prize = await grantPrize(scenario);
+    const points = await grantManualReward({
+      personId: scenario.personId,
+      employeeId: scenario.employeeId,
+      kind: 'points',
+      points: 100,
+      productId: null,
+      title: null,
+      officeId: null,
+      lifetimeDays: null,
+      note: 'компенсация',
+    });
+
+    // Вручены по порядку: ждущая три дня назад, приз два дня назад, баллы вчера. Приз выдан сейчас.
+    await backdateTestReward(waiting.id, 72);
+    await backdateTestReward(prize.id, 48);
+    await backdateTestReward(points.id, 24);
+    await issueOfficeReward(worker(scenario), prize.id);
+
+    const { rewards } = await readMemberRewards({ personId: scenario.personId, language: 'ru' });
+
+    expect(rewards.map((reward) => reward.rewardId)).toEqual([waiting.id, prize.id, points.id]);
+    expect(rewards.map((reward) => reward.status)).toEqual(['awaiting', 'issued', 'credited']);
+
+    // Карточка водителя в админке сортируется по-прежнему: ждущие, дальше по вручению.
+    const { rewards: driverRewards } = await readDriverRewards(scenario.personId);
+
+    expect(driverRewards.map((reward) => reward.rewardId)).toEqual([waiting.id, points.id, prize.id]);
   });
 
   it('баллы наградой: на балансе, строка ручной правки в журнале, без кода и офиса', async () => {

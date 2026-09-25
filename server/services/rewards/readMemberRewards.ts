@@ -4,7 +4,8 @@ import { describeMemberReward } from '#server/services/rewards/memberRewardScree
 import type { MiniAppRewardsResponse } from '#shared/types/rewards';
 
 /**
- * Награды водителя для раздела «Мои награды»: свежие первыми, баллы наравне с товарами.
+ * Награды водителя для раздела «Мои награды»: ждущие первыми, дальше по последнему событию,
+ * баллы наравне с товарами.
  * Раздел отвечает на вопрос «что мне дали», история начислений — «что с балансом».
  */
 

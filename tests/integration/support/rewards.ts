@@ -53,6 +53,18 @@ export const listRewardMovements = async (
  * Отправляет срок награды в прошлое — так выглядит награда, которую не забрали. Срок
  * сравнивается с `now()` базы, поэтому и сдвигается базой.
  */
+/**
+ * Отодвигает вручение награды на `hours` часов назад. Порядок в разделе водителя идёт по моментам
+ * событий, и тесту нужны моменты, разведённые наверняка, а не на микросекунды между запросами.
+ */
+export const backdateTestReward = async (rewardId: string, hours: number): Promise<void> => {
+  await db.$executeRaw`
+    UPDATE xb.rewards
+       SET "created_at" = now() - make_interval(hours => ${hours}::int)
+     WHERE "id" = ${rewardId}::uuid
+  `;
+};
+
 export const expireTestReward = async (rewardId: string): Promise<void> => {
   await db.$executeRaw`
     UPDATE xb.rewards
