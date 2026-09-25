@@ -27,6 +27,8 @@ import {
   homeRewardsView,
   orderDetailView,
   ordersScreenView,
+  rewardDetailView,
+  rewardsScreenView,
 } from '~/utils/memberViews';
 import { failureDenial } from '~/utils/requestError';
 import {
@@ -53,10 +55,10 @@ import {
 
 /**
  * Раскладка выбирается стадией и экраном, а не одна на страницу: загрузка, заглушки, регистрация,
- * отказ выключенному сотруднику, а у участника главная, история, заказы и экран заказа — уже
- * на новых макетах (`miniapp-next`). Цепочка обмена, раздел наград и экран сотрудника — ещё
- * на старых (`miniapp`), до своих задач. Смена оформления при переходе между старым и новым
- * экраном участника — ожидаемое временное состояние (issue #210).
+ * отказ выключенному сотруднику, а у участника главная, история, заказы, награды и их экраны —
+ * уже на новых макетах (`miniapp-next`). Цепочка обмена и экран сотрудника — ещё на старых
+ * (`miniapp`), до своих задач. Смена оформления при переходе между старым и новым экраном
+ * участника — ожидаемое временное состояние (issue #210, #215).
  *
  * Своим `<NuxtLayout :name>` в шаблоне, а не `setPageLayout`: раскладку страницы Nuxt рисует
  * с ключом по её имени, и смена имени пересоздаёт страницу целиком — вместе с состоянием
@@ -392,14 +394,30 @@ const cancelEmployeeOrder = async (): Promise<void> => {
  * строку, и роутер при переходе портит её (issue #90, #105). «Назад» — своей кнопкой экрана:
  * системная кнопка Telegram в приложении не используется.
  */
-type MemberScreenName = 'home' | 'history' | 'offices' | 'showcase' | 'confirm' | 'order' | 'orders' | 'rewards';
+type MemberScreenName =
+  | 'home'
+  | 'history'
+  | 'offices'
+  | 'showcase'
+  | 'confirm'
+  | 'order'
+  | 'orders'
+  | 'rewards'
+  | 'reward';
 
 /** Путь по экранам. Последний — показанный; «назад» снимает его. */
 const screens = ref<MemberScreenName[]>(['home']);
 const currentScreen = computed<MemberScreenName>(() => screens.value.at(-1) ?? 'home');
 
 /** Экраны участника на новых макетах. У них «назад» — в шапке, у старых — кнопкой внизу. */
-const NEXT_MEMBER_SCREENS: ReadonlySet<MemberScreenName> = new Set<MemberScreenName>(['home', 'history', 'orders', 'order']);
+const NEXT_MEMBER_SCREENS: ReadonlySet<MemberScreenName> = new Set<MemberScreenName>([
+  'home',
+  'history',
+  'orders',
+  'order',
+  'rewards',
+  'reward',
+]);
 
 const layout = computed(() => {
   if (stage.value === 'member') {
@@ -411,6 +429,12 @@ const layout = computed(() => {
 
 /** Заказ, открытый на экране заказа: только что оформленный или выбранный из списка. */
 const currentOrder = ref<MemberOrder | null>(null);
+
+/**
+ * Награда, открытая на экране награды. Номером, а не копией: экран строится из списка наград,
+ * и перечитанный список — после возврата из фона — сразу показывает её новое состояние.
+ */
+const currentRewardId = ref<string | null>(null);
 
 /** Шторка «Отменить заказ?» открыта. */
 const cancelSheetOpen = ref(false);
@@ -432,14 +456,15 @@ const goBack = (): void => {
 
   screens.value = screens.value.slice(0, -1);
 
-  // Экран, на который вернулись, мог устареть: заказ отменили, баллы списались. Главная
-  // и заказы перечитываются тихо — водитель ничего не просил, и мигать загрузкой незачем.
+  // Экран, на который вернулись, мог устареть: заказ отменили, баллы списались, награду выдали.
+  // Главная, заказы и награды перечитываются тихо — водитель ничего не просил, и мигать
+  // загрузкой незачем.
   if (currentScreen.value === 'home') {
     void reloadHome();
   } else if (currentScreen.value === 'orders') {
     void memberOrders.reloadOrders();
   } else if (currentScreen.value === 'rewards') {
-    void memberRewards.load();
+    void memberRewards.reload();
   }
 };
 
@@ -481,9 +506,25 @@ const openHistory = (): void => {
   openScreen('history');
 };
 
+/** Раздел наград — тем же правилом, что заказы: прочитанный для главной список перечитывается тихо. */
 const openRewards = (): void => {
   openScreen('rewards');
-  void memberRewards.load();
+  void (memberRewards.state.value === 'ready' ? memberRewards.reload() : memberRewards.load());
+};
+
+/**
+ * Награда из блока главной или из раздела: карточка отдаёт номер. Баллы не открываются —
+ * экран награды им не нужен; их карточка и не нажимается, проверка здесь на всякий случай.
+ */
+const openReward = (rewardId: string): void => {
+  const reward = memberRewards.rewards.value.find((entry) => entry.rewardId === rewardId);
+
+  if (!reward || reward.kind === 'points') {
+    return;
+  }
+
+  currentRewardId.value = rewardId;
+  openScreen('reward');
 };
 
 const selectOffice = (officeId: string): void => {
@@ -564,6 +605,15 @@ const cancelCurrentOrder = async (): Promise<void> => {
 /** Карта офиса заказа — наружу, в Яндекс Картах или браузере, а не поверх приложения. */
 const openOrderMap = (): void => {
   const mapUrl = currentOrder.value?.office.mapUrl;
+
+  if (mapUrl) {
+    window.open(mapUrl, '_blank', 'noopener');
+  }
+};
+
+/** Карта офиса награды — наружу, как у заказа. */
+const openRewardMap = (): void => {
+  const mapUrl = memberRewards.rewards.value.find((entry) => entry.rewardId === currentRewardId.value)?.office?.mapUrl;
 
   if (mapUrl) {
     window.open(mapUrl, '_blank', 'noopener');
@@ -696,6 +746,68 @@ const orderScreen = computed(() => {
 });
 
 /**
+ * Раздел «Мои награды». Подарков от Xalq Taxi здесь нет — их подключает своя задача, и тексты
+ * их группы пусты: без подарков экран их не рисует.
+ */
+const rewardsScreen = computed(() => {
+  const current = member.value;
+
+  if (!current) {
+    return null;
+  }
+
+  const { texts, rewardTexts } = current;
+
+  return {
+    ...rewardsScreenView(memberRewards.state.value, memberRewards.rewards.value, texts),
+    balance: sectionBalance.value,
+    texts: {
+      title: texts.rewardsTitle,
+      back: texts.back,
+      giftsGroup: '',
+      take: '',
+      awaitingGroup: rewardTexts.awaitingGroup,
+      pastGroup: rewardTexts.pastGroup,
+      groupEmpty: texts.groupEmpty,
+      empty: texts.rewardsEmpty,
+      error: texts.rewardsFailed,
+      retry: texts.retry,
+    },
+  };
+});
+
+/** Экран награды — из того же списка, что раздел: своей ручки у одной награды нет. Баланса в шапке нет. */
+const rewardScreen = computed(() => {
+  const current = member.value;
+  const reward = memberRewards.rewards.value.find((entry) => entry.rewardId === currentRewardId.value);
+
+  if (!current || !reward) {
+    return null;
+  }
+
+  const detail = rewardDetailView(reward, current.texts);
+
+  if (!detail) {
+    return null;
+  }
+
+  const { texts, rewardTexts } = current;
+
+  return {
+    reward: detail,
+    texts: {
+      title: rewardTexts.screenTitle,
+      back: texts.back,
+      codeTitle: rewardTexts.codeTitle,
+      officeTitle: texts.orderOfficeTitle,
+      map: texts.officeMap,
+      linesTitle: rewardTexts.screenTitle,
+      total: texts.orderTotal,
+    },
+  };
+});
+
+/**
  * Показывает то, что ответил сервер.
  *
  * Блоки главной поднимает вызывающий, а не этот код: первая загрузка экрана и перечитывание
@@ -760,6 +872,7 @@ const resetScreenWork = (): void => {
   employeePassword.reset();
   screens.value = ['home'];
   currentOrder.value = null;
+  currentRewardId.value = null;
   cancelSheetOpen.value = false;
 };
 
@@ -863,7 +976,8 @@ const reloadHome = async (): Promise<void> => {
 
 /**
  * Возврат в приложение из фона: пока Telegram был свёрнут, баллы могли прийти. На новых экранах
- * участника перечитывается баланс, на главной — ещё её блоки, в разделе заказов — список.
+ * участника перечитывается баланс, на главной — ещё её блоки, в разделе заказов — список,
+ * в разделе и на экране награды — список наград: награду могли выдать у стойки.
  * Старые экраны не трогаются: в цепочке обмена перечитывание сбило бы корзину.
  */
 const onVisibilityChange = (): void => {
@@ -878,6 +992,8 @@ const onVisibilityChange = (): void => {
 
     if (currentScreen.value === 'orders') {
       void memberOrders.reloadOrders();
+    } else if (currentScreen.value === 'rewards' || currentScreen.value === 'reward') {
+      void memberRewards.reload();
     }
   }
 };
@@ -1196,7 +1312,7 @@ const openMap = (office: MemberOfficeView): void => {
         @orders="openOrders"
         @order="openOrder"
         @rewards="openRewards"
-        @reward="openRewards"
+        @reward="openReward"
         @history="openHistory"
         @retry-orders="memberOrders.loadOrders()"
         @retry-rewards="memberRewards.load()"
@@ -1238,6 +1354,22 @@ const openMap = (office: MemberOfficeView): void => {
         />
       </template>
 
+      <OrganismsNextMemberRewardsScreen
+        v-else-if="currentScreen === 'rewards' && rewardsScreen"
+        v-bind="rewardsScreen"
+        @back="goBack"
+        @open="openReward"
+        @retry="memberRewards.load()"
+      />
+
+      <OrganismsNextMemberRewardScreen
+        v-else-if="currentScreen === 'reward' && rewardScreen"
+        :reward="rewardScreen.reward"
+        :texts="rewardScreen.texts"
+        @back="goBack"
+        @map="openRewardMap"
+      />
+
       <div v-else class="flex flex-col gap-2">
         <OrganismsMemberOfficePicker
           v-if="currentScreen === 'offices'"
@@ -1270,13 +1402,6 @@ const openMap = (office: MemberOfficeView): void => {
           :texts="member.orderTexts"
           @place="placeOrder"
           @edit="goBack"
-        />
-
-        <OrganismsMemberRewardList
-          v-else-if="currentScreen === 'rewards'"
-          :state="memberRewards.state.value"
-          :rewards="memberRewards.rewards.value"
-          :texts="member.rewardTexts"
         />
 
         <!-- «Назад» внизу — только у старых экранов: у новых он в шапке раздела -->

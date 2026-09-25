@@ -5,6 +5,7 @@ import type {
   RewardSource,
   RewardStatus,
 } from '#server/generated/prisma/enums';
+import type { OfficeRow } from '#server/repositories/offices';
 import {
   DESK_DRIVER_COLUMNS,
   deskDriverJoins,
@@ -183,7 +184,8 @@ export const listExpiredAwaitingRewards = async (limit: number): Promise<{ id: s
      LIMIT ${limit}
   `;
 
-export type PersonRewardRow = {
+/** Поля награды, общие у раздела водителя и карточки водителя в админке. */
+type PersonRewardColumns = {
   id: string;
   kind: RewardKind;
   title: string;
@@ -196,9 +198,29 @@ export type PersonRewardRow = {
   source: RewardSource;
   sourceNote: string | null;
   campaignTitle: string | null;
+  createdAt: Date;
+};
+
+export type PersonRewardRow = PersonRewardColumns & {
+  /** Офис выдачи целиком — архивный тоже: награда уже родилась с ним. Пуст у баллов. */
+  office: OfficeRow | null;
+  /** Фото и цена товара из каталога — у награды-товара. У остальных пусто. */
+  photoPath: string | null;
+  photoUpdatedAt: Date | null;
+  pricePoints: number | null;
+};
+
+/** Строка запроса как она приходит из базы: офис плоскими колонками с приставкой. */
+type PersonRewardQueryRow = Omit<PersonRewardRow, 'office'> & {
+  officeId: string | null;
   officeName: string | null;
   officeAddress: string | null;
-  createdAt: Date;
+  officeMapUrl: string | null;
+  officeWorkHours: string | null;
+  officePhoneE164: string | null;
+  officeTelegram: string | null;
+  officeArchivedAt: Date | null;
+  officeUpdatedAt: Date | null;
 };
 
 /**
@@ -209,30 +231,74 @@ export const listPersonRewards = async (
   personId: string,
   limit: number,
   client: Executor = db,
-): Promise<PersonRewardRow[]> =>
-  client.$queryRaw<PersonRewardRow[]>`
+): Promise<PersonRewardRow[]> => {
+  const rows = await client.$queryRaw<PersonRewardQueryRow[]>`
     SELECT reward."id",
            reward."kind",
            reward."title",
            reward."points",
            reward."code",
            reward."status",
-           reward."expires_at"  AS "expiresAt",
-           reward."issued_at"   AS "issuedAt",
-           reward."expired_at"  AS "expiredAt",
+           reward."expires_at"   AS "expiresAt",
+           reward."issued_at"    AS "issuedAt",
+           reward."expired_at"   AS "expiredAt",
            reward."source",
-           reward."source_note" AS "sourceNote",
-           campaign."title"     AS "campaignTitle",
-           office."name"        AS "officeName",
-           office."address"     AS "officeAddress",
-           reward."created_at"  AS "createdAt"
+           reward."source_note"  AS "sourceNote",
+           campaign."title"      AS "campaignTitle",
+           reward."created_at"   AS "createdAt",
+           office."id"           AS "officeId",
+           office."name"         AS "officeName",
+           office."address"      AS "officeAddress",
+           office."map_url"      AS "officeMapUrl",
+           office."work_hours"   AS "officeWorkHours",
+           office."phone_e164"   AS "officePhoneE164",
+           office."telegram"     AS "officeTelegram",
+           office."archived_at"  AS "officeArchivedAt",
+           office."updated_at"   AS "officeUpdatedAt",
+           product."photo_path"  AS "photoPath",
+           product."updated_at"  AS "photoUpdatedAt",
+           product."price_points" AS "pricePoints"
       FROM xb.rewards AS reward
       LEFT JOIN xb.offices   AS office   ON office."id" = reward."office_id"
       LEFT JOIN xb.campaigns AS campaign ON campaign."id" = reward."campaign_id"
+      LEFT JOIN xb.products  AS product  ON product."id" = reward."product_id"
      WHERE reward."person_id" = ${personId}::uuid
      ORDER BY reward."created_at" DESC
      LIMIT ${limit}
   `;
+
+  return rows.map(
+    ({
+      officeId,
+      officeName,
+      officeAddress,
+      officeMapUrl,
+      officeWorkHours,
+      officePhoneE164,
+      officeTelegram,
+      officeArchivedAt,
+      officeUpdatedAt,
+      ...reward
+    }) => ({
+      ...reward,
+      // Имя, адрес и отметка правки у офиса обязательны: пусты они только без офиса вовсе.
+      office:
+        officeId === null || officeName === null || officeAddress === null || officeUpdatedAt === null
+          ? null
+          : {
+              id: officeId,
+              name: officeName,
+              address: officeAddress,
+              mapUrl: officeMapUrl,
+              workHours: officeWorkHours,
+              phoneE164: officePhoneE164,
+              telegram: officeTelegram,
+              archivedAt: officeArchivedAt,
+              updatedAt: officeUpdatedAt,
+            },
+    }),
+  );
+};
 
 export type OfficeRewardRow = DeskDriverColumns & {
   id: string;
@@ -311,7 +377,10 @@ export const findAwaitingOfficeRewardByCode = async (
   return rows[0] ?? null;
 };
 
-export type DriverRewardRow = PersonRewardRow & {
+export type DriverRewardRow = PersonRewardColumns & {
+  /** Офис выдачи. Пуст у баллов. */
+  officeName: string | null;
+  officeAddress: string | null;
   /** Кто выдал у стойки. Пусто у всех, кроме выданной. */
   issuedByName: string | null;
   /** Кто вручил. Пусто у наград акции. */

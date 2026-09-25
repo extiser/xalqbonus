@@ -213,10 +213,15 @@ describe('награды', () => {
       status: 'awaiting',
       title: 'Тестовый товар',
       code: reward.code,
-      officeName: 'Тестовый офис',
+      office: { name: 'Тестовый офис' },
       originText: 'Вручил парк · за помощь новичкам',
+      stateWord: 'Ждёт в офисе',
+      reasonText: null,
     });
-    expect(rewards[0]?.stateText).toMatch(/^Ждёт в офисе до \d{2}\.\d{2}\.\d{4}$/);
+    // Срок — словом месяца: «до 5 октября».
+    expect(rewards[0]?.stateHint).toMatch(/^до \d{1,2} [а-я]+$/);
+    expect(rewards[0]?.claimHint).toMatch(/^заберите до \d{1,2} [а-я]+$/);
+    expect(rewards[0]?.stateText).toMatch(/^Ждёт в офисе до \d{1,2} [а-я]+$/);
 
     // Лента офиса называет награду, которой вызвано движение.
     const feed = await readOfficeFeed(scenario.officeId, 10, 0);
@@ -309,8 +314,15 @@ describe('награды', () => {
 
     const { rewards } = await readMemberRewards({ personId: scenario.personId, language: 'ru' });
 
-    expect(rewards[0]).toMatchObject({ status: 'issued', code: null, officeName: 'Тестовый офис' });
-    expect(rewards[0]?.stateText).toMatch(/^Получена \d{2}\.\d{2}\.\d{4} \d{2}:\d{2}$/);
+    expect(rewards[0]).toMatchObject({
+      status: 'issued',
+      code: null,
+      office: { name: 'Тестовый офис' },
+      stateWord: 'Получена',
+      claimHint: null,
+    });
+    expect(rewards[0]?.stateHint).toMatch(/^\d{2}\.\d{2}\.\d{4}, \d{2}:\d{2}$/);
+    expect(rewards[0]?.stateText).toMatch(/^Получена · \d{2}\.\d{2}\.\d{4}, \d{2}:\d{2}$/);
 
     await expectStockInvariantsHold();
   });
@@ -341,9 +353,13 @@ describe('награды', () => {
     expect(rewards[0]).toMatchObject({
       title: '300 баллов',
       status: 'credited',
-      stateText: 'На балансе',
+      stateWord: 'На балансе',
       code: null,
+      office: null,
+      photoPath: null,
+      pricePoints: null,
     });
+    expect(rewards[0]?.stateText).toMatch(/^На балансе · \d{2}\.\d{2}\.\d{4}$/);
   });
 
   it('человеку вне программы награда не вручается', async () => {
@@ -413,7 +429,12 @@ describe('награды', () => {
     const { rewards } = await readMemberRewards({ personId: scenario.personId, language: 'ru' });
     const expired = rewards.find((reward) => reward.rewardId === forgotten.id);
 
-    expect(expired?.stateText).toMatch(/^Срок вышел \d{2}\.\d{2}\.\d{4} — награда не получена$/);
+    expect(expired).toMatchObject({
+      stateWord: 'Срок вышел',
+      reasonText: 'Не забрали в офисе до срока',
+      reasonTextFull: 'Не забрали в офисе до срока — награда сгорела',
+    });
+    expect(expired?.stateText).toMatch(/^Срок вышел · \d{2}\.\d{2}\.\d{4}$/);
     expect(expired?.code).toBeNull();
 
     await expectStockInvariantsHold();

@@ -308,7 +308,13 @@ describe('открытие сундука акции', () => {
     const { rewards } = await readMemberRewards({ personId: scenario.personId, language: 'ru' });
     const wash = rewards.find((reward) => reward.title === 'Мойка');
 
-    expect(wash).toMatchObject({ kind: 'custom', status: 'awaiting', officeName: 'Тестовый офис' });
+    expect(wash).toMatchObject({
+      kind: 'custom',
+      status: 'awaiting',
+      office: { name: 'Тестовый офис' },
+      photoPath: null,
+      pricePoints: null,
+    });
     expect(wash?.code).toMatch(/^[5-9]\d{4}$/);
     expect(wash?.originText).toContain('Сундук недели');
   });
@@ -338,10 +344,12 @@ describe('открытие сундука акции', () => {
       kind: 'product',
       status: 'awaiting',
       title: 'Тестовый товар',
-      officeName: 'Тестовый офис',
+      office: { name: 'Тестовый офис' },
+      // Приз без цены в баллах: зачёркивать на экране награды нечего.
+      pricePoints: null,
     });
     expect(rewards[0]?.code).toMatch(/^[5-9]\d{4}$/);
-    expect(rewards[0]?.stateText).toMatch(/\d{2}\.\d{2}\.\d{4}/);
+    expect(rewards[0]?.stateText).toMatch(/^Ждёт в офисе до \d{1,2} [а-я]+$/);
     expect(rewards[0]?.originText).toContain('Сундук дня, день 1');
     expect(await readStock(scenario.officeId, productId)).toEqual({ onHand: 0, reserved: 1 });
   });

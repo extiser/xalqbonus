@@ -143,10 +143,18 @@ export type TextKey =
   | 'rewards_empty'
   | 'rewards_failed'
   | 'reward_code_title'
+  | 'reward_screen_title'
+  | 'rewards_group_awaiting'
+  | 'rewards_group_past'
   | 'reward_state_credited'
   | 'reward_state_awaiting'
-  | 'reward_state_issued'
-  | 'reward_state_expired'
+  | 'reward_word_awaiting'
+  | 'reward_word_issued'
+  | 'reward_word_expired'
+  | 'reward_until'
+  | 'reward_claim_until'
+  | 'reward_expired_reason'
+  | 'reward_expired_reason_full'
   | 'reward_origin_manual'
   | 'reward_origin_campaign'
   | 'order_denied_office_unavailable'
@@ -831,21 +839,61 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Код для выдачи — покажите этот экран в офисе',
     uz: "Olish kodi — bu ekranni ofisda ko'rsating",
   },
+  /** Заголовок экрана награды и подпись строки награды на нём — одно слово, как в макете. */
+  reward_screen_title: {
+    ru: 'Награда',
+    uz: 'Mukofot',
+  },
+  /** Подписи групп раздела «Мои награды»; счётчик у ждущих ставит экран. */
+  rewards_group_awaiting: {
+    ru: 'Ждут в офисе',
+    uz: 'Ofisda kutmoqda',
+  },
+  rewards_group_past: {
+    ru: 'История наград',
+    uz: 'Mukofotlar tarixi',
+  },
+  /** Слово состояния баллов — и в разделе, и на главной, где после точки стоит дата. */
   reward_state_credited: {
     ru: 'На балансе',
     uz: 'Hisobingizda',
   },
+  /** Строка ждущей на главной целиком: порядок слов на узбекском другой, склейка на клиенте его сломала бы. */
   reward_state_awaiting: {
     ru: 'Ждёт в офисе до {date}',
     uz: '{date} gacha ofisda kutmoqda',
   },
-  reward_state_issued: {
-    ru: 'Получена {moment}',
-    uz: '{moment} da olindi',
+  /** Слова состояния награды — без даты: она стоит после точки, `reward_until` или датой. */
+  reward_word_awaiting: {
+    ru: 'Ждёт в офисе',
+    uz: 'Ofisda kutmoqda',
   },
-  reward_state_expired: {
-    ru: 'Срок вышел {date} — награда не получена',
-    uz: "Muddat {date} da tugadi — mukofot olinmagan",
+  reward_word_issued: {
+    ru: 'Получена',
+    uz: 'Olindi',
+  },
+  reward_word_expired: {
+    ru: 'Срок вышел',
+    uz: 'Muddati tugadi',
+  },
+  /** Срок ждущей после слова состояния в разделе: «Ждёт в офисе · до 5 октября». */
+  reward_until: {
+    ru: 'до {date}',
+    uz: '{date} gacha',
+  },
+  /** Срок ждущей на экране награды: «Ждёт в офисе · заберите до 5 октября». */
+  reward_claim_until: {
+    ru: 'заберите до {date}',
+    uz: '{date} gacha olib keting',
+  },
+  /** Причина сгоревшей — строкой под состоянием: короче в разделе, целиком на экране награды. */
+  reward_expired_reason: {
+    ru: 'Не забрали в офисе до срока',
+    uz: 'Muddatida ofisdan olinmadi',
+  },
+  reward_expired_reason_full: {
+    ru: 'Не забрали в офисе до срока — награда сгорела',
+    uz: "Muddatida ofisdan olinmadi — mukofot yo'qoldi",
   },
   reward_origin_manual: {
     ru: 'Вручил парк',
