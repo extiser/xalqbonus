@@ -111,8 +111,6 @@ export type TextKey =
   | 'button_exchange_points'
   | 'button_back'
   | 'request_failed'
-  | 'offices_empty'
-  | 'offices_failed'
   | 'showcase_empty'
   | 'showcase_failed'
   | 'unit_pieces'
@@ -137,6 +135,19 @@ export type TextKey =
   | 'stepper_decrease'
   | 'stepper_increase'
   | 'stepper_increase_more'
+  | 'office_pick'
+  | 'office_pick_title'
+  | 'office_pick_subtitle'
+  | 'button_add_to_cart'
+  | 'product_sold_out_in_office'
+  | 'product_sold_out'
+  | 'product_missing_in_office'
+  | 'office_hint'
+  | 'office_hint_close'
+  | 'catalog_exit_title'
+  | 'catalog_exit_hint'
+  | 'button_stay'
+  | 'button_exit'
   | 'order_title'
   | 'order_code_title'
   | 'order_expires_short'
@@ -741,14 +752,6 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Приложение не ответило. Проверьте связь и попробуйте ещё раз.',
     uz: "Ilova javob bermadi. Aloqani tekshirib, qaytadan urinib ko'ring.",
   },
-  offices_empty: {
-    ru: 'Офисы, где можно обменять баллы, пока не открыты.',
-    uz: "Ballarni almashtirish mumkin bo'lgan ofislar hozircha ochilmagan.",
-  },
-  offices_failed: {
-    ru: 'Не удалось загрузить офисы. Попробуйте ещё раз.',
-    uz: "Ofislarni yuklab bo'lmadi. Qaytadan urinib ko'ring.",
-  },
   /** Пустая витрина говорит словами, а не показывает пустую сетку. */
   showcase_empty: {
     ru: 'Здесь появятся товары, которые можно взять за баллы в этом офисе. Сейчас их нет — загляните в другой офис.',
@@ -814,7 +817,7 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Здесь появятся товары, которые можно взять за баллы.',
     uz: "Bu yerda ballarga olish mumkin bo'lgan mahsulotlar paydo bo'ladi.",
   },
-  /** Шторка выбора офиса — и при первом входе в каталог, и при смене. */
+  /** Шторка смены офиса со строки «Офис · … · Сменить». */
   office_sheet_title: {
     ru: 'Где заберёте товары?',
     uz: 'Mahsulotlarni qayerdan olasiz?',
@@ -858,6 +861,70 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   stepper_increase_more: {
     ru: 'Добавить ещё',
     uz: "Yana qo'shish",
+  },
+  /** «Офис · Выбрать» над каталогом без офиса и кнопка шторки, открытой этой ссылкой (issue #234). */
+  office_pick: {
+    ru: 'Выбрать',
+    uz: 'Tanlash',
+  },
+  /** Шторка выбора офиса в каталоге без офиса — с первого «+» и со ссылки «Выбрать». */
+  office_pick_title: {
+    ru: 'Где заберёте?',
+    uz: 'Qayerdan olasiz?',
+  },
+  /** Правило до выбора. Названия товара нет — оно бывает очень длинным. */
+  office_pick_subtitle: {
+    ru: 'Один заказ — один офис: дальше в корзину добавляются товары только из него.',
+    uz: "Bitta buyurtma — bitta ofis: keyin savatga faqat shu ofisdagi mahsulotlar qo'shiladi.",
+  },
+  button_add_to_cart: {
+    ru: 'Добавить в корзину',
+    uz: "Savatga qo'shish",
+  },
+  /** Над кнопками шторки: товар кончился в отмеченном офисе, пока водитель выбирал. */
+  product_sold_out_in_office: {
+    ru: 'Этот товар в {office} закончился — выберите другой офис',
+    uz: 'Bu mahsulot {office} ofisida tugadi — boshqa ofisni tanlang',
+  },
+  /** Тот же случай, но товара не осталось ни в одном офисе. */
+  product_sold_out: {
+    ru: 'Этот товар закончился',
+    uz: 'Bu mahsulot tugadi',
+  },
+  /** Плашка вместо счётчика у товара, которого нет в офисе витрины. */
+  product_missing_in_office: {
+    ru: 'Нет в {office}',
+    uz: "{office} ofisida yo'q",
+  },
+  /**
+   * Подсказка под строкой офиса после первого выбора. Имя офиса экран выделяет сам: шаблон
+   * он режет по `{office}`.
+   */
+  office_hint: {
+    ru: 'Показаны товары офиса {office}. Один заказ — один офис: чтобы взять товар из другого, смените офис.',
+    uz: "{office} ofisi mahsulotlari ko'rsatilgan. Bitta buyurtma — bitta ofis: boshqa ofisdan mahsulot olish uchun ofisni o'zgartiring.",
+  },
+  /** Подпись крестика подсказки — для экранного чтеца. */
+  office_hint_close: {
+    ru: 'Закрыть подсказку',
+    uz: 'Maslahatni yopish',
+  },
+  /** Шторка ухода из каталога с непустой корзиной: корзина не запоминается. */
+  catalog_exit_title: {
+    ru: 'Выйти из каталога?',
+    uz: 'Katalogdan chiqasizmi?',
+  },
+  catalog_exit_hint: {
+    ru: 'Товары из корзины не сохранятся.',
+    uz: 'Savatdagi mahsulotlar saqlanmaydi.',
+  },
+  button_stay: {
+    ru: 'Остаться',
+    uz: 'Qolish',
+  },
+  button_exit: {
+    ru: 'Выйти',
+    uz: 'Chiqish',
   },
   order_title: {
     ru: 'Заказ № {number}',

@@ -529,8 +529,6 @@ export type MemberOrderTexts = {
   catalogEmpty: string;
   /** Слово на пилюле скидки. */
   sale: string;
-  officesEmpty: string;
-  officesFailed: string;
   officeSheetTitle: string;
   officeSheetSubtitle: string;
   officeChange: string;
@@ -553,6 +551,23 @@ export type MemberOrderTexts = {
   confirmTitle: string;
   confirmNote: string;
   placeOrder: string;
+  /** «Выбрать» — ссылка в строке офиса каталога без офиса и кнопка шторки, открытой ею. */
+  officePick: string;
+  officePickTitle: string;
+  officePickSubtitle: string;
+  addToCart: string;
+  /** Шаблон «Этот товар в {office} закончился — …»: имя офиса подставляет экран. */
+  productSoldOutInOffice: string;
+  productSoldOut: string;
+  /** Шаблон «Нет в {office}». */
+  productMissingInOffice: string;
+  /** Шаблон подсказки под строкой офиса: `{office}` экран выделяет жирным. */
+  officeHint: string;
+  officeHintClose: string;
+  catalogExitTitle: string;
+  catalogExitHint: string;
+  stay: string;
+  exit: string;
 };
 
 /**
@@ -601,13 +616,52 @@ export type MiniAppShowcaseResponse = {
    */
   balancePoints: number;
   products: ShowcaseProduct[];
+  /**
+   * Товары общего каталога, которых в этом офисе нет. Экран рисует их приглушёнными в конце
+   * витрины: каталог не отфильтровывается молча (T70). Порядок — по `name`.
+   */
+  missingProducts: MissingProduct[];
+};
+
+/** Товар каталога, которого нет в офисе витрины: ни остатка, ни счётчика у него нет. */
+export type MissingProduct = {
+  productId: string;
+  name: string;
+  photoPath: string | null;
+  /** Версия адреса фото, как у `ShowcaseProduct`. */
+  updatedAt: string;
+  pricePoints: number;
+};
+
+/**
+ * Товар общего каталога — без выбранного офиса (issue #234). Остаток — у каждого офиса свой:
+ * им шторка «Где заберёте?» показывает, где товар есть.
+ */
+export type CatalogProduct = {
+  productId: string;
+  name: string;
+  description: string | null;
+  photoPath: string | null;
+  /** Версия адреса фото, как у `ShowcaseProduct`. */
+  updatedAt: string;
+  pricePoints: number;
+  /** Работающие офисы, где товар есть, и его свободный остаток в каждом. Не пуст никогда. */
+  offices: { officeId: string; available: number }[];
+};
+
+export type MiniAppCatalogResponse = {
+  /** Баланс числом — как у витрины офиса. */
+  balancePoints: number;
+  /** Все работающие офисы — порядком и видом `GET /api/miniapp/offices`. */
+  offices: MemberOffice[];
+  products: CatalogProduct[];
 };
 
 /**
  * Товары блока каталога на главной: самые свежие, без привязки к офису (issue #218).
  *
- * Остатка нет — у каждого офиса он свой, а офис на главной не выбран. Нажатие ведёт в каталог,
- * где сначала выбор офиса.
+ * Остатка нет — у каждого офиса он свой, а офис на главной не выбран. Нажатие ведёт в каталог
+ * без офиса, прокрученный к этому товару (issue #234).
  */
 export type MiniAppLatestProductsResponse = {
   products: {

@@ -1,11 +1,13 @@
 import { formatPhone } from '#shared/phone';
 import type {
+  CatalogProduct,
   MemberOffice,
   MemberOperation,
   MemberOrder,
   MemberOrderTexts,
   MemberScreenTexts,
   MiniAppLatestProductsResponse,
+  MissingProduct,
   ShowcaseProduct,
 } from '#shared/types/miniapp';
 import type { MemberGift, MemberReward } from '#shared/types/rewards';
@@ -390,6 +392,36 @@ export const showcaseProductsView = (
     count: quantities[product.productId] ?? 0,
     available: product.available,
   }));
+
+/**
+ * Плитки каталога без офиса (issue #234): остаток зависит от офиса, поэтому пилюли нет,
+ * счётчик на нуле и без предела — «+» здесь открывает шторку «Где заберёте?», а не прибавляет.
+ */
+export const catalogProductsView = (products: readonly CatalogProduct[]): MemberProductView[] =>
+  products.map((product) => ({
+    id: product.productId,
+    name: product.name,
+    image: photoUrl(product.photoPath, product.updatedAt),
+    price: formatPoints(product.pricePoints),
+    count: 0,
+  }));
+
+/** Товары каталога, которых нет в офисе витрины: приглушённые, с «Нет в {office}» вместо счётчика. */
+export const missingProductsView = (
+  products: readonly MissingProduct[],
+  officeName: string,
+  texts: MemberOrderTexts,
+): MemberProductView[] => {
+  const missing = texts.productMissingInOffice.replaceAll('{office}', officeName);
+
+  return products.map((product) => ({
+    id: product.productId,
+    name: product.name,
+    image: photoUrl(product.photoPath, product.updatedAt),
+    price: formatPoints(product.pricePoints),
+    missing,
+  }));
+};
 
 /**
  * Итог и «Оформить» внизу витрины. Погашенная кнопка всегда с причиной: пусто — серым,

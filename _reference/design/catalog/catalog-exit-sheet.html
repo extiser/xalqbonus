@@ -151,6 +151,8 @@ body { display: flex; justify-content: center; }
    - Приглушённые товары — в конце витрины: сверху всё, что можно взять (Руслан, 25-09-2026). Цвет — приглушённый гранат (Руслан, 25-09-2026): подложка —
      гранат 12 % поверх #14171D (#2D1B25), рамка гранат 45 %, текст #E4E8EE — светлее уточнения, чтобы
      читался; золото — цвет наград, в каталоге выбивалось */
+/* Подсказка — гранат целиком (Руслан, 25-09-2026, сессия 62, прогон #234): приглушённый гранат
+   на тёмной витрине не читался. Текст и крестик белые. */
 .where { position: sticky; top: 70px; z-index: 4; background: #0B0D11; padding-bottom: 12px;
   border-bottom: 1px solid rgba(255,255,255,0.06); }
 .tile.out .ph, .tile.out .row, .tile.out .price { opacity: 0.38; }
@@ -158,16 +160,16 @@ body { display: flex; justify-content: center; }
 .nohere { margin-top: auto; height: 44px; border-radius: 99px; border: 1px dashed rgba(255,255,255,0.14);
   display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 500; color: #8A93A2; }
 .tip { position: absolute; top: calc(100% + 6px); left: 16px; right: 16px; z-index: 6; display: flex; align-items: flex-start; gap: 10px;
-  padding: 12px 12px 12px 14px; border-radius: 14px; background: #2D1B25; border: 1px solid rgba(232,54,93,0.45);
-  box-shadow: 0 14px 34px -10px rgba(0,0,0,0.85); transition: opacity .2s ease, transform .2s ease; }
+  padding: 12px 12px 12px 14px; border-radius: 14px; background: #E8365D; border: 0;
+  box-shadow: 0 14px 34px -10px rgba(0,0,0,0.85), 0 6px 22px rgba(232,54,93,0.35); transition: opacity .2s ease, transform .2s ease; }
 /* Прокрутка, крестик, нажатие мимо — тултип гаснет и больше не показывается. */
 .tip.gone { opacity: 0; transform: translateY(-4px); pointer-events: none; }
 .tip-arrow { position: absolute; top: -7px; left: 92px; width: 12px; height: 12px; transform: rotate(45deg);
-  background: #2D1B25; border-left: 1px solid rgba(232,54,93,0.45); border-top: 1px solid rgba(232,54,93,0.45); }
-.tip-text { flex-grow: 1; font-size: 13px; font-weight: 400; line-height: 1.45; color: #E4E8EE; }
+  background: #E8365D; }
+.tip-text { flex-grow: 1; font-size: 13px; font-weight: 500; line-height: 1.45; color: #FFFFFF; }
 .tip-text b { font-weight: 700; color: #FFFFFF; }
 .tip-x { flex-shrink: 0; width: 24px; height: 24px; margin: -2px -2px 0 0; border: 0; border-radius: 99px; padding: 0;
-  background: rgba(232,54,93,0.16); color: #FF7089; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  background: rgba(255,255,255,0.22); color: #FFFFFF; display: flex; align-items: center; justify-content: center; cursor: pointer; }
 /* ------------------------------------------------------------- шторка смены офиса */
 .backdrop { position: fixed; inset: 0; z-index: 30; background: rgba(0,0,0,0.62); }
 .sheet {

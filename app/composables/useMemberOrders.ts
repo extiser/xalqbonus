@@ -1,11 +1,10 @@
 import { computed, ref } from 'vue';
 import {
   INIT_DATA_HEADER,
-  type MemberOffice,
   type MemberOrder,
   type MemberOrderLine,
+  type MiniAppCatalogResponse,
   type MiniAppLatestProductsResponse,
-  type MiniAppOfficesResponse,
   type MiniAppOrderResponse,
   type MiniAppOrdersResponse,
   type MiniAppPlaceOrderRequestBody,
@@ -15,8 +14,8 @@ import type { LoadState } from '~/types/loadState';
 import { failureMessage } from '~/utils/requestError';
 
 /**
- * Обмен баллов в Mini App: товары для блока каталога на главной, офисы, витрина с корзиной,
- * оформление, «Мои заказы» и отмена.
+ * Обмен баллов в Mini App: товары для блока каталога на главной, общий каталог без офиса,
+ * витрина офиса с корзиной, оформление, «Мои заказы» и отмена.
  *
  * Запросы живут здесь, а не в компонентах: экраны получают готовое свойствами и отдают
  * нажатия событиями (docs/frontend.md → «Данные в компоненты не ходят»).
@@ -68,24 +67,45 @@ export const useMemberOrders = (readInitData: () => string, readRequestFailed: (
     }
   };
 
-  // Офисы ------------------------------------------------------------------
+  // Общий каталог без офиса ----------------------------------------------
 
-  const officesState = ref<LoadState>('loading');
-  const offices = ref<MemberOffice[]>([]);
+  /**
+   * Каталог — все товары, которые есть хотя бы в одном работающем офисе, и все офисы (issue #234).
+   * Им открывается каталог, из него шторка «Где заберёте?» берёт офисы товара, а «Выбрать»
+   * и «Сменить» — список офисов.
+   */
+  const catalogState = ref<LoadState>('loading');
+  const catalog = ref<MiniAppCatalogResponse | null>(null);
 
-  const loadOffices = async (): Promise<void> => {
-    officesState.value = 'loading';
+  const fetchCatalog = async (): Promise<void> => {
+    catalog.value = await $fetch<MiniAppCatalogResponse>('/api/miniapp/catalog', {
+      headers: headers(),
+    });
+    catalogState.value = 'ready';
+  };
+
+  const loadCatalog = async (): Promise<void> => {
+    catalogState.value = 'loading';
+    catalog.value = null;
 
     try {
-      const response = await $fetch<MiniAppOfficesResponse>('/api/miniapp/offices', {
-        headers: headers(),
-      });
-
-      offices.value = response.offices;
-      officesState.value = 'ready';
+      await fetchCatalog();
     } catch (error) {
-      console.error('[miniapp] не удалось загрузить офисы', error);
-      officesState.value = 'error';
+      console.error('[miniapp] не удалось загрузить каталог', error);
+      catalogState.value = 'error';
+    }
+  };
+
+  /**
+   * Тихое перечитывание — для шторки «товар закончился»: остатки в ней должны стать свежими,
+   * а каталог под шторкой — не мигать загрузкой. Отказ показанное не гасит: строка о том,
+   * что товар кончился, уже стоит.
+   */
+  const reloadCatalog = async (): Promise<void> => {
+    try {
+      await fetchCatalog();
+    } catch (error) {
+      console.error('[miniapp] не удалось перечитать каталог', error);
     }
   };
 
@@ -121,6 +141,31 @@ export const useMemberOrders = (readInitData: () => string, readRequestFailed: (
     }
 
     quantities.value = next;
+  };
+
+  /**
+   * Витрина офиса без постановки — для «Добавить в корзину» в шторке «Где заберёте?»: сначала
+   * проверить, что товар в офисе ещё есть, и только потом закрепить офис (`applyShowcase`).
+   * Отказ — текстом сервера или `null`, если ответа не было: экран говорит своими словами.
+   */
+  const readShowcase = async (
+    officeId: string,
+  ): Promise<{ showcase: MiniAppShowcaseResponse } | { error: string | null }> => {
+    try {
+      return { showcase: await fetchShowcase(officeId) };
+    } catch (error) {
+      console.error('[miniapp] не удалось прочитать витрину офиса', error);
+
+      return { error: failureMessage(error) };
+    }
+  };
+
+  /** Ставит проверенную витрину без повторного запроса. Корзина — с чистого листа. */
+  const applyShowcase = (next: MiniAppShowcaseResponse): void => {
+    showcase.value = next;
+    showcaseError.value = null;
+    showcaseState.value = 'ready';
+    quantities.value = {};
   };
 
   const openShowcase = async (officeId: string): Promise<void> => {
@@ -166,7 +211,7 @@ export const useMemberOrders = (readInitData: () => string, readRequestFailed: (
 
   /**
    * Забывает витрину и корзину — при уходе из каталога. Последний офис не запоминается
-   * (`_reference/design/catalog/catalog.md`, «Путь водителя»): следующий вход — снова с выбора.
+   * (`_reference/design/catalog/catalog-no-office.md`): следующий вход — снова каталог без офиса.
    */
   const closeShowcase = (): void => {
     showcaseState.value = 'loading';
@@ -337,13 +382,16 @@ export const useMemberOrders = (readInitData: () => string, readRequestFailed: (
     latestProducts,
     loadLatest,
     reloadLatest,
-    officesState,
-    offices,
-    loadOffices,
+    catalogState,
+    catalog,
+    loadCatalog,
+    reloadCatalog,
     showcaseState,
     showcase,
     showcaseError,
     quantities,
+    readShowcase,
+    applyShowcase,
     openShowcase,
     closeShowcase,
     setQuantity,

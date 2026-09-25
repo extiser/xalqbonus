@@ -1529,7 +1529,6 @@ const CATALOG_BALANCE = 2450;
 const CATALOG_TEXTS = {
   title: 'Каталог',
   back: BACK,
-  change: 'Сменить',
   sale: 'SALE',
   decrease: 'Убрать одну',
   increase: 'Добавить',
@@ -1557,17 +1556,16 @@ const CATALOG_OFFICES: MemberCatalogOfficeView[] = [
 export const CATALOG_CURRENT_OFFICE = 'kadysheva';
 
 /**
- * Сцены витрины: `showcase` — `catalog-showcase.html`, `first` — `catalog-office-sheet-first.html`,
- * остальные — сцены 1–5 `catalog-showcase-states.html`. На листе состояний по два товара,
- * в сцене 3 у держателя в офисе две штуки.
+ * Сцены витрины офиса: `showcase` — `catalog-showcase.html`, остальные — сцены 1–5
+ * `catalog-showcase-states.html`. На листе состояний по два товара, в сцене 3 у держателя в офисе
+ * две штуки. Каталог без офиса (T70) — своими заглушками ниже.
  */
-export type CatalogScene = 'first' | 'showcase' | 'nothing' | 'overBalance' | 'stockLimit' | 'empty' | 'error';
+export type CatalogScene = 'showcase' | 'nothing' | 'overBalance' | 'stockLimit' | 'empty' | 'error';
 
 const CATALOG_SCENES: Record<
   CatalogScene,
   { state: 'pick' | 'ready' | 'empty' | 'error'; products: CatalogProduct[]; cart: CatalogCart }
 > = {
-  first: { state: 'pick', products: [], cart: {} },
   showcase: {
     state: 'ready',
     products: [POWER_BANK, HEADSET, CHECKER, FRESHENER, TIRE, MAGNET],
@@ -1597,22 +1595,28 @@ function cartTotal(products: CatalogProduct[], cart: CatalogCart): number {
 export function catalogShowcaseMock(scene: CatalogScene, cart: CatalogCart, officeId: string) {
   const setup = CATALOG_SCENES[scene];
   const total = cartTotal(setup.products, cart);
-  const remaining = CATALOG_BALANCE - total;
 
   return {
     state: setup.state,
     balance: { label: 'Ваши баллы', amount: formatPoints(CATALOG_BALANCE) },
-    office: { label: 'Офис', name: catalogOffice(officeId).name },
+    office: { label: 'Офис', name: catalogOffice(officeId).name, action: 'Сменить' },
     products: setup.products.map((product) => productView(product, cart)),
-    checkout: {
-      total: formatPoints(total),
-      remaining: formatPoints(remaining),
-      remainingNegative: remaining < 0,
-      disabled: total === 0 || remaining < 0,
-      reason: total === 0 ? CHECKOUT_NOTHING_SELECTED : remaining < 0 ? CHECKOUT_OVER_BALANCE : undefined,
-      reasonTone: remaining < 0 ? ('warn' as const) : ('quiet' as const),
-    },
+    checkout: checkoutMock(total),
     texts: CATALOG_TEXTS,
+  };
+}
+
+/** Итог и «Оформить» — из суммы корзины и баланса снимка. */
+function checkoutMock(total: number) {
+  const remaining = CATALOG_BALANCE - total;
+
+  return {
+    total: formatPoints(total),
+    remaining: formatPoints(remaining),
+    remainingNegative: remaining < 0,
+    disabled: total === 0 || remaining < 0,
+    reason: total === 0 ? CHECKOUT_NOTHING_SELECTED : remaining < 0 ? CHECKOUT_OVER_BALANCE : undefined,
+    reasonTone: remaining < 0 ? ('warn' as const) : ('quiet' as const),
   };
 }
 
@@ -1634,9 +1638,12 @@ export const CATALOG_ORDER_DENIED = '«Power Bank 20 000 mAh» осталось 
 
 /** Шторка «Проверьте заказ» — `catalog-confirm.html`: строки — то, что взято в корзину. */
 export function catalogConfirmMock(scene: CatalogScene, cart: CatalogCart, officeId: string) {
-  const setup = CATALOG_SCENES[scene];
+  return confirmMock(CATALOG_SCENES[scene].products, cart, officeId);
+}
+
+function confirmMock(products: CatalogProduct[], cart: CatalogCart, officeId: string) {
   const office = catalogOffice(officeId);
-  const lines: MemberCartLineView[] = setup.products
+  const lines: MemberCartLineView[] = products
     .filter((product) => (cart[product.id] ?? 0) > 0)
     .map((product) => {
       const count = cart[product.id] ?? 0;
@@ -1655,7 +1662,7 @@ export function catalogConfirmMock(scene: CatalogScene, cart: CatalogCart, offic
   return {
     office: { label: 'Офис', name: office.name, address: office.address },
     lines,
-    total: formatPoints(cartTotal(setup.products, cart)),
+    total: formatPoints(cartTotal(products, cart)),
     texts: {
       title: 'Проверьте заказ',
       total: 'Сумма',
@@ -1667,3 +1674,147 @@ export function catalogConfirmMock(scene: CatalogScene, cart: CatalogCart, offic
     },
   };
 }
+
+// ------------------------------------------------- каталог без офиса на входе (T70, issue #234)
+
+/**
+ * Остатки по офисам для сцен T70 — `catalog-no-office.md`. В Кадышева нет гарнитуры и держателя:
+ * на витрине офиса они приглушены в конце (`catalog-office-picked.html`). В ТТЗ нет ничего —
+ * «Выбрать» его показывает пустую витрину.
+ */
+const CATALOG_OFFICE_STOCK: Readonly<Record<string, Readonly<Record<string, number>>>> = {
+  kadysheva: { [POWER_BANK.id]: 8, [CHECKER.id]: 14, [FRESHENER.id]: 22, [TIRE.id]: 31 },
+  sergeli: { [HEADSET.id]: 3, [CHECKER.id]: 5, [TIRE.id]: 12, [MAGNET.id]: 45 },
+  ttz: {},
+};
+
+/** Весь каталог — всё, что есть хотя бы в одном офисе, по порядку сетки макета. */
+const CATALOG_ALL: CatalogProduct[] = [POWER_BANK, HEADSET, CHECKER, FRESHENER, TIRE, MAGNET];
+
+/** Товары офиса с его остатком. */
+function officeProducts(officeId: string): CatalogProduct[] {
+  const stock = CATALOG_OFFICE_STOCK[officeId] ?? {};
+
+  return CATALOG_ALL.flatMap((product) => {
+    const available = stock[product.id];
+
+    return available ? [{ ...product, available }] : [];
+  });
+}
+
+/** Каталог без офиса — `catalog-no-office.html`: «Офис · Выбрать», без пилюль остатка, итога нет. */
+export function catalogNoOfficeMock() {
+  return {
+    state: 'ready' as const,
+    balance: { label: 'Ваши баллы', amount: formatPoints(CATALOG_BALANCE) },
+    office: { label: 'Офис', action: 'Выбрать' },
+    products: CATALOG_ALL.map((product): MemberProductView => ({ ...productView(product, {}), stock: undefined, available: undefined })),
+    texts: CATALOG_TEXTS,
+  };
+}
+
+/** Подсказка под строкой офиса — `catalog-office-picked.html`, `.tip`. */
+const OFFICE_HINT = 'Показаны товары офиса {office}. Один заказ — один офис: чтобы взять товар из другого, смените офис.';
+
+/**
+ * Витрина выбранного офиса — `catalog-office-picked.html`: товары офиса, за ними приглушённые
+ * товары каталога, которых в нём нет, и подсказка. Пустой офис — без приглушённых.
+ */
+export function catalogPickedMock(officeId: string, cart: CatalogCart, hintShown: boolean) {
+  const office = catalogOffice(officeId);
+  const products = officeProducts(officeId);
+  const missing = CATALOG_ALL.filter((product) => !products.some((entry) => entry.id === product.id));
+
+  return {
+    state: products.length > 0 ? ('ready' as const) : ('empty' as const),
+    balance: { label: 'Ваши баллы', amount: formatPoints(CATALOG_BALANCE) },
+    office: { label: 'Офис', name: office.name, action: 'Сменить' },
+    products: products.map((product) => productView(product, cart)),
+    missingProducts: missing.map(
+      (product): MemberProductView => ({
+        id: product.id,
+        name: product.name,
+        image: product.image,
+        price: formatPoints(product.points),
+        oldPrice: product.oldPoints === undefined ? undefined : formatPoints(product.oldPoints),
+        discount: product.discount,
+        missing: `Нет в ${office.name}`,
+      }),
+    ),
+    checkout: checkoutMock(cartTotal(products, cart)),
+    hint: { shown: hintShown, text: OFFICE_HINT, office: office.name, closeLabel: 'Закрыть подсказку' },
+    texts: CATALOG_TEXTS,
+  };
+}
+
+/**
+ * Загрузка витрины — `catalog-loading.html`: строка офиса стоит, на месте плиток скелет (экран
+ * показывает его через 0.3 с загрузки), итога нет.
+ */
+export function catalogLoadingMock(officeId: string | null) {
+  return {
+    state: 'pick' as const,
+    balance: { label: 'Ваши баллы', amount: formatPoints(CATALOG_BALANCE) },
+    office: officeId === null ? undefined : { label: 'Офис', name: catalogOffice(officeId).name, action: 'Сменить' },
+    products: [],
+    texts: CATALOG_TEXTS,
+  };
+}
+
+/** Подтверждение с витрины выбранного офиса. */
+export function catalogPickedConfirmMock(officeId: string, cart: CatalogCart) {
+  return confirmMock(officeProducts(officeId), cart, officeId);
+}
+
+/** Остаток в офисе — шаблоном `stock_pieces`. */
+const pieces = (count: number): string => `${count} шт`;
+
+/**
+ * Шторка «Где заберёте?» — `catalog-pick-office.html`. С товаром — только офисы, где он есть,
+ * с остатком, и «Добавить в корзину»; без товара — все офисы без остатков и «Выбрать».
+ */
+export function catalogPickSheetMock(productId: string | null) {
+  const offices: MemberCatalogOfficeView[] =
+    productId === null
+      ? CATALOG_OFFICES
+      : CATALOG_OFFICES.flatMap((office) => {
+          const available = CATALOG_OFFICE_STOCK[office.id]?.[productId];
+
+          return available ? [{ ...office, stock: pieces(available) }] : [];
+        });
+
+  return {
+    offices,
+    current: null,
+    cartFilled: false,
+    texts: {
+      title: 'Где заберёте?',
+      subtitle: 'Один заказ — один офис: дальше в корзину добавляются товары только из него.',
+      office: 'Офис',
+      warning: 'Корзина очистится: в другом офисе свой набор',
+      save: productId === null ? 'Выбрать' : 'Добавить в корзину',
+      cancel: 'Отменить',
+    },
+  };
+}
+
+/**
+ * Товар закончился, пока выбирали, — `catalog-pick-office-sold-out.html`: Кадышева с нулём ушёл
+ * из списка, отметка снята, над кнопками — где закончился.
+ */
+export const catalogSoldOutSheetMock = {
+  ...catalogPickSheetMock(CHECKER.id),
+  offices: [{ ...catalogOffice('sergeli'), stock: pieces(2) }],
+  notice: 'Этот товар в Кадышева закончился — выберите другой офис',
+};
+
+/** Товар для шторки на листе `catalog-pick-office.html` и отмеченный на `catalog-no-office-focus.html`. */
+export const CATALOG_PICK_PRODUCT = CHECKER.id;
+
+/** Шторка «Выйти из каталога?» — `catalog-exit-sheet.html`. */
+export const catalogExitSheetTexts = {
+  title: 'Выйти из каталога?',
+  hint: 'Товары из корзины не сохранятся.',
+  stay: 'Остаться',
+  exit: 'Выйти',
+};
