@@ -40,11 +40,19 @@ const recipientText = (grant: GiftGrant): string =>
         :key="grant.giftGrantId"
         class="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-200 py-3 first:border-t-0"
       >
+        <!-- Обложка — той же рамкой 16:9, что у водителя. -->
+        <div
+          v-if="grant.coverUrl"
+          class="aspect-video w-24 shrink-0 overflow-hidden rounded-md border border-slate-200"
+        >
+          <img :src="grant.coverUrl" alt="Обложка подарка" class="h-full w-full object-cover" />
+        </div>
         <div class="min-w-48 flex-1">
           <p class="text-sm font-semibold text-slate-900">
             {{ formatNumber(grant.points) }} {{ pluralize(grant.points, 'балл', 'балла', 'баллов') }} ·
-            {{ grant.reason }}
+            {{ grant.reasonRu }}
           </p>
+          <p class="text-sm text-slate-500">{{ grant.reasonUz }}</p>
           <p class="mt-0.5 text-sm text-slate-700">
             <NuxtLink
               v-if="grant.recipientKind === 'person' && grant.personId"

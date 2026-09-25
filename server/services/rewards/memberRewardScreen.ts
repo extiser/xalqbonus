@@ -1,4 +1,5 @@
 import { countedPlainText, plainText } from '#server/bot/texts';
+import { giftCoverUrl } from '#server/adapters/uploads/giftCovers';
 import type { Language } from '#server/generated/prisma/enums';
 import type { MemberGiftRow } from '#server/repositories/gifts';
 import type { PersonRewardRow } from '#server/repositories/rewards';
@@ -43,10 +44,15 @@ const sourceText = (row: PersonRewardRow, language: Language): string => {
   }
 };
 
+/** Пояснение внутри источника. У подарка — повод на языке водителя: русский лежит в награде. */
+const noteText = (row: PersonRewardRow, language: Language): string | null =>
+  row.source === 'gift' && language === 'uz' && row.giftReasonUz !== null ? row.giftReasonUz : row.sourceNote;
+
 const originText = (row: PersonRewardRow, language: Language): string => {
   const source = sourceText(row, language);
+  const note = noteText(row, language);
 
-  return row.sourceNote ? `${source} · ${row.sourceNote}` : source;
+  return note ? `${source} · ${note}` : source;
 };
 
 /**
@@ -120,10 +126,13 @@ export const describeMemberReward = (row: PersonRewardRow, language: Language): 
 export const describeMemberGift = (row: MemberGiftRow, language: Language): MemberGift => ({
   rewardId: row.id,
   title: countedPlainText('gift_title', language, row.points),
-  reasonText: plainText('gift_reason', language, { reason: row.reason }),
+  reasonText: plainText('gift_reason', language, {
+    reason: language === 'uz' ? row.reasonUz : row.reasonRu,
+  }),
   deadlineText: plainText('gift_deadline', language, {
     date: formatDayMonthWord(calendarDayMoment(row.untilDate.toISOString().slice(0, 10)), language),
   }),
+  coverUrl: giftCoverUrl(row.coverPath),
 });
 
 /** Тексты раздела и экрана награды на языке участника. */

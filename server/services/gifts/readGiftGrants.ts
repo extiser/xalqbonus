@@ -1,3 +1,4 @@
+import { giftCoverUrl } from '#server/adapters/uploads/giftCovers';
 import { findGiftGrant, listGiftGrants, type GiftGrantRow } from '#server/repositories/gifts';
 import type { GiftGrant, GiftGrantsResponse } from '#shared/types/rewards';
 
@@ -27,7 +28,9 @@ const toGiftGrant = (row: GiftGrantRow): GiftGrant => ({
   segmentId: row.segmentId,
   segmentName: row.segmentName,
   points: row.points,
-  reason: row.reason,
+  reasonRu: row.reasonRu,
+  reasonUz: row.reasonUz,
+  coverUrl: giftCoverUrl(row.coverPath),
   // Столбец `date` приходит полуночью UTC — день берётся из неё как есть, без зоны.
   untilDate: row.untilDate.toISOString().slice(0, 10),
   grantedByName: row.grantedByName,

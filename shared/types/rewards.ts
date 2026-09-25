@@ -113,10 +113,15 @@ export type MemberGift = {
   rewardId: string;
   /** «300 баллов в подарок». */
   title: string;
-  /** «Xalq Taxi · ко Дню учителя». */
+  /** «Xalq Taxi · ко Дню учителя» — повод на языке водителя. */
   reasonText: string;
   /** «Заберите до 5 октября». */
   deadlineText: string;
+  /**
+   * Адрес обложки — показывается в шторке подарка рамкой 16:9 с обрезкой по краям
+   * (`_reference/design/gifts/main-screen-gift-sheet-cover.html`). Пусто — без обложки.
+   */
+  coverUrl: string | null;
 };
 
 export type MiniAppRewardsResponse = {
@@ -253,7 +258,8 @@ export type RewardGrantOptionsResponse = {
 // ---------------------------------------------------------------------------
 
 /**
- * Тело раздачи подарка (`POST /api/gifts`, issue #219) — то, что набрано в форме, строками.
+ * Поля раздачи подарка (`POST /api/gifts`, issue #219) — то, что набрано в форме, строками.
+ * Уходят телом `multipart/form-data` вместе с обложкой (`GIFT_COVER_FIELD`, `shared/gift.ts`).
  * Получатель — водитель или сегмент, заполнено поле своего вида.
  */
 export type GiftGrantRequestBody = {
@@ -261,13 +267,14 @@ export type GiftGrantRequestBody = {
   personId: string;
   segmentId: string;
   points: string;
-  reason: string;
+  reasonRu: string;
+  reasonUz: string;
   /** «Забрать до», `YYYY-MM-DD`. */
   untilDate: string;
 };
 
 /** Поле формы раздачи, к которому относится отказ. */
-export type GiftGrantField = 'recipient' | 'points' | 'reason' | 'untilDate';
+export type GiftGrantField = 'recipient' | 'points' | 'reasonRu' | 'reasonUz' | 'untilDate' | 'cover';
 
 /** Раздача в списке раздела «Награды»: кому, что, кто выдал и что стало с подарками. */
 export type GiftGrant = {
@@ -280,9 +287,12 @@ export type GiftGrant = {
   segmentId: string | null;
   segmentName: string | null;
   points: number;
-  reason: string;
+  reasonRu: string;
+  reasonUz: string;
   /** День автозачисления, `YYYY-MM-DD`. */
   untilDate: string;
+  /** Адрес обложки. Пусто — раздача без обложки. */
+  coverUrl: string | null;
   grantedByName: string;
   /** Сколько подарков родилось. */
   recipients: number;

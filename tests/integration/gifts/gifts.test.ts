@@ -64,7 +64,9 @@ const giftTo = async (personId: string, employeeId: string, points = 300) => {
   const granted = await grantGift({
     recipient: { kind: 'person', personId },
     points,
-    reason: 'ко Дню учителя',
+    reasonRu: 'ко Дню учителя',
+    reasonUz: "O'qituvchilar kuni munosabati bilan",
+    cover: null,
     untilDate: FAR_UNTIL_DATE,
     employeeId,
   });
@@ -114,7 +116,9 @@ describe('подарки от Xalq Taxi', () => {
     const granted = await grantGift({
       recipient: { kind: 'segment', segmentId: segment.segmentId },
       points: 500,
-      reason: 'ко Дню независимости',
+      reasonRu: 'ко Дню независимости',
+      reasonUz: 'ко Дню независимости',
+      cover: null,
       untilDate: FAR_UNTIL_DATE,
       employeeId,
     });
@@ -252,9 +256,15 @@ describe('подарки от Xalq Taxi', () => {
         title: '300 баллов в подарок',
         reasonText: 'Xalq Taxi · ко Дню учителя',
         deadlineText: 'Заберите до 1 января',
+        coverUrl: null,
       },
     ]);
     expect(before.giftsUnseen).toBe(true);
+
+    // Повод — на языке водителя.
+    const uzbek = await readMemberRewards({ personId, language: 'uz' });
+
+    expect(uzbek.gifts[0]?.reasonText).toBe("Xalq Taxi · O'qituvchilar kuni munosabati bilan");
 
     // Чужой идентификатор молча пропускается.
     await markGiftsShown(personId, [rewardId, foreign.rewardId]);
@@ -273,6 +283,9 @@ describe('подарки от Xalq Taxi', () => {
       title: '300 баллов',
       originText: 'Xalq Taxi · ко Дню учителя',
     });
+    expect((await readMemberRewards({ personId, language: 'uz' })).rewards[0]?.originText).toBe(
+      "Xalq Taxi · O'qituvchilar kuni munosabati bilan",
+    );
   });
 
   it('отказы раздачи: вне программы, архивный сегмент, срок не позже сегодняшнего дня парка', async () => {
@@ -284,7 +297,9 @@ describe('подарки от Xalq Taxi', () => {
       grantGift({
         recipient: { kind: 'person', personId: outsider },
         points: 100,
-        reason: 'повод',
+        reasonRu: 'повод',
+        reasonUz: 'повод',
+        cover: null,
         untilDate: FAR_UNTIL_DATE,
         employeeId,
       }),
@@ -294,7 +309,9 @@ describe('подарки от Xalq Taxi', () => {
       grantGift({
         recipient: { kind: 'person', personId },
         points: 100,
-        reason: 'повод',
+        reasonRu: 'повод',
+        reasonUz: 'повод',
+        cover: null,
         untilDate: parkDayKey(new Date()),
         employeeId,
       }),
@@ -304,7 +321,9 @@ describe('подарки от Xalq Taxi', () => {
       grantGift({
         recipient: { kind: 'person', personId },
         points: 0,
-        reason: 'повод',
+        reasonRu: 'повод',
+        reasonUz: 'повод',
+        cover: null,
         untilDate: FAR_UNTIL_DATE,
         employeeId,
       }),
@@ -314,11 +333,39 @@ describe('подарки от Xalq Taxi', () => {
       grantGift({
         recipient: { kind: 'person', personId },
         points: 100,
-        reason: '   ',
+        reasonRu: '   ',
+        reasonUz: 'sabab',
+        cover: null,
         untilDate: FAR_UNTIL_DATE,
         employeeId,
       }),
-    ).rejects.toMatchObject({ problem: 'reason_missing' });
+    ).rejects.toMatchObject({ problem: 'reason_ru_missing' });
+
+    await expect(
+      grantGift({
+        recipient: { kind: 'person', personId },
+        points: 100,
+        reasonRu: 'повод',
+        reasonUz: '',
+        cover: null,
+        untilDate: FAR_UNTIL_DATE,
+        employeeId,
+      }),
+    ).rejects.toMatchObject({ problem: 'reason_uz_missing' });
+
+    // С обложкой сообщение — подпись к фото, до 1024 знаков: повод в 1000 знаков в неё
+    // не влезает, хотя текстом без обложки ушёл бы.
+    await expect(
+      grantGift({
+        recipient: { kind: 'person', personId },
+        points: 100,
+        reasonRu: 'повод',
+        reasonUz: 'a'.repeat(1_000),
+        cover: { contentType: 'image/png', bytes: Buffer.from('png') },
+        untilDate: FAR_UNTIL_DATE,
+        employeeId,
+      }),
+    ).rejects.toMatchObject({ problem: 'reason_uz_too_long' });
 
     const segment = await createSegment(
       {
@@ -342,7 +389,9 @@ describe('подарки от Xalq Taxi', () => {
       grantGift({
         recipient: { kind: 'segment', segmentId: segment.segmentId },
         points: 100,
-        reason: 'повод',
+        reasonRu: 'повод',
+        reasonUz: 'повод',
+        cover: null,
         untilDate: FAR_UNTIL_DATE,
         employeeId,
       }),
@@ -352,7 +401,9 @@ describe('подарки от Xalq Taxi', () => {
     const tomorrow = await grantGift({
       recipient: { kind: 'person', personId },
       points: 100,
-      reason: 'повод',
+      reasonRu: 'повод',
+      reasonUz: 'повод',
+      cover: null,
       untilDate: shiftDayKey(parkDayKey(new Date()), 1),
       employeeId,
     });

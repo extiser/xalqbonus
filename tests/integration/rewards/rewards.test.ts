@@ -336,7 +336,9 @@ describe('награды', () => {
     const { giftGrantId } = await grantGift({
       recipient: { kind: 'person', personId: scenario.personId },
       points: 100,
-      reason: 'компенсация',
+      reasonRu: 'компенсация',
+      reasonUz: 'компенсация',
+      cover: null,
       untilDate: '2099-01-01',
       employeeId: scenario.employeeId,
     });

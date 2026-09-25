@@ -1,5 +1,10 @@
+import { randomUUID } from 'node:crypto';
+
 import { consola } from 'consola';
+import { deleteGiftCover, writeGiftCover } from '#server/adapters/uploads/giftCovers';
+import { giftReceivedLength } from '#server/bot/notifications';
 import { db } from '#server/db';
+import type { Language } from '#server/generated/prisma/enums';
 import { enqueueNotifications } from '#server/queues/notifications';
 import { insertGiftGrant, insertGiftRewards } from '#server/repositories/gifts';
 import { listProgramMemberIds } from '#server/repositories/programMembership';
@@ -8,6 +13,8 @@ import { GiftRecipientError, InvalidGiftGrantError } from '#server/services/gift
 import { toSegmentConditions } from '#server/services/segments/fields';
 import { parkDayKey, shiftDayKey } from '#server/utils/parkTime';
 import { isCalendarDay } from '#shared/campaign';
+import { mailingMessageLimit } from '#shared/mailing';
+import { MAX_PHOTO_BYTES, PHOTO_EXTENSION_BY_TYPE } from '#shared/photo';
 
 /**
  * Раздача подарка от Xalq Taxi (issue #219): баллы одному водителю или сегменту, каждому —
@@ -24,6 +31,10 @@ import { isCalendarDay } from '#shared/campaign';
  * и дальше не пересчитывается. Раздача и все её награды — одна транзакция: половина раздачи
  * означала бы водителей, которым не досталось, без следа причины. Сообщения водителям
  * ставятся после фиксации — сообщение о подарке, который откатился, хуже, чем никакого.
+ *
+ * Повод — на двух языках, оба обязательны: сообщение и приложение говорят с водителем на его
+ * языке. Обложка необязательна и ложится на том под идентификатор раздачи до транзакции —
+ * как фото рассылки, сначала файл, потом колонка. Не записалась раздача — файл снимается.
  */
 
 const log = consola.withTag('gifts:grant');
@@ -32,13 +43,18 @@ export type GiftRecipient =
   | { kind: 'person'; personId: string }
   | { kind: 'segment'; segmentId: string };
 
+/** Обложка, как её прислали: тип и размер проверяются здесь. */
+export type GiftCoverUpload = { contentType: string; bytes: Buffer };
+
 export type GrantGiftInput = {
   recipient: GiftRecipient;
   /** Как пришло: проверяется здесь. */
   points: number | null;
-  reason: string;
+  reasonRu: string;
+  reasonUz: string;
   /** «Забрать до», `YYYY-MM-DD`. */
   untilDate: string;
+  cover: GiftCoverUpload | null;
   employeeId: string;
 };
 
@@ -51,7 +67,39 @@ export type GrantGiftResult = {
 /** Столбец `points` — `int`: сумма больше него не запишется. */
 const MAX_POINTS = 2_147_483_647;
 
-type ValidGift = { points: number; reason: string; untilDate: string };
+type ValidGift = { points: number; reasonRu: string; reasonUz: string; untilDate: string };
+
+/**
+ * Влезает ли сообщение о подарке на каждом языке в то, что примет Telegram: с обложкой текст
+ * становится подписью, и потолок у неё вчетверо ниже — тем же правилом, что у рассылки
+ * (`shared/mailing.ts`). Проверяется до записи: отказ Telegram в очереди не чинится ничем.
+ */
+const TOO_LONG_PROBLEM = { ru: 'reason_ru_too_long', uz: 'reason_uz_too_long' } as const;
+
+const requireFittingMessage = (gift: ValidGift, withCover: boolean): void => {
+  const limit = mailingMessageLimit(withCover);
+  const params = { ...gift, coverPath: withCover ? 'cover' : null };
+
+  for (const language of ['ru', 'uz'] as const satisfies readonly Language[]) {
+    if (giftReceivedLength(params, language) > limit) {
+      throw new InvalidGiftGrantError(TOO_LONG_PROBLEM[language]);
+    }
+  }
+};
+
+const validateCover = (cover: GiftCoverUpload | null): void => {
+  if (cover === null) {
+    return;
+  }
+
+  if (!PHOTO_EXTENSION_BY_TYPE[cover.contentType]) {
+    throw new InvalidGiftGrantError('cover_type_invalid');
+  }
+
+  if (cover.bytes.byteLength > MAX_PHOTO_BYTES) {
+    throw new InvalidGiftGrantError('cover_too_large');
+  }
+};
 
 const validate = (input: GrantGiftInput, now: Date): ValidGift => {
   const { points } = input;
@@ -60,10 +108,15 @@ const validate = (input: GrantGiftInput, now: Date): ValidGift => {
     throw new InvalidGiftGrantError('points_invalid');
   }
 
-  const reason = input.reason.trim();
+  const reasonRu = input.reasonRu.trim();
+  const reasonUz = input.reasonUz.trim();
 
-  if (reason === '') {
-    throw new InvalidGiftGrantError('reason_missing');
+  if (reasonRu === '') {
+    throw new InvalidGiftGrantError('reason_ru_missing');
+  }
+
+  if (reasonUz === '') {
+    throw new InvalidGiftGrantError('reason_uz_missing');
   }
 
   const untilDate = input.untilDate.trim();
@@ -78,14 +131,24 @@ const validate = (input: GrantGiftInput, now: Date): ValidGift => {
     throw new InvalidGiftGrantError('until_date_too_early');
   }
 
-  return { points, reason, untilDate };
+  const gift = { points, reasonRu, reasonUz, untilDate };
+
+  validateCover(input.cover);
+  requireFittingMessage(gift, input.cover !== null);
+
+  return gift;
 };
 
-export const grantGift = async (input: GrantGiftInput): Promise<GrantGiftResult> => {
-  const gift = validate(input, new Date());
+/** Раздача и её подарки одной транзакцией. Получатели — участники программы, снимком. */
+const writeGrant = async (
+  input: GrantGiftInput,
+  gift: ValidGift,
+  giftGrantId: string,
+  coverPath: string | null,
+): Promise<{ personIds: string[]; skipped: number }> => {
   const { recipient } = input;
 
-  const granted = await db.$transaction(async (transaction) => {
+  return db.$transaction(async (transaction) => {
     let personIds: string[];
     let skipped = 0;
 
@@ -116,8 +179,10 @@ export const grantGift = async (input: GrantGiftInput): Promise<GrantGiftResult>
       }
     }
 
-    const giftGrantId = await insertGiftGrant(transaction, {
+    await insertGiftGrant(transaction, {
       ...gift,
+      id: giftGrantId,
+      coverPath,
       segmentId: recipient.kind === 'segment' ? recipient.segmentId : null,
       personId: recipient.kind === 'person' ? recipient.personId : null,
       recipients: personIds.length,
@@ -131,7 +196,7 @@ export const grantGift = async (input: GrantGiftInput): Promise<GrantGiftResult>
       points: gift.points,
       // Как у награды-баллов ручной выдачи: водителю сумму называет экран на его языке.
       title: `Баллы: ${gift.points}`,
-      reason: gift.reason,
+      reasonRu: gift.reasonRu,
       untilDate: gift.untilDate,
       grantedByEmployeeId: input.employeeId,
     });
@@ -140,8 +205,39 @@ export const grantGift = async (input: GrantGiftInput): Promise<GrantGiftResult>
       throw new Error(`раздача ${giftGrantId}: подарков ${inserted} вместо ${personIds.length}`);
     }
 
-    return { giftGrantId, personIds, skipped };
+    return { personIds, skipped };
   });
+};
+
+export const grantGift = async (input: GrantGiftInput): Promise<GrantGiftResult> => {
+  const gift = validate(input, new Date());
+  const { recipient } = input;
+  // Идентификатор выдаётся до записи: под него ложится файл обложки.
+  const giftGrantId = randomUUID();
+  const coverPath = input.cover
+    ? await writeGiftCover(giftGrantId, input.cover.contentType, input.cover.bytes)
+    : null;
+
+  let written: { personIds: string[]; skipped: number };
+
+  try {
+    written = await writeGrant(input, gift, giftGrantId, coverPath);
+  } catch (error) {
+    // Раздача не записалась — обложке ссылаться не на что. Отказ снятия не заслоняет
+    // исходную причину: она важнее файла, оставшегося на томе.
+    if (coverPath) {
+      await deleteGiftCover(coverPath).catch((cleanupError: unknown) => {
+        log.warn('обложка несостоявшейся раздачи не снялась с тома', {
+          coverPath,
+          error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+        });
+      });
+    }
+
+    throw error;
+  }
+
+  const granted = { giftGrantId, ...written };
 
   log.info('подарок роздан', {
     giftGrantId: granted.giftGrantId,
@@ -158,7 +254,13 @@ export const grantGift = async (input: GrantGiftInput): Promise<GrantGiftResult>
       granted.personIds.map((personId) => ({
         personId,
         template: 'gift_received',
-        params: { points: gift.points, reason: gift.reason, untilDate: gift.untilDate },
+        params: {
+          points: gift.points,
+          reasonRu: gift.reasonRu,
+          reasonUz: gift.reasonUz,
+          untilDate: gift.untilDate,
+          coverPath,
+        },
       })),
     );
   } catch (error) {

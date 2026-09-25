@@ -6,6 +6,8 @@ import {
   type GiftGrantProblem,
   type GiftRecipientProblem,
 } from '#server/services/gifts/errors';
+import { MAILING_CAPTION_MAX_LENGTH, MAILING_TEXT_MAX_LENGTH } from '#shared/mailing';
+import { MAX_PHOTO_MB } from '#shared/photo';
 import type { GiftGrantField } from '#shared/types/rewards';
 
 /**
@@ -23,11 +25,28 @@ type Rejection = { status: 400 | 409; field: GiftGrantField; message: string };
 
 const GRANT_PROBLEMS: Readonly<Record<GiftGrantProblem, Rejection>> = {
   points_invalid: { status: 400, field: 'points', message: 'Сумма — целое число баллов больше нуля.' },
-  reason_missing: {
+  reason_ru_missing: {
     status: 400,
-    field: 'reason',
-    message: 'Напишите повод: водитель увидит его в приложении и в сообщении.',
+    field: 'reasonRu',
+    message: 'Напишите повод на русском: водитель увидит его в приложении и в сообщении.',
   },
+  reason_uz_missing: {
+    status: 400,
+    field: 'reasonUz',
+    message: 'Напишите повод на узбекском: водитель увидит его в приложении и в сообщении.',
+  },
+  reason_ru_too_long: {
+    status: 400,
+    field: 'reasonRu',
+    message: `Сообщение на русском с этим поводом не примет Telegram: с обложкой — не больше ${MAILING_CAPTION_MAX_LENGTH} знаков, без неё — ${MAILING_TEXT_MAX_LENGTH}. Сократите повод.`,
+  },
+  reason_uz_too_long: {
+    status: 400,
+    field: 'reasonUz',
+    message: `Сообщение на узбекском с этим поводом не примет Telegram: с обложкой — не больше ${MAILING_CAPTION_MAX_LENGTH} знаков, без неё — ${MAILING_TEXT_MAX_LENGTH}. Сократите повод.`,
+  },
+  cover_type_invalid: { status: 400, field: 'cover', message: 'Обложка — JPEG, PNG или WebP.' },
+  cover_too_large: { status: 400, field: 'cover', message: `Обложка тяжелее ${MAX_PHOTO_MB} МБ.` },
   until_date_invalid: { status: 400, field: 'untilDate', message: 'Дата не читается как день календаря.' },
   until_date_too_early: {
     status: 400,

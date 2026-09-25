@@ -10,6 +10,7 @@ import type { GiftFields, PickedDriver } from '~/types/rewardGrant';
 import type { SelectOption } from '~/types/selectOption';
 import { GIFT_SEGMENT_ROLES } from '#shared/access';
 import type { DriverCardResponse, DriverSearchResponse, DriverSearchRow } from '#shared/types/driver';
+import { GIFT_COVER_FIELD } from '#shared/gift';
 import type {
   GiftGrantRequestBody,
   GiftGrantResponse,
@@ -199,7 +200,7 @@ const confirmMessage = computed(() => {
 
   return [
     `В сегменте «${segment.name}» сейчас ${formatNumber(segment.total)} чел.`,
-    `Подарок — ${gift.points} ${pluralize(Number(gift.points), 'балл', 'балла', 'баллов')}, «${gift.reason}».`,
+    `Подарок — ${gift.points} ${pluralize(Number(gift.points), 'балл', 'балла', 'баллов')}, «${gift.reasonRu}»${gift.cover ? ', с обложкой' : ''}.`,
     'Получат только участники программы, остальные будут пропущены. Каждому придёт сообщение в Telegram.',
     'Раздача не отменяется.',
   ].join('\n');
@@ -208,12 +209,26 @@ const confirmMessage = computed(() => {
 const sendGift = async (gift: GiftFields): Promise<void> => {
   saving.value = true;
 
-  const body: GiftGrantRequestBody = {
+  const fields: GiftGrantRequestBody = {
     recipientKind: recipientKind.value,
     personId: recipientKind.value === 'person' ? (driver.value?.personId ?? '') : '',
     segmentId: recipientKind.value === 'segment' ? segmentId.value : '',
-    ...gift,
+    points: gift.points,
+    reasonRu: gift.reasonRu,
+    reasonUz: gift.reasonUz,
+    untilDate: gift.untilDate,
   };
+
+  // Одним запросом с обложкой: раздача не правится, и черновика под картинку у неё нет.
+  const body = new FormData();
+
+  for (const [name, value] of Object.entries(fields)) {
+    body.append(name, value);
+  }
+
+  if (gift.cover) {
+    body.append(GIFT_COVER_FIELD, gift.cover);
+  }
 
   try {
     const { grant } = await $fetch<GiftGrantResponse>('/api/gifts', { method: 'POST', body });

@@ -28,3 +28,6 @@ export const PRODUCT_PHOTO_DIR = 'products';
 
 /** Подкаталог фото рассылок внутри тома. Он же первый сегмент `mailings.photo_path`. */
 export const MAILING_PHOTO_DIR = 'mailings';
+
+/** Подкаталог обложек подарков внутри тома (issue #219). Он же первый сегмент `gift_grants.cover_path`. */
+export const GIFT_COVER_DIR = 'gifts';

@@ -210,6 +210,11 @@ type PersonRewardColumns = {
  */
 export type PersonRewardRow = Omit<PersonRewardColumns, 'status'> & {
   status: Exclude<RewardStatus, 'claimable'>;
+  /**
+   * Повод подарка на узбекском — из раздачи. Русский лежит в `sourceNote`. Пусто у всех,
+   * кроме подарка.
+   */
+  giftReasonUz: string | null;
   /** Офис выдачи целиком — архивный тоже: награда уже родилась с ним. Пуст у баллов. */
   office: OfficeRow | null;
   /** Фото и цена товара из каталога — у награды-товара. У остальных пусто. */
@@ -261,6 +266,7 @@ export const listPersonRewards = async (
            reward."source",
            reward."source_note"  AS "sourceNote",
            campaign."title"      AS "campaignTitle",
+           gift_grant."reason_uz" AS "giftReasonUz",
            reward."created_at"   AS "createdAt",
            office."id"           AS "officeId",
            office."name"         AS "officeName",
@@ -278,6 +284,7 @@ export const listPersonRewards = async (
       LEFT JOIN xb.offices   AS office   ON office."id" = reward."office_id"
       LEFT JOIN xb.campaigns AS campaign ON campaign."id" = reward."campaign_id"
       LEFT JOIN xb.products  AS product  ON product."id" = reward."product_id"
+      LEFT JOIN xb.gift_grants AS gift_grant ON gift_grant."id" = reward."gift_grant_id"
      WHERE reward."person_id" = ${personId}::uuid
        AND reward."status" <> 'claimable'
      ORDER BY (reward."status" = 'awaiting') DESC,

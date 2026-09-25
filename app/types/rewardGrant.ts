@@ -15,7 +15,10 @@ export type PickedDriver = {
 /** Поля подарка-баллов, как их набрали в форме. */
 export type GiftFields = {
   points: string;
-  reason: string;
+  reasonRu: string;
+  reasonUz: string;
   /** «Забрать до», `YYYY-MM-DD`. */
   untilDate: string;
+  /** Обложка. Пусто — без обложки. */
+  cover: File | null;
 };

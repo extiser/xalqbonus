@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import type { GiftFields } from '~/types/rewardGrant';
 import type { SelectOption } from '~/types/selectOption';
+import { MAILING_TEXT_MAX_LENGTH } from '#shared/mailing';
 import type { ManualRewardRequestBody } from '#shared/types/rewards';
 
 /**
@@ -36,8 +37,10 @@ type KindChoice = 'points' | 'product' | 'custom';
 
 const kind = ref<KindChoice>('points');
 const points = ref('');
-const reason = ref('');
+const reasonRu = ref('');
+const reasonUz = ref('');
 const untilDate = ref('');
+const cover = ref<File | null>(null);
 const productId = ref('');
 const title = ref('');
 const officeId = ref('');
@@ -75,7 +78,9 @@ watch(
   () => props.appliedCount,
   () => {
     points.value = '';
-    reason.value = '';
+    reasonRu.value = '';
+    reasonUz.value = '';
+    cover.value = null;
     productId.value = '';
     title.value = '';
     note.value = '';
@@ -89,8 +94,10 @@ const fieldError = (field: string): string | null =>
 const FORM_FIELDS = [
   'recipient',
   'points',
-  'reason',
+  'reasonRu',
+  'reasonUz',
   'untilDate',
+  'cover',
   'kind',
   'productId',
   'title',
@@ -105,7 +112,13 @@ const generalError = computed(() =>
 
 const submit = (): void => {
   if (kind.value === 'points') {
-    emit('gift', { points: points.value, reason: reason.value.trim(), untilDate: untilDate.value });
+    emit('gift', {
+      points: points.value,
+      reasonRu: reasonRu.value.trim(),
+      reasonUz: reasonUz.value.trim(),
+      untilDate: untilDate.value,
+      cover: cover.value,
+    });
 
     return;
   }
@@ -137,19 +150,6 @@ const submit = (): void => {
           required
           :error="fieldError('points')"
         />
-        <div class="sm:col-span-2">
-          <MoleculesFormField
-            v-model="reason"
-            label="Повод"
-            type="text"
-            placeholder="ко Дню учителя"
-            required
-            :error="fieldError('reason')"
-            hint="Водитель увидит его в приложении и в сообщении: «Xalq Taxi · ко Дню учителя»."
-          />
-        </div>
-      </div>
-      <div class="max-w-xs">
         <MoleculesFormField
           v-model="untilDate"
           label="Забрать до"
@@ -159,6 +159,40 @@ const submit = (): void => {
           hint="Не раньше завтра. Незабранное к концу этого дня зачислится само."
         />
       </div>
+
+      <!-- Порядок языков — как у текстов рассылки: узбекский первым. -->
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+          <MoleculesTextAreaField
+            v-model="reasonUz"
+            label="Повод на узбекском"
+            :rows="2"
+            placeholder="O'qituvchilar kuni munosabati bilan"
+            required
+            :maxlength="MAILING_TEXT_MAX_LENGTH"
+            :invalid="fieldError('reasonUz') !== null"
+          />
+          <p v-if="fieldError('reasonUz')" class="mt-1 text-sm text-red-700">{{ fieldError('reasonUz') }}</p>
+        </div>
+        <div>
+          <MoleculesTextAreaField
+            v-model="reasonRu"
+            label="Повод на русском"
+            :rows="2"
+            placeholder="ко Дню учителя"
+            required
+            :maxlength="MAILING_TEXT_MAX_LENGTH"
+            :invalid="fieldError('reasonRu') !== null"
+          />
+          <p v-if="fieldError('reasonRu')" class="mt-1 text-sm text-red-700">{{ fieldError('reasonRu') }}</p>
+        </div>
+      </div>
+      <p class="text-sm text-slate-500">
+        Оба обязательны. Водитель видит повод на своём языке — в сообщении и в приложении:
+        «Xalq Taxi · ко Дню учителя».
+      </p>
+
+      <MoleculesGiftCoverField v-model="cover" :error="fieldError('cover')" />
     </template>
 
     <template v-else>

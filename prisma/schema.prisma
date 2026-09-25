@@ -1866,10 +1866,14 @@ model Reward {
 model GiftGrant {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   points    Int
-  /// Повод, который видит водитель: «ко Дню учителя».
-  reason    String
+  /// Повод, который видит водитель, на его языке: «ко Дню учителя». Оба языка обязательны —
+  /// сообщение и приложение говорят с водителем на его языке (правка по прогону #232).
+  reasonRu  String   @map("reason_ru")
+  reasonUz  String   @map("reason_uz")
   /// День автозачисления в зоне парка: незабранное ложится на баланс в конце этих суток.
   untilDate DateTime @map("until_date") @db.Date
+  /// Обложка — относительный путь на томе, `gifts/<id>.<ext>`. Пусто — без обложки.
+  coverPath String?  @map("cover_path")
 
   segmentId String? @map("segment_id") @db.Uuid
   personId  String? @map("person_id") @db.Uuid

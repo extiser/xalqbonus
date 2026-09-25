@@ -21,10 +21,14 @@ type Executor = Prisma.TransactionClient;
 const CHUNK_SIZE = 1_000;
 
 export type GiftGrantInput = {
+  /** Выдаётся сервисом до записи: под него ложится файл обложки. */
+  id: string;
   points: number;
-  reason: string;
+  reasonRu: string;
+  reasonUz: string;
   /** День автозачисления в зоне парка, `YYYY-MM-DD`. */
   untilDate: string;
+  coverPath: string | null;
   segmentId: string | null;
   personId: string | null;
   recipients: number;
@@ -32,17 +36,20 @@ export type GiftGrantInput = {
   grantedByEmployeeId: string;
 };
 
-/** Заводит раздачу. Возвращает идентификатор: строку с именами читает `findGiftGrant`. */
-export const insertGiftGrant = async (client: Executor, input: GiftGrantInput): Promise<string> => {
+/** Заводит раздачу. Строку с именами читает `findGiftGrant`. */
+export const insertGiftGrant = async (client: Executor, input: GiftGrantInput): Promise<void> => {
   const rows = await client.$queryRaw<{ id: string }[]>`
     INSERT INTO xb.gift_grants (
-      "points", "reason", "until_date", "segment_id", "person_id",
+      "id", "points", "reason_ru", "reason_uz", "until_date", "cover_path", "segment_id", "person_id",
       "recipients", "skipped", "granted_by_employee_id"
     )
     VALUES (
+      ${input.id}::uuid,
       ${input.points}::int,
-      ${input.reason},
+      ${input.reasonRu},
+      ${input.reasonUz},
       ${input.untilDate}::date,
+      ${input.coverPath},
       ${input.segmentId}::uuid,
       ${input.personId}::uuid,
       ${input.recipients}::int,
@@ -52,13 +59,9 @@ export const insertGiftGrant = async (client: Executor, input: GiftGrantInput): 
     RETURNING "id"
   `;
 
-  const row = rows[0];
-
-  if (!row) {
+  if (!rows[0]) {
     throw new Error('раздача подарка не вставилась');
   }
-
-  return row.id;
 };
 
 export type GiftRewardsInput = {
@@ -66,7 +69,8 @@ export type GiftRewardsInput = {
   personIds: readonly string[];
   points: number;
   title: string;
-  reason: string;
+  /** Повод на русском — копией в `source_note`: его читают стойка и карточка водителя. */
+  reasonRu: string;
   untilDate: string;
   grantedByEmployeeId: string;
 };
@@ -78,8 +82,8 @@ export type GiftRewardsInput = {
  * «Сутки — с 05:00 до 05:00»). Считает его база тем же выражением, что режет сутки везде,
  * а не код: две копии правила однажды разошлись бы на час.
  *
- * Повод копируется в `source_note`, как название товара в `title`: стойка и карточка
- * водителя читают происхождение награды из неё самой.
+ * Русский повод копируется в `source_note`, как название товара в `title`: стойка и карточка
+ * водителя читают происхождение награды из неё самой. Узбекский водителю отдаётся из раздачи.
  */
 export const insertGiftRewards = async (
   client: Executor,
@@ -102,7 +106,7 @@ export const insertGiftRewards = async (
              'claimable'::xb.reward_status,
              ${parkDayStartSql(Prisma.sql`${input.untilDate}::date + 1`)},
              'gift'::xb.reward_source,
-             ${input.reason},
+             ${input.reasonRu},
              ${input.grantedByEmployeeId}::uuid,
              ${input.giftGrantId}::uuid
         FROM unnest(${chunk}::text[]::uuid[]) AS person("id")
@@ -184,8 +188,10 @@ export const listDueGifts = async (limit: number, afterId: string | null): Promi
 export type MemberGiftRow = {
   id: string;
   points: number;
-  reason: string;
+  reasonRu: string;
+  reasonUz: string;
   untilDate: Date;
+  coverPath: string | null;
   shownAt: Date | null;
 };
 
@@ -200,8 +206,10 @@ export const listPersonClaimableGifts = async (
   client.$queryRaw<MemberGiftRow[]>`
     SELECT reward."id",
            reward."points",
-           grant_row."reason",
+           grant_row."reason_ru"   AS "reasonRu",
+           grant_row."reason_uz"   AS "reasonUz",
            grant_row."until_date"  AS "untilDate",
+           grant_row."cover_path"  AS "coverPath",
            reward."gift_shown_at"  AS "shownAt"
       FROM xb.rewards AS reward
       JOIN xb.gift_grants AS grant_row ON grant_row."id" = reward."gift_grant_id"
@@ -229,8 +237,10 @@ export const markGiftsShown = async (personId: string, rewardIds: readonly strin
 export type GiftGrantRow = {
   id: string;
   points: number;
-  reason: string;
+  reasonRu: string;
+  reasonUz: string;
   untilDate: Date;
+  coverPath: string | null;
   segmentId: string | null;
   segmentName: string | null;
   personId: string | null;
@@ -257,8 +267,10 @@ export type GiftGrantRow = {
 const giftGrantSelect = (where: Prisma.Sql, limit: number): Prisma.Sql => Prisma.sql`
   SELECT grant_row."id",
          grant_row."points",
-         grant_row."reason",
+         grant_row."reason_ru"    AS "reasonRu",
+         grant_row."reason_uz"    AS "reasonUz",
          grant_row."until_date"   AS "untilDate",
+         grant_row."cover_path"   AS "coverPath",
          grant_row."segment_id"   AS "segmentId",
          segment."name"           AS "segmentName",
          grant_row."person_id"    AS "personId",

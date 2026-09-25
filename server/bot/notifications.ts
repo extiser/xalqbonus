@@ -1,7 +1,8 @@
 import type { OpenAppButton } from '#server/adapters/telegram/outgoing';
+import { readGiftCover } from '#server/adapters/uploads/giftCovers';
 import type { CampaignParticipantOutcome, Language } from '#server/generated/prisma/enums';
 import { launchButton } from '#server/bot/launchButton';
-import { countedPlainText, formatPoints, text } from '#server/bot/texts';
+import { countedPlainText, formatPoints, plainText, text } from '#server/bot/texts';
 import { calendarDayMoment, formatCalendarDate, formatDayMonthWord } from '#server/utils/parkTime';
 
 /**
@@ -73,15 +74,22 @@ export type Notification =
   | {
       /**
        * Подарок от Xalq Taxi ждёт в приложении (issue #219). Уходит в окне 09:00–21:00
-       * по Ташкенту — правило очереди (`server/queues/notifications.ts`).
+       * по Ташкенту — правило очереди (`server/queues/notifications.ts`). С обложкой — фото
+       * с подписью, без неё — текстом.
        */
       template: 'gift_received';
       params: {
         points: number;
-        /** Повод раздачи: «ко Дню учителя». Раздача не правится, в задании он не устареет. */
-        reason: string;
+        /**
+         * Повод раздачи на обоих языках: «ко Дню учителя». В сообщение идёт один — на языке
+         * человека, прочитанном в момент отправки. Раздача не правится, в задании он не устареет.
+         */
+        reasonRu: string;
+        reasonUz: string;
         /** День автозачисления, `YYYY-MM-DD`. */
         untilDate: string;
+        /** Обложка на томе. Пусто — сообщение без фото. */
+        coverPath: string | null;
       };
     };
 
@@ -155,6 +163,22 @@ const renderChestsRevealed = (
   ].join('\n\n');
 };
 
+type GiftReceivedParams = Extract<Notification, { template: 'gift_received' }>['params'];
+
+const giftReceivedValues = (params: GiftReceivedParams, language: Language): Record<string, string> => ({
+  points: countedPlainText('reward_points', language, params.points),
+  reason: language === 'uz' ? params.reasonUz : params.reasonRu,
+  date: formatDayMonthWord(calendarDayMoment(params.untilDate), language),
+});
+
+/**
+ * Длина сообщения о подарке так, как её меряет Telegram, — после разбора разметки, без
+ * экранирования. По ней раздача проверяет повод до записи: сообщение, которое Telegram
+ * отклонит, в очереди не чинится ничем.
+ */
+export const giftReceivedLength = (params: GiftReceivedParams, language: Language): number =>
+  plainText('notification_gift_received', language, giftReceivedValues(params, language)).length;
+
 /** Собирает текст уведомления на языке получателя. */
 export const renderNotification = (notification: Notification, language: Language): string => {
   switch (notification.template) {
@@ -169,11 +193,7 @@ export const renderNotification = (notification: Notification, language: Languag
     case 'app_relaunch':
       return text('start_greeting', language);
     case 'gift_received':
-      return text('notification_gift_received', language, {
-        points: countedPlainText('reward_points', language, notification.params.points),
-        reason: notification.params.reason,
-        date: formatDayMonthWord(calendarDayMoment(notification.params.untilDate), language),
-      });
+      return text('notification_gift_received', language, giftReceivedValues(notification.params, language));
   }
 };
 
@@ -186,3 +206,24 @@ export const notificationButton = (notification: Notification, language: Languag
   notification.template === 'app_relaunch' || notification.template === 'gift_received'
     ? launchButton(language)
     : undefined;
+
+/**
+ * Фото уведомления: где оно лежит и как прочитать его байты. Путь — ключ, по которому дверь
+ * помнит `file_id` уже выгруженной картинки; чтение — забота шаблона, потому что знает, в каком
+ * подкаталоге тома лежит его картинка, только он.
+ */
+export type NotificationPhoto = {
+  path: string;
+  read: () => Promise<{ bytes: Buffer; fileName: string }>;
+};
+
+/** Фото под уведомлением. Есть только у подарка с обложкой — текст тогда уходит подписью. */
+export const notificationPhoto = (notification: Notification): NotificationPhoto | null => {
+  if (notification.template !== 'gift_received' || notification.params.coverPath === null) {
+    return null;
+  }
+
+  const { coverPath } = notification.params;
+
+  return { path: coverPath, read: () => readGiftCover(coverPath) };
+};
