@@ -81,6 +81,8 @@ const emit = defineEmits<{
   checkout: [];
   retry: [];
   'hint-close': [];
+  /** К товару с главной прокрутили: фокус отработал, владелец его снимает. */
+  focused: [];
 }>();
 
 /** Заглушек на загрузке — два ряда. */
@@ -95,14 +97,20 @@ const grid = ref<HTMLElement | null>(null);
 /** Прокрутка к товару — одна на жизнь экрана: следующие `ready` водителя уже не двигают. */
 let focusDone = false;
 
-/** Плитка, фото которой отмечено увеличением после прокрутки. */
+/**
+ * Плитка, фото которой отмечено увеличением после прокрутки. Снимается, как только отыграло,
+ * и раньше — если витрина успела пересобраться: выбор офиса, «Сменить» и загрузка создают
+ * плитки заново, и отметка на них сыграла бы второй раз. Отметка — одна за заход в каталог.
+ */
 const pulseProductId = ref<string | null>(null);
 
-const scrollToFocus = async (): Promise<void> => {
+const scrollToFocus = async (productId: string): Promise<void> => {
+  // Товар запомнен до `focused`: владелец снимает фокус сразу, и свойство к прокрутке уже пустое.
   focusDone = true;
+  emit('focused');
   await nextTick();
 
-  const tile = grid.value?.querySelector<HTMLElement>(`[data-product-id="${props.focusProductId}"]`);
+  const tile = grid.value?.querySelector<HTMLElement>(`[data-product-id="${productId}"]`);
 
   if (!tile) {
     return;
@@ -113,7 +121,7 @@ const scrollToFocus = async (): Promise<void> => {
   const top = tile.getBoundingClientRect().top + window.scrollY - lineBottom - FOCUS_GAP;
 
   window.scrollTo({ top: Math.max(0, top), behavior: 'instant' });
-  pulseProductId.value = props.focusProductId ?? null;
+  pulseProductId.value = productId;
 };
 
 const hideHint = (): void => {
@@ -131,11 +139,15 @@ onMounted(() => {
     () => props.state,
     (state) => {
       if (state === 'ready' && props.focusProductId && !focusDone) {
-        void scrollToFocus();
+        void scrollToFocus(props.focusProductId);
       }
     },
     { immediate: true },
   );
+
+  watch([() => props.state, () => props.office?.name], () => {
+    pulseProductId.value = null;
+  });
 
   // Подсказка гаснет при первой прокрутке и по первому нажатию где угодно — как в макете.
   watch(
@@ -200,6 +212,7 @@ onBeforeUnmount(stopHintListeners);
             mode="showcase"
             :product="product"
             :pulse="product.id === pulseProductId"
+            @pulsed="pulseProductId = null"
             :texts="{ sale: texts.sale, stepper: { decrease: texts.decrease, increase: texts.increase, increaseMore: texts.increaseMore } }"
             @inc="$emit('inc', product.id)"
             @dec="$emit('dec', product.id)"

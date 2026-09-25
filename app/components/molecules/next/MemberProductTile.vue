@@ -36,7 +36,11 @@ const NAME_LIMIT = 30;
 const props = defineProps<{
   mode: TileMode;
   product: MemberProductView;
-  /** Фото один раз увеличивается и возвращается — отметка товара, к которому пришли с главной. */
+  /**
+   * Фото один раз увеличивается и возвращается — отметка товара, к которому пришли с главной.
+   * Отыграло — плитка отдаёт `pulsed`, и владелец снимает признак: иначе пересозданная плитка
+   * с тем же признаком сыграла бы его снова.
+   */
   pulse?: boolean;
   texts: {
     /** Слово на пилюле скидки: «SALE». */
@@ -52,7 +56,7 @@ const props = defineProps<{
   };
 }>();
 
-defineEmits<{ open: []; inc: []; dec: [] }>();
+defineEmits<{ open: []; inc: []; dec: []; pulsed: [] }>();
 
 const name = computed(() =>
   props.product.name.length > NAME_LIMIT ? `${props.product.name.slice(0, NAME_LIMIT).trimEnd()}…` : props.product.name,
@@ -78,6 +82,7 @@ const missing = computed(() => props.product.missing !== undefined);
     <div
       class="relative aspect-[9/10] w-full overflow-hidden rounded-[24px] bg-xb-photo"
       :class="[missing ? 'opacity-38' : '', pulse ? 'member-product-tile-pulse' : '']"
+      @animationend="pulse && $emit('pulsed')"
     >
       <img
         v-if="product.image"

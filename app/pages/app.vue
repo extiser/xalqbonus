@@ -508,7 +508,10 @@ const officeSheetBusy = ref(false);
  */
 const officeSheetNotice = ref<string | null>(null);
 
-/** Товар с главной, к которому витрина прокручивается при первом показе каталога. */
+/**
+ * Товар с главной, к которому витрина прокручивается при первом показе каталога. Прокрутили —
+ * фокус снимается: ни выбор офиса, ни «Сменить», ни перечитывание каталога его не повторяют.
+ */
 const catalogFocusProductId = ref<string | null>(null);
 
 /**
@@ -2243,6 +2246,7 @@ const openMap = (office: MemberOfficeView): void => {
           @checkout="openConfirm"
           @retry="retryCatalog"
           @hint-close="hintShown = false"
+          @focused="catalogFocusProductId = null"
         />
         <OrganismsNextMemberOfficeSheet
           v-if="officeSheet"
