@@ -97,6 +97,8 @@ export interface MemberGiftView {
   reason: string;
   /** Срок: «Заберите до 5 октября». */
   deadline: string;
+  /** Адрес обложки — только для шторки, рамкой 16:9. `null` — без обложки. */
+  cover: string | null;
 }
 
 /**

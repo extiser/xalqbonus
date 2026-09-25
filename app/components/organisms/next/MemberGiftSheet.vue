@@ -6,8 +6,9 @@ import type { MemberGiftView } from '~/types/memberView';
  * Шторка подарков — `_reference/design/gifts/main-screen-gift-sheet.html` (один подарок),
  * `main-screen-gifts-sheet.html` (несколько), поведение — `main-screen-gifts-take.html`.
  *
- * Под заголовком — список подарков с «Забрать» у каждого, причина целиком. «Забрать всё» — при
- * двух и больше. Пока оно ждёт ответа, «Закрыть» погашена и Escape шторку не закрывает.
+ * Под заголовком — список подарков с «Забрать» у каждого, причина целиком, у подарка с обложкой — она
+ * сверху карточки (`main-screen-gift-sheet-cover.html`). «Забрать всё» — при двух и больше. Пока
+ * оно ждёт ответа, «Закрыть» погашена и Escape шторку не закрывает.
  *
  * Состояний шторка не хранит: какие подарки ждут ответа, лопаются или не забрались, приходит
  * свойствами. Каждый подарок — свой исход: при «Забрать всё» страница лопает забранные по очереди
@@ -77,6 +78,7 @@ function close(): void {
         mode="take"
         :take-label="texts.take"
         reason-full
+        show-cover
         :busy="busy.includes(gift.id)"
         :error="errors[gift.id]"
         :popping="popping.includes(gift.id)"

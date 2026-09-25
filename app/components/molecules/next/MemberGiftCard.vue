@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import type { MemberGiftView } from '~/types/memberView';
 
 /**
@@ -19,6 +19,12 @@ import type { MemberGiftView } from '~/types/memberView';
  * место — вместе со строкой ошибки. Схлопнулось — `popped`, подарок можно убирать из списка.
  * Анимация одна на все карточки подарков, где бы они ни стояли.
  *
+ * `showCover` — обложка подарка сверху карточки, только в шторке
+ * (`_reference/design/gifts/main-screen-gift-sheet-cover.html`): во всю ширину, скругление по карточке,
+ * рамка 16:9 с обрезкой по краям — вертикальная картинка шторку не вытягивает. Обложки нет или она
+ * не загрузилась — карточка как без неё, без пустой рамки и значка битой картинки. Лопается карточка
+ * вместе с обложкой. На главной и в разделе карточки компактные, без обложки.
+ *
  * Схлопываясь, место съедает и зазор 10 над собой (`margin-top: -10px`): оба списка, где
  * подарок забирают, — шторка и раздел — стоят с зазором 10, и без этого строка ниже доезжала бы
  * рывком.
@@ -35,12 +41,22 @@ const props = withDefaults(
     takeLabel?: string;
     /** Причина целиком, без обрезки в две строки. */
     reasonFull?: boolean;
+    /** Обложка сверху карточки — в шторке. */
+    showCover?: boolean;
     busy?: boolean;
     /** Строка под карточкой: «Не удалось забрать подарок. Попробуйте ещё раз.» */
     error?: string;
     popping?: boolean;
   }>(),
-  { hint: undefined, takeLabel: undefined, reasonFull: false, busy: false, error: undefined, popping: false },
+  {
+    hint: undefined,
+    takeLabel: undefined,
+    reasonFull: false,
+    showCover: false,
+    busy: false,
+    error: undefined,
+    popping: false,
+  },
 );
 
 const emit = defineEmits<{ open: []; take: []; popped: [] }>();
@@ -55,6 +71,12 @@ const streamer = ref<{ burst: () => void } | null>(null);
 const slotHeight = ref<number | null>(null);
 const gone = ref(false);
 const timers: ReturnType<typeof setTimeout>[] = [];
+
+/** Обложка, которая не загрузилась. Адрес сменился — пробуем новый. */
+const coverFailed = ref<string | null>(null);
+const cover = computed(() =>
+  props.showCover && props.gift.cover !== null && props.gift.cover !== coverFailed.value ? props.gift.cover : null,
+);
 
 watch(
   () => props.popping,
@@ -84,6 +106,14 @@ onBeforeUnmount(() => timers.forEach((timer) => clearTimeout(timer)));
     <AtomsNextMemberStreamerBurst ref="streamer">
       <div :class="popping ? 'member-gift-pop' : ''">
         <AtomsNextMemberCard tone="gold" :clickable="mode === 'home'" @click="emit('open')">
+          <!-- Скругление — по карточке за вычетом её рамки: карточка содержимое не обрезает. -->
+          <img
+            v-if="cover"
+            :src="cover"
+            alt=""
+            class="block aspect-video w-full rounded-t-[19px] bg-[#0F1116] object-cover"
+            @error="coverFailed = cover"
+          />
           <span class="flex items-center gap-3 px-3.5 py-[13px]">
             <span class="flex min-w-0 grow flex-col gap-px">
               <span class="flex items-center gap-1.5 text-[16px] font-bold leading-[1.25]">
