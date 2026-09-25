@@ -60,6 +60,21 @@ export const upsertPersonSettings = async (
   }
 };
 
+/**
+ * Меняет язык участника. `false` — строки участия нет, менять нечего.
+ *
+ * Только язык: дата и источник участия остаются теми, с какими человек вошёл в программу.
+ */
+export const updatePersonLanguage = async (personId: string, language: Language): Promise<boolean> => {
+  const updated = await db.$executeRaw`
+    UPDATE xb.person_settings
+       SET "language" = ${language}::text::xb.language
+     WHERE "person_id" = ${personId}::uuid
+  `;
+
+  return updated > 0;
+};
+
 export type TelegramLinkInput = {
   personId: string;
   telegramChatId: bigint;

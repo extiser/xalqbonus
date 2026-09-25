@@ -72,6 +72,24 @@ export type TextKey =
   | 'history_empty'
   | 'history_failed'
   | 'profile_title'
+  | 'profile_callsign'
+  | 'profile_license'
+  | 'profile_phone_missing'
+  | 'profile_license_show'
+  | 'profile_license_hide'
+  | 'profile_settings'
+  | 'profile_language'
+  | 'profile_reset'
+  | 'profile_reset_title'
+  | 'profile_reset_note'
+  | 'profile_reset_kept'
+  | 'button_reset'
+  | 'button_cancel'
+  | 'language_sheet_subtitle'
+  | 'language_name_ru'
+  | 'language_name_uz'
+  | 'button_save'
+  | 'button_close'
   | 'button_retry'
   | 'button_yes'
   | 'button_no'
@@ -508,6 +526,83 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   profile_title: {
     ru: 'Профиль',
     uz: 'Profil',
+  },
+  // Раздел «Профиль» (issue #216) — по макетам `_reference/design/profile/`. Подписи «Телефон»
+  // и «Telegram ID» — те же ключи, что у «Покажите менеджеру» на регистрации: смысл один.
+  profile_callsign: {
+    ru: 'Позывной',
+    uz: 'Pozivnoy',
+  },
+  profile_license: {
+    ru: 'Номер ВУ',
+    uz: 'Guvohnoma raqami',
+  },
+  /** Телефона у профиля нет: у нерабочей учётки парк его не отдаёт. */
+  profile_phone_missing: {
+    ru: 'нет в парке',
+    uz: "parkda yo'q",
+  },
+  /** Подписи глазика у номера ВУ — для экранного чтеца: на экране у кнопки слов нет. */
+  profile_license_show: {
+    ru: 'Показать номер целиком',
+    uz: "Raqamni to'liq ko'rsatish",
+  },
+  profile_license_hide: {
+    ru: 'Скрыть номер',
+    uz: 'Raqamni yashirish',
+  },
+  profile_settings: {
+    ru: 'Настройки',
+    uz: 'Sozlamalar',
+  },
+  /** Строка настроек и заголовок шторки языка. */
+  profile_language: {
+    ru: 'Язык',
+    uz: 'Til',
+  },
+  profile_reset: {
+    ru: 'Сбросить сессию',
+    uz: 'Seansni qayta boshlash',
+  },
+  /** Шторка подтверждения сброса: вопрос и два абзаца пояснения под ним. */
+  profile_reset_title: {
+    ru: 'Сбросить сессию?',
+    uz: 'Seans qayta boshlansinmi?',
+  },
+  profile_reset_note: {
+    ru: 'Приложение закроется, а бот пришлёт кнопку «Открыть приложение» — нажмите её, и всё загрузится заново.',
+    uz: "Ilova yopiladi, bot esa «Ilovani ochish» tugmasini yuboradi — uni bosing, hammasi qaytadan yuklanadi.",
+  },
+  profile_reset_kept: {
+    ru: 'Профиль и баллы не изменятся.',
+    uz: "Profil va ballar o'zgarmaydi.",
+  },
+  button_reset: {
+    ru: 'Сбросить',
+    uz: 'Qayta boshlash',
+  },
+  button_cancel: {
+    ru: 'Отменить',
+    uz: 'Bekor qilish',
+  },
+  language_sheet_subtitle: {
+    ru: 'Приложение и уведомления бота — на этом языке',
+    uz: 'Ilova va bot bildirishnomalari — shu tilda',
+  },
+  /**
+   * Названия языков в шторке — на самих языках, одинаковые на любом экране: узбекоговорящий
+   * найдёт «O'zbek» и на русском. Не ключи шага 1 регистрации: там «O'zbekcha», здесь — как
+   * в макете шторки.
+   */
+  language_name_ru: { ru: 'Русский', uz: 'Русский' },
+  language_name_uz: { ru: "O'zbek", uz: "O'zbek" },
+  button_save: {
+    ru: 'Сохранить',
+    uz: 'Saqlash',
+  },
+  button_close: {
+    ru: 'Закрыть',
+    uz: 'Yopish',
   },
   /** Повтор запроса, который не прочитался, — в блоках главной и в разделах. */
   button_retry: {

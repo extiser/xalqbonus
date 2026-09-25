@@ -13,3 +13,9 @@ import type { Language } from '#server/generated/prisma/enums';
  */
 export const preferredLanguage = (languageCode: string | undefined): Language =>
   languageCode === 'uz' ? 'uz' : 'ru';
+
+/**
+ * Язык, присланный клиентом, — сверкой со словарём. Всё, что не `ru` и не `uz`, отвергается,
+ * а не превращается молча в русский: это выбор человека, и подменить его — значит соврать.
+ */
+export const isLanguage = (value: unknown): value is Language => value === 'ru' || value === 'uz';

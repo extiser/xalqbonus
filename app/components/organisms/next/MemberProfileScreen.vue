@@ -13,40 +13,52 @@ import type { MemberLanguage, MemberLanguageOptionView, MemberProfileFieldView }
  *
  * Что открыто — глазик, шторка сброса, шторка языка — решает родитель: экран принимает
  * состояние свойствами и отдаёт нажатия событиями.
+ *
+ * Номера ВУ нет (`license: null`) — строки с глазиком нет: прячется нечего. Строку «Номер ВУ»
+ * с прочерком родитель ставит последней в `fields`, тем же видом, что позывной без значения
+ * (решение Руслана 25-09-2026, issue #216).
+ *
+ * Пока идёт запрос, кнопка шторки ждёт с кольцом: «Сохранить» — у языка (`savingLanguage`),
+ * «Сбросить» — у сброса (`resetting`), и тогда «Отменить» гаснет.
  */
-defineProps<{
-  lastName: string;
-  givenNames: string;
-  fields: MemberProfileFieldView[];
-  license: {
-    label: string;
-    /** Номер целиком. */
-    full: string;
-    /** Последние знаки — видны всегда. */
-    tail: string;
-  };
-  licenseRevealed: boolean;
-  language: MemberLanguage;
-  languageOptions: MemberLanguageOptionView[];
-  /** Открытая шторка: сброса, языка или никакой. */
-  sheet: 'none' | 'reset' | 'language';
-  texts: {
-    title: string;
-    back: string;
-    settings: string;
-    language: string;
-    reset: string;
-    licenseShow: string;
-    licenseHide: string;
-    resetTitle: string;
-    resetSubtitle: readonly string[];
-    resetConfirm: string;
-    resetCancel: string;
-    languageSubtitle: string;
-    save: string;
-    close: string;
-  };
-}>();
+withDefaults(
+  defineProps<{
+    lastName: string;
+    givenNames: string;
+    fields: MemberProfileFieldView[];
+    license: {
+      label: string;
+      /** Номер целиком. */
+      full: string;
+      /** Последние знаки — видны всегда. */
+      tail: string;
+    } | null;
+    licenseRevealed: boolean;
+    language: MemberLanguage;
+    languageOptions: MemberLanguageOptionView[];
+    /** Открытая шторка: сброса, языка или никакой. */
+    sheet: 'none' | 'reset' | 'language';
+    savingLanguage?: boolean;
+    resetting?: boolean;
+    texts: {
+      title: string;
+      back: string;
+      settings: string;
+      language: string;
+      reset: string;
+      licenseShow: string;
+      licenseHide: string;
+      resetTitle: string;
+      resetSubtitle: readonly string[];
+      resetConfirm: string;
+      resetCancel: string;
+      languageSubtitle: string;
+      save: string;
+      close: string;
+    };
+  }>(),
+  { savingLanguage: false, resetting: false },
+);
 
 defineEmits<{
   back: [];
@@ -77,6 +89,7 @@ const LICENSE_MASK = '•••••';
           :missing="field.missing"
         />
         <MoleculesNextMemberFieldRow
+          v-if="license"
           :label="license.label"
           :value="licenseRevealed ? license.full : license.tail"
           :mask="licenseRevealed ? undefined : LICENSE_MASK"
@@ -127,8 +140,12 @@ const LICENSE_MASK = '•••••';
       @close="$emit('close')"
     >
       <template #buttons>
-        <AtomsNextMemberButton size="l" tone="scarlet" @click="$emit('reset')">{{ texts.resetConfirm }}</AtomsNextMemberButton>
-        <AtomsNextMemberButton size="l" tone="grey" @click="$emit('close')">{{ texts.resetCancel }}</AtomsNextMemberButton>
+        <AtomsNextMemberButton size="l" tone="scarlet" :busy="resetting" @click="$emit('reset')">
+          {{ texts.resetConfirm }}
+        </AtomsNextMemberButton>
+        <AtomsNextMemberButton size="l" tone="grey" :disabled="resetting" @click="$emit('close')">
+          {{ texts.resetCancel }}
+        </AtomsNextMemberButton>
       </template>
     </MoleculesNextMemberSheet>
 
@@ -136,6 +153,7 @@ const LICENSE_MASK = '•••••';
       :open="sheet === 'language'"
       :current="language"
       :options="languageOptions"
+      :busy="savingLanguage"
       :texts="{ title: texts.language, subtitle: texts.languageSubtitle, save: texts.save, close: texts.close }"
       @save="(picked) => $emit('save', picked)"
       @close="$emit('close')"

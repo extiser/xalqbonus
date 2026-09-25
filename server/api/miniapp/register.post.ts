@@ -1,7 +1,7 @@
 import { readBotToken } from '#server/bot/config';
-import type { Language } from '#server/generated/prisma/enums';
 import { registerDriverByContact } from '#server/services/drivers/registerDriverByContact';
 import { describeRegistrationResult } from '#server/services/drivers/registrationScreen';
+import { isLanguage } from '#server/utils/language';
 import { requireTelegramUser } from '#server/utils/telegramAuth';
 import { checkContactData } from '#server/utils/telegramInitData';
 import type { MiniAppRegisterRequestBody, MiniAppRegisterResponse } from '#shared/types/miniapp';
@@ -25,8 +25,6 @@ import type { MiniAppRegisterRequestBody, MiniAppRegisterResponse } from '#share
  * Решение о том, привязывать или отправить в офис, целиком принимает
  * `registerDriverByContact` (docs/principles.md → «Слои и зависимости»).
  */
-
-const isLanguage = (value: unknown): value is Language => value === 'ru' || value === 'uz';
 
 export default defineEventHandler(async (event): Promise<MiniAppRegisterResponse> => {
   const user = requireTelegramUser(event);

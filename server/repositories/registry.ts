@@ -617,6 +617,7 @@ export type DisplayProfileRow = {
   profileId: string;
   firstName: string;
   lastName: string;
+  middleName: string | null;
   workStatus: string;
   callsign: string | null;
 };
@@ -634,6 +635,7 @@ export const findDisplayProfile = async (personId: string): Promise<DisplayProfi
     SELECT "profile_id"  AS "profileId",
            "first_name"  AS "firstName",
            "last_name"   AS "lastName",
+           "middle_name" AS "middleName",
            "work_status" AS "workStatus",
            "callsign"
       FROM xb.park_profiles
@@ -643,6 +645,26 @@ export const findDisplayProfile = async (personId: string): Promise<DisplayProfi
   `;
 
   return rows[0] ?? null;
+};
+
+/**
+ * Действующий телефон профиля — сырой строкой, как его отдал парк. Пусто — активной строки
+ * нет: у нерабочей учётки парк телефон не отдаёт.
+ *
+ * Несколько активных строк бывает — парк записал номер с пробелами и без, — и берётся самая
+ * свежая по отметке наблюдения.
+ */
+export const findActiveProfilePhone = async (profileId: string): Promise<string | null> => {
+  const rows = await db.$queryRaw<{ phoneRaw: string }[]>`
+    SELECT "phone_raw" AS "phoneRaw"
+      FROM xb.profile_phones
+     WHERE "profile_id" = ${profileId}
+       AND "closed_at" IS NULL
+     ORDER BY "observed_at" DESC
+     LIMIT 1
+  `;
+
+  return rows[0]?.phoneRaw ?? null;
 };
 
 export type ProfileOwnerRow = { profileId: string; personId: string };
