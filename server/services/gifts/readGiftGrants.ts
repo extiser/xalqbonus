@@ -30,7 +30,10 @@ const toGiftGrant = (row: GiftGrantRow): GiftGrant => ({
   points: row.points,
   reasonRu: row.reasonRu,
   reasonUz: row.reasonUz,
-  coverUrl: giftCoverUrl(row.coverPath),
+  coverRuUrl: giftCoverUrl(row.coverRuPath),
+  coverUzUrl: giftCoverUrl(row.coverUzPath),
+  messageRu: row.messageRu,
+  messageUz: row.messageUz,
   // Столбец `date` приходит полуночью UTC — день берётся из неё как есть, без зоны.
   untilDate: row.untilDate.toISOString().slice(0, 10),
   grantedByName: row.grantedByName,

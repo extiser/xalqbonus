@@ -11,14 +11,22 @@ import { PHOTO_EXTENSION_BY_TYPE } from '../../../shared/photo';
  * Обложки подарков на томе приложения — том же, где фото рассылок и товаров (issue #219).
  *
  * Устроено как фото рассылки (`mailingPhotos.ts`): адаптер файловой системы, про базу не знает
- * ничего, колонку `gift_grants.cover_path` пишет сервис. Имя файла — uuid раздачи и расширение
- * по типу содержимого; имя, присланное клиентом, не используется нигде.
+ * ничего, колонки `gift_grants.cover_ru_path` и `cover_uz_path` пишет сервис. Имя файла — uuid
+ * раздачи, язык обложки и расширение по типу содержимого: `<id>-ru.jpg` (issue #236). Имя,
+ * присланное клиентом, не используется нигде.
+ *
+ * Раздачи до #236 несли одну обложку на оба языка под именем `<id>.jpg`. Колонки ссылаются
+ * на эти файлы и дальше, поэтому сверка имени принимает и прежний вид.
  *
  * Обложка не заменяется: раздача не правится, и файл по своему адресу не меняется никогда.
  * Читает её и воркер — обложка уходит в Telegram из очереди уведомлений.
  */
 
-const fileNameFor = (giftGrantId: string, extension: string): string => `${giftGrantId}.${extension}`;
+/** Язык обложки — своим типом, а не перечислением базы: адаптер про базу не знает. */
+export type GiftCoverLanguage = 'ru' | 'uz';
+
+const fileNameFor = (giftGrantId: string, language: GiftCoverLanguage, extension: string): string =>
+  `${giftGrantId}-${language}.${extension}`;
 
 const coverDir = (): string => join(readUploadsDir(), GIFT_COVER_DIR);
 
@@ -27,9 +35,10 @@ export const ensureGiftCoverDir = (): void => {
   mkdirSync(coverDir(), { recursive: true });
 };
 
-/** Кладёт обложку на том и возвращает относительный путь для колонки раздачи. */
+/** Кладёт обложку языка на том и возвращает относительный путь для колонки раздачи. */
 export const writeGiftCover = async (
   giftGrantId: string,
+  language: GiftCoverLanguage,
   contentType: string,
   bytes: Buffer,
 ): Promise<string> => {
@@ -40,15 +49,17 @@ export const writeGiftCover = async (
   }
 
   const dir = coverDir();
+  const fileName = fileNameFor(giftGrantId, language, extension);
 
   await mkdir(dir, { recursive: true });
-  await writeFile(join(dir, fileNameFor(giftGrantId, extension)), bytes);
+  await writeFile(join(dir, fileName), bytes);
 
-  return `${GIFT_COVER_DIR}/${fileNameFor(giftGrantId, extension)}`;
+  return `${GIFT_COVER_DIR}/${fileName}`;
 };
 
+/** `<id>-ru.jpg`, `<id>-uz.jpg` — и прежний `<id>.jpg`, на который ссылаются раздачи до #236. */
 const COVER_FILE_NAME =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$/i;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(-(ru|uz))?\.(jpg|png|webp)$/i;
 
 /** Имя файла из пути колонки, если путь нашего вида. `..` в колонке — то, ради чего сверка стоит. */
 const fileNameOfPath = (coverPath: string): string => {

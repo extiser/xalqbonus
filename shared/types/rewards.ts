@@ -282,10 +282,44 @@ export type GiftGrantRequestBody = {
   reasonUz: string;
   /** «Забрать до», `YYYY-MM-DD`. */
   untilDate: string;
+  /** Свой текст сообщения (issue #236). Пусто — водителю этого языка уходит системный текст. */
+  messageRu: string;
+  messageUz: string;
 };
 
 /** Поле формы раздачи, к которому относится отказ. */
-export type GiftGrantField = 'recipient' | 'points' | 'reasonRu' | 'reasonUz' | 'untilDate' | 'cover';
+export type GiftGrantField =
+  | 'recipient'
+  | 'points'
+  | 'reasonRu'
+  | 'reasonUz'
+  | 'untilDate'
+  | 'messageRu'
+  | 'messageUz'
+  | 'coverRu'
+  | 'coverUz';
+
+/**
+ * Предпросмотр системного текста подарка (`POST /api/gifts/message-preview`, issue #236) —
+ * то, что набрано в форме. Может быть пустым или неверным: на месте такого встаёт подпись поля
+ * в фигурных скобках — «{Сумма баллов}».
+ */
+export type GiftMessagePreviewRequestBody = {
+  points: number | null;
+  reasonRu: string;
+  reasonUz: string;
+  /** `YYYY-MM-DD`. */
+  untilDate: string;
+};
+
+export type GiftMessagePreviewResponse = {
+  /** Системный текст целиком — уходит, если своё поле пусто. */
+  systemRu: string;
+  systemUz: string;
+  /** Системная строка — идёт под своим текстом. */
+  footerRu: string;
+  footerUz: string;
+};
 
 /** Раздача в списке раздела «Награды»: кому, что, кто выдал и что стало с подарками. */
 export type GiftGrant = {
@@ -302,8 +336,12 @@ export type GiftGrant = {
   reasonUz: string;
   /** День автозачисления, `YYYY-MM-DD`. */
   untilDate: string;
-  /** Адрес обложки. Пусто — раздача без обложки. */
-  coverUrl: string | null;
+  /** Адреса обложек на каждом языке — обе или ни одной. Пусто — раздача без обложки. */
+  coverRuUrl: string | null;
+  coverUzUrl: string | null;
+  /** Свой текст сообщения. Пусто — на этом языке ушёл системный. */
+  messageRu: string | null;
+  messageUz: string | null;
   grantedByName: string;
   /** Сколько подарков родилось. */
   recipients: number;

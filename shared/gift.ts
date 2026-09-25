@@ -1,3 +1,5 @@
+import { mailingMessageLimit } from './mailing';
+
 /**
  * Правила раздачи подарка, общие для сервера и формы (issue #219).
  *
@@ -6,10 +8,12 @@
  */
 
 /**
- * Поле с обложкой в теле `multipart/form-data`. Остальные поля идут строками рядом, по именам
- * `GiftGrantRequestBody`. Файла нет — раздача без обложки.
+ * Поля с обложками в теле `multipart/form-data` — на каждом языке, обе или ни одной
+ * (issue #236). Остальные поля идут строками рядом, по именам `GiftGrantRequestBody`.
+ * Файлов нет — раздача без обложки.
  */
-export const GIFT_COVER_FIELD = 'cover';
+export const GIFT_COVER_RU_FIELD = 'coverRu';
+export const GIFT_COVER_UZ_FIELD = 'coverUz';
 
 /**
  * Размер обложки — подсказкой под полем. Пропорции не проверяются: рамка 16:9 с обрезкой
@@ -25,3 +29,30 @@ export const GIFT_COVER_SIZE_HINT = 'Горизонтальная, 1280 × 720 (
  * сервис отказывает тем же числом.
  */
 export const GIFT_REASON_MAX_LENGTH = 60;
+
+/**
+ * Подписи полей подарка в форме «Вручить». Ими же предпросмотр системного текста называет
+ * то, что ещё не заполнено: «{Сумма баллов}» на месте суммы — сотрудник видит, что куда
+ * подставится. Одна строка на подпись и на подстановку: иначе они разошлись бы на первой
+ * правке формы. По-русски в обоих языках текста — форму читает сотрудник.
+ */
+export const GIFT_FIELD_LABELS = {
+  points: 'Сумма баллов',
+  reasonRu: 'Повод на русском',
+  reasonUz: 'Повод на узбекском',
+  untilDate: 'Забрать до',
+} as const;
+
+/**
+ * Между своим текстом подарка и системной строкой под ним — пустая строка (issue #236).
+ * Одна на сборку сообщения и на счётчик в форме.
+ */
+export const GIFT_MESSAGE_FOOTER_SEPARATOR = '\n\n';
+
+/**
+ * Сколько знаков остаётся своему тексту: потолок сообщения — подписи к фото, если обложки
+ * выбраны, — за вычетом системной строки и пустой строки перед ней. Сервер меряет сообщение
+ * целиком (`buildGiftMessage`), и это тот же предел, перенесённый на одно поле.
+ */
+export const giftCustomMessageLimit = (footer: string, withCover: boolean): number =>
+  mailingMessageLimit(withCover) - GIFT_MESSAGE_FOOTER_SEPARATOR.length - footer.length;

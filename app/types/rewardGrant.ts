@@ -19,6 +19,10 @@ export type GiftFields = {
   reasonUz: string;
   /** «Забрать до», `YYYY-MM-DD`. */
   untilDate: string;
-  /** Обложка. Пусто — без обложки. */
-  cover: File | null;
+  /** Свой текст сообщения. Пусто — водителю этого языка уходит системный текст. */
+  messageRu: string;
+  messageUz: string;
+  /** Обложки — обе или ни одной. Пусто — без обложки. */
+  coverRu: File | null;
+  coverUz: File | null;
 };

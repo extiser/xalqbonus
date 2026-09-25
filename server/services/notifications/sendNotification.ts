@@ -136,7 +136,7 @@ export const sendNotification = async (
         text: renderNotification(input, recipient.language),
         openAppButton: notificationButton(input, recipient.language),
       },
-      notificationPhoto(input),
+      notificationPhoto(input, recipient.language),
     );
   } catch (error) {
     // Единственное, что мы узнаём о смерти канала связи: водитель, заблокировавший бота,

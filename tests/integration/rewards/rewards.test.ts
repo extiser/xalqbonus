@@ -338,7 +338,10 @@ describe('награды', () => {
       points: 100,
       reasonRu: 'компенсация',
       reasonUz: 'компенсация',
-      cover: null,
+      messageRu: '',
+      messageUz: '',
+      coverRu: null,
+      coverUz: null,
       untilDate: '2099-01-01',
       employeeId: scenario.employeeId,
     });
