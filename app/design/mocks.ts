@@ -544,12 +544,17 @@ export const rewardsErrorMock = { ...rewardsMock, state: 'error' as const, await
 
 // -------------------------------------------------------------------------- подарки
 
-/** Подарки от Xalq Taxi — `_reference/design/gifts/`. Третий есть только в сцене «Забрать». */
+/**
+ * Подарки от Xalq Taxi — `_reference/design/gifts/`. Третий есть только в сцене «Забрать».
+ * Обложка — у первого, картинка вынута из `main-screen-gift-sheet-cover.html`: второй рядом
+ * показывает карточку без неё.
+ */
 const GIFT_TEACHER: MemberGiftView = {
   id: 'gift-teacher',
   title: '300 баллов в подарок',
   reason: 'Xalq Taxi · ко Дню учителя',
   deadline: 'Заберите до 5 октября',
+  cover: '/design/gift-cover.jpg',
 };
 
 const GIFT_INDEPENDENCE: MemberGiftView = {
@@ -557,6 +562,7 @@ const GIFT_INDEPENDENCE: MemberGiftView = {
   title: '500 баллов в подарок',
   reason: 'Xalq Taxi · ко Дню независимости',
   deadline: 'Заберите до 12 октября',
+  cover: null,
 };
 
 const GIFT_LINE: MemberGiftView = {
@@ -564,6 +570,7 @@ const GIFT_LINE: MemberGiftView = {
   title: '150 баллов в подарок',
   reason: 'Xalq Taxi · за помощь на линии',
   deadline: 'Заберите до 20 октября',
+  cover: null,
 };
 
 /** Главная с подарками — `main-screen-gift-sheet.html` (один) и `main-screen-gift.html` (два). */

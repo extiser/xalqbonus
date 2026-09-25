@@ -33,6 +33,16 @@ export const failureDenial = (error: unknown): ServerDenialCode | null => {
 };
 
 /**
+ * Код отказа как есть — для доменных отказов, которых нет в общем словаре: их список знает
+ * тот, кто решает. `null` — ответа не было или кода в нём нет.
+ */
+export const failureCode = (error: unknown): string | null => {
+  const code = asRecord(failureBody(error)?.data)?.code;
+
+  return typeof code === 'string' ? code : null;
+};
+
+/**
  * Поле формы, к которому ручка отнесла отказ. `null` — отказ не про поле или ответа не было.
  *
  * Строкой без проверки по списку: какие поля у формы, знает форма, и значение, которого

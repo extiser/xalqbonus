@@ -161,6 +161,17 @@ export type MemberRewardTexts = {
   /** «Награда» — заголовок экрана награды и подпись строки награды на нём. */
   screenTitle: string;
   codeTitle: string;
+  /** Подарки от Xalq Taxi (issue #220): заголовок шторки по числу; «Подарки…» — и подпись группы. */
+  giftsTitleOne: string;
+  giftsTitleMany: string;
+  giftsSubtitle: string;
+  giftTake: string;
+  giftsTakeAll: string;
+  giftsClose: string;
+  /** «нажмите, чтобы забрать» — хвост срока у подарка на главной. */
+  giftTapHint: string;
+  /** Сбой «Забрать» без ответа ручки. Отказ ручки говорит своим текстом. */
+  giftTakeFailed: string;
 };
 
 // ---------------------------------------------------------------------------
