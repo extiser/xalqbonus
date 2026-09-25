@@ -108,7 +108,11 @@ export type SendMessageInput = {
   openAppButton?: OpenAppButton;
 };
 
-const replyMarkupFor = (button: OpenAppButton | undefined): InlineKeyboard | undefined =>
+/**
+ * Клавиатура с кнопкой запуска. Наружу — для приветствия бота: оно уходит экраном диалога,
+ * а не этим адаптером, и кнопка у него обязана быть той же, что у уведомления.
+ */
+export const openAppKeyboard = (button: OpenAppButton | undefined): InlineKeyboard | undefined =>
   button === undefined ? undefined : new InlineKeyboard().webApp(button.text, button.url);
 
 /**
@@ -151,7 +155,7 @@ export const sendTelegramMessage = async (input: SendMessageInput): Promise<numb
     getApi(input.token).sendMessage(input.telegramChatId.toString(), input.text, {
       parse_mode: 'HTML',
       link_preview_options: { is_disabled: true },
-      reply_markup: replyMarkupFor(input.openAppButton),
+      reply_markup: openAppKeyboard(input.openAppButton),
     }),
   );
 
@@ -223,7 +227,7 @@ export const sendTelegramPhoto = async (input: SendPhotoInput): Promise<SentPhot
     getApi(input.token).sendPhoto(input.telegramChatId.toString(), photo, {
       caption: input.caption,
       parse_mode: 'HTML',
-      reply_markup: replyMarkupFor(input.openAppButton),
+      reply_markup: openAppKeyboard(input.openAppButton),
     }),
   );
 

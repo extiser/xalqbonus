@@ -24,6 +24,9 @@ const NOW = new Date('2026-09-14T05:43:00.000Z');
 
 const HOUR_MS = 60 * 60 * 1_000;
 
+/** Чат участника — экрану он нужен только для строки Telegram ID в профиле. */
+const TEST_CHAT_ID = 5_812_345_670n;
+
 const readNote = async (
   finishedAt: Date,
   language: 'ru' | 'uz',
@@ -34,6 +37,7 @@ const readNote = async (
 
   const screen = await readMemberScreen(
     { personId, name: 'Тест', callsign: null, points: 0n, language },
+    TEST_CHAT_ID,
     NOW,
   );
 
@@ -103,6 +107,7 @@ describe('отметка поездок на экране участника', (
 
     const screen = await readMemberScreen(
       { personId, name: 'Тест', callsign: null, points: 0n, language: 'ru' },
+      TEST_CHAT_ID,
       NOW,
     );
 

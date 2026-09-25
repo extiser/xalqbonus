@@ -258,6 +258,59 @@ export type MiniAppMemberScreen = {
   orderTexts: MemberOrderTexts;
   /** Тексты раздела «Мои награды» (issue #172) — тем же приёмом, что тексты заказов. */
   rewardTexts: MemberRewardTexts;
+  /** Кто залогинен — для раздела «Профиль» (issue #216). */
+  profile: MemberProfile;
+  /** Тексты раздела «Профиль», его шторки сброса и шторки языка. */
+  profileTexts: MemberProfileTexts;
+};
+
+/**
+ * Кто залогинен: по этим полям менеджер у стойки понимает, чья учётка перед ним.
+ *
+ * Профиль — тот же, из которого берутся имя и позывной в шапке главной (`findDisplayProfile`):
+ * два профиля на одном экране означали бы, что один из них врёт.
+ */
+export type MemberProfile = {
+  /** `park_profiles.last_name` того же профиля, что имя в шапке. */
+  lastName: string;
+  /** Имя и отчество через пробел; отчества нет — только имя. */
+  givenNames: string;
+  /** Активный телефон этого профиля. `null` — парк не отдал (нерабочая учётка). */
+  phone: FormattedPhone | null;
+  /** `telegram_chat_id` активной привязки, строкой. */
+  telegramId: string;
+  /** `park_profiles.callsign`; пусто — `null`. */
+  callsign: string | null;
+  /** `person_licenses.number_raw` активной строки (`closed_at IS NULL`). `null` — строки нет. */
+  license: string | null;
+};
+
+/** Тексты раздела «Профиль» на языке участника — поле на ключ словаря. */
+export type MemberProfileTexts = {
+  title: string;
+  phone: string;
+  telegramId: string;
+  callsign: string;
+  license: string;
+  /** «нет в парке» — на месте телефона, которого парк не отдал. */
+  phoneMissing: string;
+  /** Подписи глазика у номера ВУ — для экранного чтеца. */
+  licenseShow: string;
+  licenseHide: string;
+  settings: string;
+  /** Строка «Язык» и заголовок шторки языка. */
+  language: string;
+  reset: string;
+  resetTitle: string;
+  /** Пояснение шторки сброса — абзацами. */
+  resetSubtitle: string[];
+  resetConfirm: string;
+  resetCancel: string;
+  languageSubtitle: string;
+  /** Названия языков — на самих языках. */
+  languageNames: Record<Language, string>;
+  save: string;
+  close: string;
 };
 
 /**
@@ -678,6 +731,20 @@ export type MiniAppRegisterRequestBody = {
    * — и единственное, которое подтверждать нечем: это выбор человека, сделанный только что.
    * Сервер сверяет его со словарём и отвергает всё остальное.
    */
+  language: Language;
+};
+
+/**
+ * Смена языка участником из профиля. Идентификатора человека нет: чей язык меняется, решают
+ * проверенная `initData` и активная привязка.
+ */
+export type MiniAppLanguageRequestBody = {
+  /** Сверяется со словарём: всё, что не `ru` и не `uz`, отвергается. */
+  language: Language;
+};
+
+export type MiniAppLanguageResponse = {
+  /** Записанный язык. */
   language: Language;
 };
 

@@ -1,6 +1,6 @@
 import { consola } from 'consola';
 import { sendTelegramMessage, TelegramSendError } from '#server/adapters/telegram/outgoing';
-import { renderNotification, type Notification } from '#server/bot/notifications';
+import { notificationButton, renderNotification, type Notification } from '#server/bot/notifications';
 import { readBotToken } from '#server/bot/config';
 import { closeTelegramLink, findNotificationRecipient } from '#server/repositories/programMembership';
 
@@ -84,6 +84,7 @@ export const sendNotification = async (
       token,
       telegramChatId: recipient.telegramChatId,
       text: renderNotification(input, recipient.language),
+      openAppButton: notificationButton(input, recipient.language),
     });
   } catch (error) {
     // Единственное, что мы узнаём о смерти канала связи: водитель, заблокировавший бота,

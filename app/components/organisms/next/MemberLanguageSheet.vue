@@ -11,18 +11,25 @@ import type { MemberLanguage, MemberLanguageOptionView } from '~/types/memberVie
  *
  * «Сохранить» гаснет, пока отмечен текущий язык: сохранять нечего. Отметка — состояние
  * самой шторки, пока она открыта; при каждом открытии она встаёт на текущий язык.
+ *
+ * Пока выбор записывается (`busy`), «Сохранить» ждёт с кольцом; отказ оставляет шторку
+ * открытой с тем же выбором, и повтор — тем же нажатием.
  */
-const props = defineProps<{
-  open: boolean;
-  current: MemberLanguage;
-  options: MemberLanguageOptionView[];
-  texts: {
-    title: string;
-    subtitle: string;
-    save: string;
-    close: string;
-  };
-}>();
+const props = withDefaults(
+  defineProps<{
+    open: boolean;
+    current: MemberLanguage;
+    options: MemberLanguageOptionView[];
+    busy?: boolean;
+    texts: {
+      title: string;
+      subtitle: string;
+      save: string;
+      close: string;
+    };
+  }>(),
+  { busy: false },
+);
 
 defineEmits<{ save: [language: MemberLanguage]; close: [] }>();
 
@@ -51,7 +58,13 @@ watch(
     </div>
 
     <template #buttons>
-      <AtomsNextMemberButton size="l" tone="garnet" :disabled="picked === current" @click="$emit('save', picked)">
+      <AtomsNextMemberButton
+        size="l"
+        tone="garnet"
+        :disabled="picked === current"
+        :busy="busy"
+        @click="$emit('save', picked)"
+      >
         {{ texts.save }}
       </AtomsNextMemberButton>
       <AtomsNextMemberButton size="l" tone="grey" @click="$emit('close')">{{ texts.close }}</AtomsNextMemberButton>

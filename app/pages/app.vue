@@ -8,6 +8,8 @@ import {
   type MemberOrder,
   type MiniAppEmployeeDeniedScreen,
   type MiniAppEmployeeScreen,
+  type MiniAppLanguageRequestBody,
+  type MiniAppLanguageResponse,
   type MiniAppMemberScreen,
   type MiniAppRegisterResponse,
   type MiniAppStateResponse,
@@ -19,7 +21,12 @@ import { useMemberHistory } from '~/composables/useMemberHistory';
 import { useMemberOrders } from '~/composables/useMemberOrders';
 import { useMemberRewards } from '~/composables/useMemberRewards';
 import { useOfficeDesk } from '~/composables/useOfficeDesk';
-import type { MemberManagerIdsView, MemberOfficeView } from '~/types/memberView';
+import type {
+  MemberLanguageOptionView,
+  MemberManagerIdsView,
+  MemberOfficeView,
+  MemberProfileFieldView,
+} from '~/types/memberView';
 import {
   HOME_HISTORY_SIZE,
   historyView,
@@ -32,6 +39,7 @@ import {
 } from '~/utils/memberViews';
 import { failureDenial } from '~/utils/requestError';
 import {
+  forgetInitData,
   hasSignedInitData,
   loadTelegramWebApp,
   resolveInitData,
@@ -55,8 +63,8 @@ import {
 
 /**
  * Раскладка выбирается стадией и экраном, а не одна на страницу: загрузка, заглушки, регистрация,
- * отказ выключенному сотруднику, а у участника главная, история, заказы, награды и их экраны —
- * уже на новых макетах (`miniapp-next`). Цепочка обмена и экран сотрудника — ещё на старых
+ * отказ выключенному сотруднику, а у участника главная, история, заказы, награды, их экраны
+ * и профиль — уже на новых макетах (`miniapp-next`). Цепочка обмена и экран сотрудника — ещё на старых
  * (`miniapp`), до своих задач. Смена оформления при переходе между старым и новым экраном
  * участника — ожидаемое временное состояние (issue #210, #215).
  *
@@ -403,7 +411,8 @@ type MemberScreenName =
   | 'order'
   | 'orders'
   | 'rewards'
-  | 'reward';
+  | 'reward'
+  | 'profile';
 
 /** Путь по экранам. Последний — показанный; «назад» снимает его. */
 const screens = ref<MemberScreenName[]>(['home']);
@@ -417,6 +426,7 @@ const NEXT_MEMBER_SCREENS: ReadonlySet<MemberScreenName> = new Set<MemberScreenN
   'order',
   'rewards',
   'reward',
+  'profile',
 ]);
 
 const layout = computed(() => {
@@ -438,6 +448,19 @@ const currentRewardId = ref<string | null>(null);
 
 /** Шторка «Отменить заказ?» открыта. */
 const cancelSheetOpen = ref(false);
+
+/**
+ * Профиль: раскрыт ли номер ВУ и какая шторка открыта. Держит страница, а не экран: уход
+ * с профиля сбрасывает оба, и вернувшийся видит номер спрятанным, а шторки закрытыми.
+ */
+const licenseRevealed = ref(false);
+const profileSheet = ref<'none' | 'reset' | 'language'>('none');
+
+/** Язык записывается: «Сохранить» ждёт с кольцом. */
+const savingLanguage = ref(false);
+
+/** Сброс сессии в пути: «Сбросить» ждёт, «Отменить» гаснет. */
+const resetting = ref(false);
 
 const openScreen = (screen: MemberScreenName): void => {
   screens.value = [...screens.value, screen];
@@ -473,6 +496,14 @@ watch(currentScreen, () => {
   window.scrollTo(0, 0);
 });
 
+// Уход с профиля сбрасывает раскрытый номер и шторку.
+watch(currentScreen, (screen) => {
+  if (screen !== 'profile') {
+    licenseRevealed.value = false;
+    profileSheet.value = 'none';
+  }
+});
+
 // Пункт пароля открывается с начала экрана. Отдельно от наблюдателя ниже: со стойки из нескольких
 // офисов «назад» есть и до открытия пункта, и признак возврата при открытии не меняется.
 watch(employeePasswordOpen, () => {
@@ -499,6 +530,11 @@ const openExchange = (): void => {
 const openOrders = (): void => {
   openScreen('orders');
   void (memberOrders.ordersState.value === 'ready' ? memberOrders.reloadOrders() : memberOrders.loadOrders());
+};
+
+/** Профиль — с аватара в шапке главной. Всё, что он показывает, уже пришло с экраном участника. */
+const openProfile = (): void => {
+  openScreen('profile');
 };
 
 /** Раздел истории: страницы уже читает главная, раздел показывает их все и листает дальше. */
@@ -808,6 +844,89 @@ const rewardScreen = computed(() => {
   };
 });
 
+/** Прочерк на месте значения, которого нет. Не текст словаря: на обоих языках он один. */
+const MISSING_VALUE = '—';
+
+/** Сколько последних знаков номера ВУ видно до глазика. */
+const LICENSE_TAIL_LENGTH = 4;
+
+/** Языки в шторке — в порядке макета. */
+const PROFILE_LANGUAGES: readonly Language[] = ['ru', 'uz'];
+
+/**
+ * Раздел «Профиль» и его шторки. Баланса в шапке нет — так в макете.
+ *
+ * Поля — готовыми строками: телефона нет — «нет в парке» серым, позывного нет — прочерк серым.
+ * Номера ВУ нет — та же строка с прочерком последней среди полей и без глазика: прятать
+ * нечего (решение Руслана 25-09-2026).
+ */
+const profileScreen = computed(() => {
+  const current = member.value;
+
+  if (!current) {
+    return null;
+  }
+
+  const { profile, profileTexts: texts } = current;
+  const fields: MemberProfileFieldView[] = [
+    profile.phone === null
+      ? { id: 'phone', label: texts.phone, value: texts.phoneMissing, missing: true }
+      : { id: 'phone', label: texts.phone, value: profile.phone.display },
+    { id: 'telegram', label: texts.telegramId, value: profile.telegramId },
+    profile.callsign === null
+      ? { id: 'callsign', label: texts.callsign, value: MISSING_VALUE, missing: true }
+      : { id: 'callsign', label: texts.callsign, value: profile.callsign },
+  ];
+
+  if (profile.license === null) {
+    fields.push({ id: 'license', label: texts.license, value: MISSING_VALUE, missing: true });
+  }
+
+  const languageOptions: MemberLanguageOptionView[] = PROFILE_LANGUAGES.map((language) => ({
+    language,
+    label: texts.languageNames[language],
+  }));
+
+  return {
+    lastName: profile.lastName,
+    givenNames: profile.givenNames,
+    fields,
+    license:
+      profile.license === null
+        ? null
+        : { label: texts.license, full: profile.license, tail: profile.license.slice(-LICENSE_TAIL_LENGTH) },
+    licenseRevealed: licenseRevealed.value,
+    language: current.language,
+    languageOptions,
+    sheet: profileSheet.value,
+    savingLanguage: savingLanguage.value,
+    resetting: resetting.value,
+    texts: {
+      title: texts.title,
+      back: current.texts.back,
+      settings: texts.settings,
+      language: texts.language,
+      reset: texts.reset,
+      licenseShow: texts.licenseShow,
+      licenseHide: texts.licenseHide,
+      resetTitle: texts.resetTitle,
+      resetSubtitle: texts.resetSubtitle,
+      resetConfirm: texts.resetConfirm,
+      resetCancel: texts.resetCancel,
+      languageSubtitle: texts.languageSubtitle,
+      save: texts.save,
+      close: texts.close,
+    },
+  };
+});
+
+/** «Отменить», «Закрыть» и Escape. Пока сброс в пути, шторка стоит: окно закроется само. */
+const closeProfileSheet = (): void => {
+  if (!resetting.value) {
+    profileSheet.value = 'none';
+  }
+};
+
 /**
  * Показывает то, что ответил сервер.
  *
@@ -875,6 +994,8 @@ const resetScreenWork = (): void => {
   currentOrder.value = null;
   currentRewardId.value = null;
   cancelSheetOpen.value = false;
+  licenseRevealed.value = false;
+  profileSheet.value = 'none';
 };
 
 /** Заглушка вместо экрана. */
@@ -973,6 +1094,73 @@ const reloadHome = async (): Promise<void> => {
       console.error('[miniapp] не удалось перечитать историю', error);
     }),
   ]);
+};
+
+/**
+ * «Сохранить» в шторке языка.
+ *
+ * Удача — перечитывается всё, что уже загружено и несёт готовые строки сервера: экран участника
+ * и списки главной — заказы, награды, история. Иначе экран собрался бы из двух языков: тексты
+ * `/me` на новом, строки списков на старом (прогон `#215`, 25-09-2026). Шторка закрывается,
+ * когда перечитанное пришло: экран под ней меняет язык целиком, а не по частям.
+ *
+ * Отказ — шторка открыта с тем же выбором, повтор тем же нажатием. Своего вида у отказа
+ * в шторке нет — причина в консоли.
+ */
+const saveLanguage = async (next: Language): Promise<void> => {
+  if (savingLanguage.value) {
+    return;
+  }
+
+  savingLanguage.value = true;
+
+  try {
+    const body: MiniAppLanguageRequestBody = { language: next };
+
+    await $fetch<MiniAppLanguageResponse>('/api/miniapp/language', {
+      method: 'POST',
+      headers: { [INIT_DATA_HEADER]: initData },
+      body,
+    });
+    await reloadHome();
+    profileSheet.value = 'none';
+  } catch (error) {
+    console.error('[miniapp] не удалось записать язык', error);
+  } finally {
+    savingLanguage.value = false;
+  }
+};
+
+/** Сколько ждать ответа ручки сброса. Не дождались — окно закрывается всё равно. */
+const RESET_TIMEOUT_MS = 5_000;
+
+/**
+ * «Сбросить» в шторке сброса сессии (T53).
+ *
+ * Ручка просит бота прислать приветствие с кнопкой запуска. Окно закрывается при любом её
+ * исходе — удаче, отказе или молчании дольше 5 секунд: водитель нажмёт /start сам. Перед
+ * закрытием стирается своя копия `initData`, и следующее открытие начнётся со свежей строки
+ * от Telegram. Кнопка из ожидания не выходит: после неё окна уже нет.
+ */
+const resetSession = async (): Promise<void> => {
+  if (resetting.value) {
+    return;
+  }
+
+  resetting.value = true;
+
+  try {
+    await $fetch('/api/miniapp/reset', {
+      method: 'POST',
+      headers: { [INIT_DATA_HEADER]: initData },
+      timeout: RESET_TIMEOUT_MS,
+    });
+  } catch (error) {
+    console.error('[miniapp] сброс сессии не ответил, окно закрывается всё равно', error);
+  }
+
+  forgetInitData();
+  webApp?.close();
 };
 
 /**
@@ -1305,10 +1493,10 @@ const openMap = (office: MemberOfficeView): void => {
     </div>
 
     <template v-else-if="stage === 'member' && member">
-      <!-- Аватар ничего не открывает: профиль подключает своя задача -->
       <OrganismsNextMemberHome
         v-if="currentScreen === 'home' && homeView"
         v-bind="homeView"
+        @profile="openProfile"
         @exchange="openExchange"
         @orders="openOrders"
         @order="openOrder"
@@ -1369,6 +1557,18 @@ const openMap = (office: MemberOfficeView): void => {
         :texts="rewardScreen.texts"
         @back="goBack"
         @map="openRewardMap"
+      />
+
+      <OrganismsNextMemberProfileScreen
+        v-else-if="currentScreen === 'profile' && profileScreen"
+        v-bind="profileScreen"
+        @back="goBack"
+        @toggle-license="licenseRevealed = !licenseRevealed"
+        @open-language="profileSheet = 'language'"
+        @ask-reset="profileSheet = 'reset'"
+        @reset="resetSession"
+        @save="saveLanguage"
+        @close="closeProfileSheet"
       />
 
       <div v-else class="flex flex-col gap-2">

@@ -233,6 +233,25 @@ export const listPersonLicenses = async (personId: string): Promise<PersonLicens
      ORDER BY "closed_at" ASC NULLS FIRST, "observed_at" DESC
   `;
 
+/**
+ * Действующий номер ВУ человека — как его отдал парк. Пусто — активной строки нет.
+ *
+ * Несколько активных строк устройством не запрещено, и берётся самая свежая по отметке
+ * наблюдения — тем же порядком, что у `listPersonLicenses`.
+ */
+export const findActiveLicenseNumber = async (personId: string): Promise<string | null> => {
+  const rows = await db.$queryRaw<{ numberRaw: string }[]>`
+    SELECT "number_raw" AS "numberRaw"
+      FROM xb.person_licenses
+     WHERE "person_id" = ${personId}::uuid
+       AND "closed_at" IS NULL
+     ORDER BY "observed_at" DESC
+     LIMIT 1
+  `;
+
+  return rows[0]?.numberRaw ?? null;
+};
+
 export type ParkProfileRow = {
   profileId: string;
   parkId: string;

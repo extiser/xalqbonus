@@ -2,6 +2,7 @@ import type { Language } from '#server/generated/prisma/enums';
 import { plainText } from '#server/bot/texts';
 import { hasTripOperations } from '#server/repositories/points';
 import { findLastSuccessfulRunFinishedAt } from '#server/repositories/syncRuns';
+import { memberProfileTexts, readMemberProfile } from '#server/services/drivers/memberProfile';
 import { memberScreenTexts } from '#server/services/drivers/memberScreen';
 import type { LinkedDriver } from '#server/services/drivers/readLinkedDriver';
 import { memberOrderTexts } from '#server/services/orders/memberOrderScreen';
@@ -50,14 +51,18 @@ const tripsNote = (syncedAt: Date, language: Language, now: Date): TripsNote => 
 /**
  * «Сейчас» приходит параметром: от него зависит предупреждение, и тест
  * задаёт его явно, а не ждёт нужного часа.
+ *
+ * Чат — тот, по которому участник найден: в профиле он стоит как Telegram ID.
  */
 export const readMemberScreen = async (
   driver: LinkedDriver,
+  telegramChatId: bigint,
   now: Date,
 ): Promise<MiniAppStateResponse> => {
-  const [hasTrips, syncedAt] = await Promise.all([
+  const [hasTrips, syncedAt, profile] = await Promise.all([
     hasTripOperations(driver.personId),
     findLastSuccessfulRunFinishedAt(FRESHNESS_KIND),
+    readMemberProfile(driver.personId, telegramChatId),
   ]);
 
   // Успешных прогонов не было ни одного — строка говорит, что данных ещё нет. Пустота
@@ -88,5 +93,7 @@ export const readMemberScreen = async (
     texts: memberScreenTexts(driver.language),
     orderTexts: memberOrderTexts(driver.language),
     rewardTexts: memberRewardTexts(driver.language),
+    profile,
+    profileTexts: memberProfileTexts(driver.language),
   };
 };

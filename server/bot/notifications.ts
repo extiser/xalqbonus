@@ -1,4 +1,6 @@
+import type { OpenAppButton } from '#server/adapters/telegram/outgoing';
 import type { CampaignParticipantOutcome, Language } from '#server/generated/prisma/enums';
+import { launchButton } from '#server/bot/launchButton';
 import { countedPlainText, formatPoints, text } from '#server/bot/texts';
 import { formatCalendarDate } from '#server/utils/parkTime';
 
@@ -59,6 +61,14 @@ export type Notification =
         /** До какого момента их забрать, ISO-строкой. Пусто, если все призы — баллы. */
         expiresAt: string | null;
       };
+    }
+  | {
+      /**
+       * Сброс сессии из профиля (issue #216, T53): приложение закрылось, и в чат приходит
+       * приветствие /start с кнопкой запуска — открыть приложение заново одним нажатием.
+       */
+      template: 'app_relaunch';
+      params: Record<string, never>;
     };
 
 /** Приз вскрытого сундука: баллы уже на балансе, товар или произвольный ждёт в офисе. */
@@ -142,5 +152,14 @@ export const renderNotification = (notification: Notification, language: Languag
       return renderCampaignFinished(notification.params, language);
     case 'campaign_chests_revealed':
       return renderChestsRevealed(notification.params, language);
+    case 'app_relaunch':
+      return text('start_greeting', language);
   }
 };
+
+/**
+ * Кнопка под уведомлением. Есть только у `app_relaunch` — та же, что под приветствием бота:
+ * остальные уведомления сообщают, а не зовут в приложение.
+ */
+export const notificationButton = (notification: Notification, language: Language): OpenAppButton | undefined =>
+  notification.template === 'app_relaunch' ? launchButton(language) : undefined;
