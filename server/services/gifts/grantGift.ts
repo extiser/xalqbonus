@@ -65,6 +65,11 @@ export type GrantGiftInput = {
   messageUz: string;
   coverRu: GiftCoverUpload | null;
   coverUz: GiftCoverUpload | null;
+  /**
+   * Сообщения — без ожидания окна отправки (issue #251): сотрудник вне окна отметил
+   * «Отправить сейчас». Уходит в каждое задание раздачи, в базе не хранится.
+   */
+  sendNow: boolean;
   employeeId: string;
 };
 
@@ -342,6 +347,7 @@ export const grantGift = async (input: GrantGiftInput): Promise<GrantGiftResult>
     await enqueueNotifications(
       granted.personIds.map((personId) => ({
         personId,
+        sendNow: input.sendNow,
         template: 'gift_received',
         params: {
           points: gift.points,

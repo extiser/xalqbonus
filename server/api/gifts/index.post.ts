@@ -110,6 +110,7 @@ export default defineEventHandler(async (event): Promise<GiftGrantResponse> => {
       messageRu: fields.messageRu ?? '',
       messageUz: fields.messageUz ?? '',
       ...covers,
+      sendNow: fields.sendNow === 'true',
       employeeId: employee.employeeId,
     }));
   } catch (error) {

@@ -245,6 +245,7 @@ const sendGift = async (gift: GiftFields): Promise<void> => {
     untilDate: gift.untilDate,
     messageRu: gift.messageRu,
     messageUz: gift.messageUz,
+    sendNow: gift.sendNow ? 'true' : '',
   };
 
   // Одним запросом с обложками: раздача не правится, и черновика под картинку у неё нет.

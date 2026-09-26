@@ -8,6 +8,7 @@ import {
   type NotificationOutcome,
 } from '#server/services/notifications/sendNotification';
 import { msUntilParkWindow } from '#server/utils/parkTime';
+import { SEND_WINDOW_END_HOUR, SEND_WINDOW_START_HOUR } from '../../shared/sendWindow';
 
 /**
  * Очередь уведомлений.
@@ -46,7 +47,12 @@ const RATE_LIMIT = { max: 20, duration: 1_000 };
  */
 const CONCURRENCY = 5;
 
-export type NotificationJobData = { personId: string } & Notification;
+/**
+ * `sendNow` — отправить без ожидания окна, даже если шаблон его ждёт (issue #251). Ставит его
+ * только раздача подарка, когда сотрудник вне окна отметил «Отправить сейчас»; остальные
+ * постановки признак не ставят.
+ */
+export type NotificationJobData = { personId: string; sendNow?: boolean } & Notification;
 
 // Очередь одна на процесс и держится на globalThis — по той же причине, что соединение
 // с Redis: горячая перезагрузка в dev перевычисляет модуль, а вторая очередь с тем же
@@ -75,10 +81,6 @@ export const getNotificationsQueue = (): Queue<NotificationJobData> => {
   return globalForQueue.notificationsQueue;
 };
 
-/** Окно отправки по часам парка: с 09:00 до 21:00 по Ташкенту. */
-const SEND_WINDOW_START_HOUR = 9;
-const SEND_WINDOW_END_HOUR = 21;
-
 /**
  * Уведомления, которые ждут окна отправки (docs/decisions.md → «Единичные уведомления —
  * одна дверь»: правила тишины живут здесь, а не в событиях).
@@ -87,15 +89,21 @@ const SEND_WINDOW_END_HOUR = 21;
  * о подарке ночью будит водителя ради того, что подождёт до утра. Общее окно на все
  * уведомления — отдельная задача (T35); она расширит этот список, а не заведёт второе
  * правило рядом.
+ *
+ * Исключение — признак `sendNow` в задании (issue #251): его ставит тот, кто ставит задание,
+ * осознанно и на одну постановку. Это признак постановки, а не второе правило рядом
+ * со списком. Часы окна — `shared/sendWindow.ts`: по ним же форма подарка говорит,
+ * когда уйдёт сообщение.
  */
 const WINDOWED_TEMPLATES: ReadonlySet<NotificationTemplate> = new Set(['gift_received']);
 
 /**
  * Параметры задания: вне окна — задержка до ближайших 09:00. Задержка, а не отдельное
  * расписание: отложенное задание — то же задание, с теми же повторами и лимитом.
+ * С `sendNow` задержки нет.
  */
 const jobOptions = (job: NotificationJobData, now: Date): { delay?: number } => {
-  if (!WINDOWED_TEMPLATES.has(job.template)) {
+  if (job.sendNow === true || !WINDOWED_TEMPLATES.has(job.template)) {
     return {};
   }
 

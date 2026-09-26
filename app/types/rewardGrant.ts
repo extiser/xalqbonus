@@ -27,4 +27,6 @@ export type GiftFields = {
   /** Обложки — обе или ни одной. Пусто — без обложки. */
   coverRu: File | null;
   coverUz: File | null;
+  /** Сообщение — без ожидания окна 09:00–21:00 (issue #251). Внутри окна всегда `false`. */
+  sendNow: boolean;
 };
