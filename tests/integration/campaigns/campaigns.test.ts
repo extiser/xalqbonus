@@ -92,6 +92,7 @@ const asDriver = (personId: string, language: Language = 'ru'): LinkedDriver => 
   callsign: null,
   points: 0n,
   language,
+  isDemo: false,
 });
 
 type Setup = {
@@ -112,6 +113,7 @@ const setup = async (drivers: number): Promise<Setup> => {
       conditions: { ...EMPTY_SEGMENT_CONDITIONS, balanceMin: BALANCE_FROM, balanceMax: BALANCE_TO },
     },
     employeeId,
+    false,
   );
 
   trackTestSegment(segment.segmentId);
@@ -139,7 +141,7 @@ const createDraft = async (
   context: Setup,
   overrides: Partial<CampaignFields> = {},
 ): Promise<string> => {
-  const created = await createCampaign(draftFields(context, overrides), context.employeeId);
+  const created = await createCampaign(draftFields(context, overrides), context.employeeId, false);
 
   trackTestCampaign(created.campaign.campaignId);
   // Все три сундука наполнены: без этого запуск отказывает `prizes_missing` (issue #180).
@@ -314,7 +316,7 @@ describe('акции', () => {
     await createDraft(context, { slug });
 
     await expect(
-      createCampaign(draftFields(context, { slug }), context.employeeId),
+      createCampaign(draftFields(context, { slug }), context.employeeId, false),
     ).rejects.toBeInstanceOf(CampaignSlugTakenError);
   });
 

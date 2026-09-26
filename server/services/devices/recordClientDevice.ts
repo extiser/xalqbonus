@@ -105,7 +105,9 @@ export const recordClientDevice = async (input: ClientDeviceInput): Promise<Mini
     return { offices: [] };
   }
 
-  const rows = await listActiveOffices();
+  // Только живые: экран старого браузера видит кто угодно, и демо-водитель среди них
+  // не отличается от живого (issue #212).
+  const rows = await listActiveOffices(false);
 
   return { offices: rows.map(toOldEngineOffice) };
 };

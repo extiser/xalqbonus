@@ -110,3 +110,17 @@ export const REWARD_GRANT_ROLES: readonly EmployeeRole[] = POINTS_ADJUST_ROLES;
  * от имени парка, и выбрать сегмент менеджеру всё равно не из чего — раздел сегментов ему закрыт.
  */
 export const GIFT_SEGMENT_ROLES: readonly EmployeeRole[] = SEGMENT_ROLES;
+
+/**
+ * Кто правит демо-сущность — товар, офис, рассылку, сегмент, акцию, демо-сотрудника
+ * и демо-водителя (issue #212). Только владелец: демо — витрина программы, которую показывает
+ * он, и правка чужими руками ломает показ. Остальные роли демо видят с пометкой «ДЕМО».
+ *
+ * Решает сервер (`requireDemoEditor`); разметка по тому же правилу прячет кнопки правки
+ * и поле «Демо» в формах заведения.
+ */
+export const DEMO_EDITOR_ROLES: readonly EmployeeRole[] = ['owner'];
+
+/** Вправе ли роль править сущность с этим признаком. Живую — всякий, кого пустил раздел. */
+export const canEditDemo = (role: EmployeeRole, isDemo: boolean): boolean =>
+  !isDemo || DEMO_EDITOR_ROLES.includes(role);

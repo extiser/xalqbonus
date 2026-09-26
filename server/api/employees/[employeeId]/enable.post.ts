@@ -1,5 +1,5 @@
 import { setEmployeeDisabled } from '#server/services/employees/setEmployeeDisabled';
-import { requireEmployeeRole } from '#server/utils/employeeAuth';
+import { requireDemoEditor, requireEmployeeRole } from '#server/utils/employeeAuth';
 import { requireUuidParam } from '#server/utils/query';
 import { STAFF_ROLES } from '#shared/access';
 import type { EmployeeDisabledResponse } from '#shared/types/employee';
@@ -9,6 +9,8 @@ import type { EmployeeDisabledResponse } from '#shared/types/employee';
 export default defineEventHandler(async (event): Promise<EmployeeDisabledResponse> => {
   const employee = await requireEmployeeRole(event, STAFF_ROLES);
   const employeeId = requireUuidParam(event, 'employeeId');
+
+  await requireDemoEditor(employee, { kind: 'employee', id: employeeId });
 
   const outcome = await setEmployeeDisabled({
     actor: { employeeId: employee.employeeId, role: employee.role },

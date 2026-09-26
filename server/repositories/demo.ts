@@ -290,3 +290,46 @@ export const findDemoOfficeId = async (client: Executor = db): Promise<string | 
 
   return rows[0]?.id ?? null;
 };
+
+// ---------------------------------------------------------------------------
+// Признак демо у сущностей (issue #212)
+// ---------------------------------------------------------------------------
+
+/** Что бывает демо: у каждой из этих таблиц есть `is_demo`. */
+export type DemoEntityKind =
+  | 'product'
+  | 'office'
+  | 'mailing'
+  | 'segment'
+  | 'campaign'
+  | 'employee'
+  | 'person';
+
+/**
+ * Таблица на каждый вид — постоянной строкой, а не собранной из запроса: имя таблицы
+ * параметром не передаётся, и выбирается оно здесь, кодом, из закрытого списка.
+ */
+const DEMO_TABLES = {
+  product: Prisma.sql`xb.products`,
+  office: Prisma.sql`xb.offices`,
+  mailing: Prisma.sql`xb.mailings`,
+  segment: Prisma.sql`xb.segments`,
+  campaign: Prisma.sql`xb.campaigns`,
+  employee: Prisma.sql`xb.employees`,
+  person: Prisma.sql`xb.persons`,
+} as const satisfies Record<DemoEntityKind, Prisma.Sql>;
+
+/** Признак демо у сущности. Пусто — такой строки нет. */
+export const findDemoFlag = async (
+  kind: DemoEntityKind,
+  id: string,
+  client: Executor = db,
+): Promise<boolean | null> => {
+  const rows = await client.$queryRaw<{ isDemo: boolean }[]>`
+    SELECT "is_demo" AS "isDemo"
+      FROM ${DEMO_TABLES[kind]}
+     WHERE "id" = ${id}::uuid
+  `;
+
+  return rows[0]?.isDemo ?? null;
+};

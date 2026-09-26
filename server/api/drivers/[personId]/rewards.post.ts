@@ -7,7 +7,7 @@ import {
   type ManualRewardProblem,
 } from '#server/services/rewards/errors';
 import { grantManualReward } from '#server/services/rewards/grantManualReward';
-import { requireEmployeeRole } from '#server/utils/employeeAuth';
+import { requireDemoEditor, requireEmployeeRole } from '#server/utils/employeeAuth';
 import { readUuid, requireUuidParam } from '#server/utils/query';
 import { REWARD_GRANT_ROLES } from '#shared/access';
 import type { ManualRewardField, ManualRewardResponse } from '#shared/types/rewards';
@@ -76,6 +76,9 @@ export default defineEventHandler(async (event): Promise<ManualRewardResponse> =
   const employee = await requireEmployeeRole(event, REWARD_GRANT_ROLES);
 
   const personId = requireUuidParam(event, 'personId');
+
+  await requireDemoEditor(employee, { kind: 'person', id: personId });
+
   const body = await readBody<ManualRewardBody | null>(event);
 
   try {
@@ -103,11 +106,19 @@ export default defineEventHandler(async (event): Promise<ManualRewardResponse> =
     }
 
     if (error instanceof RewardProductUnavailableError) {
-      throw rejectField(409, 'productId', 'этот товар не выдаётся: он черновик или в архиве');
+      throw rejectField(
+        409,
+        'productId',
+        'этот товар не выдаётся: он черновик, в архиве или демо, а водитель живой',
+      );
     }
 
     if (error instanceof RewardOfficeUnavailableError) {
-      throw rejectField(409, 'officeId', 'офис в архиве и наград не выдаёт');
+      throw rejectField(
+        409,
+        'officeId',
+        'офис наград не выдаёт: он в архиве или демо, а водитель живой',
+      );
     }
 
     if (error instanceof DriverAccountMissingError) {

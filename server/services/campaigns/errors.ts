@@ -52,6 +52,34 @@ export class CampaignSegmentArchivedError extends CampaignError {
   }
 }
 
+/**
+ * Сегмент не того мира (issue #212): демо-акция идёт только на демо-сегменте, живая — только
+ * на живом. Иначе демо-акция позвала бы живых водителей, а живая — демо.
+ */
+export class CampaignSegmentDemoMismatchError extends CampaignError {
+  constructor(
+    public readonly segmentId: string,
+    public readonly campaignIsDemo: boolean,
+  ) {
+    super(
+      `сегмент ${segmentId} ${campaignIsDemo ? 'живой, а акция демо' : 'демо, а акция живая'}`,
+    );
+  }
+}
+
+/**
+ * Офис выдачи не того мира (issue #212): у демо-акции — ДЕМО ОФИС, у живой — живой. Живой
+ * водитель не видит ДЕМО ОФИС, и приз в нём он бы не забрал.
+ */
+export class CampaignOfficeDemoMismatchError extends CampaignError {
+  constructor(
+    public readonly officeId: string,
+    public readonly campaignIsDemo: boolean,
+  ) {
+    super(`офис ${officeId} ${campaignIsDemo ? 'живой, а акция демо' : 'демо, а акция живая'}`);
+  }
+}
+
 /** Выбранного сегмента нет. */
 export class CampaignSegmentUnknownError extends CampaignError {
   constructor(public readonly segmentId: string) {
@@ -146,6 +174,19 @@ export class InvalidCampaignPrizesError extends CampaignError {
     public readonly chest: CampaignChestKind | null,
   ) {
     super(`призы акции не годятся: ${problem}${chest ? ` (${chest})` : ''}`);
+  }
+}
+
+/**
+ * Демо-товар в призах живой акции (issue #212): живому водителю он не выдаётся. У демо-акции
+ * в призах может быть любой товар — живое до демо доходит.
+ */
+export class CampaignPrizeDemoProductError extends CampaignError {
+  constructor(
+    public readonly productId: string,
+    public readonly chest: CampaignChestKind,
+  ) {
+    super(`товар ${productId} демо и не годится в приз живой акции`);
   }
 }
 

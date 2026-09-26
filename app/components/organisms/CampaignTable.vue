@@ -50,6 +50,7 @@ defineProps<{
               :tone="campaignStatusTone(campaign.status)"
               :label="campaignStatusLabel(campaign.status)"
             />
+            <AtomsStatusBadge v-if="campaign.isDemo" tone="demo" label="ДЕМО" />
           </div>
           <p class="mt-0.5 text-xs text-slate-500">
             Окно половины А: {{ formatDayRange(campaign.halfA.startsOn, campaign.halfA.endsOn) }}

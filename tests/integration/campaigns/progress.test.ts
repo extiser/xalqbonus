@@ -69,6 +69,7 @@ const asDriver = (personId: string): LinkedDriver => ({
   callsign: null,
   points: 0n,
   language: 'ru',
+  isDemo: false,
 });
 
 const launch = async (count: number, splitEnabled = false): Promise<Setup> => {
@@ -89,6 +90,7 @@ const launch = async (count: number, splitEnabled = false): Promise<Setup> => {
       conditions: { ...EMPTY_SEGMENT_CONDITIONS, balanceMin: BALANCE_FROM, balanceMax: BALANCE_TO },
     },
     employeeId,
+    false,
   );
 
   trackTestSegment(segment.segmentId);
@@ -108,6 +110,7 @@ const launch = async (count: number, splitEnabled = false): Promise<Setup> => {
       rewardLifetimeDays: 7,
     },
     employeeId,
+    false,
   );
   const campaignId = created.campaign.campaignId;
 

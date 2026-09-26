@@ -55,6 +55,12 @@ export type Campaign = {
   /** Пусто только у черновика. */
   title: string | null;
   status: CampaignStatus;
+  /**
+   * Демо-акция (issue #212): только на демо-сегменте и с ДЕМО ОФИСОМ выдачи, живая — только
+   * на живом, с живым офисом и без демо-товаров в призах. Ставится при заведении и не меняется;
+   * править её может только владелец.
+   */
+  isDemo: boolean;
   segment: CampaignSegmentRef | null;
   splitEnabled: boolean;
   /** Офис выдачи наград акции. Обязателен у запущенной (issue #172). */
@@ -112,6 +118,12 @@ export type CampaignRequestBody = {
   /** Строкой, как набрано в поле: «пусто значит не задано» решает сервер. */
   rewardLifetimeDays: string;
 };
+
+/**
+ * Тело заведения: то же, что у правки, и признак демо (issue #212). Ставит его только владелец,
+ * и только здесь — правка его не принимает: живое в демо не превращается и обратно.
+ */
+export type CampaignCreateRequestBody = CampaignRequestBody & { isDemo: boolean };
 
 /** Тело назначения окна половины Б. */
 export type CampaignWindowRequestBody = {

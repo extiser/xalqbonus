@@ -78,12 +78,14 @@ describe('инварианты остатков', () => {
         { productId: secondProduct, quantity: 1 },
       ],
       actor: 'mini_app',
+      driverIsDemo: false,
     });
     const cancelled = await placeOrder({
       personId: person.personId,
       officeId,
       items: [{ productId: firstProduct, quantity: 3 }],
       actor: 'mini_app',
+      driverIsDemo: false,
     });
     // Третий заказ остаётся висеть: резерв по нему обязан сойтись с позициями.
     await placeOrder({
@@ -91,6 +93,7 @@ describe('инварианты остатков', () => {
       officeId,
       items: [{ productId: secondProduct, quantity: 2 }],
       actor: 'mini_app',
+      driverIsDemo: false,
     });
 
     await issueOrder({ orderId: issued.orderId, employeeId });
@@ -131,6 +134,7 @@ describe('инварианты остатков', () => {
       officeId,
       items: [{ productId, quantity: 2 }],
       actor: 'mini_app',
+      driverIsDemo: false,
     });
 
     // Так выглядел бы забытый резерв: заказ закрылся, а занятое осталось занятым. Кэш

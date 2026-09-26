@@ -279,6 +279,7 @@ type PersonOrderQueryRow = Omit<PersonOrderRow, 'office'> & {
   officePhoneE164: string | null;
   officeTelegram: string | null;
   officeArchivedAt: Date | null;
+  officeIsDemo: boolean;
   officeUpdatedAt: Date;
 };
 
@@ -318,6 +319,7 @@ export const listPersonOrders = async (
            office."phone_e164"     AS "officePhoneE164",
            office."telegram"       AS "officeTelegram",
            office."archived_at"    AS "officeArchivedAt",
+           office."is_demo"        AS "officeIsDemo",
            office."updated_at"     AS "officeUpdatedAt"
       FROM xb.orders AS "order"
       JOIN xb.offices AS office ON office."id" = "order"."office_id"
@@ -337,6 +339,7 @@ export const listPersonOrders = async (
       officePhoneE164,
       officeTelegram,
       officeArchivedAt,
+      officeIsDemo,
       officeUpdatedAt,
       ...order
     }) => ({
@@ -350,6 +353,7 @@ export const listPersonOrders = async (
         phoneE164: officePhoneE164,
         telegram: officeTelegram,
         archivedAt: officeArchivedAt,
+        isDemo: officeIsDemo,
         updatedAt: officeUpdatedAt,
       },
     }),

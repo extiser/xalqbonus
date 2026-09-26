@@ -33,6 +33,9 @@ import type { LoadState } from '~/types/loadState';
  *
  * Жёсткий предел у каждого текста свой и стоит `maxlength`: длиннее `sendMessage` Telegram
  * не примет ни в каком виде.
+ *
+ * Демо-рассылка (issue #212) уходит только демо-водителям — так и подписано число адресатов.
+ * `readonly` — демо-рассылка у того, кто её не правит: поля видны, но закрыты.
  */
 const props = defineProps<{
   heading: string;
@@ -44,6 +47,9 @@ const props = defineProps<{
   audience: MailingAudienceResponse | null;
   uploading: boolean;
   photoError: string | null;
+  /** Рассылка демо — своя или ставится полем «Демо» до заведения. */
+  demo: boolean;
+  readonly?: boolean;
 }>();
 
 const emit = defineEmits<{ upload: [file: File]; removePhoto: []; retry: [] }>();
@@ -64,91 +70,96 @@ const photoNote = `Необязательно. С фото сообщение у
 
 <template>
   <MoleculesSectionPanel :title="heading">
-    <div class="space-y-4">
-      <MoleculesFormField
-        v-model="title"
-        label="Заголовок"
-        type="text"
-        hint="Для списка рассылок. Водителю не уходит."
-      />
+    <fieldset :disabled="readonly" class="min-w-0 space-y-4">
+        <MoleculesFormField
+          v-model="title"
+          label="Заголовок"
+          type="text"
+          hint="Для списка рассылок. Водителю не уходит."
+        />
 
-      <!-- Поля в том же порядке, в каком блоки уйдут в сообщении: узбекский первым (issue #160). -->
-      <MoleculesTextAreaField
-        v-model="textUz"
-        label="Текст на узбекском"
-        :rows="6"
-        :maxlength="MAILING_TEXT_MAX_LENGTH"
-        :invalid="tooLong"
-      />
-      <MoleculesTextAreaField
-        v-model="textRu"
-        label="Текст на русском"
-        :rows="6"
-        :maxlength="MAILING_TEXT_MAX_LENGTH"
-        :invalid="tooLong"
-        hint="Заполните хотя бы один язык, любой. Оба уходят одним сообщением: узбекский первым, каждый с флагом в начале, между ними разделитель. Один — без флага и разделителя."
-      />
+        <!-- Поля в том же порядке, в каком блоки уйдут в сообщении: узбекский первым (issue #160). -->
+        <MoleculesTextAreaField
+          v-model="textUz"
+          label="Текст на узбекском"
+          :rows="6"
+          :maxlength="MAILING_TEXT_MAX_LENGTH"
+          :invalid="tooLong"
+        />
+        <MoleculesTextAreaField
+          v-model="textRu"
+          label="Текст на русском"
+          :rows="6"
+          :maxlength="MAILING_TEXT_MAX_LENGTH"
+          :invalid="tooLong"
+          hint="Заполните хотя бы один язык, любой. Оба уходят одним сообщением: узбекский первым, каждый с флагом в начале, между ними разделитель. Один — без флага и разделителя."
+        />
 
-      <!-- Аудиторию по языку мы не режем сознательно, а пишущий узбекский текст легко решит,
-           что тот уйдёт только узбекоязычным. -->
-      <p class="text-sm text-slate-500">
-        Сообщение уходит всем участникам программы — независимо от языка в их профиле.
-      </p>
-
-      <div class="rounded-md px-3 py-2 text-sm" :class="tooLong ? 'bg-red-50' : 'bg-slate-50'">
-        <p :class="tooLong ? 'text-red-700' : 'text-slate-700'">
-          Сообщение с флагами и разделителем языков:
-          <span class="font-semibold tabular-nums">{{ formatNumber(length) }}</span>
-          из {{ formatNumber(limit) }} знаков.
-          <template v-if="tooLong">
-            Длиннее на {{ formatNumber(-remaining) }} — запустить нельзя, пока не сократите.
-          </template>
-          <template v-else>Осталось {{ formatNumber(remaining) }}.</template>
+        <!-- Аудиторию по языку мы не режем сознательно, а пишущий узбекский текст легко решит,
+             что тот уйдёт только узбекоязычным. -->
+        <p class="text-sm text-slate-500">
+          Сообщение уходит всем участникам программы — независимо от языка в их профиле.
         </p>
-        <p class="mt-0.5 text-xs text-slate-500">
-          <template v-if="withPhoto">
-            С фото сообщение уходит подписью к нему — потолок
-            {{ formatNumber(MAILING_CAPTION_MAX_LENGTH) }} вместо {{ formatNumber(MAILING_TEXT_MAX_LENGTH) }}.
-          </template>
-          <template v-else>
-            Без фото. Если добавить фото ниже, потолок станет {{ formatNumber(MAILING_CAPTION_MAX_LENGTH) }}.
-          </template>
-        </p>
-      </div>
 
-      <OrganismsPhotoField
-        :photo-path="mailing?.photoPath ?? null"
-        :updated-at="mailing?.updatedAt ?? ''"
-        :name="title || 'Рассылка'"
-        :uploading="uploading"
-        :error="photoError"
-        :note="photoNote"
-        removable
-        @upload="(file) => emit('upload', file)"
-        @remove="emit('removePhoto')"
-      />
+        <div class="rounded-md px-3 py-2 text-sm" :class="tooLong ? 'bg-red-50' : 'bg-slate-50'">
+          <p :class="tooLong ? 'text-red-700' : 'text-slate-700'">
+            Сообщение с флагами и разделителем языков:
+            <span class="font-semibold tabular-nums">{{ formatNumber(length) }}</span>
+            из {{ formatNumber(limit) }} знаков.
+            <template v-if="tooLong">
+              Длиннее на {{ formatNumber(-remaining) }} — запустить нельзя, пока не сократите.
+            </template>
+            <template v-else>Осталось {{ formatNumber(remaining) }}.</template>
+          </p>
+          <p class="mt-0.5 text-xs text-slate-500">
+            <template v-if="withPhoto">
+              С фото сообщение уходит подписью к нему — потолок
+              {{ formatNumber(MAILING_CAPTION_MAX_LENGTH) }} вместо {{ formatNumber(MAILING_TEXT_MAX_LENGTH) }}.
+            </template>
+            <template v-else>
+              Без фото. Если добавить фото ниже, потолок станет {{ formatNumber(MAILING_CAPTION_MAX_LENGTH) }}.
+            </template>
+          </p>
+        </div>
 
-      <div class="rounded-md bg-slate-50 px-3 py-2 text-sm">
-        <p v-if="audienceState === 'loading'" class="text-slate-500">Считаем адресатов…</p>
-        <p v-else-if="audienceState === 'error' || !audience" class="text-red-700">
-          Адресатов посчитать не вышло. Это отказ запроса, а не пустая аудитория.
-        </p>
-        <p v-else class="text-slate-700">
-          Адресатов сейчас:
-          <span class="font-semibold text-slate-900">{{ formatNumber(audience.total) }}</span> — все
-          участники программы с привязанным Telegram.
-          <template v-if="audience.notificationsDisabled > 0">
-            Из них {{ formatNumber(audience.notificationsDisabled) }} отключили уведомления — будут
-            в счётчике, но сообщения не получат.
-          </template>
-        </p>
-      </div>
+        <OrganismsPhotoField
+          :photo-path="mailing?.photoPath ?? null"
+          :updated-at="mailing?.updatedAt ?? ''"
+          :name="title || 'Рассылка'"
+          :uploading="uploading"
+          :error="photoError"
+          :note="photoNote"
+          removable
+          @upload="(file) => emit('upload', file)"
+          @remove="emit('removePhoto')"
+        />
 
-      <MoleculesAutosaveStatus
-        :state="autosaveState"
-        :error="autosaveError"
-        @retry="emit('retry')"
-      />
-    </div>
+        <div class="rounded-md bg-slate-50 px-3 py-2 text-sm">
+          <p v-if="audienceState === 'loading'" class="text-slate-500">Считаем адресатов…</p>
+          <p v-else-if="audienceState === 'error' || !audience" class="text-red-700">
+            Адресатов посчитать не вышло. Это отказ запроса, а не пустая аудитория.
+          </p>
+          <p v-else class="text-slate-700">
+            Адресатов сейчас:
+            <span class="font-semibold text-slate-900">{{ formatNumber(audience.total) }}</span> —
+            {{
+              demo
+                ? 'только демо-водители с привязанным Telegram: демо-рассылка живым не уходит.'
+                : 'все участники программы с привязанным Telegram.'
+            }}
+            <template v-if="audience.notificationsDisabled > 0">
+              Из них {{ formatNumber(audience.notificationsDisabled) }} отключили уведомления — будут
+              в счётчике, но сообщения не получат.
+            </template>
+          </p>
+        </div>
+
+        <MoleculesAutosaveStatus
+          v-if="!readonly"
+          :state="autosaveState"
+          :error="autosaveError"
+          @retry="emit('retry')"
+        />
+    </fieldset>
   </MoleculesSectionPanel>
 </template>

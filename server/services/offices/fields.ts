@@ -19,6 +19,7 @@ export const toOffice = (row: OfficeRow): Office => ({
   phoneE164: row.phoneE164,
   telegram: row.telegram,
   archivedAt: row.archivedAt?.toISOString() ?? null,
+  isDemo: row.isDemo,
 });
 
 /** Что сервис заведения и правки получает на вход — уже разобранным, без пустых строк. */
@@ -57,6 +58,8 @@ export type OfficeRequestFields = {
   workHours?: unknown;
   phoneE164?: unknown;
   telegram?: unknown;
+  /** Только у заведения: правка признак не трогает (issue #212). */
+  isDemo?: unknown;
 };
 
 /**

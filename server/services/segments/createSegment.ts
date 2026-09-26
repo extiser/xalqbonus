@@ -8,11 +8,18 @@ import type { Segment } from '#shared/types/segment';
  * не пропустит и база — проверкой `segments_has_condition_check`.
  *
  * Уникальности имени нет, как у офисов: два одинаковых имени — состояние, а не ошибка ввода.
+ *
+ * Признак демо ставится здесь и больше нигде (issue #212). Кто вправе его поставить, решила
+ * ручка — `requireDemoEditor`.
  */
 const log = consola.withTag('segments:create');
 
-export const createSegment = async (fields: SegmentFields, employeeId: string): Promise<Segment> => {
-  const segmentId = await insertSegment({ ...fields, createdById: employeeId });
+export const createSegment = async (
+  fields: SegmentFields,
+  employeeId: string,
+  isDemo: boolean,
+): Promise<Segment> => {
+  const segmentId = await insertSegment({ ...fields, createdById: employeeId, isDemo });
   const row = await findSegment(segmentId);
 
   if (!row) {

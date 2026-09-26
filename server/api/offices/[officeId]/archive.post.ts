@@ -1,6 +1,6 @@
 import { UnknownOfficeError } from '#server/services/offices/errors';
 import { setOfficeArchived } from '#server/services/offices/setOfficeArchived';
-import { requireEmployeeRole } from '#server/utils/employeeAuth';
+import { requireDemoEditor, requireEmployeeRole } from '#server/utils/employeeAuth';
 import { requireUuidParam } from '#server/utils/query';
 import { CATALOG_ROLES } from '#shared/access';
 import type { OfficeResponse } from '#shared/types/catalog';
@@ -11,9 +11,11 @@ import type { OfficeResponse } from '#shared/types/catalog';
 // Повторный запрос на уже закрытый офис отвечает тем же успехом и время закрытия не двигает:
 // две нажатые кнопки означают одно и то же состояние.
 export default defineEventHandler(async (event): Promise<OfficeResponse> => {
-  await requireEmployeeRole(event, CATALOG_ROLES);
+  const employee = await requireEmployeeRole(event, CATALOG_ROLES);
 
   const officeId = requireUuidParam(event, 'officeId');
+
+  await requireDemoEditor(employee, { kind: 'office', id: officeId });
 
   try {
     return { office: await setOfficeArchived(officeId, true) };

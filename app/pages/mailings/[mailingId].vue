@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import { useDemoEditor } from '~/composables/useDemoEditor';
 import { useDraftAutosave } from '~/composables/useDraftAutosave';
 import { formatDateTime, formatNumber, pluralize } from '~/utils/format';
 import { mailingStatusLabel, mailingStatusTone } from '~/utils/labels';
@@ -16,6 +17,7 @@ import {
 import type {
   Mailing,
   MailingAudienceResponse,
+  MailingCreateRequestBody,
   MailingRequestBody,
   MailingResponse,
 } from '#shared/types/mailing';
@@ -35,6 +37,10 @@ import type {
  *
  * Кнопки показываются по статусу с сервера, но решает ручка: запуск не черновика и остановка
  * не идущей отвечают отказом.
+ *
+ * **Демо** (issue #212): поле «Демо» новой рассылки видит только владелец, и уходит оно одним
+ * заведением. Число адресатов демо-рассылки — только демо-водители. Демо-рассылку у остальных
+ * экран открывает на чтение: без автосохранения и кнопок.
  */
 
 definePageMeta({
@@ -63,6 +69,17 @@ const setMailing = (next: Mailing): void => {
 };
 
 const isDraft = computed(() => mailing.value === null || mailing.value.status === 'draft');
+
+const { ownsDemo, canEdit } = useDemoEditor();
+
+/** Поле «Демо» новой рассылки. Уходит только заведением. */
+const demo = ref(false);
+
+/** Рассылка демо: заведённая — по своему признаку, новая — по полю. */
+const isDemo = computed(() => mailing.value?.isDemo ?? demo.value);
+
+/** Правит ли вошедший эту рассылку: демо — только владелец. */
+const editable = computed(() => canEdit(mailing.value?.isDemo ?? false));
 
 const toFields = (source: Mailing | null): MailingRequestBody => ({
   title: source?.title ?? '',
@@ -110,8 +127,13 @@ const headerNote = computed(() => {
   return phrases.join(' ');
 });
 
-const { data: audience, status: audienceStatus } =
-  await useFetch<MailingAudienceResponse>('/api/mailings/audience');
+/** Аудитория своя у демо-рассылки: только демо-водители. */
+const audienceQuery = computed(() => ({ demo: String(isDemo.value) }));
+
+const { data: audience, status: audienceStatus } = await useFetch<MailingAudienceResponse>(
+  '/api/mailings/audience',
+  { query: audienceQuery },
+);
 
 const audienceState = computed(() => toLoadState(audienceStatus.value));
 
@@ -125,7 +147,7 @@ const saveDraft = async (snapshot: MailingRequestBody): Promise<void> => {
   if (current === null) {
     const created = await $fetch<MailingResponse>('/api/mailings', {
       method: 'POST',
-      body: snapshot,
+      body: { ...snapshot, isDemo: demo.value } satisfies MailingCreateRequestBody,
     });
 
     setMailing(created.mailing);
@@ -145,13 +167,14 @@ const saveDraft = async (snapshot: MailingRequestBody): Promise<void> => {
 const autosave = useDraftAutosave({
   fields,
   save: saveDraft,
-  enabled: () => isDraft.value,
+  enabled: () => isDraft.value && editable.value,
 });
 
 // Переход к другой записи на той же странице — копией или историей браузера.
 watch(routeId, async (id) => {
   if (id === NEW_MAILING) {
     data.value = undefined;
+    demo.value = false;
     autosave.replace(toFields(null));
 
     return;
@@ -315,7 +338,9 @@ const launch = (): Promise<void> =>
       return;
     }
 
-    const fresh = await $fetch<MailingAudienceResponse>('/api/mailings/audience');
+    const fresh = await $fetch<MailingAudienceResponse>('/api/mailings/audience', {
+      query: audienceQuery.value,
+    });
 
     audience.value = fresh;
 
@@ -597,8 +622,13 @@ onBeforeUnmount(() => {
           :tone="mailingStatusTone(mailing.status)"
           :label="mailingStatusLabel(mailing.status)"
         />
+        <AtomsStatusBadge v-if="mailing?.isDemo" tone="demo" label="ДЕМО" />
       </div>
       <p v-if="state === 'ready'" class="mt-1 text-sm text-slate-500">{{ headerNote }}</p>
+      <p v-if="mailing?.isDemo" class="mt-1 text-sm text-slate-500">
+        Демо-рассылка: уходит только демо-водителям.
+        {{ editable ? '' : 'Менять её может только владелец.' }}
+      </p>
     </div>
 
     <MoleculesStateNotice v-if="state === 'loading'" state="loading" message="Читаем рассылку…" />
@@ -608,6 +638,13 @@ onBeforeUnmount(() => {
       message="Рассылка не прочиталась. Это отказ запроса, а не отсутствие рассылки."
     />
     <template v-else-if="isDraft">
+      <MoleculesSectionPanel v-if="mailing === null && ownsDemo" title="Кому">
+        <MoleculesDemoField
+          v-model="demo"
+          hint="Демо-рассылка уходит только демо-водителям, живым — никогда."
+        />
+      </MoleculesSectionPanel>
+
       <OrganismsMailingForm
         v-model:title="fields.title"
         v-model:text-ru="fields.textRu"
@@ -620,12 +657,15 @@ onBeforeUnmount(() => {
         :audience="audience ?? null"
         :uploading="uploading"
         :photo-error="photoError"
+        :demo="isDemo"
+        :readonly="!editable"
         @upload="upload"
         @remove-photo="removePhoto"
         @retry="autosave.retry"
       />
 
       <MoleculesSectionPanel
+        v-if="editable"
         title="Запуск"
         note="Уходит то, что на экране. Адресаты фиксируются в момент запуска: кто вступит в программу позже, рассылку не получит. Сообщения уходят очередью, по несколько в секунду."
       >
@@ -645,7 +685,7 @@ onBeforeUnmount(() => {
       </MoleculesSectionPanel>
 
       <MoleculesSectionPanel
-        v-if="mailing"
+        v-if="mailing && editable"
         title="Копия"
         note="Новый черновик с тем же заголовком, текстами и фото. Этот черновик остаётся как есть."
       >
@@ -653,7 +693,7 @@ onBeforeUnmount(() => {
       </MoleculesSectionPanel>
 
       <MoleculesSectionPanel
-        v-if="mailing"
+        v-if="mailing && editable"
         title="Удаление"
         note="Черновик удаляется целиком, вместе с фото: адресатов у него ещё нет. Брошенный черновик сам не удаляется — только этой кнопкой."
       >
@@ -677,12 +717,12 @@ onBeforeUnmount(() => {
       >
         <OrganismsMailingCounters :counters="mailing.counters" />
 
-        <div v-if="mailing.status === 'running'" class="mt-4">
+        <div v-if="editable && mailing.status === 'running'" class="mt-4">
           <AtomsActionButton label="Остановить" tone="danger" :disabled="acting" @click="stop" />
           <p v-if="actionError" class="mt-3 text-sm text-red-700">{{ actionError }}</p>
         </div>
 
-        <div v-else-if="recallState" class="mt-4">
+        <div v-else-if="editable && recallState" class="mt-4">
           <div class="flex flex-wrap items-center gap-3">
             <AtomsActionButton
               label="Скопировать в новый черновик"

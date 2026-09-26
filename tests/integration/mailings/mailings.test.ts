@@ -88,6 +88,7 @@ const createDraft = async (createdById: string) => {
   const mailing = await createMailing(
     { title: 'Тестовая рассылка', textRu: 'Привет', textUz: 'Salom' },
     createdById,
+    false,
   );
 
   trackTestMailing(mailing.mailingId);
@@ -115,7 +116,7 @@ describe('рассылки', () => {
   });
 
   it('аудитория — все участники программы с активной привязкой', async () => {
-    const before = await readMailingAudience();
+    const before = await readMailingAudience(false);
 
     await createMember();
     await createMember();
@@ -125,7 +126,7 @@ describe('рассылки', () => {
     const muted = await createMember();
     await setTestNotificationsEnabled(muted, false);
 
-    const after = await readMailingAudience();
+    const after = await readMailingAudience(false);
 
     // Три участника с привязкой: без привязки и вне программы не считаются.
     expect(after.total - before.total).toBe(3);
@@ -173,7 +174,7 @@ describe('рассылки', () => {
     const { employeeId } = await createTestEmployee({ role: 'admin' });
 
     // Условие теста, а не проверка: участников в тестовой базе между тестами нет.
-    expect((await readMailingAudience()).total).toBe(0);
+    expect((await readMailingAudience(false)).total).toBe(0);
 
     const draft = await createDraft(employeeId);
 
@@ -296,7 +297,7 @@ describe('рассылки', () => {
     const { employeeId } = await createTestEmployee({ role: 'admin' });
 
     await expect(
-      createMailing({ title: 'Роман', textRu: 'р'.repeat(4097), textUz: null }, employeeId),
+      createMailing({ title: 'Роман', textRu: 'р'.repeat(4097), textUz: null }, employeeId, false),
     ).rejects.toMatchObject({ field: 'textRu', limit: 4096 });
 
     const draft = await createDraft(employeeId);
@@ -457,7 +458,7 @@ describe('рассылки', () => {
     await createMember();
 
     // Первым действием выбрали фото: заголовка и текстов ещё нет, а черновик уже есть.
-    const empty = await createMailing({ title: null, textRu: null, textUz: null }, employeeId);
+    const empty = await createMailing({ title: null, textRu: null, textUz: null }, employeeId, false);
 
     trackTestMailing(empty.mailingId);
 

@@ -64,6 +64,11 @@ export type PlaceOrderInput = {
   items: PlaceOrderItem[];
   /** Путь, которым пришла операция, — он же `actor` перевода: `mini_app`, `web`. */
   actor: string;
+  /**
+   * Водитель демо (`LinkedDriver.isDemo`). Живому ДЕМО ОФИС и демо-товары не продаются —
+   * теми же отказами, что архивные (issue #212); демо-водителю продаётся всё.
+   */
+  driverIsDemo: boolean;
 };
 
 export type PlacedOrder = {
@@ -112,6 +117,7 @@ const validateItems = (items: PlaceOrderItem[]): PlaceOrderItem[] => {
 const priceItems = async (
   transaction: Prisma.TransactionClient,
   items: PlaceOrderItem[],
+  driverIsDemo: boolean,
 ): Promise<PricedItem[]> => {
   const products = await findProductsByIds(
     items.map((item) => item.productId),
@@ -120,13 +126,15 @@ const priceItems = async (
   // Черновик отсекается здесь, в выборке каталога, тем же условием, что и на витрине:
   // водителю он не виден нигде, и корзина, собранная руками, его тоже не закажет (issue #148).
   // Скрытый с витрины и приз без цены — тем же доводом (issue #172): витрина их не показывает,
-  // и заказ по идентификатору, набранному руками, их не берёт.
+  // и заказ по идентификатору, набранному руками, их не берёт. Демо-товар живому — тоже
+  // (issue #212).
   const priceByProduct = new Map(
     products.flatMap((product) =>
       product.publishedAt !== null &&
       product.archivedAt === null &&
       !product.hiddenInCatalog &&
-      product.pricePoints !== null
+      product.pricePoints !== null &&
+      (driverIsDemo || !product.isDemo)
         ? [[product.id, product.pricePoints] as const]
         : [],
     ),
@@ -135,7 +143,7 @@ const priceItems = async (
   return items.map((item) => {
     const unitPoints = priceByProduct.get(item.productId);
 
-    // Нет в каталоге, черновик и архивный — один отказ: водителю во всех случаях нельзя
+    // Нет в каталоге, черновик, архивный и чужой демо — один отказ: водителю во всех случаях нельзя
     // заказать этот товар, а знать, существовал ли он когда-нибудь, ему незачем.
     if (unitPoints === undefined) {
       throw new ProductUnavailableError(item.productId);
@@ -212,11 +220,12 @@ export const placeOrder = async (input: PlaceOrderInput): Promise<PlacedOrder> =
   return db.$transaction(async (transaction) => {
     const office = await findOffice(input.officeId, transaction);
 
-    if (!office || office.archivedAt !== null) {
+    // ДЕМО ОФИС живому — как архивный: водителю объяснять нечего (issue #212).
+    if (!office || office.archivedAt !== null || (office.isDemo && !input.driverIsDemo)) {
       throw new OfficeUnavailableError(input.officeId);
     }
 
-    const pricedItems = await priceItems(transaction, items);
+    const pricedItems = await priceItems(transaction, items, input.driverIsDemo);
 
     const stock = await lockStockRows(
       transaction,

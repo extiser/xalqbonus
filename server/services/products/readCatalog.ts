@@ -15,6 +15,8 @@ import type { CatalogProduct, MemberOffice, MiniAppCatalogResponse } from '#shar
 export type CatalogRequest = {
   /** Баланс водителя со счёта — тот же, что стоит на экране участника. */
   balance: bigint;
+  /** Водитель демо: ему видны ДЕМО ОФИС и демо-товары (issue #212). */
+  isDemo: boolean;
 };
 
 /**
@@ -58,7 +60,10 @@ export const groupCatalogProducts = (
 };
 
 export const readCatalog = async (request: CatalogRequest): Promise<MiniAppCatalogResponse> => {
-  const [{ offices }, rows] = await Promise.all([readMemberOffices(), listCatalogProducts()]);
+  const [{ offices }, rows] = await Promise.all([
+    readMemberOffices({ isDemo: request.isDemo }),
+    listCatalogProducts(request.isDemo),
+  ]);
 
   return {
     balancePoints: Number(request.balance),

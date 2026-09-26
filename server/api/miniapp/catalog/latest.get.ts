@@ -4,7 +4,7 @@ import type { MiniAppLatestProductsResponse } from '#shared/types/miniapp';
 
 // Блок каталога на главной: самые свежие товары, которые можно взять хотя бы в одном офисе.
 export default defineEventHandler(async (event): Promise<MiniAppLatestProductsResponse> => {
-  await requireMember(event);
+  const driver = await requireMember(event);
 
-  return readLatestProducts();
+  return readLatestProducts({ isDemo: driver.isDemo });
 });

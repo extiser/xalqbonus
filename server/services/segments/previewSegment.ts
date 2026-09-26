@@ -25,11 +25,12 @@ import type {
 
 const previewConditions = async (
   conditions: SegmentConditions,
+  isDemo: boolean,
   offset: number,
 ): Promise<SegmentPreviewResponse> => {
   const [count, rows] = await Promise.all([
-    countSegmentMembers(conditions),
-    listSegmentMembersPage(conditions, SEGMENT_PREVIEW_LIMIT, Math.max(offset, 0)),
+    countSegmentMembers(conditions, isDemo),
+    listSegmentMembersPage(conditions, isDemo, SEGMENT_PREVIEW_LIMIT, Math.max(offset, 0)),
   ]);
 
   return {
@@ -64,11 +65,15 @@ export const previewSavedSegment = async (
     throw new UnknownSegmentError(segmentId);
   }
 
-  return previewConditions(toSegmentConditions(row), offset);
+  return previewConditions(toSegmentConditions(row), row.isDemo, offset);
 };
 
-/** Состав по условиям формы, ничего не сохраняя. Условия уже разобраны и непусты. */
+/**
+ * Состав по условиям формы, ничего не сохраняя. Условия уже разобраны и непусты. Признак
+ * демо — тоже из формы (issue #212): несохранённый сегмент сохранится с ним же.
+ */
 export const previewSegmentConditions = (
   conditions: SegmentConditions,
+  isDemo: boolean,
   offset: number,
-): Promise<SegmentPreviewResponse> => previewConditions(conditions, offset);
+): Promise<SegmentPreviewResponse> => previewConditions(conditions, isDemo, offset);

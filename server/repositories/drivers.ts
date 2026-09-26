@@ -94,6 +94,8 @@ export type DriverSearchListRow = {
   workStatuses: string[];
   profilesCount: number;
   isMember: boolean;
+  /** Демо-водитель (issue #205). */
+  isDemo: boolean;
   balance: bigint | null;
 };
 
@@ -123,6 +125,7 @@ export const listMatchedDrivers = async (
            profiles."workStatuses",
            profiles."profilesCount",
            (settings."person_id" IS NOT NULL)   AS "isMember",
+           person."is_demo"                     AS "isDemo",
            account."balance"
       FROM matched
       JOIN xb.persons AS person ON person."id" = matched."personId"
@@ -188,11 +191,13 @@ export const countMatchedDrivers = async (criteria: DriverSearchCriteria): Promi
 export type PersonRow = {
   personId: string;
   createdAt: Date;
+  /** Демо-водитель (issue #205). */
+  isDemo: boolean;
 };
 
 export const findPerson = async (personId: string): Promise<PersonRow | null> => {
   const rows = await db.$queryRaw<PersonRow[]>`
-    SELECT "id" AS "personId", "created_at" AS "createdAt"
+    SELECT "id" AS "personId", "created_at" AS "createdAt", "is_demo" AS "isDemo"
       FROM xb.persons
      WHERE "id" = ${personId}::uuid
   `;

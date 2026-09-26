@@ -73,6 +73,7 @@ const setup = async (): Promise<Setup> => {
       conditions: { ...EMPTY_SEGMENT_CONDITIONS, balanceMin: BALANCE_FROM, balanceMax: BALANCE_TO },
     },
     employeeId,
+    false,
   );
 
   trackTestSegment(segment.segmentId);
@@ -99,6 +100,7 @@ const createDraft = async (
       ...overrides,
     },
     context.employeeId,
+    false,
   );
 
   trackTestCampaign(created.campaign.campaignId);
@@ -170,15 +172,18 @@ describe('призы акции', () => {
     const context = await setup();
     const campaignId = await createDraft(context);
     const archivedProductId = await createTestProduct({ pricePoints: 40, archived: true });
-    const draftProduct = await createProduct({
-      name: 'Черновик приза',
-      description: null,
-      pricePoints: null,
-      priceRetail: 10_000,
-      priceCost: 8_000,
-      promo: true,
-      hiddenInCatalog: true,
-    });
+    const draftProduct = await createProduct(
+      {
+        name: 'Черновик приза',
+        description: null,
+        pricePoints: null,
+        priceRetail: 10_000,
+        priceCost: 8_000,
+        promo: true,
+        hiddenInCatalog: true,
+      },
+      false,
+    );
 
     trackTestProduct(draftProduct.productId);
 

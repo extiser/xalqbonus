@@ -24,7 +24,7 @@ export const readSegment = async (segmentId: string): Promise<Segment> => {
 export const readSegmentList = async (): Promise<SegmentListResponse> => {
   const segments = (await listSegments()).map(toSegment);
   const counts = await Promise.all(
-    segments.map((segment) => countSegmentMembers(segment.conditions)),
+    segments.map((segment) => countSegmentMembers(segment.conditions, segment.isDemo)),
   );
 
   return {

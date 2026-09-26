@@ -5,7 +5,7 @@ import {
   MissingAdjustmentNoteError,
   UnknownStockTargetError,
 } from '#server/services/stock/errors';
-import { requireEmployeeRole } from '#server/utils/employeeAuth';
+import { requireDemoEditor, requireEmployeeRole } from '#server/utils/employeeAuth';
 import { requireUuidParam } from '#server/utils/query';
 import { CATALOG_ROLES } from '#shared/access';
 import type { StockOperationResponse } from '#shared/types/catalog';
@@ -29,6 +29,9 @@ export default defineEventHandler(async (event): Promise<StockOperationResponse>
 
   const officeId = requireUuidParam(event, 'officeId');
   const productId = requireUuidParam(event, 'productId');
+
+  await requireDemoEditor(employee, { kind: 'office', id: officeId });
+
   const body = await readBody<AdjustBody>(event);
 
   const targetOnHand = typeof body?.onHand === 'number' ? body.onHand : Number(body?.onHand);

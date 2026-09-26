@@ -37,6 +37,7 @@ export const toSegment = (row: SegmentRow): Segment => ({
   name: row.name,
   description: row.description,
   conditions: toSegmentConditions(row),
+  isDemo: row.isDemo,
   createdByName: row.createdByName,
   createdAt: row.createdAt.toISOString(),
   updatedAt: row.updatedAt.toISOString(),
@@ -68,6 +69,8 @@ export type SegmentRequestFields = {
   name?: unknown;
   description?: unknown;
   conditions?: unknown;
+  /** Только у заведения и предпросмотра несохранённого: правка признак не трогает (issue #212). */
+  isDemo?: unknown;
 };
 
 const asConditionsRequest = (value: unknown): SegmentConditionsRequest =>

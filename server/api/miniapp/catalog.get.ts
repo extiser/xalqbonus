@@ -7,5 +7,5 @@ import type { MiniAppCatalogResponse } from '#shared/types/miniapp';
 export default defineEventHandler(async (event): Promise<MiniAppCatalogResponse> => {
   const driver = await requireMember(event);
 
-  return readCatalog({ balance: driver.points });
+  return readCatalog({ balance: driver.points, isDemo: driver.isDemo });
 });

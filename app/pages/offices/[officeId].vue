@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useRoute } from 'vue-router';
+import { useDemoEditor } from '~/composables/useDemoEditor';
 import { failureText } from '~/utils/requestError';
 import { toLoadState } from '~/utils/loadState';
 import type {
@@ -22,6 +23,9 @@ import type { EmployeeAccountsResponse } from '#shared/types/employee';
  *
  * Данные берутся здесь, а не в компонентах: компонент принимает готовое свойством и о ручках
  * не знает (docs/frontend.md → «Данные в компоненты не ходят»).
+ *
+ * ДЕМО ОФИС правит только владелец (issue #212): у остальных форма, состав и остатки
+ * открываются на чтение, архива нет.
  */
 
 definePageMeta({
@@ -54,6 +58,9 @@ const feedState = computed(() => toLoadState(feedStatus.value));
 const accountsState = computed(() => toLoadState(accountsStatus.value));
 
 const archived = computed(() => card.value?.office.archivedAt !== null);
+
+const { canEdit } = useDemoEditor();
+const editable = computed(() => canEdit(card.value?.office.isDemo ?? false));
 
 const savingOffice = ref(false);
 const officeError = ref<string | null>(null);
@@ -159,11 +166,18 @@ const adjust = (payload: { productId: string; onHand: number; note: string }): P
       <NuxtLink to="/offices" class="text-sm text-slate-500 underline underline-offset-2">
         ← Все офисы
       </NuxtLink>
-      <h1 class="mt-2 text-xl font-semibold text-slate-900">
-        {{ card?.office.name ?? 'Офис' }}
-      </h1>
+      <div class="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h1 class="text-xl font-semibold text-slate-900">
+          {{ card?.office.name ?? 'Офис' }}
+        </h1>
+        <AtomsStatusBadge v-if="card?.office.isDemo" tone="demo" label="ДЕМО" />
+      </div>
       <p v-if="card?.office.archivedAt" class="mt-1 text-sm text-slate-500">
         Офис в архиве: заказов не принимает, но остаётся в истории и в остатках.
+      </p>
+      <p v-if="card?.office.isDemo" class="mt-1 text-sm text-slate-500">
+        ДЕМО ОФИС: его видит только демо-водитель.
+        {{ editable ? '' : 'Менять его может только владелец.' }}
       </p>
     </div>
 
@@ -184,10 +198,12 @@ const adjust = (payload: { productId: string; onHand: number; note: string }): P
         :office="card.office"
         :saving="savingOffice"
         :error="officeError"
+        :readonly="!editable"
         @submit="save"
       />
 
       <MoleculesSectionPanel
+        v-if="editable"
         title="Архив"
         note="Удаления нет: на офис ссылаются заказы, и заказ обязан помнить, где его выдавали."
       >
@@ -205,6 +221,7 @@ const adjust = (payload: { productId: string; onHand: number; note: string }): P
         :accounts-state="accountsState"
         :saving="savingEmployees"
         :error="employeesError"
+        :readonly="!editable"
         @save="saveEmployees"
       />
 
@@ -213,6 +230,7 @@ const adjust = (payload: { productId: string; onHand: number; note: string }): P
         :data="stock ?? null"
         :busy-product-id="busyProductId"
         :error="stockError"
+        :readonly="!editable"
         @receive="receive"
         @adjust="adjust"
       />

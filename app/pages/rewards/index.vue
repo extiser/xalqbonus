@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useCurrentEmployee } from '~/composables/useCurrentEmployee';
+import { useDemoEditor } from '~/composables/useDemoEditor';
 import { useGiftMessagePreview } from '~/composables/useGiftMessagePreview';
 import { formatNumber, pluralize } from '~/utils/format';
 import { toLoadState } from '~/utils/loadState';
@@ -58,7 +59,16 @@ const {
 
 const grantsState = computed(() => toLoadState(grantsStatus.value));
 
-const { data: grantOptions } = await useFetch<RewardGrantOptionsResponse>('/api/rewards/grant-options');
+// Демо-водителю годятся и ДЕМО ОФИС, и демо-товары, живому — только живые (issue #212):
+// варианты перечитываются, когда меняется получатель.
+const { ownsDemo } = useDemoEditor();
+
+const driver = ref<PickedDriver | null>(null);
+
+const { data: grantOptions } = await useFetch<RewardGrantOptionsResponse>(
+  '/api/rewards/grant-options',
+  { query: computed(() => ({ demo: String(driver.value?.isDemo ?? false) })) },
+);
 
 // Сегменты — только тем, кому открыта раздача сегменту: остальным ручка откажет.
 const { data: segments } = await useFetch<SegmentListResponse>('/api/segments', {
@@ -76,15 +86,20 @@ const productOptions = computed<SelectOption[]>(() =>
   })),
 );
 
-/** Рабочие сегменты: архивный при выборе не предлагается. */
+/**
+ * Рабочие сегменты: архивный при выборе не предлагается. Демо-сегмент — только тому, кто правит
+ * демо (issue #212): раздачу ему остальным откажет ручка.
+ */
 const workingSegments = computed(() =>
-  (segments.value?.segments ?? []).filter((segment) => segment.archivedAt === null),
+  (segments.value?.segments ?? []).filter(
+    (segment) => segment.archivedAt === null && (ownsDemo.value || !segment.isDemo),
+  ),
 );
 
 const segmentOptions = computed<SelectOption[]>(() =>
   workingSegments.value.map((segment) => ({
     value: segment.segmentId,
-    label: `${segment.name} — ${formatNumber(segment.total)} чел.`,
+    label: `${segment.name}${segment.isDemo ? ' (ДЕМО)' : ''} — ${formatNumber(segment.total)} чел.`,
   })),
 );
 
@@ -94,7 +109,6 @@ const segmentOptions = computed<SelectOption[]>(() =>
 
 const recipientKind = ref<'person' | 'segment'>('person');
 const segmentId = ref('');
-const driver = ref<PickedDriver | null>(null);
 
 const driverNameOf = (card: DriverCardResponse): string => {
   const profile = card.profiles[0];
@@ -118,6 +132,7 @@ if (presetPersonId !== '') {
       personId: presetPersonId,
       name: driverNameOf(card.value),
       isMember: card.value.membership !== null,
+      isDemo: card.value.isDemo,
     };
   }
 }
@@ -339,6 +354,7 @@ watch([recipientKind, segmentId, driver], resetOutcome);
           v-model:kind="recipientKind"
           v-model:segment-id="segmentId"
           :can-pick-segment="canPickSegment"
+          :can-pick-demo="ownsDemo"
           :segment-options="segmentOptions"
           :driver="driver"
           :search-state="searchState"

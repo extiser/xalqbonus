@@ -86,6 +86,7 @@ describe('остатки офиса', () => {
       officeId,
       items: [{ productId, quantity: 3 }],
       actor: 'mini_app',
+      driverIsDemo: false,
     });
 
     // Свободного остатка два: три штуки держит висящий заказ. Списать можно только

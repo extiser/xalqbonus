@@ -286,6 +286,8 @@ export type EmployeeDirectoryRow = EmployeeAccountRow & {
   passwordSet: boolean;
   /** Офисы из `employee_offices`: работающие первыми, архивные последними. */
   offices: EmployeeDirectoryOfficeRow[];
+  /** Демо-сотрудник (issue #205): править его может только владелец (issue #212). */
+  isDemo: boolean;
 };
 
 /**
@@ -308,6 +310,7 @@ export const listEmployeeDirectory = async (
            employee."disabled_at"             AS "disabledAt",
            employee."phone_e164"              AS "phoneE164",
            employee."password_hash" IS NOT NULL AS "passwordSet",
+           employee."is_demo"                 AS "isDemo",
            COALESCE(
              (SELECT json_agg(
                        json_build_object(

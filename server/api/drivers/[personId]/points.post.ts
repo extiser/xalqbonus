@@ -5,7 +5,7 @@ import {
   InvalidManualAmountError,
   MissingManualNoteError,
 } from '#server/services/points/errors';
-import { requireEmployeeRole } from '#server/utils/employeeAuth';
+import { requireDemoEditor, requireEmployeeRole } from '#server/utils/employeeAuth';
 import { requireUuidParam } from '#server/utils/query';
 import { POINTS_ADJUST_ROLES } from '#shared/access';
 import type { ManualPointsField, ManualPointsResponse } from '#shared/types/driver';
@@ -36,6 +36,9 @@ export default defineEventHandler(async (event): Promise<ManualPointsResponse> =
   const employee = await requireEmployeeRole(event, POINTS_ADJUST_ROLES);
 
   const personId = requireUuidParam(event, 'personId');
+
+  await requireDemoEditor(employee, { kind: 'person', id: personId });
+
   const body = await readBody<ManualPointsBody>(event);
 
   // Строка из чужого клиента разбирается в число здесь, а проверяет его сервис: «целое

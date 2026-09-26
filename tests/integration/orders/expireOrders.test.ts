@@ -47,18 +47,21 @@ describe('просрочка заказов', () => {
       officeId,
       items: [{ productId, quantity: 1 }],
       actor: 'mini_app',
+      driverIsDemo: false,
     });
     const fresh = await placeOrder({
       personId: person.personId,
       officeId,
       items: [{ productId, quantity: 2 }],
       actor: 'mini_app',
+      driverIsDemo: false,
     });
     const issued = await placeOrder({
       personId: person.personId,
       officeId,
       items: [{ productId, quantity: 3 }],
       actor: 'mini_app',
+      driverIsDemo: false,
     });
 
     await issueOrder({ orderId: issued.orderId, employeeId });
@@ -103,6 +106,7 @@ describe('просрочка заказов', () => {
       officeId,
       items: [{ productId, quantity: 1 }],
       actor: 'mini_app',
+      driverIsDemo: false,
     });
 
     await expireTestOrder(order.orderId);

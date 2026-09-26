@@ -65,6 +65,7 @@ describe('оформление заказа', () => {
       officeId,
       items: [{ productId, quantity: 2 }],
       actor: 'mini_app',
+      driverIsDemo: false,
     });
 
     expect(order.totalPoints).toBe(80);
@@ -122,6 +123,7 @@ describe('оформление заказа', () => {
         { productId: second, quantity: 1 },
       ],
       actor: 'mini_app',
+      driverIsDemo: false,
     });
 
     // 2 × 10 + 1 × 25.
@@ -144,6 +146,7 @@ describe('оформление заказа', () => {
         officeId,
         items: [{ productId, quantity: 1 }],
         actor: 'mini_app',
+        driverIsDemo: false,
       }),
     ).rejects.toBeInstanceOf(InsufficientPointsError);
 
@@ -169,6 +172,7 @@ describe('оформление заказа', () => {
         officeId,
         items: [{ productId, quantity: 2 }],
         actor: 'mini_app',
+        driverIsDemo: false,
       }),
     ).rejects.toBeInstanceOf(InsufficientStockError);
 
@@ -192,6 +196,7 @@ describe('оформление заказа', () => {
         officeId,
         items: [{ productId, quantity: 1 }],
         actor: 'mini_app',
+        driverIsDemo: false,
       }),
     ).rejects.toBeInstanceOf(InsufficientStockError);
 
@@ -216,6 +221,7 @@ describe('оформление заказа', () => {
         officeId: archivedOffice,
         items: [{ productId: archivedProduct, quantity: 1 }],
         actor: 'mini_app',
+        driverIsDemo: false,
       }),
     ).rejects.toBeInstanceOf(OfficeUnavailableError);
 
@@ -225,6 +231,7 @@ describe('оформление заказа', () => {
         officeId: workingOffice,
         items: [{ productId: archivedProduct, quantity: 1 }],
         actor: 'mini_app',
+        driverIsDemo: false,
       }),
     ).rejects.toBeInstanceOf(ProductUnavailableError);
 

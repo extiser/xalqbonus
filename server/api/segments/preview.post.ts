@@ -12,8 +12,12 @@ import type { SegmentPreviewResponse } from '#shared/types/segment';
 // `POST`, а не `GET` с условиями в адресе: условия — тело формы, и разбирает их тот же
 // `readSegmentConditions`, что сохранение, — предпросмотр не примет того, что сохранение
 // отвергнет.
+//
+// Признак демо — из формы (issue #212): демо-сегмент отбирает только демо-водителей. Смотреть
+// состав — не править, поэтому владельцем здесь быть не нужно.
 type PreviewBody = {
   conditions?: unknown;
+  isDemo?: unknown;
   offset?: unknown;
 };
 
@@ -25,7 +29,11 @@ export default defineEventHandler(async (event): Promise<SegmentPreviewResponse>
     typeof body?.offset === 'number' && Number.isInteger(body.offset) ? body.offset : 0;
 
   try {
-    return await previewSegmentConditions(readSegmentConditions(body?.conditions), offset);
+    return await previewSegmentConditions(
+      readSegmentConditions(body?.conditions),
+      body?.isDemo === true,
+      offset,
+    );
   } catch (error) {
     return rethrowSegmentFailure(error);
   }

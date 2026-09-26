@@ -10,6 +10,9 @@ import { workStatusLabel } from '~/utils/labels';
  * Участие в программе видно сразу и подписано словами, а не выведено из пустого баланса:
  * реестр парка шире программы в шесть раз, и «не состоит» — самый частый честный ответ,
  * а не отсутствие данных.
+ *
+ * Демо-водитель помечен «ДЕМО» уже в строке (issue #212): иначе его не отличить от живого,
+ * пока не откроешь карточку, — а строку показывают и поиск, и выбор получателя подарка.
  */
 const props = defineProps<{
   driver: DriverSearchRow;
@@ -48,6 +51,7 @@ const callsigns = computed(() => props.driver.callsigns.join(', '));
         :tone="driver.isMember ? 'ok' : 'muted'"
         :label="driver.isMember ? 'в программе' : 'не в программе'"
       />
+      <AtomsStatusBadge v-if="driver.isDemo" tone="demo" label="ДЕМО" />
       <AtomsStatusBadge
         v-for="status in driver.workStatuses"
         :key="status"

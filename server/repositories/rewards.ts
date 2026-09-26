@@ -233,6 +233,7 @@ type PersonRewardQueryRow = Omit<PersonRewardRow, 'office'> & {
   officePhoneE164: string | null;
   officeTelegram: string | null;
   officeArchivedAt: Date | null;
+  officeIsDemo: boolean | null;
   officeUpdatedAt: Date | null;
 };
 
@@ -276,6 +277,7 @@ export const listPersonRewards = async (
            office."phone_e164"   AS "officePhoneE164",
            office."telegram"     AS "officeTelegram",
            office."archived_at"  AS "officeArchivedAt",
+           office."is_demo"      AS "officeIsDemo",
            office."updated_at"   AS "officeUpdatedAt",
            product."photo_path"  AS "photoPath",
            product."updated_at"  AS "photoUpdatedAt",
@@ -303,6 +305,7 @@ export const listPersonRewards = async (
       officePhoneE164,
       officeTelegram,
       officeArchivedAt,
+      officeIsDemo,
       officeUpdatedAt,
       ...reward
     }) => ({
@@ -320,6 +323,7 @@ export const listPersonRewards = async (
               phoneE164: officePhoneE164,
               telegram: officeTelegram,
               archivedAt: officeArchivedAt,
+              isDemo: officeIsDemo ?? false,
               updatedAt: officeUpdatedAt,
             },
     }),

@@ -1,4 +1,5 @@
 import type { Language } from '#server/generated/prisma/enums';
+import { findDemoFlag } from '#server/repositories/demo';
 import { findPersonSettings } from '#server/repositories/drivers';
 import { findActiveLinkByChat } from '#server/repositories/programMembership';
 import { findDriverAccountByPerson } from '#server/repositories/points';
@@ -19,6 +20,12 @@ export type LinkedDriver = {
   points: bigint;
   /** Язык участника из `person_settings` — тот, который он выбрал при регистрации. */
   language: Language;
+  /**
+   * Демо-водитель (issue #205). По нему решается, что водителю видно (issue #212): живое видно
+   * всем, демо — только демо-водителю. Вызывающие передают признак дальше, в сборку списков
+   * и в оформление заказа.
+   */
+  isDemo: boolean;
 };
 
 /** Язык, на котором бот говорит с участником, если строки участия у него почему-то нет. */
@@ -65,10 +72,11 @@ export const readLinkedDriver = async (telegramChatId: bigint): Promise<LinkedDr
     return null;
   }
 
-  const [profile, account, settings] = await Promise.all([
+  const [profile, account, settings, isDemo] = await Promise.all([
     findDisplayProfile(link.personId),
     findDriverAccountByPerson(link.personId),
     findPersonSettings(link.personId),
+    findDemoFlag('person', link.personId),
   ]);
 
   return {
@@ -77,5 +85,6 @@ export const readLinkedDriver = async (telegramChatId: bigint): Promise<LinkedDr
     callsign: displayCallsign(profile?.callsign ?? null),
     points: account?.balance ?? 0n,
     language: settings?.language ?? FALLBACK_LANGUAGE,
+    isDemo: isDemo ?? false,
   };
 };

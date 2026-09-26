@@ -30,6 +30,8 @@ export type Office = {
   telegram: string | null;
   /** Заполнено — офис в архиве: заказов не принимает, из истории не исчезает. */
   archivedAt: string | null;
+  /** ДЕМО ОФИС (issue #205, #212): живому водителю не виден, править может только владелец. */
+  isDemo: boolean;
 };
 
 export type OfficeListResponse = {
@@ -49,6 +51,12 @@ export type OfficeRequestBody = {
   phoneE164?: string;
   telegram?: string;
 };
+
+/**
+ * Тело заведения: то же, что у правки, и признак демо (issue #212). Ставит его только владелец,
+ * и только здесь — правка его не принимает: живое в демо не превращается и обратно.
+ */
+export type OfficeCreateRequestBody = OfficeRequestBody & { isDemo: boolean };
 
 export type OfficeResponse = {
   office: Office;
@@ -109,6 +117,11 @@ export type Product = {
   /** Не показывать на витрине водителя. Снимается — товар выходит на витрину как есть. */
   hiddenInCatalog: boolean;
   /**
+   * Демо-товар (issue #212): его видит и заказывает только демо-водитель. Ставится при
+   * заведении и не меняется; править его может только владелец.
+   */
+  isDemo: boolean;
+  /**
    * Время последней правки. Нужно разметке: имя файла фото меняется вместе с расширением,
    * а не с содержимым, и без этой отметки перезалитая картинка осталась бы в кэше браузера.
    */
@@ -132,6 +145,12 @@ export type ProductRequestBody = {
   promo: boolean;
   hiddenInCatalog: boolean;
 };
+
+/**
+ * Тело заведения: то же, что у правки, и признак демо (issue #212). Ставит его только владелец,
+ * и только здесь — правка его не принимает: живое в демо не превращается и обратно.
+ */
+export type ProductCreateRequestBody = ProductRequestBody & { isDemo: boolean };
 
 export type ProductResponse = {
   product: Product;

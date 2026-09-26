@@ -27,6 +27,8 @@ export type MailingRow = {
   textUz: string | null;
   photoPath: string | null;
   status: MailingStatus;
+  /** Демо-рассылка (issue #212): уходит только демо-водителям. */
+  isDemo: boolean;
   createdByName: string;
   createdAt: Date;
   startedAt: Date | null;
@@ -57,6 +59,7 @@ const MAILING_SELECT = Prisma.sql`
          mailing."text_uz"            AS "textUz",
          mailing."photo_path"         AS "photoPath",
          mailing."status",
+         mailing."is_demo"            AS "isDemo",
          author."full_name"           AS "createdByName",
          mailing."created_at"         AS "createdAt",
          mailing."started_at"         AS "startedAt",
@@ -117,6 +120,8 @@ export type MailingFieldsInput = {
 export type InsertMailingInput = MailingFieldsInput & {
   photoPath: string | null;
   createdById: string;
+  /** Признак демо ставится только здесь: правка его не трогает (issue #212). */
+  isDemo: boolean;
 };
 
 /** Заводит черновик. Возвращает идентификатор: полную строку со счётчиками читает сервис. */
@@ -125,14 +130,17 @@ export const insertDraftMailing = async (
   client: Executor = db,
 ): Promise<string> => {
   const rows = await client.$queryRaw<{ id: string }[]>`
-    INSERT INTO xb.mailings ("title", "text_ru", "text_uz", "photo_path", "status", "created_by_id")
+    INSERT INTO xb.mailings (
+      "title", "text_ru", "text_uz", "photo_path", "status", "created_by_id", "is_demo"
+    )
     VALUES (
       ${input.title},
       ${input.textRu},
       ${input.textUz},
       ${input.photoPath},
       'draft'::xb.mailing_status,
-      ${input.createdById}::uuid
+      ${input.createdById}::uuid,
+      ${input.isDemo}
     )
     RETURNING "id"
   `;
@@ -233,23 +241,32 @@ export const deleteDraftMailing = async (
  *
  * Один и тот же отбор нужен подсчёту на экране и снимку при запуске — поэтому он собран
  * один раз: разойдись они, экран обещал бы одно число, а в снимок ложилось бы другое.
+ *
+ * Признак рассылки (issue #212): у демо-рассылки аудитория — только демо-водители, у живой —
+ * все участники, демо-водители тоже: живое до демо доходит, демо до живого — нет.
  */
-const AUDIENCE_SQL = Prisma.sql`
+const audienceSql = (isDemo: boolean): Prisma.Sql => Prisma.sql`
   SELECT settings."person_id",
          settings."notifications_enabled"
     FROM xb.person_settings AS settings
     JOIN xb.telegram_links AS link
       ON link."person_id" = settings."person_id"
      AND link."closed_at" IS NULL
+    JOIN xb.persons AS person
+      ON person."id" = settings."person_id"
+   WHERE (NOT ${isDemo}::boolean OR person."is_demo")
 `;
 
 export type AudienceCountRow = { total: number; notificationsDisabled: number };
 
-export const countMailingAudience = async (client: Executor = db): Promise<AudienceCountRow> => {
+export const countMailingAudience = async (
+  isDemo: boolean,
+  client: Executor = db,
+): Promise<AudienceCountRow> => {
   const rows = await client.$queryRaw<AudienceCountRow[]>`
     SELECT count(*)::int                                           AS "total",
            count(*) FILTER (WHERE NOT audience."notifications_enabled")::int AS "notificationsDisabled"
-      FROM (${AUDIENCE_SQL}) AS audience
+      FROM (${audienceSql(isDemo)}) AS audience
   `;
 
   return rows[0] ?? { total: 0, notificationsDisabled: 0 };
@@ -275,9 +292,13 @@ export const markMailingRunning = async (
 /**
  * Снимок адресатов. Выключившие уведомления ложатся сразу исходом `skipped_disabled`,
  * остальные — `pending`. Повтор второй строки не заводит: пара — первичный ключ.
+ *
+ * `isDemo` — признак самой рассылки: он не меняется после заведения, и прочитанный запуском
+ * верен и здесь.
  */
 export const insertMailingRecipients = async (
   mailingId: string,
+  isDemo: boolean,
   client: Executor = db,
 ): Promise<number> =>
   client.$executeRaw`
@@ -289,7 +310,7 @@ export const insertMailingRecipients = async (
                 ELSE 'skipped_disabled'::xb.mailing_recipient_outcome
            END,
            CASE WHEN audience."notifications_enabled" THEN NULL ELSE now() END
-      FROM (${AUDIENCE_SQL}) AS audience
+      FROM (${audienceSql(isDemo)}) AS audience
     ON CONFLICT ("mailing_id", "person_id") DO NOTHING
   `;
 

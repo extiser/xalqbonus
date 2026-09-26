@@ -1296,8 +1296,9 @@ model Office {
   phoneE164  String?   @map("phone_e164")
   telegram   String?
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(6)
-  /// ДЕМО ОФИС (issue #205) — офис демо-менеджера. Пока фильтров «демо не попадает в живое»
-  /// нет, он виден в живых списках наравне с остальными.
+  /// ДЕМО ОФИС (issue #205) — офис демо-менеджера. Живому водителю не виден нигде и заказов
+  /// от него не принимает (issue #212); демо-водитель видит его рядом с живыми. Править
+  /// демо-офис может только владелец.
   isDemo     Boolean   @default(false) @map("is_demo")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -1375,6 +1376,10 @@ model Product {
   /// Не показывать на витрине водителя. Снимается — товар выходит на витрину без повторного
   /// заведения. Остатки офиса и приход видят его всегда: иначе призы некуда оприходовать.
   hiddenInCatalog Boolean @default(false) @map("hidden_in_catalog")
+  /// Демо-товар (issue #212): его видит и заказывает только демо-водитель, призом живой акции
+  /// он не бывает. Ставится при заведении и больше не меняется — живое в демо не превращается
+  /// и обратно. Править демо-товар может только владелец.
+  isDemo      Boolean   @default(false) @map("is_demo")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -1581,6 +1586,10 @@ model Mailing {
   recallStartedAt  DateTime?     @map("recall_started_at") @db.Timestamptz(6)
   /// Когда очередь прошла всех адресатов отзыва. С него «отозвано N из M» — итог, а не ход.
   recallFinishedAt DateTime?     @map("recall_finished_at") @db.Timestamptz(6)
+  /// Демо-рассылка (issue #212): уходит только демо-водителям. Живая уходит всем участникам,
+  /// демо-водителям тоже — живое до демо доходит. Ставится при заведении и не меняется; копия
+  /// наследует. Править демо-рассылку может только владелец.
+  isDemo           Boolean       @default(false) @map("is_demo")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -1670,6 +1679,10 @@ model Segment {
 
   createdBy  Employee    @relation(fields: [createdById], references: [id])
   campaigns  Campaign[]
+  /// Демо-сегмент (issue #212): отбирает только демо-водителей, живой — только живых.
+  /// Признак — часть отбора (`segmentMembersSql`), а не условие формы: условий у сегмента
+  /// по-прежнему хотя бы одно. Ставится при заведении и не меняется.
+  isDemo      Boolean   @default(false) @map("is_demo")
   giftGrants GiftGrant[]
 
   @@map("segments")
@@ -1711,6 +1724,10 @@ model Campaign {
   rewardLifetimeDays Int?    @map("reward_lifetime_days")
   createdById  String         @map("created_by_id") @db.Uuid
   launchedAt   DateTime?      @map("launched_at") @db.Timestamptz(6)
+  /// Демо-акция (issue #212): только на демо-сегменте и с ДЕМО ОФИСОМ выдачи, живая — только
+  /// на живом сегменте, с живым офисом и без демо-товаров в призах. Идёт тем же кодом, что
+  /// живая. Ставится при заведении и не меняется.
+  isDemo       Boolean        @default(false) @map("is_demo")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)

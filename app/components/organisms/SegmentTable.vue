@@ -55,6 +55,7 @@ const driversLabel = (total: number): string =>
                 {{ segment.name }}
               </NuxtLink>
               <AtomsStatusBadge v-if="segment.archivedAt" tone="muted" label="В архиве" />
+              <AtomsStatusBadge v-if="segment.isDemo" tone="demo" label="ДЕМО" />
             </div>
             <p v-if="segment.description" class="mt-1 text-sm text-slate-600">
               {{ segment.description }}

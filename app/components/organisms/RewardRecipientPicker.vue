@@ -15,9 +15,14 @@ import type { DriverSearchRow } from '#shared/types/driver';
  *
  * За данными компонент не ходит: запрос поиска уходит наверх событием, найденное приходит
  * свойством (docs/frontend.md → «Данные в компоненты не ходят»).
+ *
+ * Демо-водитель помечен «ДЕМО» (issue #212). Выбрать его может только тот, кто правит демо, —
+ * остальным кнопки нет: вручить ему откажет ручка.
  */
 const props = defineProps<{
   canPickSegment: boolean;
+  /** Вошедший правит демо: ему можно выбрать демо-водителя. */
+  canPickDemo: boolean;
   segmentOptions: SelectOption[];
   driver: PickedDriver | null;
   searchState: LoadState | null;
@@ -50,7 +55,12 @@ const rowName = (row: DriverSearchRow): string =>
   'Без имени';
 
 const pick = (row: DriverSearchRow): void => {
-  emit('pick', { personId: row.personId, name: rowName(row), isMember: row.isMember });
+  emit('pick', {
+    personId: row.personId,
+    name: rowName(row),
+    isMember: row.isMember,
+    isDemo: row.isDemo,
+  });
 };
 </script>
 
@@ -82,6 +92,7 @@ const pick = (row: DriverSearchRow): void => {
           :tone="driver.isMember ? 'ok' : 'muted'"
           :label="driver.isMember ? 'в программе' : 'в программе не состоит'"
         />
+        <AtomsStatusBadge v-if="driver.isDemo" tone="demo" label="ДЕМО" />
         <AtomsActionButton label="Другой водитель" @click="emit('clear')" />
       </div>
 
@@ -115,7 +126,12 @@ const pick = (row: DriverSearchRow): void => {
               :tone="row.isMember ? 'ok' : 'muted'"
               :label="row.isMember ? 'в программе' : 'не в программе'"
             />
-            <AtomsActionButton label="Выбрать" @click="pick(row)" />
+            <AtomsStatusBadge v-if="row.isDemo" tone="demo" label="ДЕМО" />
+            <AtomsActionButton
+              v-if="canPickDemo || !row.isDemo"
+              label="Выбрать"
+              @click="pick(row)"
+            />
           </li>
         </ul>
       </div>

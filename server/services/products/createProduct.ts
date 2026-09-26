@@ -12,15 +12,18 @@ import type { Product } from '#shared/types/catalog';
  *
  * Без фото: фото приезжает своим запросом, потому что это файл, а не поле формы, — уже
  * к заведённому черновику и на том же экране.
+ *
+ * Признак демо ставится здесь и больше нигде (issue #212). Кто вправе его поставить, решила
+ * ручка — `requireDemoEditor`.
  */
 const log = consola.withTag('products:create');
 
-export const createProduct = async (fields: ProductFields): Promise<Product> => {
+export const createProduct = async (fields: ProductFields, isDemo: boolean): Promise<Product> => {
   assertPrices(fields);
 
-  const row = await insertProductDraft(fields);
+  const row = await insertProductDraft({ ...fields, isDemo });
 
-  log.info('черновик товара заведён', { productId: row.id, name: row.name });
+  log.info('черновик товара заведён', { productId: row.id, name: row.name, isDemo });
 
   return toProduct(row);
 };

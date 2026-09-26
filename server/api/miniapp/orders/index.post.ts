@@ -64,6 +64,7 @@ export default defineEventHandler(async (event): Promise<MiniAppOrderResponse> =
       officeId,
       items,
       actor: 'mini_app',
+      driverIsDemo: driver.isDemo,
     });
 
     orderId = placed.orderId;

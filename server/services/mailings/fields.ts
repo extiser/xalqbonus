@@ -18,6 +18,7 @@ export const toMailing = (row: MailingRow): Mailing => ({
   textUz: row.textUz,
   photoPath: row.photoPath,
   status: row.status,
+  isDemo: row.isDemo,
   createdByName: row.createdByName,
   createdAt: row.createdAt.toISOString(),
   startedAt: row.startedAt?.toISOString() ?? null,
@@ -46,6 +47,8 @@ export type MailingRequestFields = {
   title?: unknown;
   textRu?: unknown;
   textUz?: unknown;
+  /** Только у заведения: правка признак не трогает (issue #212). */
+  isDemo?: unknown;
 };
 
 /** Строка поля, обрезанная по краям. Пустое и не строка — `null`: пусто пишется одним способом. */

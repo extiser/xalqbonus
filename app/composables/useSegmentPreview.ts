@@ -23,6 +23,8 @@ const PREVIEW_DELAY_MS = 400;
 
 export type SegmentPreviewSource = {
   conditions: SegmentConditions;
+  /** Сегмент демо: отбирает только демо-водителей (issue #212). */
+  isDemo: boolean;
   /** Сохранённый сегмент, если условия формы совпадают с его. `null` — считать по форме. */
   savedSegmentId: string | null;
 };
@@ -58,6 +60,7 @@ export const useSegmentPreview = (readSource: () => SegmentPreviewSource) => {
 
     const body: SegmentPreviewRequestBody = {
       conditions: source.conditions,
+      isDemo: source.isDemo,
       offset: offset.value,
     };
 

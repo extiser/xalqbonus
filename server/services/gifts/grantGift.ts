@@ -232,7 +232,11 @@ const writeGrant = async (
         throw new GiftRecipientError('segment_archived');
       }
 
-      const audience = await listSegmentPersonIds(toSegmentConditions(segment), transaction);
+      const audience = await listSegmentPersonIds(
+        toSegmentConditions(segment),
+        segment.isDemo,
+        transaction,
+      );
 
       personIds = await listProgramMemberIds(audience, transaction);
       skipped = audience.length - personIds.length;

@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useCampaignParticipants } from '~/composables/useCampaignParticipants';
+import { useDemoEditor } from '~/composables/useDemoEditor';
 import { useDraftAutosave } from '~/composables/useDraftAutosave';
 import { DASH, formatDateTime, formatDayRange, formatNumber, pluralize } from '~/utils/format';
 import { campaignStatusLabel, campaignStatusTone } from '~/utils/labels';
@@ -20,6 +21,7 @@ import type {
   CampaignHalfBreakdown,
   CampaignPrizesRequestBody,
   CampaignPrizesResponse,
+  CampaignCreateRequestBody,
   CampaignRequestBody,
   CampaignResponse,
   CampaignWindowRequestBody,
@@ -45,6 +47,11 @@ import type { SegmentListResponse, SegmentPreviewResponse } from '#shared/types/
  *
  * Кнопки показываются по статусу с сервера, но решает ручка: запуск не черновика и правка
  * запущенной отвечают отказом.
+ *
+ * **Демо** (issue #212): поле «Демо» новой акции видит только владелец, и уходит оно одним
+ * заведением. Демо-акции в выборе предлагаются только демо-сегменты и ДЕМО ОФИС, живой —
+ * только живые, и призом живой не бывает демо-товар. Демо-акцию у остальных экран открывает
+ * на чтение.
  */
 
 definePageMeta({
@@ -79,6 +86,17 @@ const { data: prizes, refresh: refreshPrizes } = await useFetch<CampaignPrizesRe
 );
 
 const isDraft = computed(() => campaign.value === null || campaign.value.status === 'draft');
+
+const { ownsDemo, canEdit } = useDemoEditor();
+
+/** Поле «Демо» новой акции. Уходит только заведением. */
+const demo = ref(false);
+
+/** Акция демо: заведённая — по своему признаку, новая — по полю. */
+const isDemo = computed(() => campaign.value?.isDemo ?? demo.value);
+
+/** Правит ли вошедший эту акцию: демо — только владелец. */
+const editable = computed(() => canEdit(campaign.value?.isDemo ?? false));
 
 /**
  * Поля формы — строками все, включая переключатель: автосохранение сравнивает снимки полей,
@@ -161,7 +179,7 @@ const saveDraft = async (snapshot: CampaignFormFields): Promise<void> => {
   if (current === null) {
     const created = await $fetch<CampaignResponse>('/api/campaigns', {
       method: 'POST',
-      body: toRequestBody(snapshot),
+      body: { ...toRequestBody(snapshot), isDemo: demo.value } satisfies CampaignCreateRequestBody,
     });
 
     setCampaign(created);
@@ -181,7 +199,7 @@ const saveDraft = async (snapshot: CampaignFormFields): Promise<void> => {
 const autosave = useDraftAutosave({
   fields,
   save: saveDraft,
-  enabled: () => isDraft.value,
+  enabled: () => isDraft.value && editable.value,
 });
 
 // Переход к другой записи на той же странице — историей браузера.
@@ -189,6 +207,7 @@ watch(routeId, async (id) => {
   if (id === NEW_CAMPAIGN) {
     data.value = undefined;
     prizes.value = undefined;
+    demo.value = false;
     autosave.replace(toFields(null));
 
     return;
@@ -218,13 +237,17 @@ const selectedSegment = computed(
 
 /**
  * Офисы выдачи наград — только рабочие. Выбранный раньше и ушедший в архив остаётся в списке
- * с пометкой тем же доводом, что сегмент.
+ * с пометкой тем же доводом, что сегмент. Демо-акции — только ДЕМО ОФИС, живой — только живые.
  */
 const { data: offices } = await useFetch<OfficeListResponse>('/api/offices');
 
 const officeOptions = computed<SelectOption[]>(() =>
   (offices.value?.offices ?? [])
-    .filter((office) => office.archivedAt === null || office.officeId === fields.value.officeId)
+    .filter(
+      (office) =>
+        office.officeId === fields.value.officeId ||
+        (office.archivedAt === null && office.isDemo === isDemo.value),
+    )
     .map((office) => ({
       value: office.officeId,
       label: office.archivedAt === null ? office.name : `${office.name} (в архиве)`,
@@ -233,9 +256,14 @@ const officeOptions = computed<SelectOption[]>(() =>
 
 const segmentArchived = computed(() => (selectedSegment.value?.archivedAt ?? null) !== null);
 
+/** Демо-акции — только демо-сегменты, живой — только живые: проверяет то же и сервер. */
 const segmentOptions = computed<SelectOption[]>(() =>
   (segments.value?.segments ?? [])
-    .filter((segment) => segment.archivedAt === null || segment.segmentId === fields.value.segmentId)
+    .filter(
+      (segment) =>
+        segment.segmentId === fields.value.segmentId ||
+        (segment.archivedAt === null && segment.isDemo === isDemo.value),
+    )
     .map((segment) => ({
       value: segment.segmentId,
       label: segment.archivedAt === null ? segment.name : `${segment.name} (в архиве)`,
@@ -417,9 +445,10 @@ const launch = (): Promise<void> =>
 // ---------------------------------------------------------------------------
 
 // Товары для вариантов — списком ручной выдачи: те же опубликованные не архивные, призы первыми.
-// Ручка открыта ролям выдачи, а они шире ролей акций.
+// Ручка открыта ролям выдачи, а они шире ролей акций. Демо-товары — только демо-акции.
 const { data: grantOptions } = await useFetch<RewardGrantOptionsResponse>(
   '/api/rewards/grant-options',
+  { query: computed(() => ({ demo: String(isDemo.value) })) },
 );
 
 const prizeProductOptions = computed<SelectOption[]>(() =>
@@ -559,8 +588,13 @@ onBeforeUnmount(() => {
           :tone="campaignStatusTone(campaign.status)"
           :label="campaignStatusLabel(campaign.status)"
         />
+        <AtomsStatusBadge v-if="campaign?.isDemo" tone="demo" label="ДЕМО" />
       </div>
       <p v-if="state === 'ready'" class="mt-1 text-sm text-slate-500">{{ headerNote }}</p>
+      <p v-if="campaign?.isDemo" class="mt-1 text-sm text-slate-500">
+        Демо-акция: только на демо-сегменте, призы выдаёт ДЕМО ОФИС.
+        {{ editable ? '' : 'Менять её может только владелец.' }}
+      </p>
     </div>
 
     <MoleculesStateNotice v-if="state === 'loading'" state="loading" message="Читаем акцию…" />
@@ -570,6 +604,13 @@ onBeforeUnmount(() => {
       message="Акция не прочиталась. Такой акции нет, или запрос не прошёл."
     />
     <template v-else-if="isDraft">
+      <MoleculesSectionPanel v-if="campaign === null && ownsDemo" title="Для кого">
+        <MoleculesDemoField
+          v-model="demo"
+          hint="Демо-акция идёт только на демо-сегменте, призы выдаёт ДЕМО ОФИС. Живые водители её не видят."
+        />
+      </MoleculesSectionPanel>
+
       <OrganismsCampaignForm
         v-model:title="fields.title"
         v-model:slug="fields.slug"
@@ -586,13 +627,14 @@ onBeforeUnmount(() => {
         :segment-count="segmentCount"
         :autosave-state="autosave.state.value"
         :autosave-error="autosave.error.value"
+        :readonly="!editable"
         @retry="autosave.retry"
       />
 
       <OrganismsCampaignPrizes
         v-if="prizes"
         :chests="prizes.chests"
-        :editable="prizes.editable"
+        :editable="prizes.editable && editable"
         :product-options="prizeProductOptions"
         :saving="prizesSaving"
         :error="prizesError"
@@ -601,6 +643,7 @@ onBeforeUnmount(() => {
       />
 
       <MoleculesSectionPanel
+        v-if="editable"
         title="Запуск"
         note="Уходит то, что на экране. Состав снимается из сегмента в момент запуска и больше не пересчитывается; правки после запуска нет."
       >
@@ -661,7 +704,7 @@ onBeforeUnmount(() => {
       <OrganismsCampaignPrizes
         v-if="prizes"
         :chests="prizes.chests"
-        :editable="prizes.editable"
+        :editable="prizes.editable && editable"
         :product-options="prizeProductOptions"
         :saving="prizesSaving"
         :error="prizesError"
@@ -670,7 +713,7 @@ onBeforeUnmount(() => {
       />
 
       <OrganismsCampaignSecondHalfForm
-        v-if="secondHalfOpen"
+        v-if="secondHalfOpen && editable"
         v-model:starts-on="secondHalf.startsOn"
         v-model:ends-on="secondHalf.endsOn"
         :submitting="secondHalfSubmitting"

@@ -1,7 +1,7 @@
 import { UnknownOfficeError } from '#server/services/offices/errors';
 import { readOfficeFields, type OfficeRequestFields } from '#server/services/offices/fields';
 import { updateOffice } from '#server/services/offices/updateOffice';
-import { requireEmployeeRole } from '#server/utils/employeeAuth';
+import { requireDemoEditor, requireEmployeeRole } from '#server/utils/employeeAuth';
 import { requireUuidParam } from '#server/utils/query';
 import { CATALOG_ROLES } from '#shared/access';
 import type { OfficeResponse } from '#shared/types/catalog';
@@ -12,9 +12,12 @@ import type { OfficeResponse } from '#shared/types/catalog';
 // Архивность этим запросом не меняется — у неё своя кнопка и своя ручка: поле формы, которым
 // можно закрыть офис, поправляя телефон, закрыло бы его однажды случайно.
 export default defineEventHandler(async (event): Promise<OfficeResponse> => {
-  await requireEmployeeRole(event, CATALOG_ROLES);
+  const employee = await requireEmployeeRole(event, CATALOG_ROLES);
 
   const officeId = requireUuidParam(event, 'officeId');
+
+  await requireDemoEditor(employee, { kind: 'office', id: officeId });
+
   const fields = readOfficeFields(await readBody<OfficeRequestFields>(event));
 
   if (!fields) {

@@ -13,12 +13,16 @@ import type { MiniAppShowcaseResponse, MissingProduct } from '#shared/types/mini
  * (issue #234).
  *
  * `null` — офиса нет или он архивный. Для водителя это одно и то же: здесь ничего не взять.
+ * ДЕМО ОФИС живому водителю — тоже `null`, а демо-товары из его витрины убраны (issue #212):
+ * демо живому не видно нигде. Демо-водителю видно всё.
  */
 
 export type OfficeShowcaseRequest = {
   officeId: string;
   /** Баланс водителя со счёта — тот же, что стоит на экране участника. */
   balance: bigint;
+  /** Водитель демо: ему видны ДЕМО ОФИС и демо-товары. */
+  isDemo: boolean;
 };
 
 export const readOfficeShowcase = async (
@@ -26,11 +30,14 @@ export const readOfficeShowcase = async (
 ): Promise<MiniAppShowcaseResponse | null> => {
   const office = await findOffice(request.officeId);
 
-  if (!office || office.archivedAt !== null) {
+  if (!office || office.archivedAt !== null || (office.isDemo && !request.isDemo)) {
     return null;
   }
 
-  const [rows, catalogRows] = await Promise.all([listOfficeShowcase(request.officeId), listCatalogProducts()]);
+  const [rows, catalogRows] = await Promise.all([
+    listOfficeShowcase(request.officeId, request.isDemo),
+    listCatalogProducts(request.isDemo),
+  ]);
   const present = new Set(rows.map((row) => row.productId));
   const missing = new Map<string, MissingProduct>();
 
