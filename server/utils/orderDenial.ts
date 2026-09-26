@@ -14,10 +14,13 @@ import {
  * код — экрану, текст — человеку.
  *
  * `404` — заказа или награды нет или код не нашёлся, `409` — они есть, но уже не ждут:
- * выданы, отменены или сгорели раньше, чем дошло это нажатие.
+ * выданы, отменены или сгорели раньше, чем дошло это нажатие. `403` — офис не открыт
+ * этому сотруднику.
  */
 
-const DENIAL_STATUS: Readonly<Record<OrderDenialCode, 404 | 409>> = {
+type DenialStatus = 403 | 404 | 409;
+
+const DENIAL_STATUS: Readonly<Record<OrderDenialCode, DenialStatus>> = {
   desk_code_not_found: 404,
   order_not_found: 404,
   order_already_issued: 409,
@@ -25,9 +28,11 @@ const DENIAL_STATUS: Readonly<Record<OrderDenialCode, 404 | 409>> = {
   reward_not_found: 404,
   reward_already_issued: 409,
   reward_already_expired: 409,
+  office_not_open: 403,
 };
 
-const STATUS_MESSAGE: Readonly<Record<404 | 409, string>> = {
+const STATUS_MESSAGE: Readonly<Record<DenialStatus, string>> = {
+  403: 'Forbidden',
   404: 'Not Found',
   409: 'Conflict',
 };

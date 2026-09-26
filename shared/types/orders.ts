@@ -24,6 +24,14 @@ export type EmployeeOffice = {
   archived: boolean;
 };
 
+/**
+ * Офис на выборе офиса у стойки Mini App (`GET /api/desk/offices`, issue #250): архивных нет,
+ * у каждого — сколько ждут выдачи, заказы и награды вместе.
+ */
+export type DeskOffice = EmployeeOffice & { awaitingCount: number };
+
+export type DeskOfficesResponse = { offices: DeskOffice[] };
+
 export type OfficeOrderLine = {
   productId: string;
   name: string;

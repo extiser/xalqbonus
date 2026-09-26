@@ -255,3 +255,33 @@ export const replaceOfficeEmployees = async (
     ON CONFLICT ("employee_id", "office_id") DO NOTHING
   `;
 };
+
+export type DeskAwaitingCountRow = {
+  officeId: string;
+  awaitingCount: number;
+};
+
+/**
+ * Сколько ждут выдачи в каждом офисе списка — висящие заказы плюс ждущие награды (issue #250),
+ * одним запросом на весь список. Офис без ждущих в ответ не попадает: ноль ставит вызывающий.
+ */
+export const countDeskAwaiting = async (
+  officeIds: string[],
+  client: Executor = db,
+): Promise<DeskAwaitingCountRow[]> =>
+  client.$queryRaw<DeskAwaitingCountRow[]>`
+    SELECT awaiting."office_id" AS "officeId",
+           count(*)::int        AS "awaitingCount"
+      FROM (
+             SELECT "office_id"
+               FROM xb.orders
+              WHERE "office_id" = ANY(${officeIds}::uuid[])
+                AND "status" = 'pending'
+             UNION ALL
+             SELECT "office_id"
+               FROM xb.rewards
+              WHERE "office_id" = ANY(${officeIds}::uuid[])
+                AND "status" = 'awaiting'
+           ) AS awaiting
+     GROUP BY awaiting."office_id"
+  `;

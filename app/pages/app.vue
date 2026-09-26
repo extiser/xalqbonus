@@ -19,6 +19,7 @@ import {
   type RegistrationScreenTexts,
 } from '#shared/types/miniapp';
 import { useCountUp } from '~/composables/useCountUp';
+import { useDeskOffices } from '~/composables/useDeskOffices';
 import { useEmployeePassword } from '~/composables/useEmployeePassword';
 import { useLiveScreenPoll } from '~/composables/useLiveScreenPoll';
 import { useMemberGifts } from '~/composables/useMemberGifts';
@@ -56,6 +57,19 @@ import {
 import { OLD_ENGINE_FORCE_ALLOWED_SCRIPT, OLD_ENGINE_GUARD_SCRIPT } from '~/utils/oldEngineGuard';
 import { failureDenial } from '~/utils/requestError';
 import {
+  cancelledOutcome,
+  deskItemId,
+  EMPLOYEE_PASSWORD_LABEL,
+  issuedOutcome,
+  STAFF_ROLE_LABELS,
+  staffDeskRowView,
+  staffOfficeView,
+  staffOrderView,
+  staffRewardView,
+} from '~/utils/staffViews';
+import type { StaffOutcomeView } from '~/types/staffView';
+import { denialText, WEB_LANGUAGE } from '#shared/denials';
+import {
   forgetInitData,
   hasSignedInitData,
   loadTelegramWebApp,
@@ -80,8 +94,8 @@ import {
 
 /**
  * Раскладка выбирается стадией, а не одна на страницу: загрузка, заглушки, регистрация, отказ
- * выключенному сотруднику и все экраны участника — на новых макетах (`miniapp-next`). Экран
- * сотрудника — ещё на старых (`miniapp`), до своей задачи. Каталог переехал последним (issue #218).
+ * выключенному сотруднику, все экраны участника и экран сотрудника — на новых макетах
+ * (`miniapp-next`). Сотрудник переехал последним (issue #250).
  *
  * Своим `<NuxtLayout :name>` в шаблоне, а не `setPageLayout`: раскладку страницы Nuxt рисует
  * с ключом по её имени, и смена имени пересоздаёт страницу целиком — вместе с состоянием
@@ -127,8 +141,7 @@ useHead({
 
 /**
  * Шрифты новых макетов — и на странице, а не только в раскладке `miniapp-next`: полоса
- * «Демо-аккаунт» и шторка «Войти как» стоят и над экраном сотрудника, который ещё на старой
- * раскладке, а та шрифтов не грузит (issue #205).
+ * «Демо-аккаунт» и шторка «Войти как» стоят над любой стадией (issue #205).
  */
 useDesignFonts();
 
@@ -198,13 +211,14 @@ type Stage = 'loading' | 'error' | 'member' | 'registration' | 'employee' | 'emp
 
 const stage = ref<Stage>('loading');
 
-/** Стадии на новых макетах. Сотрудник — ещё на старых. */
+/** Стадии на новых макетах. */
 const NEXT_LAYOUT_STAGES: ReadonlySet<Stage> = new Set<Stage>([
   'loading',
   'error',
   'registration',
   'employee_denied',
   'member',
+  'employee',
 ]);
 
 /** Заглушка на стадии `error`. */
@@ -333,14 +347,26 @@ const memberGifts = useMemberGifts(() => initData, {
 });
 
 /**
- * Экран сотрудника: его офисы, выбранный офис и стойка выдачи.
+ * Экран сотрудника (issue #250): выбор офиса, стойка, карточка заказа или награды, профиль
+ * и форма пароля — по макетам `_reference/design/staff/`.
  *
- * Своего пути по экранам у него нет: выбор офиса, стойка и карточка заказа выводятся
- * из состояния — выбран ли офис, открыт ли заказ, — и «назад» снимает ровно последнее из них.
+ * Своего пути по экранам у него нет: что показать, выводится из состояния — открыт ли профиль
+ * или форма пароля, выбран ли офис, открыта ли карточка (`employeeScreen`). «Назад» — только
+ * там, где он в макете: у карточки, профиля и формы пароля. Со стойки сотрудник не уходит —
+ * офис он меняет шторкой «Сменить».
  */
 const employee = ref<MiniAppEmployeeScreen | null>(null);
 const employeeOfficeId = ref<string | null>(null);
 const employeeCode = ref('');
+
+/**
+ * Профиль и форма пароля — поверх рабочих экранов. Под ними ничего не сбрасывается: «Назад»
+ * возвращает туда, откуда открыли, — к выбору офиса или к стойке с тем же офисом.
+ */
+const employeeView = ref<'work' | 'profile' | 'password'>('work');
+
+/** Открытая шторка: выдачи, отмены, смены офиса, сброса сессии — или никакой. Двух сразу не бывает. */
+const employeeSheet = ref<'none' | 'issue' | 'cancel' | 'office' | 'reset'>('none');
 
 // Отказ отдаётся странице обёрткой, а не самой функцией: `reportDoorDenial` объявлена ниже,
 // рядом с `loadState`, и к моменту первого запроса уже существует.
@@ -349,51 +375,297 @@ const officeDesk = useOfficeDesk(
   (error) => reportDoorDenial(error),
 );
 
-const employeeOffice = computed(
-  () => employee.value?.offices.find((office) => office.officeId === employeeOfficeId.value) ?? null,
+/** Офисы стойки с числом ждущих — выбор офиса и шторка «Сменить», читаются при каждом показе. */
+const deskOffices = useDeskOffices(
+  () => ({ [INIT_DATA_HEADER]: initData }),
+  (error) => reportDoorDenial(error),
 );
 
 /**
- * Пункт «Пароль для входа с компьютера» открыт (issue #130).
- *
- * Открывается и с выбора офиса, и со стойки: сотрудник с единственным офисом попадает на стойку
- * сразу и выбора офиса не видит никогда, а без офиса вовсе стойки нет. «Назад» закрывает пункт
- * и возвращает туда, откуда его открыли, — стойка и выбранный офис под ним не сбрасываются.
+ * Офис стойки. Ищется и в свежем списке стойки, и в офисах экрана: менеджера могли закрепить
+ * за новым офисом после открытия приложения, и выбранный в шторке офис есть только в свежем.
  */
-const employeePasswordOpen = ref(false);
+const employeeOffice = computed(() => {
+  const officeId = employeeOfficeId.value;
 
-/**
- * Название пункта — одно на обе кнопки. Его же дословно цитирует бот после принятия приглашения
- * (`invite_accepted` в `server/bot/texts.ts`): меняется здесь — меняется и там.
- */
-const EMPLOYEE_PASSWORD_LABEL = 'Пароль для входа с компьютера';
+  if (officeId === null) {
+    return null;
+  }
 
-/**
- * Пункт пароля — пока пароля нет. У демо-менеджера его нет никогда и пункта тоже: своего входа
- * у демо-учётки не бывает, сервер такой пароль отвергнет (issue #205).
- */
-const employeePasswordOffered = computed(
-  () => employee.value !== null && !employee.value.passwordSet && employee.value.demo === null,
+  return (
+    deskOffices.offices.value.find((office) => office.officeId === officeId) ??
+    employee.value?.offices.find((office) => office.officeId === officeId) ??
+    null
+  );
+});
+
+/** Офисов больше одного — у стойки есть «Сменить», без выбранного показывается выбор офиса. */
+const employeeManyOffices = computed(() => (employee.value?.offices.length ?? 0) > 1);
+
+/** Какой экран сотрудника сейчас на месте. */
+const employeeScreen = computed((): 'password' | 'profile' | 'card' | 'picker' | 'desk' => {
+  if (employeeView.value !== 'work') {
+    return employeeView.value;
+  }
+
+  if (officeDesk.current.value) {
+    return 'card';
+  }
+
+  return employeeManyOffices.value && employeeOffice.value === null ? 'picker' : 'desk';
+});
+
+/** Шапка выбора офиса и стойки. */
+const staffBar = computed(() =>
+  employee.value ? { name: employee.value.fullName, role: STAFF_ROLE_LABELS[employee.value.role] } : null,
 );
+
+/**
+ * Текст «не прочиталось» у списков стойки — из словаря отказов веба: служебная часть говорит
+ * по-русски, и своего текста на экране нет (docs/frontend.md → «Тексты отказов — из словаря»).
+ */
+const STAFF_REQUEST_FAILED = denialText('request_failed', WEB_LANGUAGE);
+
+const deskOfficeViews = computed(() => deskOffices.offices.value.map(staffOfficeView));
+
+/** Строки «Ждут выдачи». «Сегодня» и «вчера» считаются от часов в момент перечитывания списка. */
+const deskRows = computed(() => {
+  const now = new Date();
+
+  return officeDesk.pendingItems.value.map((item) => staffDeskRowView(item, now));
+});
+
+/** Открытая карточка — заказ или награда. */
+const deskOrder = computed(() =>
+  officeDesk.current.value?.kind === 'order' ? staffOrderView(officeDesk.current.value.order) : null,
+);
+
+const deskReward = computed(() =>
+  officeDesk.current.value?.kind === 'reward' ? staffRewardView(officeDesk.current.value.reward) : null,
+);
+
+/**
+ * Плашка исхода под полем кода: выдано, отменено или отказ. Снимается набором следующего кода,
+ * сменой офиса и открытием строки из списка.
+ */
+const deskOutcome = ref<StaffOutcomeView | null>(null);
+
+watch(employeeCode, (code) => {
+  if (code !== '') {
+    deskOutcome.value = null;
+  }
+});
+
+// Выбор офиса читает офисы с числом ждущих при каждом показе: с профиля вернулись — перечитал.
+watch(
+  () => stage.value === 'employee' && employeeScreen.value === 'picker',
+  (shown) => {
+    if (shown) {
+      void deskOffices.load();
+    }
+  },
+);
+
+// Новый экран сотрудника открывается с начала, а не с той высоты, на которой листали прошлый.
+watch(employeeScreen, () => {
+  window.scrollTo(0, 0);
+});
+
+/** Офис, отмеченный в шторке «Сменить». */
+const officeSheetPicked = ref<string | null>(null);
+
+const selectEmployeeOffice = (officeId: string): void => {
+  employeeOfficeId.value = officeId;
+  employeeCode.value = '';
+  deskOutcome.value = null;
+  officeDesk.reset();
+  void officeDesk.loadPending(officeId);
+};
+
+/** «Сменить»: шторка с отметкой на текущем офисе и свежим списком. */
+const openDeskOfficeSheet = (): void => {
+  officeSheetPicked.value = employeeOfficeId.value;
+  employeeSheet.value = 'office';
+  void deskOffices.load();
+};
+
+const saveDeskOfficeSheet = (officeId: string): void => {
+  employeeSheet.value = 'none';
+  selectEmployeeOffice(officeId);
+};
+
+/**
+ * Отказ у стойки — алой плашкой под полем. Чужой офис (`office_not_open`) — ещё и шторкой
+ * выбора офиса сразу: в этом офисе сотруднику больше делать нечего. Текста нет — отказ двери,
+ * и экран уже перечитывается (`reportDoorDenial`).
+ */
+const showDeskFailure = (text: string | null, code: string | null): void => {
+  if (text === null) {
+    return;
+  }
+
+  deskOutcome.value = { tone: 'fail', text };
+
+  if (code === 'office_not_open') {
+    openDeskOfficeSheet();
+  }
+};
+
+/** Пятая цифра: заказ или награда по коду. Нашлось — открывается карточка, нет — плашка. */
+const searchDeskCode = async (code: string): Promise<void> => {
+  const officeId = employeeOfficeId.value;
+
+  if (officeId === null) {
+    return;
+  }
+
+  deskOutcome.value = null;
+
+  if (!(await officeDesk.findByCode(officeId, code))) {
+    showDeskFailure(officeDesk.searchError.value, officeDesk.denialCode.value);
+  }
+};
+
+/** Строка из списка «Ждут выдачи» — её карточка. */
+const openDeskItem = (itemId: string): void => {
+  const item = officeDesk.pendingItems.value.find((entry) => deskItemId(entry) === itemId);
+
+  if (item) {
+    deskOutcome.value = null;
+    officeDesk.open(item);
+  }
+};
+
+/**
+ * «Назад» с карточки без действия. Поле кода пустеет: иначе тот же код набрать заново нельзя —
+ * пятая цифра уже стоит, и события набора не будет.
+ */
+const closeDeskItem = (): void => {
+  employeeSheet.value = 'none';
+  officeDesk.close();
+  employeeCode.value = '';
+};
+
+/** Шторку выдачи и отмены не закрыть, пока запрос в пути. */
+const closeDeskSheet = (): void => {
+  if (!officeDesk.acting.value) {
+    employeeSheet.value = 'none';
+  }
+};
+
+/**
+ * Итог выдачи и отмены — возврат на стойку с плашкой, список перечитывается: и после выдачи,
+ * и после отказа «уже выдан» прежний список врёт. Удача — зелёная плашка и пустое поле: следующий
+ * водитель уже называет свой код. Отказ — алая, поле как было.
+ */
+const finishDeskAction = async (done: boolean, outcome: StaffOutcomeView | null): Promise<void> => {
+  employeeSheet.value = 'none';
+
+  if (done) {
+    employeeCode.value = '';
+    deskOutcome.value = outcome;
+  } else {
+    // Текст и код снимаются закрытием карточки — забираются до него.
+    const text = officeDesk.actionError.value;
+    const code = officeDesk.denialCode.value;
+
+    if (text === null) {
+      return;
+    }
+
+    officeDesk.close();
+    showDeskFailure(text, code);
+  }
+
+  if (employeeOfficeId.value) {
+    await officeDesk.loadPending(employeeOfficeId.value);
+  }
+};
+
+const issueDeskItem = async (): Promise<void> => {
+  if (officeDesk.acting.value) {
+    return;
+  }
+
+  const done = await officeDesk.issue();
+  const issued = officeDesk.issued.value;
+
+  await finishDeskAction(done, done && issued ? issuedOutcome(issued) : null);
+};
+
+const cancelDeskOrder = async (): Promise<void> => {
+  if (officeDesk.acting.value) {
+    return;
+  }
+
+  // Заказ запоминается до отмены: закрытая карточка его уже не держит, а плашке нужны номер и имя.
+  const item = officeDesk.current.value;
+  const done = await officeDesk.cancel();
+
+  await finishDeskAction(done, done && item?.kind === 'order' ? cancelledOutcome(item.order) : null);
+};
+
+/**
+ * Пароль задан — строкой-состоянием в профиле. У демо-менеджера он задан всегда: своего входа
+ * у демо-учётки не бывает, сервер такой пароль отвергнет (issue #205), и формы у него нет.
+ */
+const employeePasswordSet = computed(() => employee.value !== null && (employee.value.passwordSet || employee.value.demo !== null));
 
 const employeePassword = useEmployeePassword(
   () => ({ [INIT_DATA_HEADER]: initData }),
   (error) => reportDoorDenial(error),
 );
 
+/** Профиль сотрудника: всё, что он показывает, уже пришло с экраном. */
+const staffProfile = computed(() => {
+  const current = employee.value;
+
+  if (!current) {
+    return null;
+  }
+
+  const fields: MemberProfileFieldView[] = [
+    { id: 'role', label: 'Роль', value: STAFF_ROLE_LABELS[current.role] },
+    { id: 'phone', label: 'Телефон', value: current.phone.display },
+    { id: 'telegram', label: 'Telegram ID', value: current.telegramId },
+  ];
+
+  return {
+    name: current.fullName,
+    fields,
+    offices: current.offices.map((office) => ({ id: office.officeId, name: office.name, address: office.address })),
+  };
+});
+
+const openEmployeeProfile = (): void => {
+  employeeView.value = 'profile';
+};
+
+const closeEmployeeProfile = (): void => {
+  employeeSheet.value = 'none';
+  employeeView.value = 'work';
+};
+
 const openEmployeePassword = (): void => {
   employeePassword.reset();
-  employeePasswordOpen.value = true;
+  employeeView.value = 'password';
 };
 
 /**
- * Пароль сохранён — пункт с экрана уходит. Признак ставится в уже прочитанном экране, а не
- * перечитыванием `/api/miniapp/me`: экран читается один раз при открытии, и второй запрос
- * ради одного признака незачем. Иначе кнопка висела бы до перезахода и звала повторить сделанное.
+ * Пароль сохранён — признак ставится в уже прочитанном экране, а не перечитыванием
+ * `/api/miniapp/me`: экран читается один раз при открытии, и второй запрос ради одного признака
+ * незачем. Строка в профиле после «Готово» уже «Задан».
  */
 const saveEmployeePassword = async (): Promise<void> => {
   if ((await employeePassword.submit()) && employee.value) {
     employee.value.passwordSet = true;
+  }
+};
+
+/** Шторку сброса не закрыть, пока сброс в пути: окно закроется само. */
+const closeEmployeeResetSheet = (): void => {
+  if (!resetting.value) {
+    employeeSheet.value = 'none';
   }
 };
 
@@ -463,70 +735,6 @@ const closeDemoSheet = (): void => {
   }
 };
 
-/**
- * Есть ли куда вернуться: из пункта пароля — туда, откуда открыли; из карточки — к полю кода;
- * от поля кода — к выбору из нескольких офисов.
- */
-const employeeCanGoBack = computed(
-  () =>
-    employeePasswordOpen.value ||
-    officeDesk.current.value !== null ||
-    (employeeOffice.value !== null && (employee.value?.offices.length ?? 0) > 1),
-);
-
-const selectEmployeeOffice = (officeId: string): void => {
-  employeeOfficeId.value = officeId;
-  employeeCode.value = '';
-  officeDesk.reset();
-  void officeDesk.loadPending(officeId);
-};
-
-const employeeBack = (): void => {
-  if (employeePasswordOpen.value) {
-    employeePasswordOpen.value = false;
-
-    return;
-  }
-
-  if (officeDesk.current.value) {
-    officeDesk.close();
-
-    return;
-  }
-
-  if ((employee.value?.offices.length ?? 0) > 1) {
-    employeeOfficeId.value = null;
-  }
-};
-
-const searchOrderCode = (code: string): void => {
-  if (employeeOfficeId.value) {
-    void officeDesk.findByCode(employeeOfficeId.value, code);
-  }
-};
-
-/**
- * Выдача и отмена у стойки. После любого исхода список висящих перечитывается: и после
- * выдачи, и после отказа «уже выдан» прежний список врёт. Поле кода пустеет только после
- * удачи — следующий водитель уже называет свой.
- */
-const finishEmployeeAction = async (done: boolean): Promise<void> => {
-  if (done) {
-    employeeCode.value = '';
-  }
-
-  if (employeeOfficeId.value) {
-    await officeDesk.loadPending(employeeOfficeId.value);
-  }
-};
-
-const issueEmployeeItem = async (): Promise<void> => {
-  await finishEmployeeAction(await officeDesk.issue());
-};
-
-const cancelEmployeeOrder = async (): Promise<void> => {
-  await finishEmployeeAction(await officeDesk.cancel());
-};
 
 /**
  * Экраны участника.
@@ -638,12 +846,6 @@ const openScreen = (screen: MemberScreenName): void => {
 };
 
 const goBack = (): void => {
-  if (stage.value === 'employee') {
-    employeeBack();
-
-    return;
-  }
-
   if (screens.value.length <= 1) {
     return;
   }
@@ -771,20 +973,6 @@ watch(giftSheetDue, (due) => {
 watch(currentScreen, () => {
   giftSheetOpen.value = false;
   memberGifts.settle();
-});
-
-// Пункт пароля открывается с начала экрана. Отдельно от наблюдателя ниже: со стойки из нескольких
-// офисов «назад» есть и до открытия пункта, и признак возврата при открытии не меняется.
-watch(employeePasswordOpen, () => {
-  window.scrollTo(0, 0);
-});
-
-watch(employeeCanGoBack, () => {
-  if (stage.value !== 'employee') {
-    return;
-  }
-
-  window.scrollTo(0, 0);
 });
 
 /**
@@ -1729,7 +1917,8 @@ const applyState = (state: MiniAppStateResponse): void => {
     employee.value = state;
     stage.value = 'employee';
 
-    // Один офис — выбирать нечего, стойка открывается сразу.
+    // Один офис — выбирать нечего, стойка открывается сразу. Офисов нет — стойка без поля кода,
+    // со словами, что сотрудника ещё не закрепили.
     const [onlyOffice] = state.offices;
 
     if (state.offices.length === 1 && onlyOffice) {
@@ -1771,7 +1960,10 @@ const resetScreenWork = (): void => {
   employeeOfficeId.value = null;
   employeeCode.value = '';
   officeDesk.reset();
-  employeePasswordOpen.value = false;
+  deskOutcome.value = null;
+  employeeView.value = 'work';
+  employeeSheet.value = 'none';
+  officeSheetPicked.value = null;
   employeePassword.reset();
   screens.value = ['home'];
   currentOrder.value = null;
@@ -2263,79 +2455,102 @@ const openMap = (office: MemberOfficeView): void => {
 
     <OrganismsNextMemberStubScreen v-else-if="stage === 'error' && stub" v-bind="stub" @retry="retry" />
 
-    <div v-else-if="stage === 'employee' && employee" class="flex flex-col gap-6">
-      <OrganismsEmployeePasswordForm
-        v-if="employeePasswordOpen"
-        v-model="employeePassword.password.value"
+    <template v-else-if="stage === 'employee' && employee && staffBar">
+      <OrganismsNextStaffPasswordScreen
+        v-if="employeeScreen === 'password'"
+        v-model:password="employeePassword.password.value"
+        v-model:repeat="employeePassword.repeat.value"
+        :phone="employee.phone.display"
         :submitting="employeePassword.submitting.value"
         :error="employeePassword.error.value"
+        :mismatch="employeePassword.mismatch.value"
         :saved="employeePassword.saved.value"
-        @submit="saveEmployeePassword"
-        @done="employeeBack"
+        @save="saveEmployeePassword"
+        @back="employeeView = 'profile'"
+        @done="employeeView = 'profile'"
       />
 
-      <template v-else-if="!employeeOffice">
-        <OrganismsEmployeeOfficePicker
-          :full-name="employee.fullName"
-          :offices="employee.offices"
-          @select="selectEmployeeOffice"
-        />
+      <OrganismsNextStaffProfileScreen
+        v-else-if="employeeScreen === 'profile' && staffProfile"
+        v-bind="staffProfile"
+        :password-label="EMPLOYEE_PASSWORD_LABEL"
+        :password-set="employeePasswordSet"
+        :reset-open="employeeSheet === 'reset'"
+        :resetting="resetting"
+        @back="closeEmployeeProfile"
+        @password="openEmployeePassword"
+        @ask-reset="employeeSheet = 'reset'"
+        @reset="resetSession"
+        @close="closeEmployeeResetSheet"
+      />
 
-        <AtomsMiniAppButton
-          v-if="employeePasswordOffered"
-          variant="secondary"
-          :label="EMPLOYEE_PASSWORD_LABEL"
-          @click="openEmployeePassword"
-        />
-      </template>
-
-      <OrganismsEmployeeOrderCard
-        v-else-if="officeDesk.current.value?.kind === 'order'"
-        :order="officeDesk.current.value.order"
+      <OrganismsNextStaffOrderCard
+        v-else-if="employeeScreen === 'card' && deskOrder"
+        :order="deskOrder"
+        :sheet="employeeSheet === 'issue' || employeeSheet === 'cancel' ? employeeSheet : 'none'"
         :acting="officeDesk.acting.value"
-        :error="officeDesk.actionError.value"
-        @issue="issueEmployeeItem"
-        @cancel="cancelEmployeeOrder"
-        @close="officeDesk.close()"
+        @back="closeDeskItem"
+        @ask-issue="employeeSheet = 'issue'"
+        @ask-cancel="employeeSheet = 'cancel'"
+        @issue="issueDeskItem"
+        @cancel="cancelDeskOrder"
+        @close="closeDeskSheet"
       />
 
-      <OrganismsEmployeeRewardCard
-        v-else-if="officeDesk.current.value?.kind === 'reward'"
-        :reward="officeDesk.current.value.reward"
+      <OrganismsNextStaffRewardCard
+        v-else-if="employeeScreen === 'card' && deskReward"
+        :reward="deskReward"
+        :sheet-open="employeeSheet === 'issue'"
         :acting="officeDesk.acting.value"
-        :error="officeDesk.actionError.value"
-        @issue="issueEmployeeItem"
-        @close="officeDesk.close()"
+        @back="closeDeskItem"
+        @ask-issue="employeeSheet = 'issue'"
+        @issue="issueDeskItem"
+        @close="closeDeskSheet"
       />
 
-      <template v-else>
-        <OrganismsEmployeeCodeEntry
-          v-model="employeeCode"
-          :office-name="employeeOffice.name"
-          :searching="officeDesk.searching.value"
-          :error="officeDesk.searchError.value"
-          :notice="officeDesk.notice.value"
-          @complete="searchOrderCode"
-        />
+      <OrganismsNextStaffOfficePicker
+        v-else-if="employeeScreen === 'picker'"
+        v-bind="staffBar"
+        :state="deskOffices.state.value"
+        :offices="deskOfficeViews"
+        :error-text="STAFF_REQUEST_FAILED"
+        @profile="openEmployeeProfile"
+        @select="selectEmployeeOffice"
+        @retry="deskOffices.load()"
+      />
 
-        <OrganismsEmployeePendingOrders
-          :state="officeDesk.pendingState.value"
-          :orders="officeDesk.pendingOrders.value"
-          @open="officeDesk.open($event)"
-        />
+      <OrganismsNextStaffDesk
+        v-else
+        v-model:code="employeeCode"
+        v-bind="staffBar"
+        :office="employeeOffice?.name"
+        :can-change="employeeManyOffices"
+        :outcome="deskOutcome"
+        :state="officeDesk.pendingState.value"
+        :rows="deskRows"
+        :error-text="STAFF_REQUEST_FAILED"
+        @profile="openEmployeeProfile"
+        @change="openDeskOfficeSheet"
+        @complete="searchDeskCode"
+        @open="openDeskItem"
+        @retry="employeeOfficeId && officeDesk.loadPending(employeeOfficeId)"
+      />
 
-        <AtomsMiniAppButton
-          v-if="employeePasswordOffered"
-          variant="secondary"
-          :label="EMPLOYEE_PASSWORD_LABEL"
-          @click="openEmployeePassword"
-        />
-      </template>
-
-      <div v-if="employeeCanGoBack">
-        <AtomsMiniAppButton variant="secondary" label="Назад" @click="employeeBack" />
-      </div>
-    </div>
+      <!-- Шторка «Сменить» стоит в разметке всегда: отказ «чужой офис» открывает её в тот же миг,
+           когда карточка уступает место стойке, и выезду иначе не с чего начаться. -->
+      <OrganismsNextStaffOfficeSheet
+        :open="employeeSheet === 'office'"
+        :state="deskOffices.state.value"
+        :offices="deskOfficeViews"
+        :current="employeeOfficeId"
+        :selected="officeSheetPicked"
+        :error-text="STAFF_REQUEST_FAILED"
+        @select="officeSheetPicked = $event"
+        @save="saveDeskOfficeSheet"
+        @cancel="employeeSheet = 'none'"
+        @retry="deskOffices.load()"
+      />
+    </template>
 
     <template v-else-if="stage === 'member' && member">
       <template v-if="currentScreen === 'home' && homeView">

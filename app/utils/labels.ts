@@ -189,7 +189,7 @@ const STOCK_MOVEMENT_KIND_LABELS: Record<StockMovementEntry['kind'], string> = {
   order_release: 'снятие резерва',
   reward_reserve: 'резерв под награду',
   reward_issue: 'выдача награды',
-  reward_release: 'награда сгорела, товар на полке',
+  reward_release: 'награда сгорела, товар в остатках',
 };
 
 export const stockMovementKindLabel = (kind: StockMovementEntry['kind']): string =>

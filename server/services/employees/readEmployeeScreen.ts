@@ -32,7 +32,11 @@ export const readEmployeeScreen = async (
  * руководитель найдёт, кого включить, — и говорит текстами экранов регистрации: по устройству
  * это тот же экран исхода. Словарь двери веба (`shared/denials.ts`) здесь не читается.
  *
- * Telegram ID — того, кто открыл приложение: у демо-менеджера своего нет.
+ * Telegram ID — того, кто открыл приложение: у демо-менеджера своего нет, и в профиле у него
+ * стоит Telegram зрителя — туда же придёт приветствие после сброса сессии.
+ *
+ * Офисы — только работающие (issue #250): по ним экран решает «один офис — сразу стойка»
+ * и рисует список в профиле, а архивный офис у стойки — дверь, в которую никто не придёт.
  */
 export const buildEmployeeScreen = async (
   employee: EmployeeRow,
@@ -52,9 +56,13 @@ export const buildEmployeeScreen = async (
     screen: 'employee',
     fullName: employee.fullName,
     role: employee.role,
+    phone: formatPhone(employee.phoneE164),
+    telegramId: telegramUserId.toString(),
     // Только признак: хеш из сервиса наружу не уходит ни в каком виде (issue #130).
     passwordSet: employee.passwordHash !== null,
-    offices: await readEmployeeOffices({ employeeId: employee.id, role: employee.role }),
+    offices: (await readEmployeeOffices({ employeeId: employee.id, role: employee.role })).filter(
+      (office) => !office.archived,
+    ),
     demo,
   };
 };

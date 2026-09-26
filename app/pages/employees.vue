@@ -88,7 +88,7 @@ const nameOf = (employeeId: string): string =>
 // Подтверждение спрашивается у действий, которые человек за столом заметит сразу:
 // выключенный не войдёт, сброшенный выйдет из веба на всех устройствах.
 const disable = (employeeId: string): Promise<void> | undefined => {
-  if (!window.confirm(`Выключить учётку «${nameOf(employeeId)}»? Войти не выйдет ни в веб, ни в приложение.`)) {
+  if (!window.confirm(`Выключить учётную запись «${nameOf(employeeId)}»? Войти не выйдет ни в веб, ни в приложение.`)) {
     return;
   }
 

@@ -42,7 +42,7 @@ const fullName = computed(() =>
     </div>
 
     <dl class="mt-2 divide-y divide-slate-100">
-      <MoleculesFactRow label="Учётка в парке" :value="profile.profileId" mono />
+      <MoleculesFactRow label="Учётная запись в парке" :value="profile.profileId" mono />
       <MoleculesFactRow label="Принят" :value="formatCalendarDate(profile.hireDate)" mono />
       <MoleculesFactRow label="Уволен" :value="formatCalendarDate(profile.fireDate)" mono />
       <MoleculesFactRow

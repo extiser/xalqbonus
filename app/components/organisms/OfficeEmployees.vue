@@ -118,7 +118,7 @@ const remove = (employeeId: string): void => {
           <label class="block min-w-56 flex-1">
             <span class="mb-1 block text-sm font-medium text-slate-700">Добавить сотрудника</span>
             <AtomsSelectInput v-model="chosen" :options="candidateOptions">
-              <option value="">Выберите учётку</option>
+              <option value="">Выберите учётную запись</option>
             </AtomsSelectInput>
           </label>
           <AtomsActionButton

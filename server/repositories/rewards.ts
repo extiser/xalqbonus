@@ -407,6 +407,23 @@ export const findAwaitingOfficeRewardByCode = async (
   return rows[0] ?? null;
 };
 
+/**
+ * Ждущие награды офиса для списка «Ждут выдачи» у стойки (issue #250), свежие первыми. Офис
+ * входит в условие всегда — «чей это офис», решает вызывающий до запроса.
+ */
+export const listAwaitingOfficeRewards = async (
+  officeId: string,
+  limit: number,
+  client: Executor = db,
+): Promise<OfficeRewardRow[]> =>
+  client.$queryRaw<OfficeRewardRow[]>`
+    ${OFFICE_REWARD_SELECT}
+     WHERE reward."office_id" = ${officeId}::uuid
+       AND reward."status" = 'awaiting'
+     ORDER BY reward."created_at" DESC
+     LIMIT ${limit}
+  `;
+
 export type DriverRewardRow = PersonRewardColumns & {
   /** Офис выдачи. Пуст у баллов. */
   officeName: string | null;

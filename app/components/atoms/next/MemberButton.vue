@@ -17,8 +17,13 @@ import { computed } from 'vue';
  * бегущий блик шёл бы по четырём кнопкам разом (решение Руслана 25-09-2026, `#200`). В ожидании
  * гаснет до 55 %, как гранатовая L, и кольцо у неё тёмное — цвета её текста.
  *
- * Своего отступа снаружи у кнопки нет, как и ширины, кроме `l` — та по шкале «во всю ширину»,
- * и это форма кнопки, а не её место.
+ * `green` размера `xl` — «Выдать» и «Да, выдать» у стойки сотрудника (`_reference/design/staff/`,
+ * issue #250): сплошная зелёная, белый текст 16/700, высота 64 и без свечения. Зелёный насыщеннее
+ * палитрового `xb-green`: на светлом зелёном белый текст не читается. Главное действие стойки —
+ * крупнее обычной L, по нему жмут не глядя.
+ *
+ * Своего отступа снаружи у кнопки нет, как и ширины, кроме `l` и `xl` — те по шкале «во всю
+ * ширину», и это форма кнопки, а не её место.
  *
  * Гранатовая и серая L — один вид на всё приложение, по макетам регистрации (решение Руслана
  * 24-09-2026, ревью `#195`). Гранатовая L светится так же крупно, как M посреди экрана, а погашенная
@@ -30,8 +35,8 @@ import { computed } from 'vue';
  * поверх соседа снизу. Соседям, которые должны остаться над свечением, контейнер даёт тот же
  * `relative z-[1]` — две кнопки подряд разводятся сами, порядком в разметке.
  */
-type ButtonSize = 'l' | 'm' | 's';
-type ButtonTone = 'garnet' | 'gold' | 'gold-calm' | 'gold-soft' | 'scarlet' | 'grey' | 'danger' | 'outline';
+type ButtonSize = 'xl' | 'l' | 'm' | 's';
+type ButtonTone = 'garnet' | 'gold' | 'gold-calm' | 'gold-soft' | 'scarlet' | 'green' | 'grey' | 'danger' | 'outline';
 
 const props = withDefaults(
   defineProps<{
@@ -47,12 +52,14 @@ const props = withDefaults(
 defineEmits<{ click: [] }>();
 
 const SIZE_CLASSES: Record<ButtonSize, string> = {
+  xl: 'h-16 w-full rounded-[16px] text-[16px]',
   l: 'h-[52px] w-full rounded-[16px] text-[15px]',
   m: 'h-12 rounded-full text-[15px]',
   s: 'h-10 rounded-full text-[14px]',
 };
 
 const SIZE_PADDING: Record<ButtonSize, string> = {
+  xl: 'px-4',
   l: 'px-4',
   m: 'px-[30px]',
   s: 'px-[22px]',
@@ -69,6 +76,7 @@ const TONE_CLASSES: Record<ButtonTone, string> = {
   'gold-soft':
     'member-button-gold-soft bg-[linear-gradient(135deg,#FFD98A_0%,#E9A93C_100%)] font-bold text-[#2A1B05] disabled:opacity-35',
   scarlet: 'bg-xb-scarlet font-bold text-white disabled:opacity-35',
+  green: 'gap-2.5 bg-[#22B866] font-bold text-white disabled:opacity-55',
   grey: 'member-button-grey border border-white/8 bg-xb-button-grey font-semibold text-xb-text active:bg-[#2A2E35] disabled:opacity-50',
   danger:
     'border border-[rgba(255,92,120,0.40)] bg-[rgba(255,92,120,0.08)] font-semibold text-xb-scarlet-soft disabled:opacity-35',
@@ -81,6 +89,7 @@ const TONE_CLASSES: Record<ButtonTone, string> = {
  * карточки сдержаннее. Погашенная L тускнеет до 55 %, M и S — до 35 %, как раньше.
  */
 const GARNET_SIZE_CLASSES: Record<ButtonSize, string> = {
+  xl: 'shadow-[0_8px_26px_rgba(232,54,93,0.38)] disabled:opacity-55',
   l: 'member-button-garnet-l shadow-[0_8px_26px_rgba(232,54,93,0.38)] disabled:opacity-55',
   m: 'shadow-[0_8px_26px_rgba(232,54,93,0.38)] disabled:opacity-35',
   s: 'shadow-[0_6px_16px_rgba(232,54,93,0.22)] disabled:opacity-35',

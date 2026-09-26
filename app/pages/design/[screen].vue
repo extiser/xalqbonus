@@ -66,6 +66,15 @@ import {
   registrationLanguageMock,
   registrationOutcomeMock,
   registrationPhoneMock,
+  staffBarMock,
+  staffDeskRowsMock,
+  staffIssuedMock,
+  staffNotFoundMock,
+  staffOfficesMock,
+  staffOrderMock,
+  staffProfileMock,
+  staffRewardMock,
+  staffSheetOfficesMock,
 } from '~/design/mocks';
 import type { CatalogCart, CatalogScene, GiftSheetScene, RegistrationOutcomeScene } from '~/design/mocks';
 import { findDesignScreen } from '~/design/screens';
@@ -658,6 +667,28 @@ function enterDemoRole(role: MemberDemoRole): void {
   demoSheetOpen.value = false;
 }
 
+/**
+ * Сотрудник (issue #250): стойка, карточки и профиль на заглушках. Код, шторки и поля пароля
+ * живут здесь — компоненты только рисуют их; кнопки ведут на соседние адреса, как в макетах.
+ */
+const isStaff = slug.value.startsWith('staff-');
+const staffCode = ref(slug.value === 'staff-desk-not-found' ? '52817' : slug.value === 'staff-desk-issued' ? '' : '52');
+const staffSheet = ref<'none' | 'issue' | 'cancel' | 'office' | 'reset'>(
+  slug.value === 'staff-order-issue' || slug.value === 'staff-reward-issue'
+    ? 'issue'
+    : slug.value === 'staff-order-cancel'
+      ? 'cancel'
+      : slug.value === 'staff-desk-office-sheet'
+        ? 'office'
+        : 'none',
+);
+const staffPicked = ref<string | null>('chilanzar');
+const staffPassword = ref('qwerty2026x');
+const staffRepeat = ref(slug.value === 'staff-password' ? 'qwerty20' : 'qwerty2026x');
+const staffOutcome = slug.value === 'staff-desk-issued' ? staffIssuedMock : slug.value === 'staff-desk-not-found' ? staffNotFoundMock : null;
+const staffDeskRows = slug.value === 'staff-desk-empty' ? [] : slug.value === 'staff-desk-issued' ? staffDeskRowsMock.filter((row) => row.id !== 'order-1042') : staffDeskRowsMock;
+const STAFF_FAILED = 'Приложение не ответило. Проверьте связь и попробуйте снова.';
+
 function go(target: string): void {
   void navigateTo(`/design/${target}`);
 }
@@ -676,7 +707,92 @@ function go(target: string): void {
         />
       </template>
 
-      <template v-if="slug === 'app-loading'">
+      <template v-if="isStaff">
+        <OrganismsNextStaffOfficePicker
+          v-if="slug === 'staff-office-picker'"
+          v-bind="staffBarMock"
+          state="ready"
+          :offices="staffOfficesMock"
+          :error-text="STAFF_FAILED"
+          @profile="go('staff-profile')"
+          @select="go('staff-desk')"
+        />
+        <OrganismsNextStaffOrderCard
+          v-else-if="slug.startsWith('staff-order')"
+          :order="staffOrderMock"
+          :sheet="staffSheet === 'issue' || staffSheet === 'cancel' ? staffSheet : 'none'"
+          :acting="false"
+          @back="go('staff-desk')"
+          @ask-issue="staffSheet = 'issue'"
+          @ask-cancel="staffSheet = 'cancel'"
+          @issue="go('staff-desk-issued')"
+          @cancel="go('staff-desk')"
+          @close="staffSheet = 'none'"
+        />
+        <OrganismsNextStaffRewardCard
+          v-else-if="slug.startsWith('staff-reward')"
+          :reward="staffRewardMock"
+          :sheet-open="staffSheet === 'issue'"
+          :acting="false"
+          @back="go('staff-desk')"
+          @ask-issue="staffSheet = 'issue'"
+          @issue="go('staff-desk')"
+          @close="staffSheet = 'none'"
+        />
+        <OrganismsNextStaffProfileScreen
+          v-else-if="slug.startsWith('staff-profile')"
+          v-bind="staffProfileMock"
+          :password-set="slug === 'staff-profile-password-set'"
+          :reset-open="staffSheet === 'reset'"
+          @back="go('staff-desk')"
+          @password="go('staff-password')"
+          @ask-reset="staffSheet = 'reset'"
+          @reset="staffSheet = 'none'"
+          @close="staffSheet = 'none'"
+        />
+        <OrganismsNextStaffPasswordScreen
+          v-else-if="slug.startsWith('staff-password')"
+          v-model:password="staffPassword"
+          v-model:repeat="staffRepeat"
+          phone="+998 90 765-43-21"
+          :submitting="false"
+          :error="null"
+          :mismatch="slug === 'staff-password' && staffPassword !== staffRepeat"
+          :saved="slug === 'staff-password-saved'"
+          @save="go('staff-password-saved')"
+          @back="go('staff-profile')"
+          @done="go('staff-profile-password-set')"
+        />
+        <template v-else>
+          <OrganismsNextStaffDesk
+            v-model:code="staffCode"
+            v-bind="staffBarMock"
+            :office="slug === 'staff-no-offices' ? undefined : 'Кадышева'"
+            can-change
+            :outcome="staffOutcome"
+            state="ready"
+            :rows="staffDeskRows"
+            :error-text="STAFF_FAILED"
+            @profile="go('staff-profile')"
+            @change="staffSheet = 'office'"
+            @complete="go('staff-order')"
+            @open="(id) => go(id.startsWith('order') ? 'staff-order' : 'staff-reward')"
+          />
+          <OrganismsNextStaffOfficeSheet
+            :open="staffSheet === 'office'"
+            state="ready"
+            :offices="staffSheetOfficesMock"
+            current="kadysheva"
+            :selected="staffPicked"
+            :error-text="STAFF_FAILED"
+            @select="staffPicked = $event"
+            @save="staffSheet = 'none'"
+            @cancel="staffSheet = 'none'"
+          />
+        </template>
+      </template>
+
+      <template v-else-if="slug === 'app-loading'">
         <OrganismsNextMemberLoadingScreen :key="loadingKey" :leaving="loadingLeaving" @left="loadingLeft = true" />
         <div class="fixed inset-x-0 bottom-0 z-40 flex justify-center pb-[calc(24px+env(safe-area-inset-bottom))]">
           <AtomsNextMemberButton size="s" tone="outline" :disabled="loadingLeaving && !loadingLeft" @click="toggleLoading">

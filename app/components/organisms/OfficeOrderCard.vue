@@ -77,7 +77,7 @@ watch(
       </template>
 
       <template v-else-if="confirming === 'cancel'">
-        <span class="text-sm">Отменить заказ № {{ order.number }}? Баллы вернутся водителю, товар — на полку.</span>
+        <span class="text-sm">Отменить заказ № {{ order.number }}? Баллы вернутся водителю, товар — в остатки.</span>
         <AtomsActionButton label="Да, отменить" tone="danger" :disabled="acting" @click="emit('cancel')" />
         <AtomsActionButton label="Не отменять" :disabled="acting" @click="confirming = null" />
       </template>

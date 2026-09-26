@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue';
 import { useOfficeDesk } from '~/composables/useOfficeDesk';
 import { toLoadState } from '~/utils/loadState';
-import { failureDenial } from '~/utils/requestError';
+import { failureCode } from '~/utils/requestError';
 import type { SelectOption } from '~/types/selectOption';
 import type { OfficeOrdersResponse } from '#shared/types/orders';
 
@@ -39,10 +39,10 @@ const {
 const state = computed(() => toLoadState(fetchStatus.value));
 
 /**
- * Менеджер без офисов. Ручка отвечает ему `role_not_allowed`, и другой причины отказать
- * списку у вошедшего сотрудника нет: выбор офиса предлагает только открытые ему офисы.
+ * Менеджер без офисов. Ручка отвечает ему `office_not_open` (issue #250), и другой причины
+ * отказать списку у вошедшего сотрудника нет: выбор офиса предлагает только открытые ему офисы.
  */
-const withoutOffices = computed(() => failureDenial(error.value) === 'role_not_allowed');
+const withoutOffices = computed(() => failureCode(error.value) === 'office_not_open');
 
 const officeId = computed({
   get: () => selectedOfficeId.value || data.value?.officeId || '',
@@ -161,7 +161,7 @@ const cancel = async (): Promise<void> => {
       <OrganismsOfficeOrderTable
         :state="state"
         :data="data ?? null"
-        @open="desk.open($event)"
+        @open="desk.open({ kind: 'order', order: $event })"
         @page="offset = $event"
       />
     </template>
