@@ -125,6 +125,15 @@ body { display: flex; justify-content: center; }
 
 /* Пустой список — .notice из ../app/rewards-screen-empty.html. */
 .notice { text-align: center; padding: 48px 28px 72px; color: #8A93A2; font-size: 15px; font-weight: 300; line-height: 1.4; }
+
+/* Кнопка «Обновить» у «Ждут выдачи» — вариант А (Руслан 26-09-2026, сессия 65, прогон #250): список сам
+   не обновляется, телефон лежит на стойке. Перечитывает список; ещё список перечитывается при возврате
+   приложения из фона. Опроса нет. */
+.title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.title-row .title { margin: 0; }
+.refresh-pill { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: 999px;
+  border: 1px solid rgba(95,208,138,.45); background: rgba(34,184,102,.10); color: #5FD08A;
+  font: 600 14px Manrope, sans-serif; cursor: pointer; flex-shrink: 0; }
 </style></head>
 <body>
 <div class="screen">
@@ -145,7 +154,7 @@ body { display: flex; justify-content: center; }
       <input class="code focus" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" placeholder="•••••" aria-label="Код заказа или награды, пять цифр" value="52">
     </div>
 
-    <div class="title">Ждут выдачи</div>
+    <div class="title-row"><div class="title">Ждут выдачи</div><button class="refresh-pill"><svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M20 12a8 8 0 1 1-2.34-5.66" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M20 4v5h-5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Обновить</button></div>
     <div class="notice">Здесь появятся заказы и награды, которые ждут выдачи.</div>
 
   </div>
