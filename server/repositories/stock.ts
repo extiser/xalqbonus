@@ -216,7 +216,8 @@ export type ShowcaseRow = {
 /**
  * Витрина офиса: работающие товары, которые можно взять сейчас.
  *
- * `includeDemo` — брать ли демо-товары (issue #212): их видит только демо-водитель.
+ * `isDemo` — водитель демо (issue #212): демо-товары видит только он. Сторону офиса здесь
+ * не решают — витрину чужого офиса водителю не отдаёт сервис.
  *
  * `JOIN`, а не `LEFT JOIN`, как у таблицы остатков: витрина обещает то, что лежит
  * на полке, и товар без строки остатка или с нулём в ней водителю не показывается.
@@ -231,7 +232,7 @@ export type ShowcaseRow = {
  */
 export const listOfficeShowcase = async (
   officeId: string,
-  includeDemo: boolean,
+  isDemo: boolean,
   client: Prisma.TransactionClient = db,
 ): Promise<ShowcaseRow[]> =>
   client.$queryRaw<ShowcaseRow[]>`
@@ -250,7 +251,7 @@ export const listOfficeShowcase = async (
        AND product."archived_at" IS NULL
        AND NOT product."hidden_in_catalog"
        AND product."price_points" IS NOT NULL
-       AND (${includeDemo}::boolean OR NOT product."is_demo")
+       AND (${isDemo}::boolean OR NOT product."is_demo")
      ORDER BY product."name"
   `;
 
@@ -280,10 +281,11 @@ export type CatalogProductRow = {
  * Порядок — по `name` товара, как у витрины офиса; порядок офисов внутри товара ставит
  * сервис — порядком списка офисов.
  *
- * `includeDemo` — брать ли демо-товары и ДЕМО ОФИС (issue #212): их видит только демо-водитель.
+ * `isDemo` — сторона водителя (issue #212): офисы только своей стороны — демо-водителю демо,
+ * живому живые; товары живому только живые, демо-водителю живые и демо.
  */
 export const listCatalogProducts = async (
-  includeDemo: boolean,
+  isDemo: boolean,
   client: Prisma.TransactionClient = db,
 ): Promise<CatalogProductRow[]> =>
   client.$queryRaw<CatalogProductRow[]>`
@@ -304,7 +306,8 @@ export const listCatalogProducts = async (
        AND product."archived_at" IS NULL
        AND NOT product."hidden_in_catalog"
        AND product."price_points" IS NOT NULL
-       AND (${includeDemo}::boolean OR NOT (product."is_demo" OR office."is_demo"))
+       AND office."is_demo" = ${isDemo}::boolean
+       AND (${isDemo}::boolean OR NOT product."is_demo")
      ORDER BY product."name", product."id"
   `;
 
@@ -327,12 +330,13 @@ export type LatestProductRow = {
  * Свежесть — `published_at`: четыре последних опубликованных (решение Руслана 25-09-2026,
  * issue #218). Настраиваемая витрина главной — отдельный проход.
  *
- * `includeDemo` — брать ли демо-товары и остаток ДЕМО ОФИСА (issue #212): тем же правилом,
- * что общий каталог, иначе главная звала бы живого водителя к товару, которого ему не дадут.
+ * `isDemo` — сторона водителя (issue #212), тем же правилом, что общий каталог: остаток только
+ * в офисах своей стороны, демо-товары только демо-водителю. Иначе главная звала бы водителя
+ * к товару, которого ему не дадут.
  */
 export const listLatestProducts = async (
   limit: number,
-  includeDemo: boolean,
+  isDemo: boolean,
   client: Prisma.TransactionClient = db,
 ): Promise<LatestProductRow[]> =>
   client.$queryRaw<LatestProductRow[]>`
@@ -346,7 +350,7 @@ export const listLatestProducts = async (
        AND product."archived_at" IS NULL
        AND NOT product."hidden_in_catalog"
        AND product."price_points" IS NOT NULL
-       AND (${includeDemo}::boolean OR NOT product."is_demo")
+       AND (${isDemo}::boolean OR NOT product."is_demo")
        AND EXISTS (
              SELECT 1
                FROM xb.office_stock AS stock
@@ -354,7 +358,7 @@ export const listLatestProducts = async (
               WHERE stock."product_id" = product."id"
                 AND stock."on_hand" > 0
                 AND office."archived_at" IS NULL
-                AND (${includeDemo}::boolean OR NOT office."is_demo")
+                AND office."is_demo" = ${isDemo}::boolean
            )
      ORDER BY product."published_at" DESC, product."id"
      LIMIT ${limit}

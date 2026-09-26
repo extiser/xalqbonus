@@ -161,7 +161,7 @@ describe('черновик товара', () => {
       }),
     );
 
-    const showcase = await readOfficeShowcase({ officeId, balance: 100n });
+    const showcase = await readOfficeShowcase({ officeId, balance: 100n, isDemo: false });
 
     expect(showcase?.products.map((product) => product.productId)).not.toContain(draft.productId);
 
@@ -178,7 +178,7 @@ describe('черновик товара', () => {
     // Опубликованный с тем же остатком виден и заказывается.
     await publishProduct(draft.productId);
 
-    const published = await readOfficeShowcase({ officeId, balance: 100n });
+    const published = await readOfficeShowcase({ officeId, balance: 100n, isDemo: false });
 
     expect(published?.products.map((product) => product.productId)).toContain(draft.productId);
   });

@@ -258,7 +258,7 @@ export type ManualRewardResponse = {
 
 /** Что можно выбрать в форме ручной выдачи. */
 export type RewardGrantOptionsResponse = {
-  /** Рабочие офисы. ДЕМО ОФИС — только по `?demo=true` (issue #212). */
+  /** Рабочие офисы своей стороны: по `?demo=true` — только демо, иначе только живые (#212). */
   offices: { officeId: string; name: string; isDemo: boolean }[];
   /** Опубликованные товары не в архиве; призы помечены. Демо — только по `?demo=true`. */
   products: { productId: string; name: string; promo: boolean; isDemo: boolean }[];

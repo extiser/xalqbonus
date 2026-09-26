@@ -62,18 +62,20 @@ export const listOffices = async (client: Executor = db): Promise<OfficeRow[]> =
  * Работающие офисы — для водителя. Архивный офис заказов не принимает, и показывать его
  * в списке, откуда выбирают, куда ехать, значит звать в закрытую дверь.
  *
- * `includeDemo` — брать ли ДЕМО ОФИС (issue #212): живое видно всем, демо — только
- * демо-водителю. Параметр обязателен: каждый, кто собирает список, решает это явно.
+ * `isDemo` — сторона (issue #212): демо-водителю только демо-офисы, живому — только живые.
+ * Офисы разведены полностью, в обе стороны: заказ и награда-товар резервируют штуку в офисе
+ * при создании, и демо в живом офисе заняло бы живую штуку (решение Руслана 26-09-2026).
+ * Параметр обязателен: каждый, кто собирает список, называет сторону явно.
  */
 export const listActiveOffices = async (
-  includeDemo: boolean,
+  isDemo: boolean,
   client: Executor = db,
 ): Promise<OfficeRow[]> =>
   client.$queryRaw<OfficeRow[]>`
     SELECT ${OFFICE_COLUMNS}
       FROM xb.offices
      WHERE "archived_at" IS NULL
-       AND (${includeDemo}::boolean OR NOT "is_demo")
+       AND "is_demo" = ${isDemo}::boolean
      ORDER BY "name"
   `;
 

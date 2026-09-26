@@ -10,18 +10,19 @@ import type { RewardGrantOptionsResponse } from '#shared/types/rewards';
  * Своей ручкой, а не списками каталога и офисов: те открыты владельцу и админу, а награду
  * выдаёт и менеджер — тем же правилом, что ручную правку баллов.
  *
- * `includeDemo` — для демо-водителя и демо-акции (issue #212): им годится любое. Живому
- * водителю — только живые офисы и товары; выдача проверяет то же сама (`grantReward`).
+ * `isDemo` — сторона (issue #212): демо-водителю и демо-акции — только демо-офисы, товары
+ * живые и демо; живым — только живые офисы и товары. Выдача проверяет то же сама
+ * (`grantReward`).
  */
 export type RewardGrantOptionsRequest = {
-  includeDemo: boolean;
+  isDemo: boolean;
 };
 
 export const readRewardGrantOptions = async (
   request: RewardGrantOptionsRequest,
 ): Promise<RewardGrantOptionsResponse> => {
   const [offices, products] = await Promise.all([
-    listActiveOffices(request.includeDemo),
+    listActiveOffices(request.isDemo),
     listProducts(),
   ]);
 
@@ -35,7 +36,7 @@ export const readRewardGrantOptions = async (
       .flatMap((product) =>
         isGrantableProduct(product) &&
         product.name !== null &&
-        (request.includeDemo || !product.isDemo)
+        (request.isDemo || !product.isDemo)
           ? [
               {
                 productId: product.id,

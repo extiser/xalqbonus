@@ -46,6 +46,7 @@ import {
   createTestPerson,
   createTestProduct,
   disconnectDatabase,
+  readStock,
 } from '../support/database';
 import {
   cleanupTestEmployees,
@@ -169,7 +170,7 @@ describe('демо-сущности', () => {
     expect(canEditDemo('admin', false)).toBe(true);
   });
 
-  it('живой водитель не видит ДЕМО ОФИС и демо-товары, демо-водитель видит всё', async () => {
+  it('офисы разведены по сторонам, демо-товары видит только демо-водитель', async () => {
     const catalog = await setupCatalog();
 
     const liveOffices = (await readMemberOffices({ isDemo: false })).offices.map(
@@ -181,13 +182,15 @@ describe('демо-сущности', () => {
 
     expect(liveOffices).toContain(catalog.liveOfficeId);
     expect(liveOffices).not.toContain(catalog.demoOfficeId);
-    expect(demoOffices).toEqual(
-      expect.arrayContaining([catalog.liveOfficeId, catalog.demoOfficeId]),
-    );
+    expect(demoOffices).toContain(catalog.demoOfficeId);
+    expect(demoOffices).not.toContain(catalog.liveOfficeId);
 
-    // ДЕМО ОФИС живому — как архивный: витрины нет.
+    // Офис чужой стороны — как архивный: витрины нет, в обе стороны.
     expect(
       await readOfficeShowcase({ officeId: catalog.demoOfficeId, balance: 0n, isDemo: false }),
+    ).toBeNull();
+    expect(
+      await readOfficeShowcase({ officeId: catalog.liveOfficeId, balance: 0n, isDemo: true }),
     ).toBeNull();
 
     const liveShowcase = await readOfficeShowcase({
@@ -224,11 +227,16 @@ describe('демо-сущности', () => {
     );
     expect(liveProduct?.offices.map((office) => office.officeId)).toEqual([catalog.liveOfficeId]);
 
+    // У демо-водителя — живой и демо-товар, но только остатком ДЕМО ОФИСА.
     const demoCatalog = await readCatalog({ balance: 0n, isDemo: true });
-
-    expect(demoCatalog.products.map((product) => product.productId)).toContain(
-      catalog.demoProductId,
+    const demoCatalogProducts = demoCatalog.products.filter((product) =>
+      [catalog.liveProductId, catalog.demoProductId].includes(product.productId),
     );
+
+    expect(demoCatalogProducts).toHaveLength(2);
+    expect(demoCatalogProducts.flatMap((product) => product.offices.map((office) => office.officeId)))
+      .toEqual([catalog.demoOfficeId, catalog.demoOfficeId]);
+    expect(demoCatalog.offices.map((office) => office.officeId)).not.toContain(catalog.liveOfficeId);
 
     const latest = await readLatestProducts({ isDemo: false });
 
@@ -237,7 +245,7 @@ describe('демо-сущности', () => {
     );
   });
 
-  it('заказ живого в ДЕМО ОФИС или на демо-товар — отказ, демо-водитель заказывает', async () => {
+  it('заказ в офис чужой стороны и живого на демо-товар — отказ, живой остаток не тронут', async () => {
     const catalog = await setupCatalog();
     const livePersonId = await createDriver({ demo: false });
     const demoPersonId = await createDriver({ demo: true });
@@ -262,6 +270,18 @@ describe('демо-сущности', () => {
       }),
     ).rejects.toBeInstanceOf(ProductUnavailableError);
 
+    await expect(
+      placeOrder({
+        personId: demoPersonId,
+        officeId: catalog.liveOfficeId,
+        items: [{ productId: catalog.liveProductId, quantity: 1 }],
+        actor: 'mini_app',
+        driverIsDemo: true,
+      }),
+    ).rejects.toBeInstanceOf(OfficeUnavailableError);
+
+    const liveStockBefore = await readStock(catalog.liveOfficeId, catalog.liveProductId);
+
     const order = await placeOrder({
       personId: demoPersonId,
       officeId: catalog.demoOfficeId,
@@ -274,9 +294,10 @@ describe('демо-сущности', () => {
     });
 
     expect(order.totalPoints).toBe(20);
+    expect(await readStock(catalog.liveOfficeId, catalog.liveProductId)).toEqual(liveStockBefore);
   });
 
-  it('награда живому — только живые офис и товар, варианты выдачи без демо', async () => {
+  it('награда — офис только своей стороны, живому только живой товар', async () => {
     const catalog = await setupCatalog();
     const livePersonId = await createDriver({ demo: false });
     const demoPersonId = await createDriver({ demo: true });
@@ -308,23 +329,40 @@ describe('демо-сущности', () => {
       }),
     ).rejects.toBeInstanceOf(RewardProductUnavailableError);
 
+    await expect(
+      grantManualReward({
+        ...manual,
+        personId: demoPersonId,
+        kind: 'product',
+        productId: catalog.liveProductId,
+        officeId: catalog.liveOfficeId,
+      }),
+    ).rejects.toBeInstanceOf(RewardOfficeUnavailableError);
+
+    const liveStockBefore = await readStock(catalog.liveOfficeId, catalog.liveProductId);
+
+    // Живой товар демо-водителю — можно, если он лежит в ДЕМО ОФИСЕ.
     const reward = await grantManualReward({
       ...manual,
       personId: demoPersonId,
       kind: 'product',
-      productId: catalog.demoProductId,
+      productId: catalog.liveProductId,
       officeId: catalog.demoOfficeId,
     });
 
     expect(reward.officeId).toBe(catalog.demoOfficeId);
+    expect(await readStock(catalog.liveOfficeId, catalog.liveProductId)).toEqual(liveStockBefore);
 
-    const live = await readRewardGrantOptions({ includeDemo: false });
-    const demo = await readRewardGrantOptions({ includeDemo: true });
+    const live = await readRewardGrantOptions({ isDemo: false });
+    const demo = await readRewardGrantOptions({ isDemo: true });
 
     expect(live.offices.map((office) => office.officeId)).not.toContain(catalog.demoOfficeId);
     expect(live.products.map((product) => product.productId)).not.toContain(catalog.demoProductId);
     expect(demo.offices.map((office) => office.officeId)).toContain(catalog.demoOfficeId);
-    expect(demo.products.map((product) => product.productId)).toContain(catalog.demoProductId);
+    expect(demo.offices.map((office) => office.officeId)).not.toContain(catalog.liveOfficeId);
+    expect(demo.products.map((product) => product.productId)).toEqual(
+      expect.arrayContaining([catalog.liveProductId, catalog.demoProductId]),
+    );
   });
 
   it('живой сегмент без демо-водителей, демо-сегмент — только они', async () => {

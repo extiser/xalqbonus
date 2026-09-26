@@ -52,6 +52,16 @@ export const buildOpeningIdempotencyKey = (personId: string): IdempotencyKey =>
   buildKey('opening', personId);
 
 /**
+ * Баллы новому демо-водителю: `demo_grant:<persons.id>` (issue #212).
+ *
+ * От человека — один раз за всё время: повторное внесение зрителя водителя не заводит,
+ * а ключ не даёт второму переводу лечь на тот же счёт. Своей схемой, а не `opening`:
+ * `opening` — это перенос из старой базы, и его итог сверяется с эталоном.
+ */
+export const buildDemoGrantIdempotencyKey = (personId: string): IdempotencyKey =>
+  buildKey('demo_grant', personId);
+
+/**
  * Приветственный бонус за первые пять завершённых поездок: `welcome:<persons.id>`.
  *
  * Ключ строится от человека, а не от поездки, на которой порог сошёлся: бонус случается

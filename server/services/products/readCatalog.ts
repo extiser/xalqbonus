@@ -15,7 +15,7 @@ import type { CatalogProduct, MemberOffice, MiniAppCatalogResponse } from '#shar
 export type CatalogRequest = {
   /** Баланс водителя со счёта — тот же, что стоит на экране участника. */
   balance: bigint;
-  /** Водитель демо: ему видны ДЕМО ОФИС и демо-товары (issue #212). */
+  /** Водитель демо: ему видны только демо-офисы, живые и демо-товары в них (issue #212). */
   isDemo: boolean;
 };
 

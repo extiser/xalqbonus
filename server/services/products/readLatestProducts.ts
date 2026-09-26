@@ -11,7 +11,7 @@ import type { MiniAppLatestProductsResponse } from '#shared/types/miniapp';
 const LATEST_PRODUCTS_LIMIT = 4;
 
 export type LatestProductsRequest = {
-  /** Водитель демо: ему видны демо-товары и остаток ДЕМО ОФИСА (issue #212). */
+  /** Водитель демо: остаток только демо-офисов, демо-товары видны (issue #212). */
   isDemo: boolean;
 };
 

@@ -45,6 +45,9 @@ enum PointReason {
   raffle
   /// Массовое начисление по кампании и приз сундука акции (issue #181).
   campaign
+  /// Баллы новому демо-водителю (issue #212): `demo_grant:<persons.id>`. Своей причиной, а не
+  /// `opening`, — чтобы итоги переноса не считали выдуманные баллы перенесёнными.
+  demo_grant
 
   @@map("point_reason")
   @@schema("xb")

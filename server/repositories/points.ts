@@ -300,6 +300,11 @@ export type BalanceTotals = {
 /**
  * Итоги по счетам для отчёта переноса. Считаются по кэшу баланса, а сходимость кэша
  * с журналом проверяет `make invariants` — вторым запросом из scripts/invariants.sql.
+ *
+ * Демо в итоги не входит (issue #212): демо-водителю дают сколько угодно баллов, и отчёт
+ * переноса разошёлся бы с эталоном старой базы на сумму демо. Счета демо-водителей
+ * отсекаются по `persons.is_demo`, а из баланса `emission` вычитается то, что ушло им
+ * и вернулось от них, — по журналу: у системного счёта своего признака демо нет.
  */
 export const readBalanceTotals = async (): Promise<BalanceTotals> => {
   const rows = await db.$queryRaw<
@@ -310,11 +315,24 @@ export const readBalanceTotals = async (): Promise<BalanceTotals> => {
       emissionBalance: bigint;
     }[]
   >`
-    SELECT COUNT(*) FILTER (WHERE "type" = 'driver')                     AS "driverAccounts",
-           COUNT(*) FILTER (WHERE "type" = 'driver' AND "balance" > 0)   AS "driverAccountsPositive",
-           COALESCE(SUM("balance") FILTER (WHERE "type" = 'driver'), 0)  AS "driverBalanceTotal",
-           COALESCE(SUM("balance") FILTER (WHERE "type" = 'emission'), 0) AS "emissionBalance"
-      FROM xb.accounts
+    SELECT COUNT(*) FILTER (WHERE account."type" = 'driver')                             AS "driverAccounts",
+           COUNT(*) FILTER (WHERE account."type" = 'driver' AND account."balance" > 0)   AS "driverAccountsPositive",
+           COALESCE(SUM(account."balance") FILTER (WHERE account."type" = 'driver'), 0)  AS "driverBalanceTotal",
+           COALESCE(SUM(account."balance") FILTER (WHERE account."type" = 'emission'), 0)
+             - (SELECT COALESCE(SUM(entry."delta"), 0)
+                  FROM xb.point_entries AS entry
+                  JOIN xb.accounts AS emission
+                    ON emission."id" = entry."account_id" AND emission."type" = 'emission'
+                  JOIN xb.point_transfers AS transfer ON transfer."id" = entry."transfer_id"
+                  JOIN xb.accounts AS counterpart
+                    ON counterpart."id" IN (transfer."from_account_id", transfer."to_account_id")
+                   AND counterpart."id" <> emission."id"
+                  JOIN xb.persons AS person
+                    ON person."id" = counterpart."person_id" AND person."is_demo")
+                                                                                         AS "emissionBalance"
+      FROM xb.accounts AS account
+      LEFT JOIN xb.persons AS person ON person."id" = account."person_id"
+     WHERE NOT COALESCE(person."is_demo", false)
   `;
 
   const row = rows[0];
@@ -335,6 +353,9 @@ export const readBalanceTotals = async (): Promise<BalanceTotals> => {
  * растут поездками с первого же прогона синхронизации, и общая сумма перестала бы
  * сходиться с перенесённой на следующий день после переноса — по совершенно законной
  * причине. Сверять перенос надо с тем, что записал перенос.
+ *
+ * Без демо-водителей (issue #212): заведённые до появления `demo_grant` получили баллы
+ * переводом `opening`, и переписывать их журнал нельзя — их отсекает признак человека.
  */
 export const readOpeningTotal = async (): Promise<number> => {
   const rows = await db.$queryRaw<{ total: bigint }[]>`
@@ -342,8 +363,10 @@ export const readOpeningTotal = async (): Promise<number> => {
       FROM xb.point_entries AS entry
       JOIN xb.point_transfers AS transfer ON transfer."id" = entry."transfer_id"
       JOIN xb.accounts AS account ON account."id" = entry."account_id"
+      JOIN xb.persons AS person ON person."id" = account."person_id"
      WHERE transfer."reason" = 'opening'
        AND account."type" = 'driver'
+       AND NOT person."is_demo"
   `;
 
   return Number(rows[0]?.total ?? 0n);

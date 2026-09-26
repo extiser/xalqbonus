@@ -65,8 +65,9 @@ export type PlaceOrderInput = {
   /** Путь, которым пришла операция, — он же `actor` перевода: `mini_app`, `web`. */
   actor: string;
   /**
-   * Водитель демо (`LinkedDriver.isDemo`). Живому ДЕМО ОФИС и демо-товары не продаются —
-   * теми же отказами, что архивные (issue #212); демо-водителю продаётся всё.
+   * Водитель демо (`LinkedDriver.isDemo`). Офис — только своей стороны: живому ДЕМО ОФИС,
+   * демо-водителю живой офис не продаются, — иначе демо заняло бы живую штуку резервом.
+   * Живому не продаются и демо-товары. Отказы те же, что у архивных (issue #212).
    */
   driverIsDemo: boolean;
 };
@@ -220,8 +221,8 @@ export const placeOrder = async (input: PlaceOrderInput): Promise<PlacedOrder> =
   return db.$transaction(async (transaction) => {
     const office = await findOffice(input.officeId, transaction);
 
-    // ДЕМО ОФИС живому — как архивный: водителю объяснять нечего (issue #212).
-    if (!office || office.archivedAt !== null || (office.isDemo && !input.driverIsDemo)) {
+    // Офис чужой стороны — как архивный: водителю объяснять нечего (issue #212).
+    if (!office || office.archivedAt !== null || office.isDemo !== input.driverIsDemo) {
       throw new OfficeUnavailableError(input.officeId);
     }
 
