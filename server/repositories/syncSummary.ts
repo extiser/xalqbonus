@@ -1,4 +1,5 @@
 import { db } from '#server/db';
+import { Prisma } from '#server/generated/prisma/client';
 import { COMPLETED_TRIP_STATUS } from '#server/utils/tripStatus';
 
 /**
@@ -23,6 +24,11 @@ import { COMPLETED_TRIP_STATUS } from '#server/utils/tripStatus';
  *   - пропущенное — по `first_seen_at`: сколько нового потеряно за период, а не сколько
  *     раз старое принесло окно.
  *
+ * Демо-водитель не входит ни в одно число (docs/decisions.md → «Демо не входит ни в одну общую
+ * цифру»): его ручные поездки (issue #213) пишутся в ту же `xb.trips` и начисляются тем же
+ * переводом `trip`, но Fleet API их не приносил, и свод синхронизации они бы только врали.
+ * Поездки отсекаются по владельцу профиля, начисления — по владельцу счёта-получателя.
+ *
  * Счётчиков, которые различным подсчётом не берутся, здесь нет. «Уже начислено»
  * и «не разобрано» живут только в разборе отдельного прогона: там вопрос «что сделал
  * этот прогон», и ответ на него — именно события.
@@ -46,25 +52,43 @@ export type SyncPeriodCounts = {
   runsFailed: number;
 };
 
+/**
+ * Профиль и живой владелец поездки — продолжение `JOIN` после `xb.trips AS trip`. Соединением,
+ * а не `EXISTS`: «вне программы» берёт человека из того же профиля.
+ */
+const LIVE_TRIP_OWNER = Prisma.sql`
+  xb.park_profiles AS profile
+    ON profile."profile_id" = trip."profile_id"
+  JOIN xb.persons AS owner
+    ON owner."id" = profile."person_id"
+   AND NOT owner."is_demo"
+`;
+
 export const readSyncPeriodCounts = async (from: Date): Promise<SyncPeriodCounts> => {
   const since = from.toISOString();
 
   const rows = await db.$queryRaw<SyncPeriodCounts[]>`
     SELECT (SELECT count(*)::int
-              FROM xb.trips
-             WHERE "ended_at" >= ${since}::timestamptz)                     AS "trips",
-           (SELECT count(*)::int
-              FROM xb.trips
-             WHERE "ended_at" >= ${since}::timestamptz
-               AND "status" = ${COMPLETED_TRIP_STATUS})                     AS "tripsCompleted",
-           (SELECT count(*)::int
-              FROM xb.point_transfers
-             WHERE "reason" = 'trip'::xb.point_reason
-               AND "occurred_at" >= ${since}::timestamptz)                  AS "awards",
+              FROM xb.trips AS trip
+              JOIN ${LIVE_TRIP_OWNER}
+             WHERE trip."ended_at" >= ${since}::timestamptz)                AS "trips",
            (SELECT count(*)::int
               FROM xb.trips AS trip
-              JOIN xb.park_profiles AS profile
-                ON profile."profile_id" = trip."profile_id"
+              JOIN ${LIVE_TRIP_OWNER}
+             WHERE trip."ended_at" >= ${since}::timestamptz
+               AND trip."status" = ${COMPLETED_TRIP_STATUS})                AS "tripsCompleted",
+           (SELECT count(*)::int
+              FROM xb.point_transfers AS transfer
+              JOIN xb.accounts AS account
+                ON account."id" = transfer."to_account_id"
+              JOIN xb.persons AS person
+                ON person."id" = account."person_id"
+               AND NOT person."is_demo"
+             WHERE transfer."reason" = 'trip'::xb.point_reason
+               AND transfer."occurred_at" >= ${since}::timestamptz)         AS "awards",
+           (SELECT count(*)::int
+              FROM xb.trips AS trip
+              JOIN ${LIVE_TRIP_OWNER}
               LEFT JOIN xb.person_settings AS settings
                 ON settings."person_id" = profile."person_id"
              WHERE trip."ended_at" >= ${since}::timestamptz
@@ -113,7 +137,9 @@ export type SyncDataBoundaries = {
 export const readSyncDataBoundaries = async (): Promise<SyncDataBoundaries> => {
   const rows = await db.$queryRaw<SyncDataBoundaries[]>`
     SELECT (SELECT min("started_at") FROM xb.sync_runs) AS "journalSince",
-           (SELECT min("ended_at") FROM xb.trips)       AS "tripsSince"
+           (SELECT min(trip."ended_at")
+              FROM xb.trips AS trip
+              JOIN ${LIVE_TRIP_OWNER})                  AS "tripsSince"
   `;
 
   return rows[0] ?? { journalSince: null, tripsSince: null };
