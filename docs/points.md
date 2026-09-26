@@ -45,6 +45,7 @@
 | Операция | Ключ | Откуда → куда |
 |---|---|---|
 | перенос баланса при запуске журнала | `opening:<persons.id>` | `emission` → водитель |
+| баллы новому демо-водителю | `demo_grant:<persons.id>` | `emission` → демо-водитель |
 | начисление за поездку | `trip:<trips.order_id>` | `emission` → водитель |
 | приветственный бонус | `welcome:<persons.id>` | `emission` → водитель |
 | списание при заказе | `order_spend:<orders.id>` | водитель → `redemption` |
