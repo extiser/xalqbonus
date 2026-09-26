@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Сотрудник — профиль</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&family=Unbounded:wght@200;300;600;700&display=swap">
+<style>
+/* ЭКРАН СОТРУДНИКА — ПРОФИЛЬ. Шаг 6 блока «Экраны сотрудника» (steps.md).
+   Собран 26-09-2026, сессия 64. Копия ../app/profile-screen.html (профиль водителя) — устройство
+   и шкала оттуда; здесь состав полей сотрудника.
+
+   Открывается по аватару в шапке выбора офиса и стойки. Сюда переехал «Пароль для входа
+   с компьютера» (Руслан 26-09-2026: «чтобы не светилась постоянно» на рабочих экранах).
+
+   Поля (решения Руслана 26-09-2026):
+   - роль, телефон — xb.employees (role, phone_e164)
+   - Telegram ID — xb.employees.telegram_user_id; в MiniAppEmployeeScreen его нет — правка контракта.
+     У демо-менеджера своего Telegram нет — показывается Telegram ID зрителя, открывшего приложение
+   - офисы — employee.offices; у owner/admin одна строка «Все офисы»
+   - «Пароль для входа с компьютера»: нет пароля — «Задать» и шеврон, ведёт на форму; задан —
+     «Задан» серым, строка не нажимается: смена пароля живёт на сайте (#130). У демо-менеджера
+     строки нет вовсе — пароля у демо-учётки не бывает (#205)
+   - «Сбросить сессию» — как у водителя, со шторкой подтверждения (Руслан: нужна) */
+
+html, body { background: #0B0D11; margin: 0; }
+body { display: flex; justify-content: center; }
+
+.screen {
+  position: relative; width: 100%; max-width: 520px; min-height: 100dvh;
+  box-sizing: border-box; background: #0B0D11; color: #F4F6F8;
+  font-family: Manrope, 'Segoe UI', system-ui, sans-serif;
+  display: flex; flex-direction: column;
+  padding-bottom: calc(40px + env(safe-area-inset-bottom));
+}
+
+/* ------------------------------------------------------- шапка раздела
+   Перенесена из ../artboard/section-bar.html — общий блок всех разделов. */
+.bar {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 12px;
+  padding: calc(14px + env(safe-area-inset-top)) 16px 14px;
+  background: rgba(11, 13, 17, 0.82);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.bar .back {
+  width: 40px; height: 40px; flex-shrink: 0; border: 0; padding: 0; cursor: pointer;
+  border-radius: 999px; background: rgba(255, 255, 255, 0.07);
+  display: flex; align-items: center; justify-content: center;
+}
+.bar h1 {
+  margin: 0; flex-grow: 1; min-width: 0;
+  font-family: Unbounded, Manrope, sans-serif;
+  font-size: 19px; font-weight: 600; letter-spacing: -0.5px; line-height: 1.25;
+}
+.bar .act { width: 40px; height: 40px; flex-shrink: 0; }
+
+.body { display: flex; flex-direction: column; gap: 10px; padding: 8px 16px 20px; }
+
+/* Подпись группы — та же, что у дней в истории и групп в заказах. */
+.group {
+  font-size: 12px; font-weight: 600; letter-spacing: 1.2px; text-transform: uppercase;
+  color: #8A93A2; padding: 18px 2px 2px;
+}
+
+.card {
+  border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.09);
+  background: #14171D; overflow: hidden;
+}
+
+/* ------------------------------------------------------ карточка человека
+   Верх — аватар и ФИО: по ним менеджер понимает «кто это» первым взглядом.
+   ФИО полностью и переносится, а не режется: сверяется с документом в руках. */
+.who { display: flex; align-items: center; gap: 14px; padding: 18px 16px 16px; }
+.avatar {
+  width: 56px; height: 56px; border-radius: 999px; flex-shrink: 0;
+  background: rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;
+}
+/* Две строки: фамилия первой, имя и отчество второй (Руслан, 23-09-2026). Отчества
+   бывает нет — тогда вторая строка просто короче, и раскладка не меняется. */
+.who .name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.who .last { font-size: 18px; font-weight: 700; letter-spacing: -0.2px; line-height: 1.25; }
+.who .first { font-size: 16px; font-weight: 500; color: #C2C9D3; line-height: 1.3; }
+
+/* Поля — строками «подпись слева, значение справа». Значение моноширинными цифрами:
+   менеджер сверяет его знак за знаком с тем, что называет водитель. */
+.row {
+  display: flex; align-items: center; gap: 12px; min-height: 52px; box-sizing: border-box;
+  padding: 0 16px; border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+/* Строки профиля — кегль 15 у всех; поле: подпись 15/400 серым, значение 15/600; настройка: название 15/400 белым,
+   значение 15/400 серым (сверка шрифтов, сессия 53, 23-09-2026). */
+.row .label { flex-grow: 1; font-size: 15px; font-weight: 400; color: #8A93A2; }
+.row .value {
+  font-size: 15px; font-weight: 600; color: #F4F6F8; text-align: right;
+  font-variant-numeric: tabular-nums; letter-spacing: 0.3px;
+}
+/* Номера нет — у нерабочей учётки парк его не отдаёт. Серым, не алым: это не ошибка. */
+.row .value.none { font-weight: 400; color: #8A93A2; letter-spacing: 0; }
+
+/* ВУ: последние четыре знака, глазик раскрывает номер целиком. */
+.license { display: flex; align-items: center; gap: 8px; }
+.license .dots { letter-spacing: 2px; color: #8A93A2; margin-right: 2px; }
+.eye {
+  width: 32px; height: 32px; border: 0; padding: 0; cursor: pointer; flex-shrink: 0;
+  border-radius: 999px; background: rgba(255, 255, 255, 0.07); margin-right: -6px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* ---------------------------------------------------------------- настройки
+   Строка-кнопка: значение справа и шеврон. Строки «Уведомления» нет: выключатель
+   уведомлений водителю убран из приложения решением Руслана 23-09-2026, сессия 54 —
+   остаётся планом (T54). Прежде она вела на свой экран по решению #134, 15-09-2026. */
+.row.link { cursor: pointer; }
+.row.link .label { color: #F4F6F8; font-size: 15px; font-weight: 400; }
+.row.link .value { font-size: 15px; font-weight: 400; color: #8A93A2; letter-spacing: 0; }
+.row.link .chev { flex-shrink: 0; margin-right: -4px; }
+.card > .row:first-child { border-top: 0; }
+/* Офисы — название белым 15/600, адрес справа уточнением серым 13/300. */
+.row .label.office { color: #F4F6F8; font-weight: 600; }
+.row .value.addr { font-size: 13px; font-weight: 300; color: #8A93A2; letter-spacing: 0; }
+
+/* ------------------------------------------------------------ сброс сессии
+   Зачем: иногда в приложении что-то «закешировалось», и водителю нужно зайти заново
+   через /start в боте (Руслан, 23-09-2026). В базе не меняется НИЧЕГО — привязка
+   не закрывается, учётка та же. Сброс только на стороне приложения: стереть копию
+   initData из sessionStorage (ключ `xalqbonus:init-data`, useTelegramWebApp.ts)
+   и закрыть окно — `Telegram.WebApp.close()`.
+   Перед закрытием приложение зовёт `POST /api/miniapp/reset`: бот шлёт в чат то же
+   приветствие с кнопкой «Открыть приложение», что на /start, на языке из person_settings.
+   Ручка не ответила — окно закрывается всё равно, водитель нажмёт /start сам. Задача — T53.
+   Отдельной карточкой под настройками, а не строкой в них: это не настройка.
+   Отступ сверху больше обычного, чтобы по ней не попадали, листая настройки. */
+/* Вторичная кнопка L — во всю ширину, 52, радиус 16, 15/600 (сверка шрифтов, сессия 53, 23-09-2026). */
+.reset {
+  margin-top: 22px; width: 100%; height: 52px; cursor: pointer;
+  border-radius: 16px; border: 1px solid rgba(255, 92, 120, 0.40);
+  background: rgba(255, 92, 120, 0.08); color: #FF7089;
+  font-family: inherit; font-size: 15px; font-weight: 600;
+}
+
+/* ------------------------------------------------ шторка подтверждения сброса
+   По эталону шторок — ../comeback/04-day-chests-sheet.html (memory/feedback_sheet_by_reference.md):
+   без ручки и свайпа, затемнение не закрывает, шапка по центру, кнопки внизу во всю ширину.
+   «Сбросить» алым — цвет отмены и списания в приложении; «Отменить» серой под ней
+   (Руслан, 23-09-2026). */
+.rs-backdrop {
+  position: fixed; inset: 0; z-index: 20;
+  background: rgba(0,0,0,0.62);
+  opacity: 0; pointer-events: none; transition: opacity .28s ease;
+}
+.rs-backdrop.in { opacity: 1; pointer-events: auto; }
+.rs-sheet {
+  position: fixed; left: 50%; bottom: 0; z-index: 21; width: 100%; max-width: 520px;
+  box-sizing: border-box; transform: translate(-50%, 100%);
+  transition: transform .34s cubic-bezier(.22,.7,.3,1);
+  background: #14171D; border-radius: 26px 26px 0 0;
+  box-shadow: 0 -18px 50px -20px rgba(0,0,0,0.9);
+  padding: 32px 20px calc(24px + env(safe-area-inset-bottom));
+  color: #F4F6F8; font-family: Manrope, 'Segoe UI', system-ui, sans-serif; text-align: center;
+}
+.rs-sheet.in { transform: translate(-50%, 0); }
+.rs-sheet .title { font-size: 24px; font-weight: 800; letter-spacing: -0.2px; margin-bottom: 10px; }
+.rs-sheet .sub { margin-top: 4px; font-size: 13px; font-weight: 300; line-height: 1.65; color: #A9B2BF; }
+.rs-btns { display: flex; flex-direction: column; gap: 10px; margin-top: 24px; }
+/* Вторичная кнопка L — во всю ширину, 52, радиус 16, 15/600 (сверка шрифтов, сессия 53, 23-09-2026). */
+.rs-btns button {
+  width: 100%; height: 52px; padding: 0 16px; border: none; border-radius: 16px; cursor: pointer;
+  font-family: Manrope, sans-serif; font-size: 15px; font-weight: 600;
+}
+/* Основная кнопка L — во всю ширину, 52, радиус 16, 15/700 (сверка шрифтов, сессия 53, 23-09-2026). */
+.rs-btns .rs-confirm { position: relative; z-index: 1; background: #FF5C78; color: #fff; height: 52px; padding: 0 16px; font-size: 15px; font-weight: 700; }
+.rs-cancel { position: relative; z-index: 2; background: #21242A; color: #F4F6F8; border: 1px solid rgba(255,255,255,0.08); }
+.sheet-close:active, .rs-cancel:active, .gsheet .g-close:active { background: #2A2E35; }
+/* Кнопки L сведены к одному виду — решение Руслана 24-09-2026, сессия 58 (ревью PR #195): гранатовая — свечение 8/26 38 %, погашенная 55 %; серая — как кнопки языка на регистрации: контур 8 %, белый текст, при нажатии #2A2E35. */
+</style></head>
+<body>
+<div class="screen">
+
+  <div class="bar">
+    <button class="back" aria-label="Назад">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M14.5 5.5L8 12l6.5 6.5" stroke="#E4E8EE" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <h1>Профиль</h1>
+    <span class="act"></span>
+  </div>
+
+  <div class="body">
+
+    <div class="card">
+      <div class="who">
+        <div class="avatar">
+          <svg viewBox="0 0 24 24" width="26" height="26" fill="none"><circle cx="12" cy="8.5" r="3.6" stroke="#B4BCC8" stroke-width="1.8"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" stroke="#B4BCC8" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </div>
+        <div class="name"><span class="last">Каримова</span><span class="first">Дилноза</span></div>
+      </div>
+      <div class="row"><span class="label">Роль</span><span class="value">Менеджер</span></div>
+      <div class="row"><span class="label">Телефон</span><span class="value">+998 90 765-43-21</span></div>
+      <div class="row"><span class="label">Telegram ID</span><span class="value">6960373225</span></div>
+    </div>
+
+    <div class="group">Офисы</div>
+    <div class="card">
+      <div class="row"><span class="label office">Кадышева</span><span class="value addr">ул. Кадышева, 12</span></div>
+      <div class="row"><span class="label office">Чиланзар</span><span class="value addr">Чиланзар, 9-й квартал, 4</span></div>
+    </div>
+
+    <div class="group">Настройки</div>
+    <div class="card">
+      <div class="row link">
+        <span class="label">Пароль для входа с компьютера</span><span class="value">Задать</span>
+        <svg class="chev" viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M9.5 5.5L16 12l-6.5 6.5" stroke="#6B7483" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+    </div>
+
+    <button class="reset" id="reset">Сбросить сессию</button>
+
+  </div>
+</div>
+
+<div class="rs-backdrop" id="rs-backdrop"></div>
+<div class="rs-sheet" id="rs-sheet" role="dialog" aria-modal="true" aria-labelledby="rs-title">
+  <div class="title" id="rs-title">Сбросить сессию?</div>
+  <div class="sub">Приложение закроется, а бот пришлёт кнопку «Открыть приложение» — нажмите её, и всё загрузится заново.</div>
+  <div class="sub">Учётная запись не изменится.</div>
+  <div class="rs-btns">
+    <button class="rs-confirm" id="confirm">Сбросить</button>
+    <button class="rs-cancel" id="cancel">Отменить</button>
+  </div>
+</div>
+
+<script>
+  // Сброс — только через шторку подтверждения.
+  const rsBackdrop = document.getElementById('rs-backdrop');
+  const rsSheet = document.getElementById('rs-sheet');
+  const rsOpen = () => { rsBackdrop.classList.add('in'); rsSheet.classList.add('in'); };
+  const rsClose = () => { rsBackdrop.classList.remove('in'); rsSheet.classList.remove('in'); };
+  document.getElementById('reset').addEventListener('click', rsOpen);
+  document.getElementById('cancel').addEventListener('click', rsClose);
+  document.getElementById('confirm').addEventListener('click', rsClose);
+</script>
+</body></html>
