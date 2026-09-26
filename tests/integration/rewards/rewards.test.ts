@@ -345,6 +345,7 @@ describe('награды', () => {
       messageUz: '',
       coverRu: null,
       coverUz: null,
+      sendNow: false,
       untilDate: '2099-01-01',
       employeeId: scenario.employeeId,
     });

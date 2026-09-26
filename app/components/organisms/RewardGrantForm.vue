@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { GiftFields } from '~/types/rewardGrant';
 import type { SelectOption } from '~/types/selectOption';
 import { giftCustomMessageLimit, GIFT_FIELD_LABELS, GIFT_REASON_MAX_LENGTH } from '#shared/gift';
+import { isInSendWindow } from '#shared/sendWindow';
 import type {
   GiftMessagePreviewRequestBody,
   GiftMessagePreviewResponse,
@@ -20,6 +21,11 @@ import type {
  * У подарка — свой текст сообщения и обложка на каждом языке (issue #236). Текст необязателен
  * на каждом языке сам по себе: над полем — системный текст, который уйдёт вместо пустого.
  * Обложки — обе или ни одной: выбрана одна — вторая обязательна, и «Вручить» гаснет до неё.
+ *
+ * Сообщение о подарке ждёт окна 09:00–21:00 по Ташкенту (issue #251). Вне окна форма говорит
+ * об этом под «Вручить» и даёт отправить сразу галочкой — по умолчанию снятой: окно остаётся
+ * правилом, ночная отправка — осознанный выбор. Внутри окна сообщение и так уходит сразу,
+ * и форма молчит.
  *
  * За данными компонент не ходит: набранное уходит наверх событием, отказ приходит свойством
  * вместе с полем (docs/frontend.md → «Данные в компоненты не ходят»).
@@ -64,6 +70,33 @@ const title = ref('');
 const officeId = ref('');
 const lifetimeDays = ref('');
 const note = ref('');
+const sendNow = ref(false);
+
+/**
+ * Сейчас внутри окна отправки. До показа формы считаем, что внутри, — чтобы не мелькнула
+ * галочка; при показе и дальше раз в минуту время сверяется заново: форму могут держать
+ * открытой, пока часы переходят через 21:00 или 09:00.
+ */
+const inSendWindow = ref(true);
+const SEND_WINDOW_TICK_MS = 60_000;
+let sendWindowTimer: ReturnType<typeof setInterval> | null = null;
+
+onMounted(() => {
+  inSendWindow.value = isInSendWindow(new Date());
+  sendWindowTimer = setInterval(() => {
+    inSendWindow.value = isInSendWindow(new Date());
+  }, SEND_WINDOW_TICK_MS);
+});
+
+onBeforeUnmount(() => {
+  if (sendWindowTimer !== null) {
+    clearInterval(sendWindowTimer);
+    sendWindowTimer = null;
+  }
+});
+
+/** Галочка и строка про 09:00 — только у подарка баллами и только вне окна. */
+const outsideSendWindow = computed(() => kind.value === 'points' && !inSendWindow.value);
 
 const kindOptions = computed<SelectOption[]>(() => [
   { value: 'points', label: 'Баллы в подарок' },
@@ -105,6 +138,7 @@ watch(
     productId.value = '';
     title.value = '';
     note.value = '';
+    sendNow.value = false;
   },
 );
 
@@ -190,6 +224,7 @@ const submit = (): void => {
       messageUz: messageUz.value.trim(),
       coverRu: coverRu.value,
       coverUz: coverUz.value,
+      sendNow: outsideSendWindow.value && sendNow.value,
     });
 
     return;
@@ -362,10 +397,22 @@ const submit = (): void => {
       />
     </template>
 
+    <label v-if="outsideSendWindow" class="flex items-center gap-3">
+      <input
+        v-model="sendNow"
+        type="checkbox"
+        class="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
+      />
+      <span class="text-sm font-medium text-slate-900">Отправить сообщение сейчас, не дожидаясь 09:00</span>
+    </label>
+
     <div class="flex flex-wrap items-center gap-3">
       <AtomsSubmitButton :label="saving ? 'Вручаем…' : 'Вручить'" :disabled="saving || submitBlocked" />
       <p v-if="notice" class="text-sm font-medium text-emerald-700">{{ notice }}</p>
     </div>
+    <p v-if="outsideSendWindow && !sendNow" class="text-sm text-slate-500">
+      Сообщение водителям уйдёт в 09:00, подарок в приложении появится сразу
+    </p>
     <p v-if="generalError" class="text-sm text-red-700">{{ generalError }}</p>
   </form>
 </template>
