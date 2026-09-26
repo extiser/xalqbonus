@@ -689,6 +689,16 @@ const staffOutcome = slug.value === 'staff-desk-issued' ? staffIssuedMock : slug
 const staffDeskRows = slug.value === 'staff-desk-empty' ? [] : slug.value === 'staff-desk-issued' ? staffDeskRowsMock.filter((row) => row.id !== 'order-1042') : staffDeskRowsMock;
 const STAFF_FAILED = 'Приложение не ответило. Проверьте связь и попробуйте снова.';
 
+// «Обновить» у стойки: пилюля ждёт полторы секунды, как ждала бы ответа ручки.
+const staffRefreshing = ref(false);
+
+function refreshStaffDesk(): void {
+  staffRefreshing.value = true;
+  setTimeout(() => {
+    staffRefreshing.value = false;
+  }, 1500);
+}
+
 function go(target: string): void {
   void navigateTo(`/design/${target}`);
 }
@@ -772,11 +782,13 @@ function go(target: string): void {
             :outcome="staffOutcome"
             state="ready"
             :rows="staffDeskRows"
+            :refreshing="staffRefreshing"
             :error-text="STAFF_FAILED"
             @profile="go('staff-profile')"
             @change="staffSheet = 'office'"
             @complete="go('staff-order')"
             @open="(id) => go(id.startsWith('order') ? 'staff-order' : 'staff-reward')"
+            @refresh="refreshStaffDesk"
           />
           <OrganismsNextStaffOfficeSheet
             :open="staffSheet === 'office'"

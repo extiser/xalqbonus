@@ -1,3 +1,4 @@
+import { formatPhone } from '#shared/phone';
 import type { MiniAppEmployeeScreen } from '#shared/types/miniapp';
 import type { DeskOffice, OfficeOrder } from '#shared/types/orders';
 import type { DeskItemResponse, OfficeReward } from '#shared/types/rewards';
@@ -152,10 +153,19 @@ export const staffDeskRowView = (item: DeskItemResponse, now: Date): StaffDeskRo
   };
 };
 
+const phoneView = (phone: string): { display: string; href: string } => {
+  const formatted = formatPhone(phone);
+
+  return { display: formatted.display, href: `tel:${formatted.copy}` };
+};
+
 /**
  * Водитель на карточке. Имя приходит одной строкой «Фамилия Имя», собранной сервером в этом
  * порядке (`deskDriverName`), и делится по первому пробелу: фамилия — первой строкой, остальное —
  * второй.
+ *
+ * Телефон — одним правилом проекта (`formatPhone`): на экране «+998 90 940-40-55», в ссылку звонка —
+ * без пробелов. Номер, который к канонической форме не приводится, идёт как пришёл из реестра.
  */
 const staffDriverView = (driverName: string | null, callsign: string | null, phone: string | null): StaffDriverView => {
   const name = driverName?.trim() ?? '';
@@ -165,8 +175,7 @@ const staffDriverView = (driverName: string | null, callsign: string | null, pho
     lastName: name === '' ? undefined : space === -1 ? name : name.slice(0, space),
     givenNames: space === -1 ? undefined : name.slice(space + 1),
     callsign: callsign ?? undefined,
-    // Номер из реестра бывает с пробелами и скобками: в ссылку звонка — только плюс и цифры.
-    phone: phone ? { display: phone, href: `tel:${phone.replace(/[^\d+]/g, '')}` } : undefined,
+    phone: phone ? phoneView(phone) : undefined,
   };
 };
 

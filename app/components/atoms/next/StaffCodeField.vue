@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { onMounted, useTemplateRef } from 'vue';
-
 /**
  * Поле кода у стойки сотрудника — `_reference/design/staff/02-desk.html`, `.code` (issue #250).
  *
@@ -12,7 +10,10 @@ import { onMounted, useTemplateRef } from 'vue';
  * «04217» законный. Всё, что не цифра, отбрасывается при вводе. Пятая цифра — событие
  * `complete`: кнопки «Найти» нет, код диктуют, и лишнее нажатие было бы на каждом водителе.
  *
- * В фокусе сразу при показе: стойка открывается ради этого поля.
+ * Фокус программно не ставится ни при открытии стойки, ни после выдачи, отмены или смены офиса —
+ * поле ждёт нажатия (решение Руслана 26-09-2026, прогон #253). В WebView Telegram фокус при открытии
+ * приложения не встаёт, а после любого касания встаёт: поведение выходило разным, и клавиатура
+ * закрывала «Ждут выдачи».
  */
 const CODE_LENGTH = 5;
 
@@ -24,12 +25,6 @@ defineProps<{
 const model = defineModel<string>({ required: true });
 
 const emit = defineEmits<{ complete: [code: string] }>();
-
-const input = useTemplateRef<HTMLInputElement>('input');
-
-onMounted(() => {
-  input.value?.focus();
-});
 
 const onInput = (event: Event): void => {
   const field = event.target as HTMLInputElement;
@@ -48,7 +43,6 @@ const onInput = (event: Event): void => {
 
 <template>
   <input
-    ref="input"
     :value="model"
     type="text"
     inputmode="numeric"

@@ -206,25 +206,78 @@ export const useOfficeDesk = (
   const pendingState = ref<LoadState>('loading');
   const pendingItems = ref<DeskItemResponse[]>([]);
 
+  /** Список перечитывается тихо: строки стоят до ответа, «Обновить» ждёт. */
+  const pendingRefreshing = ref(false);
+
+  /**
+   * Номер запроса списка: ответ по прежнему офису, пришедший после смены офиса, свежий
+   * не перетирает.
+   */
+  let pendingRequest = 0;
+
+  const fetchPending = (officeId: string): Promise<DeskPendingResponse> =>
+    $fetch<DeskPendingResponse>('/api/desk/pending', {
+      headers: readHeaders(),
+      query: { officeId },
+    });
+
   /** Ждущие выдачи одним списком, свежие первыми (`GET /api/desk/pending`, issue #250). */
   const loadPending = async (officeId: string): Promise<void> => {
+    const request = ++pendingRequest;
+
     pendingState.value = 'loading';
+    pendingRefreshing.value = false;
 
     try {
-      const response = await $fetch<DeskPendingResponse>('/api/desk/pending', {
-        headers: readHeaders(),
-        query: { officeId },
-      });
+      const response = await fetchPending(officeId);
+
+      if (request !== pendingRequest) {
+        return;
+      }
 
       pendingItems.value = response.items;
       pendingState.value = 'ready';
     } catch (error) {
-      if (reportDenial(error)) {
+      if (request !== pendingRequest || reportDenial(error)) {
         return;
       }
 
       console.error('[orders] не удалось загрузить ждущие выдачи', error);
       pendingState.value = 'error';
+    }
+  };
+
+  /**
+   * Перечитывает список тихо — «Обновить» у стойки и возврат приложения из фона: строки стоят
+   * до ответа, загрузкой экран не мигает. Отказ оставляет прежние строки, причина — в консоли:
+   * стерев список, экран соврал бы, что ждущих нет. Список ещё не читался или не прочитался —
+   * читается обычным путём, со своими состояниями.
+   */
+  const reloadPending = async (officeId: string): Promise<void> => {
+    if (pendingState.value !== 'ready') {
+      await loadPending(officeId);
+
+      return;
+    }
+
+    const request = ++pendingRequest;
+
+    pendingRefreshing.value = true;
+
+    try {
+      const response = await fetchPending(officeId);
+
+      if (request === pendingRequest) {
+        pendingItems.value = response.items;
+      }
+    } catch (error) {
+      if (request === pendingRequest && !reportDenial(error)) {
+        console.error('[orders] не удалось перечитать ждущие выдачи', error);
+      }
+    } finally {
+      if (request === pendingRequest) {
+        pendingRefreshing.value = false;
+      }
     }
   };
 
@@ -254,7 +307,9 @@ export const useOfficeDesk = (
     cancel,
     pendingState,
     pendingItems,
+    pendingRefreshing,
     loadPending,
+    reloadPending,
     reset,
   };
 };

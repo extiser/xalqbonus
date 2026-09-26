@@ -402,6 +402,17 @@ const employeeOffice = computed(() => {
 /** Офисов больше одного — у стойки есть «Сменить», без выбранного показывается выбор офиса. */
 const employeeManyOffices = computed(() => (employee.value?.offices.length ?? 0) > 1);
 
+/**
+ * Офисов у сотрудника нет: при входе их не было, или свежий список стойки пришёл пустым — менеджера
+ * отвязали от последнего офиса, пока приложение было открыто (прогон #253). Стойка тогда без поля
+ * кода, со словами, что офиса нет: выбирать не из чего, и шторка «Сменить» была бы пустой.
+ */
+const employeeNoOffices = computed(
+  () =>
+    (employee.value?.offices.length ?? 0) === 0 ||
+    (deskOffices.state.value === 'ready' && deskOffices.offices.value.length === 0),
+);
+
 /** Какой экран сотрудника сейчас на месте. */
 const employeeScreen = computed((): 'password' | 'profile' | 'card' | 'picker' | 'desk' => {
   if (employeeView.value !== 'work') {
@@ -410,6 +421,10 @@ const employeeScreen = computed((): 'password' | 'profile' | 'card' | 'picker' |
 
   if (officeDesk.current.value) {
     return 'card';
+  }
+
+  if (employeeNoOffices.value) {
+    return 'desk';
   }
 
   return employeeManyOffices.value && employeeOffice.value === null ? 'picker' : 'desk';
@@ -482,11 +497,14 @@ const selectEmployeeOffice = (officeId: string): void => {
   void officeDesk.loadPending(officeId);
 };
 
-/** «Сменить»: шторка с отметкой на текущем офисе и свежим списком. */
-const openDeskOfficeSheet = (): void => {
+/** «Сменить»: шторка с отметкой на текущем офисе. Список перечитывается, если его не перечитали только что. */
+const openDeskOfficeSheet = (reload = true): void => {
   officeSheetPicked.value = employeeOfficeId.value;
   employeeSheet.value = 'office';
-  void deskOffices.load();
+
+  if (reload) {
+    void deskOffices.load();
+  }
 };
 
 const saveDeskOfficeSheet = (officeId: string): void => {
@@ -495,9 +513,29 @@ const saveDeskOfficeSheet = (officeId: string): void => {
 };
 
 /**
- * Отказ у стойки — алой плашкой под полем. Чужой офис (`office_not_open`) — ещё и шторкой
- * выбора офиса сразу: в этом офисе сотруднику больше делать нечего. Текста нет — отказ двери,
- * и экран уже перечитывается (`reportDoorDenial`).
+ * Чужой офис (`office_not_open`): в этом офисе сотруднику больше делать нечего. Офисы
+ * перечитываются: остались — шторка выбора сразу; не осталось ни одного — выбранный офис снимается,
+ * и стойка встаёт в вид «без офисов» (`employeeNoOffices`): пустая шторка была бы тупиком
+ * (прогон #253).
+ */
+const handleOfficeNotOpen = async (): Promise<void> => {
+  await deskOffices.load();
+
+  if (deskOffices.state.value === 'ready' && deskOffices.offices.value.length === 0) {
+    employeeOfficeId.value = null;
+    employeeCode.value = '';
+    deskOutcome.value = null;
+    officeDesk.reset();
+
+    return;
+  }
+
+  openDeskOfficeSheet(false);
+};
+
+/**
+ * Отказ у стойки — алой плашкой под полем, чужой офис — ещё и выбором офиса (`handleOfficeNotOpen`).
+ * Текста нет — отказ двери, и экран уже перечитывается (`reportDoorDenial`).
  */
 const showDeskFailure = (text: string | null, code: string | null): void => {
   if (text === null) {
@@ -507,7 +545,7 @@ const showDeskFailure = (text: string | null, code: string | null): void => {
   deskOutcome.value = { tone: 'fail', text };
 
   if (code === 'office_not_open') {
-    openDeskOfficeSheet();
+    void handleOfficeNotOpen();
   }
 };
 
@@ -1918,7 +1956,7 @@ const applyState = (state: MiniAppStateResponse): void => {
     stage.value = 'employee';
 
     // Один офис — выбирать нечего, стойка открывается сразу. Офисов нет — стойка без поля кода,
-    // со словами, что сотрудника ещё не закрепили.
+    // со словами, что сотрудника не привязали к офису.
     const [onlyOffice] = state.offices;
 
     if (state.offices.length === 1 && onlyOffice) {
@@ -2186,7 +2224,21 @@ const resetSession = async (): Promise<void> => {
  * только баланс: витрина и корзина остаются, какими водитель их оставил.
  */
 const onVisibilityChange = (): void => {
-  if (document.visibilityState !== 'visible' || stage.value !== 'member') {
+  if (document.visibilityState !== 'visible') {
+    return;
+  }
+
+  // Сотрудник: пока приложение было свёрнуто, водители оформляли заказы и им вручали награды —
+  // «Ждут выдачи» перечитывается тихо, как заказы у водителя (прогон #253). Опроса по таймеру нет.
+  if (stage.value === 'employee') {
+    if (employeeOfficeId.value) {
+      void officeDesk.reloadPending(employeeOfficeId.value);
+    }
+
+    return;
+  }
+
+  if (stage.value !== 'member') {
     return;
   }
 
@@ -2523,17 +2575,19 @@ const openMap = (office: MemberOfficeView): void => {
         v-else
         v-model:code="employeeCode"
         v-bind="staffBar"
-        :office="employeeOffice?.name"
-        :can-change="employeeManyOffices"
+        :office="employeeNoOffices ? undefined : employeeOffice?.name"
+        :can-change="employeeManyOffices && !employeeNoOffices"
         :outcome="deskOutcome"
         :state="officeDesk.pendingState.value"
         :rows="deskRows"
+        :refreshing="officeDesk.pendingRefreshing.value"
         :error-text="STAFF_REQUEST_FAILED"
         @profile="openEmployeeProfile"
-        @change="openDeskOfficeSheet"
+        @change="openDeskOfficeSheet()"
         @complete="searchDeskCode"
         @open="openDeskItem"
         @retry="employeeOfficeId && officeDesk.loadPending(employeeOfficeId)"
+        @refresh="employeeOfficeId && officeDesk.reloadPending(employeeOfficeId)"
       />
 
       <!-- Шторка «Сменить» стоит в разметке всегда: отказ «чужой офис» открывает её в тот же миг,

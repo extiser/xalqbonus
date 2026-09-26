@@ -14,8 +14,12 @@ import type { StaffDeskRowView, StaffOutcomeView } from '~/types/staffView';
  * Нажатие на строку открывает карточку. Пусто — словами; не прочиталось — текст из словаря
  * отказов и «Повторить»; пока читается — под заголовком пусто.
  *
- * Сотрудник без офисов (`office` нет) — шапка и одна строка, что его не закрепили: поля кода
- * нет, выдавать ему негде.
+ * Справа от заголовка — «Обновить» (прогон #253): список сам по таймеру не перечитывается, а водитель
+ * мог оформить заказ, пока стойка открыта. Пока перечитывается (`refreshing`), строки стоят.
+ *
+ * Сотрудник без офисов (`office` нет) — шапка и одна строка, что его не привязали: поля кода
+ * нет, выдавать ему негде. Тем же видом — менеджер, которого отвязали от последнего офиса,
+ * пока стойка была открыта.
  */
 defineProps<{
   name: string;
@@ -26,12 +30,14 @@ defineProps<{
   outcome: StaffOutcomeView | null;
   state: LoadState;
   rows: StaffDeskRowView[];
+  /** Список перечитывается тихо — «Обновить» ждёт. */
+  refreshing: boolean;
   errorText: string;
 }>();
 
 const code = defineModel<string>('code', { required: true });
 
-defineEmits<{ profile: []; change: []; complete: [code: string]; open: [id: string]; retry: [] }>();
+defineEmits<{ profile: []; change: []; complete: [code: string]; open: [id: string]; retry: []; refresh: [] }>();
 </script>
 
 <template>
@@ -49,7 +55,7 @@ defineEmits<{ profile: []; change: []; complete: [code: string]; open: [id: stri
       v-if="!office"
       state="empty"
       size="desk"
-      message="Вас ещё не закрепили ни за одним офисом. Попросите руководителя."
+      message="Вас не привязали к офису. Обратитесь к руководителю."
     />
 
     <div v-else class="flex flex-col gap-2.5 px-4 pb-5 pt-3">
@@ -64,12 +70,15 @@ defineEmits<{ profile: []; change: []; complete: [code: string]; open: [id: stri
         </div>
       </section>
 
-      <h2 class="mx-0.5 mb-1 mt-[18px] flex items-baseline gap-2 font-unbounded text-[17px] font-semibold tracking-[-0.3px]">
-        Ждут выдачи
-        <span v-if="state === 'ready' && rows.length > 0" class="font-manrope text-[15px] font-normal tracking-normal text-xb-grey">
-          {{ rows.length }}
-        </span>
-      </h2>
+      <div class="mx-0.5 mb-1 mt-[18px] flex items-center justify-between gap-3">
+        <h2 class="m-0 flex items-baseline gap-2 font-unbounded text-[17px] font-semibold tracking-[-0.3px]">
+          Ждут выдачи
+          <span v-if="state === 'ready' && rows.length > 0" class="font-manrope text-[15px] font-normal tracking-normal text-xb-grey">
+            {{ rows.length }}
+          </span>
+        </h2>
+        <AtomsNextStaffRefreshPill :busy="refreshing || state === 'loading'" @click="$emit('refresh')" />
+      </div>
 
       <template v-if="state === 'ready'">
         <MoleculesNextStaffDeskRow v-for="row in rows" :key="row.id" :row="row" @open="$emit('open', row.id)" />
