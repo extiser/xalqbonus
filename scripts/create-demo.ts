@@ -110,7 +110,7 @@ const reportViewer = (result: AddDemoViewerResult): boolean => {
       return false;
 
     case 'no_source':
-      log.error('нет участника программы с баллами — копировать демо-водителю не с кого');
+      log.error('нет участника программы с работающим профилем — условия работы демо-водителю взять не с кого');
 
       return false;
   }

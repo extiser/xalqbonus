@@ -1,7 +1,7 @@
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
 import { db } from '#server/db';
-import { addDemoViewer } from '#server/services/demo/addDemoViewer';
+import { addDemoViewer, DEMO_DRIVER_OPENING_BALANCE } from '#server/services/demo/addDemoViewer';
 import { disableDemoViewer } from '#server/services/demo/disableDemoViewer';
 import { buildOpeningIdempotencyKey } from '#server/services/points/idempotencyKey';
 import {
@@ -14,20 +14,17 @@ import {
 } from '../support/database';
 import { cleanupTestDemo, trackTestDemoViewer } from '../support/demo';
 import { cleanupTestEmployees, linkTestDriver, nextTestTelegramUserId } from '../support/employees';
-import { grantPoints } from '../support/points';
 import { disconnectQueues } from '../support/queues';
 
 /**
- * Демо-водитель (issue #205): баланс ложится переводом `opening` с `emission`, ровно один раз
- * на демо-водителя, сколько бы раз зрителя ни вносили и ни выключали.
+ * Демо-водитель (issue #205): баланс `DEMO_DRIVER_OPENING_BALANCE` ложится переводом `opening`
+ * с `emission`, ровно один раз на демо-водителя, сколько бы раз зрителя ни вносили и ни выключали.
  *
- * Источник — участник с самым большим балансом, и база общая с разведкой: фикстура получает
- * баланс заведомо больше любого живого, чтобы источником стала она, а не случайный человек
- * из локальной копии.
+ * У источника берутся только условия работы профиля, и баланс у него не нужен: фикстура — участник
+ * с работающим профилем и активной привязкой, свежим по отметке API.
  */
 
-/** Больше любого баланса в парке — источником станет фикстура. */
-const SOURCE_BALANCE = 50_000_000;
+const OPENING_BALANCE = BigInt(DEMO_DRIVER_OPENING_BALANCE);
 
 type LinkRow = { closedAt: Date | null; closeReason: string | null; confirmedBy: string };
 
@@ -39,12 +36,11 @@ const readDemoLinks = (personId: string): Promise<LinkRow[]> =>
      ORDER BY "linked_at"
   `;
 
-/** Участник-источник: в программе, с активной привязкой и самым большим балансом. */
+/** Участник-источник: в программе, с активной привязкой и работающим профилем. */
 const createSource = async (): Promise<void> => {
   const source = await createTestPerson({ inProgram: true });
 
   await linkTestDriver(source.personId, nextTestTelegramUserId());
-  await grantPoints(source.personId, SOURCE_BALANCE);
 };
 
 /** Вносит зрителя и отдаёт его демо-водителя уборке. */
@@ -69,7 +65,7 @@ describe('демо-водитель', () => {
     await disconnectQueues();
   });
 
-  it('получает баланс источника одним переводом opening с эмиссии', async () => {
+  it('получает фиксированный баланс одним переводом opening с эмиссии', async () => {
     await createSource();
     const telegramUserId = nextTestTelegramUserId();
 
@@ -81,8 +77,8 @@ describe('демо-водитель', () => {
       return;
     }
 
-    expect(result.balance).toBe(BigInt(SOURCE_BALANCE));
-    expect(await readAccountBalance(result.personId)).toBe(BigInt(SOURCE_BALANCE));
+    expect(result.balance).toBe(OPENING_BALANCE);
+    expect(await readAccountBalance(result.personId)).toBe(OPENING_BALANCE);
     expect(await countTransfersByKey(buildOpeningIdempotencyKey(result.personId))).toBe(1);
     expect(await countTransfersByReason(result.personId, 'opening')).toBe(1);
 
@@ -130,7 +126,7 @@ describe('демо-водитель', () => {
 
     const enabled = await addViewer(telegramUserId, 'проверка');
 
-    expect(enabled).toEqual({ outcome: 'enabled', personId: first.personId, balance: BigInt(SOURCE_BALANCE) });
+    expect(enabled).toEqual({ outcome: 'enabled', personId: first.personId, balance: OPENING_BALANCE });
     expect((await readDemoLinks(first.personId)).map((link) => link.closedAt === null)).toEqual([false, true]);
     expect(await countTransfersByReason(first.personId, 'opening')).toBe(1);
   });

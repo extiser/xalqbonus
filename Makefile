@@ -145,7 +145,7 @@ demo-create: ## Завести ДЕМО ОФИС и демо-менеджера 
 	@test -n "$(manager_phone)" || { echo 'укажите телефон: make demo-create manager_phone=+998XXXXXXXXX'; exit 1; }
 	$(COMPOSE) exec -T app npx tsx scripts/create-demo.ts create "$(manager_phone)"
 
-# Зритель: новому заводится свой демо-водитель — копия баланса участника с самым большим,
+# Зритель: новому заводится свой демо-водитель с балансом 5000 и условиями работы живого участника,
 # повторный прогон выключенного включает его с прежним водителем, действующему меняет подпись.
 demo-viewer: ## Внести демо-зрителя локально. make demo-viewer tg=<Telegram ID> label="Xalq Taxi, владелец"
 	@test -n "$(tg)" || { echo 'укажите Telegram: make demo-viewer tg=<Telegram ID> label="кто это"'; exit 1; }

@@ -129,46 +129,33 @@ export const updateDemoViewerRole = async (telegramUserId: bigint, role: DemoRol
 
 export type DemoSourceRow = {
   personId: string;
-  /** Баланс водительского счёта источника, больше нуля. */
-  balance: bigint;
-  /** Профиль, чьи условия работы копируются, — тот, которым источник называется. */
+  /** Профиль, чьи условия работы копируются. */
   profileId: string;
 };
 
 /**
- * Участник, чей баланс и условия работы получит новый демо-водитель: активная привязка, строка
- * участия, баланс больше нуля, и из таких — самый большой. Демо-водители источником не бывают:
- * копия копии уводила бы демо от живого парка.
+ * Участник, у которого новый демо-водитель берёт условия работы профиля, — и больше ничего:
+ * баланс у демо-водителя свой, фиксированный (решение Руслана 26-09-2026).
  *
- * Профиль — первый в том же порядке, что `findDisplayProfile`: работающий важнее уволенного,
- * среди равных — свежий. Человек без профиля источником не годится — копировать с него нечего.
+ * Активная привязка, строка участия и работающий профиль; из таких — профиль, свежий по отметке
+ * API. Демо-водители источником не бывают: копия копии уводила бы демо от живого парка.
  */
 export const findDemoSource = async (client: Executor): Promise<DemoSourceRow | null> => {
   const rows = await client.$queryRaw<DemoSourceRow[]>`
-    SELECT person."id"       AS "personId",
-           account."balance",
+    SELECT profile."person_id"  AS "personId",
            profile."profile_id" AS "profileId"
-      FROM xb.persons AS person
+      FROM xb.park_profiles AS profile
+      JOIN xb.persons AS person ON person."id" = profile."person_id"
       JOIN xb.person_settings AS settings ON settings."person_id" = person."id"
-      JOIN xb.accounts AS account
-        ON account."person_id" = person."id"
-       AND account."type" = 'driver'
-      JOIN LATERAL (
-             SELECT candidate."profile_id"
-               FROM xb.park_profiles AS candidate
-              WHERE candidate."person_id" = person."id"
-              ORDER BY (candidate."work_status" = 'working') DESC, candidate."api_updated_at" DESC
-              LIMIT 1
-           ) AS profile ON true
-     WHERE NOT person."is_demo"
-       AND account."balance" > 0
+     WHERE profile."work_status" = 'working'
+       AND NOT person."is_demo"
        AND EXISTS (
              SELECT 1
                FROM xb.telegram_links AS link
               WHERE link."person_id" = person."id"
                 AND link."closed_at" IS NULL
            )
-     ORDER BY account."balance" DESC, person."id"
+     ORDER BY profile."api_updated_at" DESC, profile."profile_id"
      LIMIT 1
   `;
 
