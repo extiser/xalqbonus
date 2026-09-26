@@ -281,6 +281,19 @@ export type ManualPointsResponse = {
 /** Поле формы правки, к которому относится отказ ручки. */
 export type ManualPointsField = 'amount' | 'note';
 
+/** Ручные поездки демо-водителю (issue #213): сводка записи и начисления. */
+export type DemoTripsResponse = {
+  /** Сколько поездок записано. */
+  written: number;
+  /** Сколько поездок начислено — по баллу за каждую. */
+  awarded: number;
+  /** Приветственных бонусов выдано этим запросом — ноль или один. */
+  welcomeAwarded: number;
+};
+
+/** Поле запроса ручных поездок, к которому относится отказ ручки. */
+export type DemoTripsField = 'endedAt' | 'count';
+
 export type DriverHistoryResponse = {
   operations: DriverOperation[];
   total: number;
