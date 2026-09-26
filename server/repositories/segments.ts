@@ -5,7 +5,7 @@ import { COMPLETED_TRIP_STATUS } from '#server/utils/tripStatus';
 // Относительным путём, а не через `#shared`: состав сегмента заберёт рассылка, а её модули
 // собираются в воркер, бандл которого знает только псевдоним `#server` (package.json →
 // build:worker).
-import { hasSegmentConditions } from '../../shared/segment';
+import { isSegmentBounded } from '../../shared/segment';
 import type { SegmentConditions } from '../../shared/types/segment';
 
 /**
@@ -213,11 +213,12 @@ export const updateSegmentArchived = async (
  * Признак сегмента (issue #212) делит реестр надвое: демо-сегмент выбирает только
  * из демо-водителей, живой — только из живых. Условием формы он не является — «хотя бы одно
  * условие» по-прежнему про условия, — и отключить его незаданным нельзя: признак есть всегда.
- * Поэтому живой срез демо-водителя не возьмёт никогда, и демо-акция живого — тоже.
+ * Поэтому живой срез демо-водителя не возьмёт никогда, и демо-акция живого — тоже. Демо-сегменту
+ * условия необязательны: без них он отдаёт всех демо-водителей (`isSegmentBounded`).
  */
 export const segmentMembersSql = (conditions: SegmentConditions, isDemo: boolean): Prisma.Sql => {
-  if (!hasSegmentConditions(conditions)) {
-    throw new Error('сегмент без условий состава не отдаёт');
+  if (!isSegmentBounded(conditions, isDemo)) {
+    throw new Error('живой сегмент без условий состава не отдаёт');
   }
 
   return Prisma.sql`

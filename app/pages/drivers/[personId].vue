@@ -5,7 +5,7 @@ import { useCurrentEmployee } from '~/composables/useCurrentEmployee';
 import { DISPLAY_TIME_ZONE_LABEL } from '~/utils/format';
 import { toLoadState } from '~/utils/loadState';
 import { failureField, failureText } from '~/utils/requestError';
-import { canEditDemo, POINTS_ADJUST_ROLES, REWARD_GRANT_ROLES } from '#shared/access';
+import { POINTS_ADJUST_ROLES, REWARD_GRANT_ROLES } from '#shared/access';
 import type {
   ManualPointsField,
   ManualPointsRequestBody,
@@ -22,8 +22,8 @@ import type {
  * Человек, которого нет в программе, открывается этой же карточкой — с пустыми разделами
  * и подписью причины. Пустая карточка здесь содержательный ответ, а не ошибка.
  *
- * Демо-водитель помечен «ДЕМО» (issue #212); баллы и награды ему правит только владелец,
- * у остальных формы правки и входа в выдачу нет.
+ * Демо-водитель помечен «ДЕМО» (issue #212). Баллы и награды ему правят те же роли, что живому:
+ * демо-водитель — тренажёр, на нём учат менеджеров и админов (решение Руслана 26-09-2026).
  */
 
 /** Сколько операций журнала на странице. */
@@ -85,11 +85,6 @@ useHead({ title: () => `${fullName.value} — XalqBonus` });
 
 const employee = useCurrentEmployee();
 
-/** Демо-водителя правит только владелец — тем же правилом, что сервер. */
-const demoEditable = computed(
-  () => employee.value !== null && canEditDemo(employee.value.role, card.value?.isDemo ?? false),
-);
-
 /**
  * Форму правки видят роли из `POINTS_ADJUST_ROLES` — сегодня все, — и только у человека
  * со счётом. Проверка дублирует серверную и ничего не решает: решает ручка.
@@ -97,7 +92,6 @@ const demoEditable = computed(
 const canAdjust = computed(
   () =>
     employee.value !== null &&
-    demoEditable.value &&
     POINTS_ADJUST_ROLES.includes(employee.value.role) &&
     card.value?.balance !== null &&
     card.value?.balance !== undefined,
@@ -144,7 +138,6 @@ const adjustPoints = async (body: ManualPointsRequestBody): Promise<void> => {
 const canGrant = computed(
   () =>
     employee.value !== null &&
-    demoEditable.value &&
     REWARD_GRANT_ROLES.includes(employee.value.role) &&
     card.value?.membership !== null &&
     card.value?.membership !== undefined,
@@ -170,8 +163,8 @@ const canGrant = computed(
         <AtomsStatusBadge v-if="card?.isDemo" tone="demo" label="ДЕМО" />
       </div>
       <p v-if="card?.isDemo" class="mt-1 text-sm text-slate-500">
-        Демо-водитель: видит и живое, и демо. Живым его не посчитает ни сегмент, ни акция.
-        {{ demoEditable ? '' : 'Баллы и награды ему меняет только владелец.' }}
+        Демо-водитель: заказывает только в демо-офисе. Живым его не посчитает ни сегмент,
+        ни акция, и в итоги баллов он не входит.
       </p>
       <p class="mt-1 text-xs text-slate-400">Время показано в зоне {{ DISPLAY_TIME_ZONE_LABEL }}</p>
     </div>

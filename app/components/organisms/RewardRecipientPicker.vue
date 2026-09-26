@@ -16,13 +16,11 @@ import type { DriverSearchRow } from '#shared/types/driver';
  * За данными компонент не ходит: запрос поиска уходит наверх событием, найденное приходит
  * свойством (docs/frontend.md → «Данные в компоненты не ходят»).
  *
- * Демо-водитель помечен «ДЕМО» (issue #212). Выбрать его может только тот, кто правит демо, —
- * остальным кнопки нет: вручить ему откажет ручка.
+ * Демо-водитель помечен «ДЕМО» (issue #212) и выбирается любой ролью, как живой: на нём учат
+ * менеджеров и админов.
  */
 const props = defineProps<{
   canPickSegment: boolean;
-  /** Вошедший правит демо: ему можно выбрать демо-водителя. */
-  canPickDemo: boolean;
   segmentOptions: SelectOption[];
   driver: PickedDriver | null;
   searchState: LoadState | null;
@@ -127,11 +125,7 @@ const pick = (row: DriverSearchRow): void => {
               :label="row.isMember ? 'в программе' : 'не в программе'"
             />
             <AtomsStatusBadge v-if="row.isDemo" tone="demo" label="ДЕМО" />
-            <AtomsActionButton
-              v-if="canPickDemo || !row.isDemo"
-              label="Выбрать"
-              @click="pick(row)"
-            />
+            <AtomsActionButton label="Выбрать" @click="pick(row)" />
           </li>
         </ul>
       </div>

@@ -7,7 +7,7 @@ import {
   type SegmentConditionsDraft,
   type SegmentFlagChoice,
 } from '~/utils/segmentConditions';
-import { hasSegmentConditions, SEGMENT_EMPTY_CONDITIONS_TEXT } from '#shared/segment';
+import { isSegmentBounded, SEGMENT_EMPTY_CONDITIONS_TEXT } from '#shared/segment';
 
 /**
  * Форма сегмента — одна на заведение и правку: имя, описание и условия отбора.
@@ -21,10 +21,13 @@ import { hasSegmentConditions, SEGMENT_EMPTY_CONDITIONS_TEXT } from '#shared/seg
  * весь реестр парка.
  *
  * `readonly` — демо-сегмент у того, кто его не правит (issue #212): условия видны, но закрыты.
- * Поле «Демо» нового сегмента ставит страница слотом.
+ * Поле «Демо» нового сегмента ставит страница слотом. Демо-сегменту условия необязательны:
+ * без них он берёт всех демо-водителей, и кнопка не закрывается.
  */
-defineProps<{
+const props = defineProps<{
   title: string;
+  /** Сегмент демо — свой признак или галочка формы заведения. */
+  demo: boolean;
   submitLabel: string;
   saving: boolean;
   /** Что ответил сервер на последнюю попытку. `null` — ответа ждать нечего. */
@@ -67,7 +70,9 @@ const balanceMax = boundField('balanceMax');
 const programMember = flagField('programMember');
 const telegramLinked = flagField('telegramLinked');
 
-const hasConditions = computed(() => hasSegmentConditions(fromConditionsDraft(conditions.value)));
+const hasConditions = computed(() =>
+  isSegmentBounded(fromConditionsDraft(conditions.value), props.demo),
+);
 </script>
 
 <template>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { useDemoEditor } from '~/composables/useDemoEditor';
 import { useSegmentPreview } from '~/composables/useSegmentPreview';
 import { failureText } from '~/utils/requestError';
@@ -18,7 +18,9 @@ import type { SegmentCreateRequestBody, SegmentResponse } from '#shared/types/se
  * и сохраняется сегмент, когда оно устроило, а не ради того, чтобы его увидеть (issue #165).
  *
  * Поле «Демо» видит только владелец (issue #212); предпросмотр считает по нему же: демо-сегмент
- * берёт только демо-водителей, живой — только живых.
+ * берёт только демо-водителей, живой — только живых. Включённая галочка очищает условия —
+ * в предпросмотре сразу все демо-водители; условия можно заполнить заново, снятие галочки
+ * их не трогает.
  */
 
 definePageMeta({
@@ -35,6 +37,12 @@ const { ownsDemo } = useDemoEditor();
 
 /** Поле «Демо» нового сегмента. */
 const demo = ref(false);
+
+watch(demo, (isDemo) => {
+  if (isDemo) {
+    conditions.value = toConditionsDraft(EMPTY_SEGMENT_CONDITIONS);
+  }
+});
 
 const preview = useSegmentPreview(() => ({
   conditions: fromConditionsDraft(conditions.value),
@@ -85,12 +93,13 @@ const create = async (): Promise<void> => {
       submit-label="Завести сегмент"
       :saving="saving"
       :error="saveError"
+      :demo="demo"
       @submit="create"
     >
       <MoleculesDemoField
         v-if="ownsDemo"
         v-model="demo"
-        hint="Демо-сегмент берёт только демо-водителей, живой — только живых. Демо-акция идёт только на демо-сегменте."
+        hint="Демо-сегмент берёт только демо-водителей, живой — только живых; без условий — всех демо-водителей. Галочка очищает условия. Демо-акция идёт только на демо-сегменте."
       />
     </OrganismsSegmentForm>
 

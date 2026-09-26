@@ -61,7 +61,7 @@ const driversLabel = (total: number): string =>
               {{ segment.description }}
             </p>
             <p class="mt-0.5 text-xs text-slate-500">
-              {{ describeSegmentConditions(segment.conditions).join(' · ') }}
+              {{ describeSegmentConditions(segment.conditions).join(' · ') || 'все демо-водители' }}
             </p>
           </div>
           <p class="font-mono text-sm text-slate-900 tabular-nums">

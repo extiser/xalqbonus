@@ -1,7 +1,7 @@
 import { grantGift, type GiftCoverUpload, type GiftRecipient } from '#server/services/gifts/grantGift';
 import { readGiftGrant } from '#server/services/gifts/readGiftGrants';
 import { denyAccess } from '#server/utils/denial';
-import { requireDemoEditor, requireEmployeeRole } from '#server/utils/employeeAuth';
+import { requireEmployeeRole } from '#server/utils/employeeAuth';
 import { rethrowGiftFailure } from '#server/utils/giftFailure';
 import { readUuid } from '#server/utils/query';
 import { GIFT_SEGMENT_ROLES, REWARD_GRANT_ROLES } from '#shared/access';
@@ -16,9 +16,6 @@ import type { GiftGrantRequestBody, GiftGrantResponse } from '#shared/types/rewa
 // Раздел открыт `REWARD_GRANT_ROLES`; сегменту — только `GIFT_SEGMENT_ROLES`: проверка здесь,
 // а не только на экране, — экран лишь прячет выбор. Ответ — раздача с числом родившихся
 // подарков и пропущенных.
-//
-// Демо-водителю и демо-сегменту подарок вручает только владелец (issue #212): подарок пишет
-// баланс, а демо правит только он.
 
 type Fields = Partial<Record<keyof GiftGrantRequestBody, string>>;
 
@@ -100,13 +97,6 @@ export default defineEventHandler(async (event): Promise<GiftGrantResponse> => {
   if (recipient.kind === 'segment' && !GIFT_SEGMENT_ROLES.includes(employee.role)) {
     throw denyAccess('role_not_allowed');
   }
-
-  await requireDemoEditor(
-    employee,
-    recipient.kind === 'person'
-      ? { kind: 'person', id: recipient.personId }
-      : { kind: 'segment', id: recipient.segmentId },
-  );
 
   let giftGrantId: string;
 

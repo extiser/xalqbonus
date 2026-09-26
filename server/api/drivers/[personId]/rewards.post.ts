@@ -7,7 +7,7 @@ import {
   type ManualRewardProblem,
 } from '#server/services/rewards/errors';
 import { grantManualReward } from '#server/services/rewards/grantManualReward';
-import { requireDemoEditor, requireEmployeeRole } from '#server/utils/employeeAuth';
+import { requireEmployeeRole } from '#server/utils/employeeAuth';
 import { readUuid, requireUuidParam } from '#server/utils/query';
 import { REWARD_GRANT_ROLES } from '#shared/access';
 import type { ManualRewardField, ManualRewardResponse } from '#shared/types/rewards';
@@ -76,9 +76,6 @@ export default defineEventHandler(async (event): Promise<ManualRewardResponse> =
   const employee = await requireEmployeeRole(event, REWARD_GRANT_ROLES);
 
   const personId = requireUuidParam(event, 'personId');
-
-  await requireDemoEditor(employee, { kind: 'person', id: personId });
-
   const body = await readBody<ManualRewardBody | null>(event);
 
   try {
@@ -117,7 +114,7 @@ export default defineEventHandler(async (event): Promise<ManualRewardResponse> =
       throw rejectField(
         409,
         'officeId',
-        'офис наград не выдаёт: он в архиве или демо, а водитель живой',
+        'офис наград этому водителю не выдаёт: он в архиве или не той стороны — демо-водителю только демо-офис, живому только живой',
       );
     }
 

@@ -2,7 +2,6 @@
 import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useCurrentEmployee } from '~/composables/useCurrentEmployee';
-import { useDemoEditor } from '~/composables/useDemoEditor';
 import { useGiftMessagePreview } from '~/composables/useGiftMessagePreview';
 import { formatNumber, pluralize } from '~/utils/format';
 import { toLoadState } from '~/utils/loadState';
@@ -61,8 +60,6 @@ const grantsState = computed(() => toLoadState(grantsStatus.value));
 
 // Офисы — своей стороны: демо-водителю только ДЕМО ОФИС, живому только живые; товары
 // демо-водителю живые и демо (issue #212). Варианты перечитываются, когда меняется получатель.
-const { ownsDemo } = useDemoEditor();
-
 const driver = ref<PickedDriver | null>(null);
 
 const { data: grantOptions } = await useFetch<RewardGrantOptionsResponse>(
@@ -87,13 +84,11 @@ const productOptions = computed<SelectOption[]>(() =>
 );
 
 /**
- * Рабочие сегменты: архивный при выборе не предлагается. Демо-сегмент — только тому, кто правит
- * демо (issue #212): раздачу ему остальным откажет ручка.
+ * Рабочие сегменты: архивный при выборе не предлагается. Демо-сегмент — с пометкой, и выбирает
+ * его тот же, кому открыт выбор сегмента (issue #212).
  */
 const workingSegments = computed(() =>
-  (segments.value?.segments ?? []).filter(
-    (segment) => segment.archivedAt === null && (ownsDemo.value || !segment.isDemo),
-  ),
+  (segments.value?.segments ?? []).filter((segment) => segment.archivedAt === null),
 );
 
 const segmentOptions = computed<SelectOption[]>(() =>
@@ -354,7 +349,6 @@ watch([recipientKind, segmentId, driver], resetOutcome);
           v-model:kind="recipientKind"
           v-model:segment-id="segmentId"
           :can-pick-segment="canPickSegment"
-          :can-pick-demo="ownsDemo"
           :segment-options="segmentOptions"
           :driver="driver"
           :search-state="searchState"

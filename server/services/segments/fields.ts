@@ -3,7 +3,7 @@ import {
   EmptySegmentConditionsError,
   InvalidSegmentFieldsError,
 } from '#server/services/segments/errors';
-import { hasSegmentConditions } from '#shared/segment';
+import { isSegmentBounded } from '#shared/segment';
 import type { Segment, SegmentConditions } from '#shared/types/segment';
 
 /**
@@ -111,6 +111,9 @@ const readFlag = (value: unknown): boolean | null => {
  * Условия из тела запроса. Проверяет то же, что проверки базы (`segments_*_check`), —
  * чтобы предпросмотр несохранённого отвечал на перевёрнутые границы тем же отказом,
  * что сохранение, а не пустым составом, который выглядит как «таких водителей нет».
+ *
+ * Пустоту условий разбор не решает: демо-сегменту они необязательны, а признак у правки
+ * живёт в записи, не в теле. Её проверяет `assertSegmentBounded` в сервисах.
  */
 export const readSegmentConditions = (value: unknown): SegmentConditions => {
   const request = asConditionsRequest(value);
@@ -147,11 +150,19 @@ export const readSegmentConditions = (value: unknown): SegmentConditions => {
     throw new InvalidSegmentFieldsError('balance_reversed');
   }
 
-  if (!hasSegmentConditions(conditions)) {
+  return conditions;
+};
+
+/**
+ * Без условий — только демо-сегмент (issue #212): живой без условий — весь реестр парка.
+ *
+ * Отдельно от разбора, потому что признак у правки берётся не из тела, а из записи: зовут
+ * это сервисы заведения, правки и предпросмотра, каждый со своим признаком.
+ */
+export const assertSegmentBounded = (conditions: SegmentConditions, isDemo: boolean): void => {
+  if (!isSegmentBounded(conditions, isDemo)) {
     throw new EmptySegmentConditionsError();
   }
-
-  return conditions;
 };
 
 /**

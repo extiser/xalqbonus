@@ -29,6 +29,7 @@ import {
 import { grantManualReward } from '#server/services/rewards/grantManualReward';
 import { readRewardGrantOptions } from '#server/services/rewards/readRewardGrantOptions';
 import { createSegment } from '#server/services/segments/createSegment';
+import { EmptySegmentConditionsError } from '#server/services/segments/errors';
 import { previewSegmentConditions } from '#server/services/segments/previewSegment';
 import { readSegmentPersonIds } from '#server/services/segments/readSegmentPersonIds';
 import { receiveStock } from '#server/services/stock/receiveStock';
@@ -124,6 +125,13 @@ const asDriver = (personId: string, isDemo: boolean): LinkedDriver => ({
   language: 'ru',
   isDemo,
 });
+
+/** Состав заведённого сегмента — и отдать его уборке. */
+const readSegmentPersonIdsOf = async (segment: { segmentId: string }): Promise<string[]> => {
+  trackTestSegment(segment.segmentId);
+
+  return readSegmentPersonIds(segment.segmentId);
+};
 
 /** Офисы и товары: живые и демо, по штуке, с остатком друг у друга. */
 const setupCatalog = async () => {
@@ -384,6 +392,44 @@ describe('демо-сущности', () => {
     const draft = await previewSegmentConditions(SEGMENT_CONDITIONS, true, 0);
 
     expect(draft.rows.map((row) => row.personId)).toEqual([demoPersonId]);
+  });
+
+  it('демо-сегмент без условий — все демо-водители, живой без условий — отказ', async () => {
+    const { employeeId } = await createTestEmployee({ role: 'owner' });
+    const livePersonId = await createDriver({ demo: false });
+    const demoPersonId = await createDriver({ demo: true });
+
+    const empty = await previewSegmentConditions(EMPTY_SEGMENT_CONDITIONS, true, 0);
+    const everyDemo = await readSegmentPersonIdsOf(
+      await createSegment(
+        { name: 'Все демо', description: null, conditions: EMPTY_SEGMENT_CONDITIONS },
+        employeeId,
+        true,
+      ),
+    );
+
+    expect(empty.total).toBeGreaterThanOrEqual(1);
+    expect(everyDemo).toContain(demoPersonId);
+    expect(everyDemo).not.toContain(livePersonId);
+
+    await expect(
+      previewSegmentConditions(EMPTY_SEGMENT_CONDITIONS, false, 0),
+    ).rejects.toBeInstanceOf(EmptySegmentConditionsError);
+    await expect(
+      createSegment(
+        { name: 'Весь реестр', description: null, conditions: EMPTY_SEGMENT_CONDITIONS },
+        employeeId,
+        false,
+      ),
+    ).rejects.toBeInstanceOf(EmptySegmentConditionsError);
+
+    // База держит то же: живой без условий мимо сервиса не записывается.
+    await expect(
+      db.$executeRaw`
+        INSERT INTO xb.segments ("name", "created_by_id", "is_demo")
+        VALUES ('Весь реестр', ${employeeId}::uuid, false)
+      `,
+    ).rejects.toThrow(/segments_has_condition_check/);
   });
 
   it('демо-акция — только на демо-сегменте и с ДЕМО ОФИСОМ, живая — наоборот', async () => {

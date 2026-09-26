@@ -144,7 +144,7 @@ const toggleArchive = async (): Promise<void> => {
           {{ segment.description }}
         </p>
         <p class="mt-1 text-xs text-slate-500">
-          {{ describeSegmentConditions(segment.conditions).join(' · ') }}
+          {{ describeSegmentConditions(segment.conditions).join(' · ') || 'все демо-водители' }}
         </p>
         <p class="mt-1 text-xs text-slate-400">
           Завёл {{ segment.createdByName }} {{ formatDateTime(segment.createdAt) }} · изменён
@@ -172,6 +172,7 @@ const toggleArchive = async (): Promise<void> => {
         submit-label="Сохранить"
         :saving="saving"
         :error="saveError"
+        :demo="segment.isDemo"
         :readonly="!editable"
         @submit="save"
       />
