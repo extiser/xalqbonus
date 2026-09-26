@@ -75,5 +75,14 @@ export default defineEventHandler(async (event): Promise<EmployeeLoginResponse> 
     maxAge: result.maxAgeSeconds,
   });
 
-  return { employee: result.employee };
+  // Поимённо, как в `/api/auth/me`: признак демо (issue #205) — дело проверки доступа,
+  // а не ответа, и наружу он не уходит.
+  return {
+    employee: {
+      employeeId: result.employee.employeeId,
+      role: result.employee.role,
+      fullName: result.employee.fullName,
+      phoneE164: result.employee.phoneE164,
+    },
+  };
 });

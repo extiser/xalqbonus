@@ -12,7 +12,9 @@ import type { OfficeOrdersResponse } from '#shared/types/orders';
 // Заказы офиса: `?officeId=&status=&limit=&offset=`. Одна ручка на обе двери — под cookie веба
 // и под `initData` Mini App (docs/decisions.md → «Доступ определяется ролью, а не дверью»).
 export default defineEventHandler(async (event): Promise<OfficeOrdersResponse> => {
-  const employee = await requireEmployeeRole(event, ORDER_ROLES);
+  // Стойка открыта и демо-менеджеру (issue #205): ручку зовёт экран сотрудника в Mini App,
+  // а офисы сотрудника ограничивают демо-учётку ДЕМО ОФИСОМ.
+  const employee = await requireEmployeeRole(event, ORDER_ROLES, { allowDemo: true });
   const query = getQuery(event);
 
   try {

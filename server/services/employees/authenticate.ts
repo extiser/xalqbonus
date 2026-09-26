@@ -41,6 +41,11 @@ export type AuthenticatedEmployee = {
   role: EmployeeRole;
   fullName: string;
   phoneE164: string;
+  /**
+   * Демо-сотрудник (issue #205): под ним входит демо-зритель, чужой человек. Ручки открывают
+   * ему доступ явно (`requireEmployee` → `allowDemo`), по умолчанию — отказ.
+   */
+  isDemo: boolean;
 };
 
 export type AuthOutcome =
@@ -73,6 +78,7 @@ const asAuthenticated = (employee: EmployeeRow): AuthenticatedEmployee => ({
   role: employee.role,
   fullName: employee.fullName,
   phoneE164: employee.phoneE164,
+  isDemo: employee.isDemo,
 });
 
 /** Дверь Mini App: личность приходит подписанной, сессии за ней нет. */

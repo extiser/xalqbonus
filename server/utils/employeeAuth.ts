@@ -52,6 +52,16 @@ const DENIAL_BY_OUTCOME = {
   // на каждый исход проверки. Полноту таблицы `satisfies` проверяет так же.
 } as const satisfies Record<Exclude<AuthOutcome, 'authenticated'>, ServerDenialCode>;
 
+export type EmployeeAccessOptions = {
+  /**
+   * Ручка отвечает и демо-сотруднику (issue #205). По умолчанию — нет: под демо-учёткой входит
+   * чужой человек, которому показывают программу, и новая ручка веба ему закрыта, пока её
+   * не открыли явно в её же коде. Открыты ровно ручки стойки — то, что зовёт экран сотрудника
+   * в Mini App (`useOfficeDesk.ts`); все они и так ограничены офисами сотрудника.
+   */
+  allowDemo?: boolean;
+};
+
 /**
  * Сотрудник, пришедший этим запросом, или отказ.
  *
@@ -61,17 +71,24 @@ const DENIAL_BY_OUTCOME = {
  * не косметическая: на первое интерфейс показывает форму входа, на второе — объяснение,
  * потому что вход не поможет. Решает он по коду, а под одним номером исходов несколько.
  */
-export const requireEmployee = async (event: H3Event): Promise<AuthenticatedEmployee> => {
+export const requireEmployee = async (
+  event: H3Event,
+  { allowDemo = false }: EmployeeAccessOptions = {},
+): Promise<AuthenticatedEmployee> => {
   const result = await authenticateEmployee({
     cookieValue: readSessionCookie(event),
     initData: readInitDataHeader(event),
   });
 
-  if (result.outcome === 'authenticated') {
-    return result.employee;
+  if (result.outcome !== 'authenticated') {
+    throw denyAccess(DENIAL_BY_OUTCOME[result.outcome]);
   }
 
-  throw denyAccess(DENIAL_BY_OUTCOME[result.outcome]);
+  if (result.employee.isDemo && !allowDemo) {
+    throw denyAccess('demo_not_allowed');
+  }
+
+  return result.employee;
 };
 
 /**
@@ -88,8 +105,9 @@ export const requireEmployee = async (event: H3Event): Promise<AuthenticatedEmpl
 export const requireEmployeeRole = async (
   event: H3Event,
   allowedRoles: readonly EmployeeRole[],
+  options: EmployeeAccessOptions = {},
 ): Promise<AuthenticatedEmployee> => {
-  const employee = await requireEmployee(event);
+  const employee = await requireEmployee(event, options);
 
   if (!allowedRoles.includes(employee.role)) {
     throw denyAccess('role_not_allowed');
