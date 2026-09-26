@@ -13,6 +13,10 @@
  *
  * Офис в шторке «Где заберёте?» (`catalog-pick-office.html`, `.opt .stock`) — ещё и остаток
  * нажатого товара пилюлей справа от адреса, перед отметкой (issue #234).
+ *
+ * Офис в шторке «Сменить» у стойки сотрудника (`_reference/design/staff/02-desk-office-sheet.html`,
+ * issue #250) — без подписи «Офис»: имя 16/700 белым, адрес, и третьей строкой зелёным 13/600
+ * «Ждут выдачи: N» (`note`).
  */
 defineProps<{
   label: string;
@@ -23,6 +27,8 @@ defineProps<{
   caption?: string;
   /** Пилюля справа, перед отметкой: остаток товара в офисе, «5 шт». */
   stock?: string;
+  /** Строка зелёным под второй: «Ждут выдачи: 3». */
+  note?: string;
 }>();
 
 defineEmits<{ select: [] }>();
@@ -39,8 +45,9 @@ defineEmits<{ select: [] }>();
   >
     <span v-if="prefix || caption" class="min-w-0 grow">
       <span v-if="prefix" class="font-normal text-xb-light">{{ prefix }} · <b class="font-bold text-xb-text">{{ label }}</b></span>
-      <span v-else class="font-semibold text-xb-text">{{ label }}</span>
+      <span v-else class="font-bold text-xb-text">{{ label }}</span>
       <span v-if="caption" class="mt-0.5 block text-[13px] font-light text-xb-grey">{{ caption }}</span>
+      <span v-if="note" class="mt-1 block text-[13px] font-semibold text-xb-green">{{ note }}</span>
     </span>
     <span v-else class="grow font-semibold" :class="selected ? 'text-xb-text' : 'text-xb-secondary'">{{ label }}</span>
     <span

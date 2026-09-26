@@ -8,7 +8,7 @@ export interface DesignScreen {
   slug: string;
   title: string;
   /**
-   * Откуда снято — файл макета. Регистрация, главная, разделы с шапкой, каталог, подарки и демо — пути снимка
+   * Откуда снято — файл макета. Регистрация, главная, разделы с шапкой, каталог, подарки, демо и сотрудник — пути снимка
    * `_reference/design/`; профиль и акция — ещё пути планировочной папки (`product/design/`).
    */
   source: string;
@@ -225,6 +225,27 @@ export const DESIGN_GROUPS: DesignGroup[] = [
       { slug: 'big-chest-week-4', title: 'Сцена 4: Сундук заработан — нажмите, чтобы открыть', source: 'comeback/05-week-chest-states.html' },
       { slug: 'big-chest-week-5', title: 'Сцена 5: Открыт', source: 'comeback/05-week-chest-states.html' },
       { slug: 'big-chest-week-6', title: 'Сцена 6: Окно кончилось — упущен', source: 'comeback/05-week-chest-states.html' },
+    ],
+  },
+  {
+    title: 'Сотрудник',
+    screens: [
+      { slug: 'staff-office-picker', title: 'Выбор офиса', source: 'staff/01-office-picker.html' },
+      { slug: 'staff-desk', title: 'Стойка', source: 'staff/02-desk.html' },
+      { slug: 'staff-desk-empty', title: 'Стойка — никто не ждёт', source: 'staff/02-desk-empty.html' },
+      { slug: 'staff-desk-office-sheet', title: 'Шторка «Сменить»', source: 'staff/02-desk-office-sheet.html' },
+      { slug: 'staff-no-offices', title: 'Сотрудник без офисов', source: 'staff/02-desk-empty.html' },
+      { slug: 'staff-order', title: 'Заказ на стойке', source: 'staff/03-order-card.html' },
+      { slug: 'staff-order-issue', title: 'Шторка «Выдать заказ?»', source: 'staff/03-order-issue-sheet.html' },
+      { slug: 'staff-order-cancel', title: 'Шторка «Отменить заказ?»', source: 'staff/03-order-cancel-sheet.html' },
+      { slug: 'staff-reward', title: 'Награда на стойке', source: 'staff/04-reward-card.html' },
+      { slug: 'staff-reward-issue', title: 'Шторка «Выдать награду?»', source: 'staff/04-reward-issue-sheet.html' },
+      { slug: 'staff-desk-issued', title: 'Стойка — выдано', source: 'staff/05-desk-issued.html' },
+      { slug: 'staff-desk-not-found', title: 'Стойка — код не найден', source: 'staff/05-desk-not-found.html' },
+      { slug: 'staff-profile', title: 'Профиль — пароль не задан', source: 'staff/06-profile.html' },
+      { slug: 'staff-profile-password-set', title: 'Профиль — пароль задан', source: 'staff/06-profile-password-set.html' },
+      { slug: 'staff-password', title: 'Форма пароля — пароли не совпадают', source: 'staff/06-password.html' },
+      { slug: 'staff-password-saved', title: 'Пароль сохранён', source: 'staff/06-password-saved.html' },
     ],
   },
 ];

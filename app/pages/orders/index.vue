@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue';
 import { useOfficeDesk } from '~/composables/useOfficeDesk';
 import { toLoadState } from '~/utils/loadState';
-import { failureDenial } from '~/utils/requestError';
+import { failureCode, failureMessage } from '~/utils/requestError';
 import type { SelectOption } from '~/types/selectOption';
 import type { OfficeOrdersResponse } from '#shared/types/orders';
 
@@ -39,10 +39,17 @@ const {
 const state = computed(() => toLoadState(fetchStatus.value));
 
 /**
- * Менеджер без офисов. Ручка отвечает ему `role_not_allowed`, и другой причины отказать
- * списку у вошедшего сотрудника нет: выбор офиса предлагает только открытые ему офисы.
+ * Отказ списка «офис не открыт» (`office_not_open`, issue #250).
+ *
+ * Офис не запрашивали, а отказ пришёл — сервер не нашёл ни одного офиса сотрудника: менеджера
+ * не привязали. Запрашивали — этот офис ему не открыт (отвязали, пока страница открыта), и отказ
+ * говорит своим текстом с сервера на месте списка.
  */
-const withoutOffices = computed(() => failureDenial(error.value) === 'role_not_allowed');
+const officeNotOpen = computed(() => failureCode(error.value) === 'office_not_open');
+
+const withoutOffices = computed(() => officeNotOpen.value && selectedOfficeId.value === '');
+
+const listErrorText = computed(() => (officeNotOpen.value ? (failureMessage(error.value) ?? undefined) : undefined));
 
 const officeId = computed({
   get: () => selectedOfficeId.value || data.value?.officeId || '',
@@ -161,7 +168,8 @@ const cancel = async (): Promise<void> => {
       <OrganismsOfficeOrderTable
         :state="state"
         :data="data ?? null"
-        @open="desk.open($event)"
+        :error-text="listErrorText"
+        @open="desk.open({ kind: 'order', order: $event })"
         @page="offset = $event"
       />
     </template>

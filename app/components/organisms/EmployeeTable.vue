@@ -51,7 +51,7 @@ const empty = computed(
 <template>
   <MoleculesSectionPanel
     title="Сотрудники"
-    note="Доступ решает роль. Выключенная учётка не входит ни в веб, ни в приложение; сброшенный пароль сотрудник задаёт себе сам в приложении."
+    note="Доступ решает роль. Выключенная учётная запись не входит ни в веб, ни в приложение; сброшенный пароль сотрудник задаёт себе сам в приложении."
   >
     <MoleculesStateNotice v-if="state === 'loading'" state="loading" message="Читаем сотрудников…" />
     <MoleculesStateNotice

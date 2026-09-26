@@ -32,6 +32,8 @@ export const describeOfficeOrder = (row: OfficeOrderRow, lines: OrderLineRow[]):
     name: line.name,
     quantity: line.quantity,
     unitPoints: line.unitPoints,
+    photoPath: line.photoPath,
+    photoUpdatedAt: line.photoUpdatedAt.toISOString(),
   })),
   totalPoints: row.totalPoints,
   createdAt: row.createdAt.toISOString(),

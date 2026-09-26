@@ -10,10 +10,14 @@ import { orderStatusLabel, orderStatusTone } from '~/utils/labels';
  * Висящие стоят первыми — порядок задаёт сервер. Номер открывает карточку с действиями.
  * Три состояния нарисованы, а не подразумеваются (docs/frontend.md → «Три состояния
  * обязательны»).
+ *
+ * Отказ списка, у которого есть свой текст с сервера, — «у вас нет доступа к этому офису»
+ * (issue #250), — говорит им (`errorText`); остальные — общим «не прочитались».
  */
 defineProps<{
   state: LoadState;
   data: OfficeOrdersResponse | null;
+  errorText?: string;
 }>();
 
 const emit = defineEmits<{ open: [order: OfficeOrder]; page: [offset: number] }>();
@@ -25,7 +29,7 @@ const emit = defineEmits<{ open: [order: OfficeOrder]; page: [offset: number] }>
     <MoleculesStateNotice
       v-else-if="state === 'error'"
       state="error"
-      message="Заказы не прочитались. Это отказ запроса, а не отсутствие заказов."
+      :message="errorText ?? 'Заказы не прочитались. Это отказ запроса, а не отсутствие заказов.'"
     />
     <MoleculesStateNotice
       v-else-if="!data || data.orders.length === 0"

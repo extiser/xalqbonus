@@ -16,12 +16,21 @@ import type { EmployeePasswordResponse } from '#shared/types/employee';
  *
  * Отказ сначала отдаётся странице через `reportDenial` — как у стойки (`useOfficeDesk`):
  * отказ двери заменяет экран целиком, и решает это страница, а не композабл.
+ *
+ * Повтор пароля (issue #250) сверяется здесь, до запроса: не совпал — `mismatch`, и запрос
+ * не уходит. В ручку уезжает одно поле — повтор нужен только человеку, чтобы не задать пароль
+ * с опечаткой, которой он не видел.
  */
 export const useEmployeePassword = (
   readHeaders: () => Record<string, string>,
   reportDenial: (error: unknown) => boolean = () => false,
 ) => {
   const password = ref('');
+  const repeat = ref('');
+
+  /** Повтор не совпал с паролем — на последней попытке «Сохранить». */
+  const mismatch = ref(false);
+
   const submitting = ref(false);
   const error = ref<string | null>(null);
 
@@ -30,12 +39,18 @@ export const useEmployeePassword = (
 
   /** Отправляет пароль. `true` — сохранён: признак экрана сотрудника приводит в соответствие страница. */
   const submit = async (): Promise<boolean> => {
-    if (submitting.value) {
+    if (submitting.value || saved.value) {
+      return false;
+    }
+
+    error.value = null;
+    mismatch.value = password.value !== repeat.value;
+
+    if (mismatch.value) {
       return false;
     }
 
     submitting.value = true;
-    error.value = null;
 
     try {
       await $fetch<EmployeePasswordResponse>('/api/employees/me/password', {
@@ -44,7 +59,8 @@ export const useEmployeePassword = (
         body: { password: password.value },
       });
 
-      password.value = '';
+      // Поля остаются заполненными под плашкой «сохранён», как в макете: экран подтверждает
+      // введённое, а не показывает пустую форму. Стирает их повторное открытие пункта.
       saved.value = true;
 
       return true;
@@ -64,9 +80,11 @@ export const useEmployeePassword = (
   /** Пункт открыт заново: прошлый ввод, отказ и подтверждение к нему не относятся. */
   const reset = (): void => {
     password.value = '';
+    repeat.value = '';
+    mismatch.value = false;
     error.value = null;
     saved.value = false;
   };
 
-  return { password, submitting, error, saved, submit, reset };
+  return { password, repeat, mismatch, submitting, error, saved, submit, reset };
 };

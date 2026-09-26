@@ -5,10 +5,13 @@
  *
  * Две строки: фамилия первой, имя и отчество второй. ФИО полностью и переносится, а не режется:
  * его сверяют с документом в руках. Отчества нет — вторая строка просто короче.
+ *
+ * Второй строки нет вовсе, когда имя не делится: у сотрудника оно одно — из Telegram, в своём
+ * порядке, и фамилию в нём не угадать (issue #250). Тогда всё имя — первой строкой.
  */
 defineProps<{
   lastName: string;
-  givenNames: string;
+  givenNames?: string;
 }>();
 </script>
 
@@ -22,7 +25,7 @@ defineProps<{
     </span>
     <span class="flex min-w-0 flex-col gap-0.5">
       <span class="text-[18px] font-bold leading-[1.25] tracking-[-0.2px] text-xb-text">{{ lastName }}</span>
-      <span class="text-[16px] font-medium leading-[1.3] text-xb-secondary">{{ givenNames }}</span>
+      <span v-if="givenNames" class="text-[16px] font-medium leading-[1.3] text-xb-secondary">{{ givenNames }}</span>
     </span>
   </div>
 </template>

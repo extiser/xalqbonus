@@ -149,7 +149,7 @@ const archived = computed(() => props.row.archivedAt !== null);
           v-model="adjustNote"
           label="Почему"
           type="text"
-          placeholder="пересчёт полки, бой, недостача"
+          placeholder="пересчёт остатков, бой, недостача"
           required
           hint="Обязательно: без объяснения правку через месяц не отличить от ошибки."
         />

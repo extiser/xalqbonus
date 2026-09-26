@@ -1,15 +1,11 @@
 import { ref } from 'vue';
 import type { LoadState } from '~/types/loadState';
-import { failureText } from '~/utils/requestError';
-import type {
-  OfficeOrder,
-  OfficeOrderResponse,
-  OfficeOrdersResponse,
-} from '#shared/types/orders';
-import type { DeskItemResponse, OfficeRewardResponse } from '#shared/types/rewards';
+import { failureCode, failureText } from '~/utils/requestError';
+import type { OfficeOrderResponse } from '#shared/types/orders';
+import type { DeskItemResponse, DeskPendingResponse, OfficeRewardResponse } from '#shared/types/rewards';
 
 /**
- * Стойка выдачи: заказ или награда по коду, выдача, отмена заказа и висящие заказы офиса.
+ * Стойка выдачи: заказ или награда по коду, выдача, отмена заказа и ждущие выдачи в офисе.
  *
  * Поле кода одно на заказы и награды (issue #172): сотрудник набирает пять цифр и не решает
  * заранее, что перед ним. Ответ размечен `kind`, и открытое на карточке — тоже.
@@ -31,7 +27,7 @@ export const useOfficeDesk = (
   readHeaders: () => Record<string, string>,
   reportDenial: (error: unknown) => boolean = () => false,
 ) => {
-  /** Что открыто карточкой: найденное по коду или заказ, выбранный из списка. */
+  /** Что открыто карточкой: найденное по коду или выбранное из списка. */
   const current = ref<DeskItemResponse | null>(null);
 
   const searching = ref(false);
@@ -44,6 +40,18 @@ export const useOfficeDesk = (
   /** Итог последнего действия — «Выдано, № 1042». Снимается следующим поиском. */
   const notice = ref<string | null>(null);
 
+  /**
+   * Что выдано последним — ставится вместе с `notice` и снимается вместе с ним. Из него Mini App
+   * собирает свою плашку «Выдано · заказ #N · водитель» (issue #250): у веба строка своя.
+   */
+  const issued = ref<DeskItemResponse | null>(null);
+
+  /**
+   * Код последнего отказа поиска или действия — снимается вместе с его текстом. По нему Mini App
+   * узнаёт чужой офис (`office_not_open`) и открывает выбор офиса.
+   */
+  const denialCode = ref<string | null>(null);
+
   const findByCode = async (officeId: string, code: string): Promise<DeskItemResponse | null> => {
     if (searching.value) {
       return null;
@@ -51,7 +59,9 @@ export const useOfficeDesk = (
 
     searching.value = true;
     searchError.value = null;
+    denialCode.value = null;
     notice.value = null;
+    issued.value = null;
 
     try {
       const response = await $fetch<DeskItemResponse>('/api/desk/by-code', {
@@ -69,6 +79,7 @@ export const useOfficeDesk = (
       }
 
       searchError.value = failureText(error);
+      denialCode.value = failureCode(error);
 
       return null;
     } finally {
@@ -76,16 +87,19 @@ export const useOfficeDesk = (
     }
   };
 
-  /** Открывает заказ из списка висящих. */
-  const open = (order: OfficeOrder): void => {
-    current.value = { kind: 'order', order };
+  /** Открывает заказ или награду из списка ждущих. */
+  const open = (item: DeskItemResponse): void => {
+    current.value = item;
     actionError.value = null;
+    denialCode.value = null;
     notice.value = null;
+    issued.value = null;
   };
 
   const close = (): void => {
     current.value = null;
     actionError.value = null;
+    denialCode.value = null;
   };
 
   /** Шлёт действие и возвращает то, что ответил сервер. `null` — отказ, текст уже на экране. */
@@ -96,6 +110,7 @@ export const useOfficeDesk = (
 
     acting.value = true;
     actionError.value = null;
+    denialCode.value = null;
 
     try {
       return await request();
@@ -105,6 +120,7 @@ export const useOfficeDesk = (
       }
 
       actionError.value = failureText(error);
+      denialCode.value = failureCode(error);
 
       return null;
     } finally {
@@ -137,6 +153,7 @@ export const useOfficeDesk = (
 
       current.value = null;
       notice.value = `Выдано, № ${response.order.number}`;
+      issued.value = { kind: 'order', order: response.order };
 
       return true;
     }
@@ -154,6 +171,7 @@ export const useOfficeDesk = (
 
     current.value = null;
     notice.value = `Выдана награда: ${response.reward.title}`;
+    issued.value = { kind: 'reward', reward: response.reward };
 
     return true;
   };
@@ -183,32 +201,83 @@ export const useOfficeDesk = (
     return true;
   };
 
-  // Висящие заказы офиса ---------------------------------------------------
+  // Ждущие выдачи в офисе — заказы и награды -------------------------------
 
   const pendingState = ref<LoadState>('loading');
-  const pendingOrders = ref<OfficeOrder[]>([]);
+  const pendingItems = ref<DeskItemResponse[]>([]);
 
-  /** Потолок ручки: висящих в офисе единицы, и листать их незачем. */
-  const PENDING_LIMIT = 100;
+  /** Список перечитывается тихо: строки стоят до ответа, «Обновить» ждёт. */
+  const pendingRefreshing = ref(false);
 
+  /**
+   * Номер запроса списка: ответ по прежнему офису, пришедший после смены офиса, свежий
+   * не перетирает.
+   */
+  let pendingRequest = 0;
+
+  const fetchPending = (officeId: string): Promise<DeskPendingResponse> =>
+    $fetch<DeskPendingResponse>('/api/desk/pending', {
+      headers: readHeaders(),
+      query: { officeId },
+    });
+
+  /** Ждущие выдачи одним списком, свежие первыми (`GET /api/desk/pending`, issue #250). */
   const loadPending = async (officeId: string): Promise<void> => {
+    const request = ++pendingRequest;
+
     pendingState.value = 'loading';
+    pendingRefreshing.value = false;
 
     try {
-      const response = await $fetch<OfficeOrdersResponse>('/api/orders', {
-        headers: readHeaders(),
-        query: { officeId, status: 'pending', limit: PENDING_LIMIT },
-      });
+      const response = await fetchPending(officeId);
 
-      pendingOrders.value = response.orders;
-      pendingState.value = 'ready';
-    } catch (error) {
-      if (reportDenial(error)) {
+      if (request !== pendingRequest) {
         return;
       }
 
-      console.error('[orders] не удалось загрузить висящие заказы', error);
+      pendingItems.value = response.items;
+      pendingState.value = 'ready';
+    } catch (error) {
+      if (request !== pendingRequest || reportDenial(error)) {
+        return;
+      }
+
+      console.error('[orders] не удалось загрузить ждущие выдачи', error);
       pendingState.value = 'error';
+    }
+  };
+
+  /**
+   * Перечитывает список тихо — «Обновить» у стойки и возврат приложения из фона: строки стоят
+   * до ответа, загрузкой экран не мигает. Отказ оставляет прежние строки, причина — в консоли:
+   * стерев список, экран соврал бы, что ждущих нет. Список ещё не читался или не прочитался —
+   * читается обычным путём, со своими состояниями.
+   */
+  const reloadPending = async (officeId: string): Promise<void> => {
+    if (pendingState.value !== 'ready') {
+      await loadPending(officeId);
+
+      return;
+    }
+
+    const request = ++pendingRequest;
+
+    pendingRefreshing.value = true;
+
+    try {
+      const response = await fetchPending(officeId);
+
+      if (request === pendingRequest) {
+        pendingItems.value = response.items;
+      }
+    } catch (error) {
+      if (request === pendingRequest && !reportDenial(error)) {
+        console.error('[orders] не удалось перечитать ждущие выдачи', error);
+      }
+    } finally {
+      if (request === pendingRequest) {
+        pendingRefreshing.value = false;
+      }
     }
   };
 
@@ -217,7 +286,9 @@ export const useOfficeDesk = (
     current.value = null;
     searchError.value = null;
     actionError.value = null;
+    denialCode.value = null;
     notice.value = null;
+    issued.value = null;
   };
 
   return {
@@ -227,14 +298,18 @@ export const useOfficeDesk = (
     acting,
     actionError,
     notice,
+    issued,
+    denialCode,
     findByCode,
     open,
     close,
     issue,
     cancel,
     pendingState,
-    pendingOrders,
+    pendingItems,
+    pendingRefreshing,
     loadPending,
+    reloadPending,
     reset,
   };
 };

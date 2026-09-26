@@ -164,9 +164,10 @@ export const ordersScreenView = (
 
 /**
  * Адрес фото товара — тем же правилом, что `ProductPhoto`: отметка правки в адресе, иначе
- * перезалитая картинка того же формата показывалась бы прежней из кэша.
+ * перезалитая картинка того же формата показывалась бы прежней из кэша. Этим же правилом
+ * собирают фото карточки стойки сотрудника (`staffViews.ts`).
  */
-const photoUrl = (photoPath: string | null, updatedAt: string | null): string | undefined =>
+export const photoUrl = (photoPath: string | null, updatedAt: string | null): string | undefined =>
   photoPath === null || updatedAt === null ? undefined : `/uploads/${photoPath}?v=${encodeURIComponent(updatedAt)}`;
 
 /** Офис карточкой «Где забрать» — на экране заказа и экране награды одним правилом. */

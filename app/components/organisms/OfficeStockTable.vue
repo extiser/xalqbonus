@@ -37,7 +37,7 @@ const emit = defineEmits<{
     <MoleculesStateNotice
       v-else-if="state === 'error'"
       state="error"
-      message="Остатки не прочитались. Это отказ запроса, а не пустая полка."
+      message="Остатки не прочитались. Это отказ запроса, а не пустые остатки."
     />
     <MoleculesStateNotice
       v-else-if="!data || data.rows.length === 0"

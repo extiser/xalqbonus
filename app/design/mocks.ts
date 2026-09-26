@@ -23,6 +23,13 @@ import type {
   MemberRewardView,
   MemberWeekDayView,
 } from '~/types/memberView';
+import type {
+  StaffDeskRowView,
+  StaffOfficeView,
+  StaffOrderView,
+  StaffOutcomeView,
+  StaffRewardView,
+} from '~/types/staffView';
 
 /**
  * Заглушки служебной страницы `/design` — значения сняты с макетов `_reference/design/`.
@@ -1850,3 +1857,84 @@ export function demoMock(role: MemberDemoRole) {
     },
   };
 }
+
+// ---------------------------------------------------------------------------
+// Сотрудник — `_reference/design/staff/` (issue #250)
+// ---------------------------------------------------------------------------
+
+export const staffBarMock = { name: 'Дилноза Каримова', role: 'Менеджер' };
+
+export const staffOfficesMock: StaffOfficeView[] = [
+  { id: 'kadysheva', name: 'Кадышева', address: 'ул. Кадышева, 12', awaiting: 'Ждут выдачи: 3' },
+  { id: 'chilanzar', name: 'Чиланзар', address: 'Чиланзар, 9-й квартал, 4', awaiting: 'Ждут выдачи: 1' },
+  { id: 'yunusabad', name: 'Юнусабад', address: 'Юнусабад, 17-й квартал, 22' },
+];
+
+/** Шторка «Сменить»: офисы менеджера — у Кадышева четверо ждут. */
+export const staffSheetOfficesMock: StaffOfficeView[] = [
+  { id: 'kadysheva', name: 'Кадышева', address: 'ул. Кадышева, 12', awaiting: 'Ждут выдачи: 4' },
+  { id: 'chilanzar', name: 'Чиланзар', address: 'Чиланзар, 9-й квартал, 4', awaiting: 'Ждут выдачи: 1' },
+];
+
+export const staffDeskRowsMock: StaffDeskRowView[] = [
+  { id: 'reward-rag', tone: 'reward', label: 'Награда · из акции', title: 'Тряпка для кузова', driver: 'Рахимов Бахтиёр · А-247', when: 'сегодня, 13:52' },
+  { id: 'order-1042', tone: 'order', label: 'Заказ #1042', title: '3 товара · 1 250 баллов', driver: 'Алиев Шерзод · Б-118', when: 'сегодня, 12:10' },
+  { id: 'reward-wash', tone: 'reward', label: 'Награда · вручил парк', title: 'Мойка в подарок', driver: 'Турсунов Акмал · В-031', when: 'вчера, 18:44' },
+  { id: 'order-1037', tone: 'order', label: 'Заказ #1037', title: '1 товар · 400 баллов', driver: 'Мирзаев Жасур · Г-502', when: 'вчера, 16:05' },
+];
+
+export const staffIssuedMock: StaffOutcomeView = { tone: 'ok', text: 'Выдано · заказ #1042', name: 'Алиев Шерзод' };
+
+export const staffNotFoundMock: StaffOutcomeView = {
+  tone: 'fail',
+  text: 'Код не найден. Проверьте цифры с водителем: код действует, пока заказ или награда ждёт выдачи в этом офисе.',
+};
+
+const STAFF_DRIVER = {
+  lastName: 'Алиев',
+  givenNames: 'Шерзод',
+  callsign: 'Б-118',
+  phone: { display: '+998 90 123-45-67', href: 'tel:+998901234567' },
+};
+
+export const staffOrderMock: StaffOrderView = {
+  title: 'Заказ #1042',
+  driver: STAFF_DRIVER,
+  lines: [
+    { id: 'rag', title: 'Тряпка для кузова', caption: '2 шт. × 250', price: '500' },
+    { id: 'freshener', title: 'Освежитель «Дубай»', caption: '1 шт. × 750', price: '750' },
+  ],
+  total: '1 250',
+  dates: [
+    { label: 'Оформлен', value: '26.09, 12:10' },
+    { label: 'Забрать до', value: '27.09, 12:10' },
+  ],
+  issueTitle: 'Выдать заказ #1042?',
+  issueSubtitle: ['Алиев Шерзод · Б-118', '3 товара на сумму 1 250 баллов'],
+  cancelTitle: 'Отменить заказ #1042?',
+  cancelSubtitle: ['Алиев Шерзод · Б-118', 'Баллы вернутся водителю, товар — в остатки.'],
+};
+
+export const staffRewardMock: StaffRewardView = {
+  driver: STAFF_DRIVER,
+  prize: { label: 'Награда · из акции', title: 'Тряпка для кузова', caption: '„Неделя возвращения“, сундук дня' },
+  dates: [
+    { label: 'Вручена', value: '26.09, 13:52' },
+    { label: 'Забрать до', value: '06.10, 13:52' },
+  ],
+  issueSubtitle: ['Алиев Шерзод · Б-118', 'Тряпка для кузова'],
+};
+
+export const staffProfileMock = {
+  name: 'Дилноза Каримова',
+  fields: [
+    { id: 'role', label: 'Роль', value: 'Менеджер' },
+    { id: 'phone', label: 'Телефон', value: '+998 90 765-43-21' },
+    { id: 'telegram', label: 'Telegram ID', value: '6960373225' },
+  ] satisfies MemberProfileFieldView[],
+  offices: [
+    { id: 'kadysheva', name: 'Кадышева', address: 'ул. Кадышева, 12' },
+    { id: 'chilanzar', name: 'Чиланзар', address: 'Чиланзар, 9-й квартал, 4' },
+  ],
+  passwordLabel: 'Пароль для входа с компьютера',
+};

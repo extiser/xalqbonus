@@ -41,6 +41,21 @@ export type OfficeReward = {
   phone: string | null;
   /** Почему выдаётся: «Награда — вручную, пояснение» или «Награда — акция „…“, сундук дня». */
   reasonText: string;
+  /**
+   * Источник отдельными полями — для карточки стойки в Mini App (issue #250), где метка
+   * и подпись собираются по месту. `reasonText` — одной строкой, для веба.
+   */
+  source: RewardSource;
+  /** Акция — у источника `campaign`. */
+  campaignTitle: string | null;
+  /** Пояснение внутри источника: у ручной — пояснение автора, у акции — «сундук дня». */
+  sourceNote: string | null;
+  /**
+   * Фото товара из каталога — у награды-товара; у произвольной пусто. Адрес собирает клиент
+   * правилом `ProductPhoto`, отметка правки — его версия (issue #250).
+   */
+  photoPath: string | null;
+  photoUpdatedAt: string | null;
   createdAt: string;
   expiresAt: string;
   issuedAt: string | null;
@@ -54,6 +69,15 @@ export type OfficeReward = {
 export type DeskItemResponse =
   | { kind: 'order'; order: OfficeOrder }
   | { kind: 'reward'; reward: OfficeReward };
+
+/**
+ * «Ждут выдачи» у стойки (`GET /api/desk/pending`, issue #250): висящие заказы и ждущие награды
+ * офиса одним списком, свежие первыми.
+ */
+export type DeskPendingResponse = {
+  officeId: string;
+  items: DeskItemResponse[];
+};
 
 export type OfficeRewardResponse = {
   reward: OfficeReward;

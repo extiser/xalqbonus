@@ -344,12 +344,15 @@ export type OfficeRewardRow = DeskDriverColumns & {
   source: RewardSource;
   sourceNote: string | null;
   campaignTitle: string | null;
+  /** Фото товара из каталога — у награды-товара. У произвольной пусто. */
+  photoPath: string | null;
+  photoUpdatedAt: Date | null;
   createdAt: Date;
 };
 
 /**
- * Награда глазами сотрудника у стойки: сама награда, офис, источник и водитель с позывным
- * и телефоном — тем же куском `deskDriver.ts`, что у заказа.
+ * Награда глазами сотрудника у стойки: сама награда, офис, источник, фото товара и водитель
+ * с позывным и телефоном — тем же куском `deskDriver.ts`, что у заказа.
  *
  * Только награды с офисом: у баллов его нет, и у стойки им делать нечего.
  */
@@ -367,11 +370,14 @@ const OFFICE_REWARD_SELECT = Prisma.sql`
          reward."source",
          reward."source_note" AS "sourceNote",
          campaign."title"     AS "campaignTitle",
+         product."photo_path" AS "photoPath",
+         product."updated_at" AS "photoUpdatedAt",
          reward."created_at"  AS "createdAt",
          ${DESK_DRIVER_COLUMNS}
     FROM xb.rewards AS reward
     JOIN xb.offices AS office ON office."id" = reward."office_id"
     LEFT JOIN xb.campaigns AS campaign ON campaign."id" = reward."campaign_id"
+    LEFT JOIN xb.products  AS product  ON product."id" = reward."product_id"
     ${deskDriverJoins(Prisma.sql`reward."person_id"`)}
 `;
 
@@ -406,6 +412,23 @@ export const findAwaitingOfficeRewardByCode = async (
 
   return rows[0] ?? null;
 };
+
+/**
+ * Ждущие награды офиса для списка «Ждут выдачи» у стойки (issue #250), свежие первыми. Офис
+ * входит в условие всегда — «чей это офис», решает вызывающий до запроса.
+ */
+export const listAwaitingOfficeRewards = async (
+  officeId: string,
+  limit: number,
+  client: Executor = db,
+): Promise<OfficeRewardRow[]> =>
+  client.$queryRaw<OfficeRewardRow[]>`
+    ${OFFICE_REWARD_SELECT}
+     WHERE reward."office_id" = ${officeId}::uuid
+       AND reward."status" = 'awaiting'
+     ORDER BY reward."created_at" DESC
+     LIMIT ${limit}
+  `;
 
 export type DriverRewardRow = PersonRewardColumns & {
   /** Офис выдачи. Пуст у баллов. */
