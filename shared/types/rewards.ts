@@ -50,6 +50,12 @@ export type OfficeReward = {
   campaignTitle: string | null;
   /** Пояснение внутри источника: у ручной — пояснение автора, у акции — «сундук дня». */
   sourceNote: string | null;
+  /**
+   * Фото товара из каталога — у награды-товара; у произвольной пусто. Адрес собирает клиент
+   * правилом `ProductPhoto`, отметка правки — его версия (issue #250).
+   */
+  photoPath: string | null;
+  photoUpdatedAt: string | null;
   createdAt: string;
   expiresAt: string;
   issuedAt: string | null;

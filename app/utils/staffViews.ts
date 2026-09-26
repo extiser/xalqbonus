@@ -11,7 +11,7 @@ import type {
   StaffRewardView,
 } from '~/types/staffView';
 import { DISPLAY_TIME_ZONE, formatDate, pluralize } from '~/utils/format';
-import { formatPoints } from '~/utils/memberViews';
+import { formatPoints, photoUrl } from '~/utils/memberViews';
 
 /**
  * Экраны сотрудника в Mini App (issue #250): ответы ручек стойки — в готовые строки компонентов.
@@ -175,6 +175,7 @@ export const staffOrderView = (order: OfficeOrder): StaffOrderView => {
     id: line.productId,
     title: line.name,
     caption: `${line.quantity} шт. × ${formatPoints(line.unitPoints)}`,
+    image: photoUrl(line.photoPath, line.photoUpdatedAt),
     price: formatPoints(line.quantity * line.unitPoints),
   }));
   const driver = sheetDriverLine(order.driverName, order.callsign);
@@ -201,6 +202,7 @@ export const staffRewardView = (reward: OfficeReward): StaffRewardView => ({
     label: rewardLabel(reward),
     title: reward.title,
     caption: rewardCaption(reward),
+    image: photoUrl(reward.photoPath, reward.photoUpdatedAt),
     icon: reward.kind === 'custom' ? 'gift' : undefined,
   },
   dates: [

@@ -38,6 +38,12 @@ export type OfficeOrderLine = {
   quantity: number;
   /** Цена на момент заказа, а не текущая цена каталога. */
   unitPoints: number;
+  /**
+   * Фото товара — текущее, из каталога: у позиции своего нет. Адрес собирает клиент правилом
+   * `ProductPhoto`, отметка правки — его версия. Читает карточка стойки в Mini App (issue #250).
+   */
+  photoPath: string | null;
+  photoUpdatedAt: string;
 };
 
 /**

@@ -10,7 +10,8 @@ import type { StaffRewardView } from '~/types/staffView';
  * награды, золотая метка откуда, название и подпись — у акции её название и пояснение.
  * Отмены нет: не забранная награда сгорает сама.
  *
- * Фото товара в ответе стойки нет — стоит пустая подложка, как в макете.
+ * Фото товара — на светлой подложке умножением, как в строке состава (`MemberLineRow`):
+ * приходит на белом. Фото нет — пустая подложка, как в макете.
  */
 defineProps<{
   reward: StaffRewardView;
@@ -53,7 +54,9 @@ const close = (acting: boolean): void => {
             <path d="M12 8c-2-3.5-5.5-3-5-1s3 1 5 1c2 0 4.5 1 5-1s-3-2.5-5 1z" stroke="#8A93A2" stroke-width="1.5" stroke-linejoin="round" />
           </svg>
         </span>
-        <span v-else class="size-14 shrink-0 rounded-[14px] bg-xb-photo" aria-hidden="true" />
+        <span v-else class="relative size-14 shrink-0 overflow-hidden rounded-[14px] bg-xb-photo" aria-hidden="true">
+          <img v-if="reward.prize.image" :src="reward.prize.image" alt="" class="absolute inset-[5px] size-[46px] object-contain mix-blend-multiply" />
+        </span>
         <div class="min-w-0 grow">
           <div class="text-[11px] font-semibold tracking-[0.3px] text-xb-gold">{{ reward.prize.label }}</div>
           <div class="mt-[3px] text-[16px] font-bold leading-[1.3]">{{ reward.prize.title }}</div>

@@ -46,6 +46,8 @@ export const describeOfficeReward = (row: OfficeRewardRow): OfficeReward => ({
   source: row.source,
   campaignTitle: row.campaignTitle,
   sourceNote: row.sourceNote,
+  photoPath: row.photoPath,
+  photoUpdatedAt: row.photoUpdatedAt?.toISOString() ?? null,
   createdAt: row.createdAt.toISOString(),
   expiresAt: row.expiresAt.toISOString(),
   issuedAt: row.issuedAt?.toISOString() ?? null,

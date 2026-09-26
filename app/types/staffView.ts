@@ -67,6 +67,8 @@ export interface StaffRewardView {
     title: string;
     /** «„Неделя возвращения“, сундук дня». Нет — подписи нет. */
     caption?: string;
+    /** Фото товара. Нет — пустая подложка. */
+    image?: string;
     /** У произвольной награды фото нет — значок подарка. */
     icon?: 'gift';
   };
