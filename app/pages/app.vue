@@ -3,9 +3,12 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { formatPhone, type FormattedPhone } from '#shared/phone';
 import {
   INIT_DATA_HEADER,
+  type DemoRole,
   type Language,
   type MemberOffice,
   type MemberOrder,
+  type MiniAppDemo,
+  type MiniAppDemoRoleRequestBody,
   type MiniAppEmployeeDeniedScreen,
   type MiniAppEmployeeScreen,
   type MiniAppLanguageRequestBody,
@@ -23,8 +26,10 @@ import { useMemberHistory } from '~/composables/useMemberHistory';
 import { useMemberOrders } from '~/composables/useMemberOrders';
 import { useMemberRewards } from '~/composables/useMemberRewards';
 import { useOfficeDesk } from '~/composables/useOfficeDesk';
+import { useDesignFonts } from '~/design/fonts';
 import type {
   MemberCatalogOfficeView,
+  MemberDemoRoleOptionView,
   MemberLanguageOptionView,
   MemberManagerIdsView,
   MemberOfficeView,
@@ -119,6 +124,13 @@ useHead({
     { innerHTML: OLD_ENGINE_GUARD_SCRIPT },
   ],
 });
+
+/**
+ * Шрифты новых макетов — и на странице, а не только в раскладке `miniapp-next`: полоса
+ * «Демо-аккаунт» и шторка «Войти как» стоят и над экраном сотрудника, который ещё на старой
+ * раскладке, а та шрифтов не грузит (issue #205).
+ */
+useDesignFonts();
 
 /** Заглушка вместо экрана — свойства `MemberStubScreen`. */
 type StubView = {
@@ -356,6 +368,14 @@ const employeePasswordOpen = ref(false);
  */
 const EMPLOYEE_PASSWORD_LABEL = 'Пароль для входа с компьютера';
 
+/**
+ * Пункт пароля — пока пароля нет. У демо-менеджера его нет никогда и пункта тоже: своего входа
+ * у демо-учётки не бывает, сервер такой пароль отвергнет (issue #205).
+ */
+const employeePasswordOffered = computed(
+  () => employee.value !== null && !employee.value.passwordSet && employee.value.demo === null,
+);
+
 const employeePassword = useEmployeePassword(
   () => ({ [INIT_DATA_HEADER]: initData }),
   (error) => reportDoorDenial(error),
@@ -374,6 +394,72 @@ const openEmployeePassword = (): void => {
 const saveEmployeePassword = async (): Promise<void> => {
   if ((await employeePassword.submit()) && employee.value) {
     employee.value.passwordSet = true;
+  }
+};
+
+/**
+ * Демо-зритель (issue #205): полоса «Демо-аккаунт» над экраном участника и сотрудника и шторка
+ * «Войти как». Роль и тексты приходят с экраном — у всех, кто не демо-зритель, `null`.
+ *
+ * На остальных стадиях полосы нет: загрузка, заглушки и регистрация ролью не владеют.
+ */
+const demo = computed((): MiniAppDemo | null => {
+  if (stage.value === 'member') {
+    return member.value?.demo ?? null;
+  }
+
+  if (stage.value === 'employee') {
+    return employee.value?.demo ?? null;
+  }
+
+  return null;
+});
+
+/**
+ * Липкие шапки экранов встают под полосу по одному классу корня: он включает сдвиг
+ * `--xb-demo-offset` на высоту полосы (`app/assets/css/tailwind.css`). У не-демо сдвиг ноль.
+ */
+useHead({ htmlAttrs: { class: computed(() => (demo.value ? 'xb-demo' : '')) } });
+
+const demoSheetOpen = ref(false);
+
+/** Роль записывается: «Войти» ждёт с кольцом. */
+const demoSwitching = ref(false);
+
+/** Строки шторки — в порядке макета. */
+const DEMO_ROLES: readonly DemoRole[] = ['driver', 'manager'];
+
+const demoBar = computed(() =>
+  demo.value
+    ? { account: demo.value.texts.account, role: demo.value.texts.roles[demo.value.role], change: demo.value.texts.change }
+    : null,
+);
+
+const demoSheet = computed(() => {
+  const current = demo.value;
+
+  if (!current) {
+    return null;
+  }
+
+  const options: MemberDemoRoleOptionView[] = DEMO_ROLES.map((role) => ({ role, label: current.texts.options[role] }));
+
+  return {
+    current: current.role,
+    options,
+    texts: {
+      title: current.texts.sheetTitle,
+      subtitle: current.texts.sheetSubtitle,
+      enter: current.texts.enter,
+      close: current.texts.close,
+    },
+  };
+});
+
+/** Пока роль записывается, шторка стоит: запрос уже ушёл. */
+const closeDemoSheet = (): void => {
+  if (!demoSwitching.value) {
+    demoSheetOpen.value = false;
   }
 };
 
@@ -661,14 +747,15 @@ watch(
  * Шторка открывается сама (решение Руслана 25-09-2026): только на главной и когда поверх неё ничего
  * нет — ни загрузчика, ни другой шторки. Условие считается заново после каждого перечитывания
  * главной — при открытии, при возврате с другого экрана и из фона, — и подарок, пришедший, пока
- * водитель был в каталоге, всплывает, когда он вернётся. Других шторок у главной пока нет; появятся —
- * их открытость встаёт в условие, и шторка подарков дождётся, пока они закроются.
+ * водитель был в каталоге, всплывает, когда он вернётся. Другая шторка главной — «Войти как»
+ * у демо-зрителя (issue #205): пока она открыта, шторка подарков ждёт.
  */
 const giftSheetDue = computed(
   () =>
     stage.value === 'member' &&
     currentScreen.value === 'home' &&
     !giftSheetOpen.value &&
+    !demoSheetOpen.value &&
     memberRewards.giftsUnseen.value &&
     memberRewards.gifts.value.some((gift) => !giftsSeen.value.includes(gift.rewardId)),
 );
@@ -1714,6 +1801,42 @@ const retry = async (): Promise<void> => {
   await loadState();
 };
 
+/**
+ * «Войти» в шторке «Войти как»: роль уходит в базу, и приложение открывает экран новой роли
+ * с начала — тем же запросом `/api/miniapp/me`, что при открытии, через загрузку. Всё, что
+ * зритель успел сделать под прежней ролью, снимается: экран другой, и помнить за него нечего.
+ *
+ * Отказ — шторка открыта с тем же выбором, повтор тем же нажатием; причина в консоли.
+ */
+const switchDemoRole = async (role: DemoRole): Promise<void> => {
+  if (demoSwitching.value) {
+    return;
+  }
+
+  demoSwitching.value = true;
+
+  try {
+    const body: MiniAppDemoRoleRequestBody = { role };
+
+    await $fetch('/api/miniapp/demo/role', {
+      method: 'POST',
+      headers: { [INIT_DATA_HEADER]: initData },
+      body,
+    });
+  } catch (error) {
+    console.error('[miniapp] не удалось сменить роль демо-зрителя', error);
+    demoSwitching.value = false;
+
+    return;
+  }
+
+  demoSwitching.value = false;
+  demoSheetOpen.value = false;
+  resetScreenWork();
+  window.scrollTo(0, 0);
+  await retry();
+};
+
 /** Запрос состояния экрана. Один на первую загрузку и на перечитывание: спрашивается то же. */
 const fetchState = (): Promise<MiniAppStateResponse> =>
   $fetch<MiniAppStateResponse>('/api/miniapp/me', {
@@ -2123,6 +2246,19 @@ const openMap = (office: MemberOfficeView): void => {
 
 <template>
   <NuxtLayout :name="layout">
+    <template #top>
+      <MoleculesNextMemberDemoBar v-if="demoBar" v-bind="demoBar" @change="demoSheetOpen = true" />
+    </template>
+
+    <OrganismsNextMemberDemoRoleSheet
+      v-if="demoSheet"
+      :open="demoSheetOpen"
+      v-bind="demoSheet"
+      :busy="demoSwitching"
+      @enter="switchDemoRole"
+      @close="closeDemoSheet"
+    />
+
     <OrganismsNextMemberLoadingScreen v-if="stage === 'loading'" :leaving="loadingLeaving" @left="onLoadingLeft" />
 
     <OrganismsNextMemberStubScreen v-else-if="stage === 'error' && stub" v-bind="stub" @retry="retry" />
@@ -2146,7 +2282,7 @@ const openMap = (office: MemberOfficeView): void => {
         />
 
         <AtomsMiniAppButton
-          v-if="!employee.passwordSet"
+          v-if="employeePasswordOffered"
           variant="secondary"
           :label="EMPLOYEE_PASSWORD_LABEL"
           @click="openEmployeePassword"
@@ -2189,7 +2325,7 @@ const openMap = (office: MemberOfficeView): void => {
         />
 
         <AtomsMiniAppButton
-          v-if="!employee.passwordSet"
+          v-if="employeePasswordOffered"
           variant="secondary"
           :label="EMPLOYEE_PASSWORD_LABEL"
           @click="openEmployeePassword"

@@ -90,6 +90,15 @@ export type TextKey =
   | 'language_name_uz'
   | 'button_save'
   | 'button_close'
+  | 'demo_account'
+  | 'demo_role_driver'
+  | 'demo_role_manager'
+  | 'demo_change'
+  | 'demo_sheet_title'
+  | 'demo_sheet_subtitle'
+  | 'demo_option_driver'
+  | 'demo_option_manager'
+  | 'demo_enter'
   | 'button_retry'
   | 'button_yes'
   | 'button_no'
@@ -636,6 +645,46 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   button_close: {
     ru: 'Закрыть',
     uz: 'Yopish',
+  },
+  // Полоса «Демо-аккаунт» и шторка «Войти как» (issue #205) — `_reference/design/demo/`. Роль
+  // в полосе пишется строчной после точки, в шторке — строкой выбора с заглавной: ключи разные.
+  // Узбекский — рабочий, вычитка позже.
+  demo_account: {
+    ru: 'ДЕМО-АККАУНТ',
+    uz: 'DEMO-AKKAUNT',
+  },
+  demo_role_driver: {
+    ru: 'водитель',
+    uz: 'haydovchi',
+  },
+  demo_role_manager: {
+    ru: 'менеджер',
+    uz: 'menejer',
+  },
+  demo_change: {
+    ru: 'Сменить',
+    uz: "O'zgartirish",
+  },
+  demo_sheet_title: {
+    ru: 'Войти как',
+    uz: 'Kim sifatida kirish',
+  },
+  demo_sheet_subtitle: {
+    ru: 'Демо-аккаунт: приложение глазами водителя или менеджера',
+    uz: "Demo-akkaunt: ilova haydovchi yoki menejer ko'zi bilan",
+  },
+  demo_option_driver: {
+    ru: 'Водитель',
+    uz: 'Haydovchi',
+  },
+  demo_option_manager: {
+    ru: 'Менеджер',
+    uz: 'Menejer',
+  },
+  /** Подпись рабочая, название за Русланом (`_reference/design/demo/demo.md`). */
+  demo_enter: {
+    ru: 'Войти',
+    uz: 'Kirish',
   },
   /** Повтор запроса, который не прочитался, — в блоках главной и в разделах. */
   button_retry: {

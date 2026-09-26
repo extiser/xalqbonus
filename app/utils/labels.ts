@@ -99,6 +99,7 @@ const LINK_CLOSE_REASON_LABELS: Record<
   merge: 'склейка двойников',
   operator: 'решение оператора',
   invalid_chat: 'непригодный chat_id',
+  demo: 'демо-зритель выключен',
 };
 
 export const linkCloseReasonLabel = (
@@ -110,6 +111,7 @@ const LINK_CONFIRMED_BY_LABELS: Record<DriverTelegramLink['confirmedBy'], string
   operator: 'оператором в офисе',
   driver_reply: 'ответом водителя',
   legacy_import: 'перенесена из старой базы',
+  demo: 'демо-зритель',
 };
 
 export const linkConfirmedByLabel = (confirmedBy: DriverTelegramLink['confirmedBy']): string =>

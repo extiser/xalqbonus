@@ -8,7 +8,9 @@ import type { OfficeOrderResponse } from '#shared/types/orders';
 // Отмена заказа сотрудником: причина `employee`, баллы и остаток возвращаются. Повтор отвечает
 // «заказ уже отменён».
 export default defineEventHandler(async (event): Promise<OfficeOrderResponse> => {
-  const employee = await requireEmployeeRole(event, ORDER_ROLES);
+  // Стойка открыта и демо-менеджеру (issue #205): ручку зовёт экран сотрудника в Mini App,
+  // а офисы сотрудника ограничивают демо-учётку ДЕМО ОФИСОМ.
+  const employee = await requireEmployeeRole(event, ORDER_ROLES, { allowDemo: true });
   const orderId = requireUuidParam(event, 'orderId');
 
   try {

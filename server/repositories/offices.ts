@@ -107,6 +107,8 @@ export type OfficeInput = {
   workHours: string | null;
   phoneE164: string | null;
   telegram: string | null;
+  /** ДЕМО ОФИС (issue #205). Пусто — живой: так заводятся все, кроме `make demo-create`. */
+  isDemo?: boolean;
 };
 
 export const insertOffice = async (
@@ -114,14 +116,15 @@ export const insertOffice = async (
   client: Executor = db,
 ): Promise<OfficeRow> => {
   const rows = await client.$queryRaw<OfficeRow[]>`
-    INSERT INTO xb.offices ("name", "address", "map_url", "work_hours", "phone_e164", "telegram")
+    INSERT INTO xb.offices ("name", "address", "map_url", "work_hours", "phone_e164", "telegram", "is_demo")
     VALUES (
       ${input.name},
       ${input.address},
       ${input.mapUrl},
       ${input.workHours},
       ${input.phoneE164},
-      ${input.telegram}
+      ${input.telegram},
+      ${input.isDemo ?? false}
     )
     RETURNING ${OFFICE_COLUMNS}
   `;

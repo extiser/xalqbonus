@@ -7,12 +7,16 @@
  *
  * Цвета заданы явно, а не унаследованы от темы Telegram: клиент открывает страницу
  * и в тёмной теме, и в светлой, и прозрачный фон в тёмной дал бы белый текст на белом.
+ *
+ * Слот `top` — полоса «Демо-аккаунт» над экраном сотрудника (issue #205). Над колонкой,
+ * а не в ней: у колонки поля, а полоса стоит от края до края.
  */
 </script>
 
 <template>
   <!-- touch-manipulation: двойной тап не увеличивает экран (issue #210) -->
   <div class="min-h-screen touch-manipulation bg-white font-sans text-slate-900">
+    <slot name="top" />
     <main class="mx-auto flex min-h-screen w-full max-w-md flex-col px-5 py-8">
       <slot />
     </main>

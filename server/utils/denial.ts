@@ -29,6 +29,7 @@ const DENIAL_STATUS: Readonly<Record<ServerDenialCode, 401 | 403 | 429>> = {
   unknown_employee: 403,
   disabled: 403,
   role_not_allowed: 403,
+  demo_not_allowed: 403,
   throttled: 429,
 };
 

@@ -9,7 +9,9 @@ import type { DeskItemResponse } from '#shared/types/rewards';
 // одно, и ответ размечен `kind` (issue #172). Не нашлось — `404` без уточнений, код в чужом
 // офисе — тоже.
 export default defineEventHandler(async (event): Promise<DeskItemResponse> => {
-  const employee = await requireEmployeeRole(event, ORDER_ROLES);
+  // Стойка открыта и демо-менеджеру (issue #205): ручку зовёт экран сотрудника в Mini App,
+  // а офисы сотрудника ограничивают демо-учётку ДЕМО ОФИСОМ.
+  const employee = await requireEmployeeRole(event, ORDER_ROLES, { allowDemo: true });
   const query = getQuery(event);
   const officeId = readUuid(query.officeId);
 

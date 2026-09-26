@@ -29,6 +29,8 @@ export type EmployeeRow = {
   sessionsValidFrom: Date | null;
   telegramUserId: bigint | null;
   disabledAt: Date | null;
+  /** Демо-сотрудник (issue #205): своего входа у него нет, под ним входит демо-зритель. */
+  isDemo: boolean;
 };
 
 /**
@@ -45,7 +47,8 @@ const EMPLOYEE_COLUMNS = Prisma.sql`
   "password_changed_at" AS "passwordChangedAt",
   "sessions_valid_from" AS "sessionsValidFrom",
   "telegram_user_id"    AS "telegramUserId",
-  "disabled_at"         AS "disabledAt"
+  "disabled_at"         AS "disabledAt",
+  "is_demo"             AS "isDemo"
 `;
 
 export const findEmployeeById = async (
@@ -88,6 +91,25 @@ export const findEmployeeByTelegramUserId = async (
 };
 
 /**
+ * Демо-сотрудник этой роли (issue #205) — он один на роль, это держит частичный уникальный
+ * индекс `employees_demo_role_key`. Выключенный тоже находится: выключение демо-учётки
+ * действует так же, как у живой, и решает его проверка доступа, а не поиск.
+ */
+export const findDemoEmployee = async (
+  role: EmployeeRole,
+  client: Executor = db,
+): Promise<EmployeeRow | null> => {
+  const rows = await client.$queryRaw<EmployeeRow[]>`
+    SELECT ${EMPLOYEE_COLUMNS}
+      FROM xb.employees
+     WHERE "is_demo"
+       AND "role" = ${role}::xb.employee_role
+  `;
+
+  return rows[0] ?? null;
+};
+
+/**
  * Есть ли учётка на этот Telegram или на этот телефон — одним запросом.
  *
  * Именно так проверяется правило одной роли при принятии приглашения и при привязке
@@ -119,6 +141,8 @@ export type InsertEmployeeInput = {
   /** Cookie, выпущенный раньше этой отметки, недействителен. Пуста, пока сессии не гасили. */
   sessionsValidFrom: Date | null;
   telegramUserId: bigint | null;
+  /** Демо-сотрудник (issue #205). Пусто — живой: так заводятся все, кроме `make demo-create`. */
+  isDemo?: boolean;
 };
 
 export const insertEmployee = async (
@@ -128,7 +152,7 @@ export const insertEmployee = async (
   const rows = await client.$queryRaw<EmployeeRow[]>`
     INSERT INTO xb.employees (
       "role", "full_name", "phone_e164", "password_hash", "password_changed_at",
-      "sessions_valid_from", "telegram_user_id"
+      "sessions_valid_from", "telegram_user_id", "is_demo"
     )
     VALUES (
       ${input.role}::xb.employee_role,
@@ -137,7 +161,8 @@ export const insertEmployee = async (
       ${input.passwordHash},
       ${input.passwordChangedAt},
       ${input.sessionsValidFrom},
-      ${input.telegramUserId}
+      ${input.telegramUserId},
+      ${input.isDemo ?? false}
     )
     RETURNING ${EMPLOYEE_COLUMNS}
   `;

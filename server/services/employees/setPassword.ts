@@ -23,7 +23,13 @@ export type SetPasswordOutcome =
   /** Пароль короче предела. */
   | 'too_short'
   /** Учётки нет: её выключили и удалили, пока запрос шёл. */
-  | 'unknown_employee';
+  | 'unknown_employee'
+  /**
+   * Демо-учётка (issue #205): своего входа у неё нет — под ней входит демо-зритель. Пароль
+   * открыл бы в неё дверь из веба тому, кому демо показывали. База такую запись и не примет
+   * (`employees_demo_no_login_check`), но отбивается здесь, а не ошибкой ограничения.
+   */
+  | 'demo_account';
 
 export type SetPasswordRequest = {
   employeeId: string;
@@ -40,6 +46,10 @@ export const setPassword = async (request: SetPasswordRequest): Promise<SetPassw
 
   if (!employee) {
     return 'unknown_employee';
+  }
+
+  if (employee.isDemo) {
+    return 'demo_account';
   }
 
   // Хеш считается до записи и вне транзакции: `argon2id` идёт десятки миллисекунд,

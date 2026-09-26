@@ -55,6 +55,8 @@ enum LinkCloseReason {
   merge
   operator
   invalid_chat
+  /// Демо-зрителя выключили (issue #205): его Telegram снова ничей, демо-водитель остаётся.
+  demo
 
   @@map("link_close_reason")
   @@schema("xb")
@@ -68,8 +70,22 @@ enum LinkConfirmedBy {
   /// она не подтверждалась: `operator` на этих 4 091 строке был бы неправдой, по которой
   /// через год не отличить настоящую проверку в офисе от наследства.
   legacy_import
+  /// Привязка демо-зрителя к его демо-водителю (issue #205). Номер никто не проверял: его нет
+  /// ни у зрителя, ни у выдуманного водителя, — Telegram внесён в список `make`-целью.
+  demo
 
   @@map("link_confirmed_by")
+  @@schema("xb")
+}
+
+/// Под какой ролью демо-зритель смотрит приложение (issue #205). Живёт в базе, а не в запросе:
+/// роль, присланную клиентом, выставил бы себе кто угодно (docs/principles.md → «Доверие
+/// к входным данным»).
+enum DemoRole {
+  driver
+  manager
+
+  @@map("demo_role")
   @@schema("xb")
 }
 
@@ -456,6 +472,9 @@ enum ClientPlatform {
 /// не совпадут (docs/decisions.md → «Номер удостоверения хранится в одном месте»).
 model Person {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// Демо-водитель (issue #205): выдуманный человек, которого видит демо-зритель. Живым
+  /// не бывает никогда и источником следующего демо-водителя не служит.
+  isDemo    Boolean  @default(false) @map("is_demo")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -472,6 +491,7 @@ model Person {
   campaigns     CampaignParticipant[]
   rewards       Reward[]
   giftGrants    GiftGrant[]
+  demoViewer    DemoViewer?
 
   @@map("persons")
   @@schema("xb")
@@ -639,6 +659,35 @@ model PersonSettings {
   @@schema("xb")
 }
 
+/// Демо-зритель (issue #205): человек, чей Telegram внесён в список, смотрит приложение глазами
+/// демо-водителя или демо-менеджера — показ программы клиенту и другим паркам.
+///
+/// У каждого зрителя свой демо-водитель, и привязан он к Telegram зрителя обычной строкой
+/// `telegram_links`: для приложения, бота, уведомлений и рассылок зритель — обычный участник,
+/// и отдельных путей «для демо» там нет. Эта таблица нужна ровно для двух вещей: знать, чей
+/// демо-водитель чей, и под какой ролью зритель смотрит сейчас.
+///
+/// Заводится и выключается только `make`-целями; строка не удаляется — повторное внесение
+/// возвращает зрителю прежнего демо-водителя с его историей.
+model DemoViewer {
+  /// Telegram зрителя — `user.id` проверенной `initData`.
+  telegramUserId BigInt    @id @map("telegram_user_id")
+  /// Кто это — «Xalq Taxi, владелец». Для людей, читающих список; приложение его не показывает.
+  label          String
+  /// Его демо-водитель. Уникален: демо-водитель одного зрителя другому не достаётся.
+  personId       String    @unique @map("person_id") @db.Uuid
+  currentRole    DemoRole  @default(driver) @map("current_role")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  /// Зритель выключен: привязка к демо-водителю закрыта. Пусто — действует.
+  disabledAt     DateTime? @map("disabled_at") @db.Timestamptz(6)
+
+  person Person @relation(fields: [personId], references: [id])
+
+  @@map("demo_viewers")
+  @@schema("xb")
+}
+
 /// Лог устройств Mini App: с чего человек открывал приложение и прошёл ли его браузер
 /// проверку движка (issue #223). Строка — на сочетание Telegram-аккаунта и строки браузера:
 /// обновился WebView или iOS — строка браузера новая, и рядом со старой записью появляется
@@ -752,6 +801,10 @@ model Employee {
   telegramUserId    BigInt?      @unique @map("telegram_user_id")
   /// Учётка выключена. Проверяется на каждом запросе, поэтому действует немедленно.
   disabledAt        DateTime?    @map("disabled_at") @db.Timestamptz(6)
+  /// Демо-сотрудник (issue #205): под ним смотрит демо-зритель в роли менеджера. Своего входа
+  /// у него нет — ни пароля, ни Telegram, — и проверка «есть хотя бы один вход» его пропускает.
+  /// Один на роль — частичным уникальным индексом в миграции.
+  isDemo            Boolean      @default(false) @map("is_demo")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -1243,6 +1296,9 @@ model Office {
   phoneE164  String?   @map("phone_e164")
   telegram   String?
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(6)
+  /// ДЕМО ОФИС (issue #205) — офис демо-менеджера. Пока фильтров «демо не попадает в живое»
+  /// нет, он виден в живых списках наравне с остальными.
+  isDemo     Boolean   @default(false) @map("is_demo")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)

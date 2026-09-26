@@ -140,6 +140,7 @@ export const loginByPassword = async (request: LoginRequest): Promise<LoginResul
       role: employee.role,
       fullName: employee.fullName,
       phoneE164: employee.phoneE164,
+      isDemo: employee.isDemo,
     },
     maxAgeSeconds: SESSION_MAX_AGE_SECONDS,
   };

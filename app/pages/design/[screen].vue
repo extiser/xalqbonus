@@ -59,6 +59,7 @@ import {
   catalogPickSheetMock,
   catalogShowcaseMock,
   catalogSoldOutSheetMock,
+  demoMock,
   loadFailedMock,
   notTelegramMock,
   outdatedTelegramMock,
@@ -68,7 +69,13 @@ import {
 } from '~/design/mocks';
 import type { CatalogCart, CatalogScene, GiftSheetScene, RegistrationOutcomeScene } from '~/design/mocks';
 import { findDesignScreen } from '~/design/screens';
-import type { MemberChestCardView, MemberGiftView, MemberLanguage, MemberRewardTicketView } from '~/types/memberView';
+import type {
+  MemberChestCardView,
+  MemberDemoRole,
+  MemberGiftView,
+  MemberLanguage,
+  MemberRewardTicketView,
+} from '~/types/memberView';
 
 /**
  * Один экран служебной страницы `/design` — на заглушках, в колонке телефона.
@@ -104,6 +111,8 @@ function pick<Mock>(mocks: Record<string, Mock>): Mock | undefined {
 const home = computed(() =>
   pick({
     home: homeMock,
+    demo: homeMock,
+    'demo-sheet': homeMock,
     'home-invite': homeInviteMock,
     'home-several': homeSeveralMock,
     'home-quiet': homeQuietMock,
@@ -117,6 +126,7 @@ const home = computed(() =>
 const history = computed(() =>
   pick({
     history: historyMock,
+    'demo-history': historyMock,
     'history-reasons': historyReasonsMock,
     'history-empty': historyEmptyMock,
     'history-error': historyErrorMock,
@@ -178,6 +188,7 @@ const reward = computed(() =>
 const catalogScene = ref(
   pick<CatalogScene>({
     catalog: 'showcase',
+    'demo-catalog': 'showcase',
     'catalog-nothing': 'nothing',
     'catalog-over-balance': 'overBalance',
     'catalog-stock-limit': 'stockLimit',
@@ -630,6 +641,23 @@ function openReward(rewardId: string): void {
   go(REWARD_SCREENS[rewardId] ?? 'reward');
 }
 
+/**
+ * Демо-аккаунт (issue #205): полоса над экраном и шторка «Войти как». Роль держит страница —
+ * «Войти» меняет её в полосе, как скрипт макета. Класс корня включает сдвиг липких шапок
+ * под полосу, тот же, что ставит рабочий экран.
+ */
+const isDemo = slug.value.startsWith('demo');
+const demoRole = ref<MemberDemoRole>('driver');
+const demoSheetOpen = ref(slug.value === 'demo-sheet');
+const demo = computed(() => (isDemo ? demoMock(demoRole.value) : undefined));
+
+useHead({ htmlAttrs: { class: isDemo ? 'xb-demo' : '' } });
+
+function enterDemoRole(role: MemberDemoRole): void {
+  demoRole.value = role;
+  demoSheetOpen.value = false;
+}
+
 function go(target: string): void {
   void navigateTo(`/design/${target}`);
 }
@@ -638,6 +666,16 @@ function go(target: string): void {
 <template>
   <div class="min-h-dvh bg-xb-screen font-manrope text-xb-text">
     <div class="mx-auto w-full max-w-[520px] bg-xb-screen">
+      <template v-if="demo">
+        <MoleculesNextMemberDemoBar v-bind="demo.bar" @change="demoSheetOpen = true" />
+        <OrganismsNextMemberDemoRoleSheet
+          :open="demoSheetOpen"
+          v-bind="demo.sheet"
+          @enter="enterDemoRole"
+          @close="demoSheetOpen = false"
+        />
+      </template>
+
       <template v-if="slug === 'app-loading'">
         <OrganismsNextMemberLoadingScreen :key="loadingKey" :leaving="loadingLeaving" @left="loadingLeft = true" />
         <div class="fixed inset-x-0 bottom-0 z-40 flex justify-center pb-[calc(24px+env(safe-area-inset-bottom))]">
