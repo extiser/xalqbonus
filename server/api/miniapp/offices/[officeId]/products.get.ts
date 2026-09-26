@@ -12,7 +12,11 @@ export default defineEventHandler(async (event): Promise<MiniAppShowcaseResponse
   const driver = await requireMember(event);
   const officeId = requireUuidParam(event, 'officeId');
 
-  const showcase = await readOfficeShowcase({ officeId, balance: driver.points });
+  const showcase = await readOfficeShowcase({
+    officeId,
+    balance: driver.points,
+    isDemo: driver.isDemo,
+  });
 
   if (!showcase) {
     throw denyMemberOrder({ code: 'office_unavailable' }, driver.language);

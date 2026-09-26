@@ -1,5 +1,5 @@
 import { db } from '#server/db';
-import { lockCampaignStatus } from '#server/repositories/campaigns';
+import { findCampaign, lockCampaignStatus } from '#server/repositories/campaigns';
 import {
   listCampaignPrizes,
   replaceCampaignPrizeRows,
@@ -7,6 +7,7 @@ import {
 } from '#server/repositories/campaignPrizes';
 import { findProductsByIds } from '#server/repositories/products';
 import {
+  CampaignPrizeDemoProductError,
   CampaignPrizeProductUnavailableError,
   CampaignPrizesLockedError,
   UnknownCampaignError,
@@ -27,6 +28,9 @@ import type { CampaignPrizesResponse } from '#shared/types/campaign';
  * не проверяется: резерв случается в момент выдачи, и склад к открытию сундука всё равно
  * изменится.
  *
+ * Демо-товар — только в призах демо-акции (issue #212): живому водителю он не выдаётся.
+ * У демо-акции призом может быть любой товар.
+ *
  * Ответ читается в той же транзакции: на экран уходит ровно записанный набор.
  */
 export const replaceCampaignPrizes = async (
@@ -44,6 +48,12 @@ export const replaceCampaignPrizes = async (
       throw new CampaignPrizesLockedError(campaignId, status);
     }
 
+    const campaign = await findCampaign(campaignId, transaction);
+
+    if (!campaign) {
+      throw new UnknownCampaignError(campaignId);
+    }
+
     const productIds = [
       ...new Set(prizes.flatMap((prize) => (prize.productId === null ? [] : [prize.productId]))),
     ];
@@ -58,6 +68,10 @@ export const replaceCampaignPrizes = async (
 
       if (!product || !isGrantableProduct(product)) {
         throw new CampaignPrizeProductUnavailableError(prize.productId, prize.chest);
+      }
+
+      if (product.isDemo && !campaign.isDemo) {
+        throw new CampaignPrizeDemoProductError(prize.productId, prize.chest);
       }
     }
 

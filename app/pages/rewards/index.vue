@@ -58,7 +58,14 @@ const {
 
 const grantsState = computed(() => toLoadState(grantsStatus.value));
 
-const { data: grantOptions } = await useFetch<RewardGrantOptionsResponse>('/api/rewards/grant-options');
+// Офисы — своей стороны: демо-водителю только ДЕМО ОФИС, живому только живые; товары
+// демо-водителю живые и демо (issue #212). Варианты перечитываются, когда меняется получатель.
+const driver = ref<PickedDriver | null>(null);
+
+const { data: grantOptions } = await useFetch<RewardGrantOptionsResponse>(
+  '/api/rewards/grant-options',
+  { query: computed(() => ({ demo: String(driver.value?.isDemo ?? false) })) },
+);
 
 // Сегменты — только тем, кому открыта раздача сегменту: остальным ручка откажет.
 const { data: segments } = await useFetch<SegmentListResponse>('/api/segments', {
@@ -76,7 +83,10 @@ const productOptions = computed<SelectOption[]>(() =>
   })),
 );
 
-/** Рабочие сегменты: архивный при выборе не предлагается. */
+/**
+ * Рабочие сегменты: архивный при выборе не предлагается. Демо-сегмент — с пометкой, и выбирает
+ * его тот же, кому открыт выбор сегмента (issue #212).
+ */
 const workingSegments = computed(() =>
   (segments.value?.segments ?? []).filter((segment) => segment.archivedAt === null),
 );
@@ -84,7 +94,7 @@ const workingSegments = computed(() =>
 const segmentOptions = computed<SelectOption[]>(() =>
   workingSegments.value.map((segment) => ({
     value: segment.segmentId,
-    label: `${segment.name} — ${formatNumber(segment.total)} чел.`,
+    label: `${segment.name}${segment.isDemo ? ' (ДЕМО)' : ''} — ${formatNumber(segment.total)} чел.`,
   })),
 );
 
@@ -94,7 +104,6 @@ const segmentOptions = computed<SelectOption[]>(() =>
 
 const recipientKind = ref<'person' | 'segment'>('person');
 const segmentId = ref('');
-const driver = ref<PickedDriver | null>(null);
 
 const driverNameOf = (card: DriverCardResponse): string => {
   const profile = card.profiles[0];
@@ -118,6 +127,7 @@ if (presetPersonId !== '') {
       personId: presetPersonId,
       name: driverNameOf(card.value),
       isMember: card.value.membership !== null,
+      isDemo: card.value.isDemo,
     };
   }
 }

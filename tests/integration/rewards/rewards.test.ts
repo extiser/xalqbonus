@@ -155,15 +155,18 @@ describe('награды', () => {
   it('приз публикуется без цены в баллах, приходуется и на витрину не выходит', async () => {
     const officeId = await createTestOffice();
     const { employeeId } = await createTestEmployee({ role: 'owner' });
-    const draft = await createProduct({
-      name: 'Термокружка',
-      description: null,
-      pricePoints: null,
-      priceRetail: 60_000,
-      priceCost: 45_000,
-      promo: true,
-      hiddenInCatalog: true,
-    });
+    const draft = await createProduct(
+      {
+        name: 'Термокружка',
+        description: null,
+        pricePoints: null,
+        priceRetail: 60_000,
+        priceCost: 45_000,
+        promo: true,
+        hiddenInCatalog: true,
+      },
+      false,
+    );
 
     trackTestProduct(draft.productId);
 
@@ -174,7 +177,7 @@ describe('награды', () => {
 
     await receiveStock({ officeId, productId: draft.productId, quantity: 2, employeeId });
 
-    const showcase = await readOfficeShowcase({ officeId, balance: 0n });
+    const showcase = await readOfficeShowcase({ officeId, balance: 0n, isDemo: false });
 
     expect(showcase?.products.map((product) => product.productId)).not.toContain(draft.productId);
   });
@@ -190,7 +193,7 @@ describe('награды', () => {
       await receiveStock({ officeId, productId, quantity: 1, employeeId });
     }
 
-    const showcase = await readOfficeShowcase({ officeId, balance: 0n });
+    const showcase = await readOfficeShowcase({ officeId, balance: 0n, isDemo: false });
 
     expect(showcase?.products.map((product) => product.productId)).toEqual([visible]);
   });
@@ -478,6 +481,7 @@ describe('награды', () => {
       officeId: scenario.officeId,
       items: [{ productId, quantity: 1 }],
       actor: 'mini_app',
+      driverIsDemo: false,
     });
     const reward = await grantPrize(scenario);
 
@@ -496,7 +500,7 @@ describe('награды', () => {
     const prize = await createTestProduct({ pricePoints: null, promo: true });
     const archived = await createTestProduct({ pricePoints: 10, archived: true });
 
-    const options = await readRewardGrantOptions();
+    const options = await readRewardGrantOptions({ isDemo: false });
     const officeIds = options.offices.map((office) => office.officeId);
     const productIds = options.products.map((product) => product.productId);
 

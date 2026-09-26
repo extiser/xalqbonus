@@ -1,6 +1,6 @@
 import { createOffice } from '#server/services/offices/createOffice';
 import { readOfficeFields, type OfficeRequestFields } from '#server/services/offices/fields';
-import { requireEmployeeRole } from '#server/utils/employeeAuth';
+import { requireDemoEditor, requireEmployeeRole } from '#server/utils/employeeAuth';
 import { CATALOG_ROLES } from '#shared/access';
 import type { OfficeResponse } from '#shared/types/catalog';
 
@@ -10,10 +10,17 @@ import type { OfficeResponse } from '#shared/types/catalog';
 // Пустое обязательное поле — неполный запрос, а не отказ человеку: форму без названия
 // останавливает браузер рядом с полем (docs/frontend.md → «Обязательное поле — свойство
 // поля»), и досюда такой запрос доходит только из чужого клиента.
+//
+// ДЕМО ОФИС заводит только владелец (issue #212).
 export default defineEventHandler(async (event): Promise<OfficeResponse> => {
-  await requireEmployeeRole(event, CATALOG_ROLES);
+  const employee = await requireEmployeeRole(event, CATALOG_ROLES);
 
-  const fields = readOfficeFields(await readBody<OfficeRequestFields>(event));
+  const body = await readBody<OfficeRequestFields | null>(event);
+  const isDemo = body?.isDemo === true;
+
+  await requireDemoEditor(employee, isDemo);
+
+  const fields = readOfficeFields(body);
 
   if (!fields) {
     throw createError({
@@ -23,5 +30,5 @@ export default defineEventHandler(async (event): Promise<OfficeResponse> => {
     });
   }
 
-  return { office: await createOffice(fields) };
+  return { office: await createOffice(fields, isDemo) };
 });

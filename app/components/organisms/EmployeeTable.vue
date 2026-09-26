@@ -101,6 +101,7 @@ const empty = computed(
                 :label="account.disabled ? 'Выключена' : 'Работает'"
               />
               <AtomsStatusBadge v-if="!account.passwordSet" tone="muted" label="Без пароля" />
+              <AtomsStatusBadge v-if="account.isDemo" tone="demo" label="ДЕМО" />
             </div>
             <p class="mt-0.5 text-xs text-slate-500">{{ account.phoneE164 }}</p>
             <p class="mt-0.5 text-xs text-slate-500">

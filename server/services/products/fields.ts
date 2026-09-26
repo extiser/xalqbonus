@@ -21,6 +21,7 @@ export const toProduct = (row: ProductRow): Product => ({
   archivedAt: row.archivedAt?.toISOString() ?? null,
   promo: row.promo,
   hiddenInCatalog: row.hiddenInCatalog,
+  isDemo: row.isDemo,
   updatedAt: row.updatedAt.toISOString(),
 });
 
@@ -74,6 +75,8 @@ export type ProductRequestFields = {
   priceCost?: unknown;
   promo?: unknown;
   hiddenInCatalog?: unknown;
+  /** Только у заведения: правка признак не трогает (issue #212). */
+  isDemo?: unknown;
 };
 
 /**

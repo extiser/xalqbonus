@@ -1,14 +1,22 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useDemoEditor } from '~/composables/useDemoEditor';
 import { failureText } from '~/utils/requestError';
 import { toLoadState } from '~/utils/loadState';
-import type { OfficeListResponse, OfficeRequestBody, OfficeResponse } from '#shared/types/catalog';
+import type {
+  OfficeCreateRequestBody,
+  OfficeListResponse,
+  OfficeRequestBody,
+  OfficeResponse,
+} from '#shared/types/catalog';
 
 /**
  * Раздел «Офисы»: список и заведение нового.
  *
  * Правка, архив, состав сотрудников и остатки живут на странице офиса: список отвечает
  * на вопрос «какие офисы есть», а не на все вопросы сразу.
+ *
+ * Поле «Демо» в форме заведения видит только владелец (issue #212).
  */
 
 definePageMeta({
@@ -23,6 +31,11 @@ const { data, status, refresh } = await useFetch<OfficeListResponse>('/api/offic
 
 const state = computed(() => toLoadState(status.value));
 
+const { ownsDemo } = useDemoEditor();
+
+/** Поле «Демо» нового офиса. */
+const demo = ref(false);
+
 const saving = ref(false);
 const saveError = ref<string | null>(null);
 
@@ -36,7 +49,10 @@ const create = async (body: OfficeRequestBody): Promise<void> => {
   saveError.value = null;
 
   try {
-    const created = await $fetch<OfficeResponse>('/api/offices', { method: 'POST', body });
+    const created = await $fetch<OfficeResponse>('/api/offices', {
+      method: 'POST',
+      body: { ...body, isDemo: demo.value } satisfies OfficeCreateRequestBody,
+    });
 
     await refresh();
     await navigateTo(`/offices/${created.office.officeId}`);
@@ -67,6 +83,12 @@ const create = async (body: OfficeRequestBody): Promise<void> => {
       :saving="saving"
       :error="saveError"
       @submit="create"
-    />
+    >
+      <MoleculesDemoField
+        v-if="ownsDemo"
+        v-model="demo"
+        hint="ДЕМО ОФИС видит только демо-водитель, живым он не показывается и заказов от них не принимает."
+      />
+    </OrganismsOfficeForm>
   </div>
 </template>

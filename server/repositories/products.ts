@@ -35,6 +35,8 @@ export type ProductRow = {
   promo: boolean;
   /** Не показывать на витрине водителя. Остатки и приход видят его всегда. */
   hiddenInCatalog: boolean;
+  /** Демо-товар (issue #212): его видит и заказывает только демо-водитель. */
+  isDemo: boolean;
   updatedAt: Date;
 };
 
@@ -50,6 +52,7 @@ const PRODUCT_COLUMNS = Prisma.sql`
   "archived_at"  AS "archivedAt",
   "promo",
   "hidden_in_catalog" AS "hiddenInCatalog",
+  "is_demo"      AS "isDemo",
   "updated_at"   AS "updatedAt"
 `;
 
@@ -108,15 +111,20 @@ export type ProductInput = {
   hiddenInCatalog: boolean;
 };
 
-/** Заводит черновик: `published_at` пуст, публикация — отдельное действие. */
+/**
+ * Заводит черновик: `published_at` пуст, публикация — отдельное действие.
+ *
+ * Признак демо — только здесь (issue #212): правка его не трогает, живое в демо
+ * не превращается и обратно.
+ */
 export const insertProductDraft = async (
-  input: ProductInput,
+  input: ProductInput & { isDemo: boolean },
   client: Executor = db,
 ): Promise<ProductRow> => {
   const rows = await client.$queryRaw<ProductRow[]>`
     INSERT INTO xb.products (
       "name", "description", "price_points", "price_retail", "price_cost",
-      "promo", "hidden_in_catalog"
+      "promo", "hidden_in_catalog", "is_demo"
     )
     VALUES (
       ${input.name},
@@ -125,7 +133,8 @@ export const insertProductDraft = async (
       ${input.priceRetail}::int,
       ${input.priceCost}::int,
       ${input.promo},
-      ${input.hiddenInCatalog}
+      ${input.hiddenInCatalog},
+      ${input.isDemo}
     )
     RETURNING ${PRODUCT_COLUMNS}
   `;

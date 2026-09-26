@@ -5,7 +5,7 @@ import { COMPLETED_TRIP_STATUS } from '#server/utils/tripStatus';
 // Относительным путём, а не через `#shared`: состав сегмента заберёт рассылка, а её модули
 // собираются в воркер, бандл которого знает только псевдоним `#server` (package.json →
 // build:worker).
-import { hasSegmentConditions } from '../../shared/segment';
+import { isSegmentBounded } from '../../shared/segment';
 import type { SegmentConditions } from '../../shared/types/segment';
 
 /**
@@ -34,6 +34,8 @@ export type SegmentRow = {
   telegramLinked: boolean | null;
   balanceMin: bigint | null;
   balanceMax: bigint | null;
+  /** Демо-сегмент (issue #212): отбирает только демо-водителей, живой — только живых. */
+  isDemo: boolean;
   createdByName: string;
   createdAt: Date;
   updatedAt: Date;
@@ -50,6 +52,7 @@ const SEGMENT_SELECT = Prisma.sql`
          segment."telegram_linked"     AS "telegramLinked",
          segment."balance_min"         AS "balanceMin",
          segment."balance_max"         AS "balanceMax",
+         segment."is_demo"             AS "isDemo",
          author."full_name"            AS "createdByName",
          segment."created_at"          AS "createdAt",
          segment."updated_at"          AS "updatedAt",
@@ -87,9 +90,13 @@ export type SegmentInput = {
   conditions: SegmentConditions;
 };
 
-/** Заводит сегмент. Возвращает идентификатор: строку с автором читает сервис. */
+/**
+ * Заводит сегмент. Возвращает идентификатор: строку с автором читает сервис.
+ *
+ * Признак демо ставится только здесь: правка его не трогает (issue #212).
+ */
 export const insertSegment = async (
-  input: SegmentInput & { createdById: string },
+  input: SegmentInput & { createdById: string; isDemo: boolean },
   client: Executor = db,
 ): Promise<string> => {
   const { conditions } = input;
@@ -100,7 +107,7 @@ export const insertSegment = async (
       "days_since_trip_min", "days_since_trip_max",
       "program_member", "telegram_linked",
       "balance_min", "balance_max",
-      "created_by_id"
+      "created_by_id", "is_demo"
     )
     VALUES (
       ${input.name},
@@ -111,7 +118,8 @@ export const insertSegment = async (
       ${conditions.telegramLinked}::boolean,
       ${conditions.balanceMin}::bigint,
       ${conditions.balanceMax}::bigint,
-      ${input.createdById}::uuid
+      ${input.createdById}::uuid,
+      ${input.isDemo}
     )
     RETURNING "id"
   `;
@@ -201,10 +209,16 @@ export const updateSegmentArchived = async (
  *
  * Условий нет — отбора нет: здесь, а не только у ручки, потому что это единственная дверь
  * к составу, и сегмент без условий через неё не отдаст весь реестр ни одному потребителю.
+ *
+ * Признак сегмента (issue #212) делит реестр надвое: демо-сегмент выбирает только
+ * из демо-водителей, живой — только из живых. Условием формы он не является — «хотя бы одно
+ * условие» по-прежнему про условия, — и отключить его незаданным нельзя: признак есть всегда.
+ * Поэтому живой срез демо-водителя не возьмёт никогда, и демо-акция живого — тоже. Демо-сегменту
+ * условия необязательны: без них он отдаёт всех демо-водителей (`isSegmentBounded`).
  */
-export const segmentMembersSql = (conditions: SegmentConditions): Prisma.Sql => {
-  if (!hasSegmentConditions(conditions)) {
-    throw new Error('сегмент без условий состава не отдаёт');
+export const segmentMembersSql = (conditions: SegmentConditions, isDemo: boolean): Prisma.Sql => {
+  if (!isSegmentBounded(conditions, isDemo)) {
+    throw new Error('живой сегмент без условий состава не отдаёт');
   }
 
   return Prisma.sql`
@@ -237,6 +251,7 @@ export const segmentMembersSql = (conditions: SegmentConditions): Prisma.Sql => 
                      ON link."person_id" = person."id" AND link."closed_at" IS NULL
               LEFT JOIN xb.accounts AS account
                      ON account."person_id" = person."id" AND account."type" = 'driver'
+             WHERE person."is_demo" = ${isDemo}::boolean
            ) AS candidate
      WHERE (${conditions.daysSinceTripMin}::int IS NULL
             OR candidate."daysSinceTrip" >= ${conditions.daysSinceTripMin}::int)
@@ -261,12 +276,13 @@ export type SegmentCountRow = {
 
 export const countSegmentMembers = async (
   conditions: SegmentConditions,
+  isDemo: boolean,
   client: Executor = db,
 ): Promise<SegmentCountRow> => {
   const rows = await client.$queryRaw<SegmentCountRow[]>`
     SELECT count(*)::int AS "total",
            now()         AS "calculatedAt"
-      FROM (${segmentMembersSql(conditions)}) AS member
+      FROM (${segmentMembersSql(conditions, isDemo)}) AS member
   `;
 
   const row = rows[0];
@@ -298,12 +314,13 @@ export type SegmentMemberRow = {
  */
 export const listSegmentMembersPage = async (
   conditions: SegmentConditions,
+  isDemo: boolean,
   limit: number,
   offset: number,
   client: Executor = db,
 ): Promise<SegmentMemberRow[]> =>
   client.$queryRaw<SegmentMemberRow[]>`
-    WITH member AS (${segmentMembersSql(conditions)})
+    WITH member AS (${segmentMembersSql(conditions, isDemo)})
     SELECT member."personId",
            profile."lastName",
            profile."firstName",
@@ -346,11 +363,12 @@ export const listSegmentMembersPage = async (
  */
 export const listSegmentPersonIds = async (
   conditions: SegmentConditions,
+  isDemo: boolean,
   client: Executor = db,
 ): Promise<string[]> => {
   const rows = await client.$queryRaw<{ personId: string }[]>`
     SELECT member."personId"
-      FROM (${segmentMembersSql(conditions)}) AS member
+      FROM (${segmentMembersSql(conditions, isDemo)}) AS member
      ORDER BY member."personId"
   `;
 

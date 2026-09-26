@@ -18,7 +18,7 @@ import { findDriverAccountByPerson } from '#server/repositories/points';
 import { findActiveLinkByTelegramOrPhone, upsertPersonSettings } from '#server/repositories/programMembership';
 import { ensureDriverAccount } from '#server/services/points/ensureDriverAccount';
 import { getSystemAccount } from '#server/services/points/getSystemAccount';
-import { buildOpeningIdempotencyKey } from '#server/services/points/idempotencyKey';
+import { buildDemoGrantIdempotencyKey } from '#server/services/points/idempotencyKey';
 import { transferPoints } from '#server/services/points/transfer';
 
 /**
@@ -29,8 +29,10 @@ import { transferPoints } from '#server/services/points/transfer';
  * по демо-водителю живого не узнать.
  *
  * Баланс — фиксированный, `DEMO_DRIVER_OPENING_BALANCE`, и ложится не записью в счёт, а переводом
- * `opening` с `emission` — тем же путём, каким баланс получили перенесённые из старой базы
- * (docs/points.md). Ключ — от демо-водителя, поэтому второго перевода на один счёт не бывает.
+ * с `emission` своей причиной `demo_grant` (issue #212): не `opening`, иначе итог переноса
+ * посчитал бы выдуманные баллы перенесёнными. Ключ — от демо-водителя, поэтому второго
+ * перевода на один счёт не бывает. Заведённые до #212 с `opening` не переписываются: итоги
+ * отсекают их по `persons.is_demo`.
  *
  * Демо-водитель привязан к Telegram зрителя обычной строкой `telegram_links`: дальше зритель
  * для приложения, бота, уведомлений и рассылок — обычный участник.
@@ -123,8 +125,8 @@ const createDemoDriver = async (
   const account = await ensureDriverAccount(personId, client);
 
   await transferPoints({
-    reason: 'opening',
-    idempotencyKey: buildOpeningIdempotencyKey(personId),
+    reason: 'demo_grant',
+    idempotencyKey: buildDemoGrantIdempotencyKey(personId),
     amount: DEMO_DRIVER_OPENING_BALANCE,
     fromAccountId: emissionAccountId,
     toAccountId: account.id,

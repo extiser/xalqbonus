@@ -153,6 +153,11 @@ export type DriverSearchRow = {
   profilesCount: number;
   /** Состоит ли в программе. Реестр парка шире программы в шесть раз. */
   isMember: boolean;
+  /**
+   * Демо-водитель (issue #205, #212): в списке помечен «ДЕМО», иначе владелец не отличит его
+   * от живого, пока не откроет карточку.
+   */
+  isDemo: boolean;
   /** Кэш баланса. Пусто, когда счёта нет, — а не ноль: это разные вещи. */
   balance: number | null;
 };
@@ -181,6 +186,8 @@ export type DriverSearchResponse = {
 export type DriverCardResponse = {
   personId: string;
   createdAt: string;
+  /** Демо-водитель (issue #205, #212): правит его только владелец. */
+  isDemo: boolean;
   /** Действующий номер ВУ. Пусто у человека без активной строки — такого быть не должно. */
   activeLicense: DriverLicense | null;
   /** Прежние номера: перевыпуск закрывает строку, а не правит её. */

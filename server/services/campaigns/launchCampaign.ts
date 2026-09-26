@@ -8,11 +8,14 @@ import {
   markCampaignRunning,
 } from '#server/repositories/campaigns';
 import { listCampaignPrizes } from '#server/repositories/campaignPrizes';
+import { findOffice } from '#server/repositories/offices';
 import { findSegment } from '#server/repositories/segments';
 import {
   CampaignAudienceEmptyError,
   CampaignNotLaunchableError,
+  CampaignOfficeDemoMismatchError,
   CampaignSegmentArchivedError,
+  CampaignSegmentDemoMismatchError,
   CampaignSegmentUnknownError,
   CampaignStatusMismatchError,
   UnknownCampaignError,
@@ -34,6 +37,9 @@ import type { CampaignResponse } from '#shared/types/campaign';
  * Состав берётся построителем сегментов (`segmentMembersSql`) — тем же, которым считается
  * предпросмотр. После запуска он не пересчитывается ничем и никогда: ручки «обновить состав»
  * нет и не будет (issue #166).
+ *
+ * Демо-акция запускается тем же кодом (issue #212). Сегмент и офис выдачи сверяются с её
+ * признаком ещё раз: черновик мог быть сохранён до того, как признак появился.
  */
 const log = consola.withTag('campaigns:launch');
 
@@ -83,8 +89,18 @@ export const launchCampaign = async (campaignId: string): Promise<CampaignRespon
       throw new CampaignSegmentUnknownError(campaign.segmentId);
     }
 
+    if (segment.isDemo !== campaign.isDemo) {
+      throw new CampaignSegmentDemoMismatchError(segment.id, campaign.isDemo);
+    }
+
     if (segment.archivedAt !== null) {
       throw new CampaignSegmentArchivedError(segment.id);
+    }
+
+    const office = campaign.officeId === null ? null : await findOffice(campaign.officeId, transaction);
+
+    if (office && office.isDemo !== campaign.isDemo) {
+      throw new CampaignOfficeDemoMismatchError(office.id, campaign.isDemo);
     }
 
     // Строка окна Б — до снимка: половина участника ссылается на окно внешним ключом,
@@ -97,6 +113,7 @@ export const launchCampaign = async (campaignId: string): Promise<CampaignRespon
     const audienceSize = await insertCampaignParticipants(
       campaignId,
       toSegmentConditions(segment),
+      segment.isDemo,
       campaign.splitEnabled,
       transaction,
     );

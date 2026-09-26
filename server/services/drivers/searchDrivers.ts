@@ -70,6 +70,7 @@ export const searchDrivers = async (
         workStatuses: row.workStatuses,
         profilesCount: row.profilesCount,
         isMember: row.isMember,
+        isDemo: row.isDemo,
         // Пусто, а не ноль: «счёта нет» и «на счету ноль» — разные вещи, и подменять
         // первое вторым значит врать о человеке, которого нет в программе.
         balance: row.balance === null ? null : Number(row.balance),

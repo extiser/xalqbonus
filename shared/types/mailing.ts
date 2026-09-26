@@ -52,6 +52,11 @@ export type Mailing = {
   /** Относительный путь на томе приложения. */
   photoPath: string | null;
   status: MailingStatus;
+  /**
+   * Демо-рассылка (issue #212): уходит только демо-водителям. Ставится при заведении
+   * и не меняется, копия наследует; править её может только владелец.
+   */
+  isDemo: boolean;
   createdByName: string;
   createdAt: string;
   startedAt: string | null;
@@ -80,6 +85,12 @@ export type MailingRequestBody = {
   textRu: string;
   textUz: string;
 };
+
+/**
+ * Тело заведения: то же, что у правки, и признак демо (issue #212). Ставит его только владелец,
+ * и только здесь — правка его не принимает: живое в демо не превращается и обратно.
+ */
+export type MailingCreateRequestBody = MailingRequestBody & { isDemo: boolean };
 
 /** Сколько человек получит рассылку, если запустить её сейчас. */
 export type MailingAudienceResponse = {

@@ -1,7 +1,7 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { failureText } from '~/utils/requestError';
 import type { LoadState } from '~/types/loadState';
-import { hasSegmentConditions } from '#shared/segment';
+import { isSegmentBounded } from '#shared/segment';
 import type {
   SegmentConditions,
   SegmentPreviewRequestBody,
@@ -23,6 +23,8 @@ const PREVIEW_DELAY_MS = 400;
 
 export type SegmentPreviewSource = {
   conditions: SegmentConditions;
+  /** Сегмент демо: отбирает только демо-водителей (issue #212). */
+  isDemo: boolean;
   /** Сохранённый сегмент, если условия формы совпадают с его. `null` — считать по форме. */
   savedSegmentId: string | null;
 };
@@ -39,8 +41,11 @@ export const useSegmentPreview = (readSource: () => SegmentPreviewSource) => {
    */
   const refreshing = ref(false);
 
-  /** Условий нет — считать нечего, и экран говорит об этом словами, а не пустотой. */
-  const hasConditions = ref(hasSegmentConditions(readSource().conditions));
+  /**
+   * Условий нет — считать нечего, и экран говорит об этом словами, а не пустотой. У демо-сегмента
+   * считать есть что всегда: без условий это все демо-водители (issue #212).
+   */
+  const hasConditions = ref(isSegmentBounded(readSource().conditions, readSource().isDemo));
 
   /**
    * Номер последнего запроса. Ответы приходят не по порядку: число по «20–9» может приехать
@@ -58,6 +63,7 @@ export const useSegmentPreview = (readSource: () => SegmentPreviewSource) => {
 
     const body: SegmentPreviewRequestBody = {
       conditions: source.conditions,
+      isDemo: source.isDemo,
       offset: offset.value,
     };
 
@@ -68,7 +74,7 @@ export const useSegmentPreview = (readSource: () => SegmentPreviewSource) => {
     const source = readSource();
     const current = ++sequence;
 
-    hasConditions.value = hasSegmentConditions(source.conditions);
+    hasConditions.value = isSegmentBounded(source.conditions, source.isDemo);
 
     if (!hasConditions.value) {
       data.value = null;

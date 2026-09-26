@@ -123,6 +123,7 @@ export const readDriverCard = async (personId: string): Promise<DriverCardRespon
   return {
     personId: person.personId,
     createdAt: person.createdAt.toISOString(),
+    isDemo: person.isDemo,
     activeLicense: licenses.filter((license) => license.closedAt === null).map(toLicense)[0] ?? null,
     formerLicenses: licenses.filter((license) => license.closedAt !== null).map(toLicense),
     profiles: profiles.map((profile) =>

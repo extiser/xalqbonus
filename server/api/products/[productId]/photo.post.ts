@@ -1,5 +1,5 @@
 import { saveProductPhoto } from '#server/services/products/saveProductPhoto';
-import { requireEmployeeRole } from '#server/utils/employeeAuth';
+import { requireDemoEditor, requireEmployeeRole } from '#server/utils/employeeAuth';
 import { rethrowProductFailure } from '#server/utils/productFailure';
 import { requireUuidParam } from '#server/utils/query';
 import { CATALOG_ROLES } from '#shared/access';
@@ -15,9 +15,12 @@ import type { ProductResponse } from '#shared/types/catalog';
 // размера при выборе файла, и человек видит ограничение рядом с полем, а не в ответе сервера
 // (docs/frontend.md → «Обязательное поле — свойство поля»).
 export default defineEventHandler(async (event): Promise<ProductResponse> => {
-  await requireEmployeeRole(event, CATALOG_ROLES);
+  const employee = await requireEmployeeRole(event, CATALOG_ROLES);
 
   const productId = requireUuidParam(event, 'productId');
+
+  await requireDemoEditor(employee, { kind: 'product', id: productId });
+
   const parts = await readMultipartFormData(event);
 
   // Файлом считается часть с именем файла: у текстового поля формы его нет. Имя поля

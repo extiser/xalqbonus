@@ -1,11 +1,17 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { onBeforeRouteLeave, useRoute } from 'vue-router';
+import { useDemoEditor } from '~/composables/useDemoEditor';
 import { useDraftAutosave } from '~/composables/useDraftAutosave';
 import { failureText } from '~/utils/requestError';
 import { toLoadState } from '~/utils/loadState';
 import { productPublishProblems, productPublishProblemText } from '#shared/product';
-import type { Product, ProductRequestBody, ProductResponse } from '#shared/types/catalog';
+import type {
+  Product,
+  ProductCreateRequestBody,
+  ProductRequestBody,
+  ProductResponse,
+} from '#shared/types/catalog';
 
 /**
  * Экран товара: новый, черновик и опубликованный — одна страница (issue #148).
@@ -23,6 +29,10 @@ import type { Product, ProductRequestBody, ProductResponse } from '#shared/types
  * Фото уезжает своим запросом — `multipart/form-data` с одним файлом, — а не полем правки:
  * собрать в одном запросе текстовые поля и файл можно, но тогда каждая правка цены
  * отправляла бы картинку заново.
+ *
+ * **Демо** (issue #212): поле «Демо» у нового товара видит только владелец, и уходит оно
+ * одним заведением — в поля автосохранения не входит, потому что после заведения
+ * не меняется. Демо-товар у остальных открывается на чтение: без автосохранения и кнопок.
  */
 
 definePageMeta({
@@ -94,6 +104,14 @@ const hiddenInCatalog = computed({
   },
 });
 
+const { ownsDemo, canEdit } = useDemoEditor();
+
+/** Поле «Демо» нового товара. Уходит только заведением. */
+const demo = ref(false);
+
+/** Правит ли вошедший этот товар: демо — только владелец. */
+const editable = computed(() => canEdit(product.value?.isDemo ?? false));
+
 const isDraft = computed(() => product.value === null || product.value.publishedAt === null);
 const archived = computed(() => product.value?.archivedAt != null);
 
@@ -121,7 +139,7 @@ const saveDraft = async (snapshot: ProductFormFields): Promise<void> => {
   if (current === null) {
     const created = await $fetch<ProductResponse>('/api/products', {
       method: 'POST',
-      body: toRequestBody(snapshot),
+      body: { ...toRequestBody(snapshot), isDemo: demo.value } satisfies ProductCreateRequestBody,
     });
 
     setProduct(created.product);
@@ -141,7 +159,7 @@ const saveDraft = async (snapshot: ProductFormFields): Promise<void> => {
 const autosave = useDraftAutosave({
   fields,
   save: saveDraft,
-  enabled: () => isDraft.value,
+  enabled: () => isDraft.value && editable.value,
 });
 
 /**
@@ -220,6 +238,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', warnBeforeUnloa
 watch(routeId, async (id) => {
   if (id === NEW_PRODUCT) {
     data.value = undefined;
+    demo.value = false;
     autosave.replace(toFields(null));
 
     return;
@@ -417,7 +436,12 @@ const upload = async (file: File): Promise<void> => {
         </h1>
         <AtomsStatusBadge v-if="state === 'ready' && isDraft" tone="warn" label="Черновик" />
         <AtomsStatusBadge v-else-if="archived" tone="muted" label="В архиве" />
+        <AtomsStatusBadge v-if="product?.isDemo" tone="demo" label="ДЕМО" />
       </div>
+      <p v-if="product?.isDemo" class="mt-1 text-sm text-slate-500">
+        Демо-товар: его видит и заказывает только демо-водитель.
+        {{ editable ? '' : 'Менять его может только владелец.' }}
+      </p>
       <p v-if="state === 'ready' && isDraft" class="mt-1 text-sm text-slate-500">
         Водителю не виден нигде, пока товар не опубликован.
       </p>
@@ -433,6 +457,13 @@ const upload = async (file: File): Promise<void> => {
       message="Товар не прочитался. Это отказ запроса, а не отсутствие товара."
     />
     <template v-else>
+      <MoleculesSectionPanel v-if="product === null && ownsDemo" title="Для кого">
+        <MoleculesDemoField
+          v-model="demo"
+          hint="Демо-товар видит и заказывает только демо-водитель, живым он не показывается."
+        />
+      </MoleculesSectionPanel>
+
       <OrganismsProductForm
         v-model:name="fields.name"
         v-model:description="fields.description"
@@ -450,12 +481,13 @@ const upload = async (file: File): Promise<void> => {
         :error="saveError"
         :uploading="uploading"
         :photo-error="photoError"
+        :readonly="!editable"
         @submit="savePublished"
         @upload="upload"
         @retry="autosave.retry"
       />
 
-      <template v-if="isDraft">
+      <template v-if="editable && isDraft">
         <MoleculesSectionPanel
           title="Публикация"
           note="После публикации товар живёт как любой другой: попадает на витрину офиса, где лежит, принимает приход и уходит в архив, а не удаляется."
@@ -490,7 +522,7 @@ const upload = async (file: File): Promise<void> => {
       </template>
 
       <MoleculesSectionPanel
-        v-else
+        v-else-if="editable"
         title="Архив"
         note="Удаления нет: на товар ссылаются позиции заказов, и позиция обязана помнить, что именно было заказано."
       >

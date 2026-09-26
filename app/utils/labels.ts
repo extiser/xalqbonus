@@ -76,6 +76,7 @@ const POINT_REASON_LABELS: Record<DriverOperation['reason'], string> = {
   merge: 'объединение двойников',
   raffle: 'выплата приза',
   campaign: 'акция',
+  demo_grant: 'баллы демо-водителю',
 };
 
 export const pointReasonLabel = (reason: DriverOperation['reason']): string =>

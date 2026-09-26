@@ -113,6 +113,7 @@ describe('подарки от Xalq Taxi', () => {
         },
       },
       employeeId,
+      false,
     );
     trackTestSegment(segment.segmentId);
 
@@ -419,6 +420,7 @@ describe('подарки от Xalq Taxi', () => {
         },
       },
       employeeId,
+      false,
     );
     trackTestSegment(segment.segmentId);
     await setSegmentArchived(segment.segmentId, true);

@@ -12,6 +12,9 @@ import type { Office, OfficeRequestBody } from '#shared/types/catalog';
  * Обязательные поля помечены `required`: пустую форму останавливает браузер — сам, рядом
  * с полем, на языке человека (docs/frontend.md → «Обязательное поле — свойство поля»).
  * Своей проверки «заполните название» в обработчике отправки нет.
+ *
+ * `readonly` — ДЕМО ОФИС у того, кто его не правит (issue #212): поля видны, но закрыты,
+ * и кнопки нет. Поле «Демо» нового офиса ставит страница — здесь его нет.
  */
 const props = defineProps<{
   title: string;
@@ -22,6 +25,7 @@ const props = defineProps<{
   saving: boolean;
   /** Что ответил сервер на последнюю попытку. `null` — ответа ждать нечего. */
   error: string | null;
+  readonly?: boolean;
 }>();
 
 const emit = defineEmits<{ submit: [body: OfficeRequestBody] }>();
@@ -65,30 +69,34 @@ const submit = (): void => {
 
 <template>
   <MoleculesSectionPanel :title="title">
-    <form class="space-y-4" @submit.prevent="submit">
-      <div class="grid gap-4 sm:grid-cols-2">
-        <MoleculesFormField v-model="name" label="Название" type="text" required />
-        <MoleculesFormField v-model="address" label="Адрес" type="text" required />
-        <MoleculesFormField
-          v-model="mapUrl"
-          label="Ссылка на карту"
-          type="url"
-          placeholder="https://yandex.uz/maps/…"
-          hint="Адрес и ссылка — разные поля: в сообщение водителю идёт адрес."
-        />
-        <MoleculesFormField
-          v-model="workHours"
-          label="Часы работы"
-          type="text"
-          placeholder="Пн–Сб 09:00–18:00"
-        />
-        <MoleculesFormField v-model="phoneE164" label="Телефон" type="tel" placeholder="+998…" />
-        <MoleculesFormField v-model="telegram" label="Telegram" type="text" placeholder="@office" />
-      </div>
+    <form @submit.prevent="submit">
+      <fieldset :disabled="readonly" class="min-w-0 space-y-4">
+        <div class="grid gap-4 sm:grid-cols-2">
+          <MoleculesFormField v-model="name" label="Название" type="text" required />
+          <MoleculesFormField v-model="address" label="Адрес" type="text" required />
+          <MoleculesFormField
+            v-model="mapUrl"
+            label="Ссылка на карту"
+            type="url"
+            placeholder="https://yandex.uz/maps/…"
+            hint="Адрес и ссылка — разные поля: в сообщение водителю идёт адрес."
+          />
+          <MoleculesFormField
+            v-model="workHours"
+            label="Часы работы"
+            type="text"
+            placeholder="Пн–Сб 09:00–18:00"
+          />
+          <MoleculesFormField v-model="phoneE164" label="Телефон" type="tel" placeholder="+998…" />
+          <MoleculesFormField v-model="telegram" label="Telegram" type="text" placeholder="@office" />
+        </div>
 
-      <p v-if="error" class="text-sm text-red-700">{{ error }}</p>
+        <slot />
 
-      <AtomsSubmitButton :label="submitLabel" :disabled="saving" />
+        <p v-if="error" class="text-sm text-red-700">{{ error }}</p>
+
+        <AtomsSubmitButton v-if="!readonly" :label="submitLabel" :disabled="saving" />
+      </fieldset>
     </form>
   </MoleculesSectionPanel>
 </template>

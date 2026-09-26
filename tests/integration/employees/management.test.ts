@@ -119,6 +119,7 @@ describe('управление сотрудниками', () => {
         { officeId: archivedOffice, name: 'Тестовый офис', archived: true },
       ],
       anyOffice: false,
+      isDemo: false,
       manageable: true,
     });
 

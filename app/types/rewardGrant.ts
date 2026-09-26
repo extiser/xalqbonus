@@ -10,6 +10,8 @@ export type PickedDriver = {
   personId: string;
   name: string;
   isMember: boolean;
+  /** Демо-водитель (issue #212): ему годятся только демо-офисы, товары живые и демо. */
+  isDemo: boolean;
 };
 
 /** Поля подарка-баллов, как их набрали в форме. */

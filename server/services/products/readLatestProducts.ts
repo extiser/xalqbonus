@@ -10,8 +10,15 @@ import type { MiniAppLatestProductsResponse } from '#shared/types/miniapp';
  */
 const LATEST_PRODUCTS_LIMIT = 4;
 
-export const readLatestProducts = async (): Promise<MiniAppLatestProductsResponse> => {
-  const rows = await listLatestProducts(LATEST_PRODUCTS_LIMIT);
+export type LatestProductsRequest = {
+  /** Водитель демо: остаток только демо-офисов, демо-товары видны (issue #212). */
+  isDemo: boolean;
+};
+
+export const readLatestProducts = async (
+  request: LatestProductsRequest,
+): Promise<MiniAppLatestProductsResponse> => {
+  const rows = await listLatestProducts(LATEST_PRODUCTS_LIMIT, request.isDemo);
 
   return {
     products: rows.map((row) => ({

@@ -52,7 +52,7 @@ export const launchMailing = async (mailingId: string): Promise<Mailing> => {
         return null;
       }
 
-      const recipients = await insertMailingRecipients(mailingId, transaction);
+      const recipients = await insertMailingRecipients(mailingId, current.isDemo, transaction);
 
       if (recipients === 0) {
         throw new MailingAudienceEmptyError(mailingId);

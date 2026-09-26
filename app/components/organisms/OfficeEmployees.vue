@@ -24,6 +24,8 @@ const props = defineProps<{
   accountsState: LoadState;
   saving: boolean;
   error: string | null;
+  /** Состав только на чтение: ДЕМО ОФИС у того, кто его не правит (issue #212). */
+  readonly?: boolean;
 }>();
 
 const emit = defineEmits<{ save: [employeeIds: string[]] }>();
@@ -87,6 +89,7 @@ const remove = (employeeId: string): void => {
             <span class="text-slate-500">· {{ employeeRoleLabel(employee.role) }}</span>
           </span>
           <AtomsActionButton
+            v-if="!readonly"
             label="Снять"
             tone="danger"
             :disabled="saving"
@@ -95,7 +98,7 @@ const remove = (employeeId: string): void => {
         </li>
       </ul>
 
-      <div class="border-t border-slate-200 pt-4">
+      <div v-if="!readonly" class="border-t border-slate-200 pt-4">
         <MoleculesStateNotice
           v-if="accountsState === 'loading'"
           state="loading"

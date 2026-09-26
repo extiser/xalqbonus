@@ -35,6 +35,11 @@ export type Segment = {
   /** Для сотрудников: зачем срез и кого он должен брать. */
   description: string | null;
   conditions: SegmentConditions;
+  /**
+   * Демо-сегмент (issue #212): отбирает только демо-водителей, живой — только живых. Ставится
+   * при заведении и не меняется; править его может только владелец.
+   */
+  isDemo: boolean;
   createdByName: string;
   createdAt: string;
   updatedAt: string;
@@ -67,9 +72,17 @@ export type SegmentRequestBody = {
   conditions: SegmentConditions;
 };
 
+/**
+ * Тело заведения: то же, что у правки, и признак демо (issue #212). Ставит его только владелец,
+ * и только здесь — правка его не принимает: живое в демо не превращается и обратно.
+ */
+export type SegmentCreateRequestBody = SegmentRequestBody & { isDemo: boolean };
+
 /** Тело предпросмотра несохранённых условий. */
 export type SegmentPreviewRequestBody = {
   conditions: SegmentConditions;
+  /** Признак из формы: демо-сегмент отбирает только демо-водителей (issue #212). */
+  isDemo: boolean;
   offset: number;
 };
 

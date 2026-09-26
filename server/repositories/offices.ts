@@ -27,6 +27,8 @@ export type OfficeRow = {
   telegram: string | null;
   /** Заполнено — офис закрыт: водителю не показывается и заказов не принимает. */
   archivedAt: Date | null;
+  /** ДЕМО ОФИС (issue #205): живому водителю не виден и заказов от него не принимает. */
+  isDemo: boolean;
   updatedAt: Date;
 };
 
@@ -39,6 +41,7 @@ const OFFICE_COLUMNS = Prisma.sql`
   "phone_e164"  AS "phoneE164",
   "telegram",
   "archived_at" AS "archivedAt",
+  "is_demo"     AS "isDemo",
   "updated_at"  AS "updatedAt"
 `;
 
@@ -58,12 +61,21 @@ export const listOffices = async (client: Executor = db): Promise<OfficeRow[]> =
 /**
  * Работающие офисы — для водителя. Архивный офис заказов не принимает, и показывать его
  * в списке, откуда выбирают, куда ехать, значит звать в закрытую дверь.
+ *
+ * `isDemo` — сторона (issue #212): демо-водителю только демо-офисы, живому — только живые.
+ * Офисы разведены полностью, в обе стороны: заказ и награда-товар резервируют штуку в офисе
+ * при создании, и демо в живом офисе заняло бы живую штуку (решение Руслана 26-09-2026).
+ * Параметр обязателен: каждый, кто собирает список, называет сторону явно.
  */
-export const listActiveOffices = async (client: Executor = db): Promise<OfficeRow[]> =>
+export const listActiveOffices = async (
+  isDemo: boolean,
+  client: Executor = db,
+): Promise<OfficeRow[]> =>
   client.$queryRaw<OfficeRow[]>`
     SELECT ${OFFICE_COLUMNS}
       FROM xb.offices
      WHERE "archived_at" IS NULL
+       AND "is_demo" = ${isDemo}::boolean
      ORDER BY "name"
   `;
 

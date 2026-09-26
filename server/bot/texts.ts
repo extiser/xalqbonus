@@ -116,6 +116,7 @@ export type TextKey =
   | 'reason_correction'
   | 'reason_campaign'
   | 'reason_gift'
+  | 'reason_demo_grant'
   | 'history_order_reason'
   | 'button_exchange_points'
   | 'button_back'
@@ -775,6 +776,14 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   reason_gift: {
     ru: 'Подарок от Xalq Taxi',
     uz: "Xalq Taxi'dan sovg'a",
+  },
+  /**
+   * Баллы нового демо-водителя (issue #212): видит их только демо-зритель, словами полосы
+   * «ДЕМО-АККАУНТ». Узбекский — черновой.
+   */
+  reason_demo_grant: {
+    ru: 'Баллы демо-аккаунта',
+    uz: 'Demo-akkaunt ballari',
   },
   /**
    * Списание и возврат по заказу — причина и номер, без лишних слов. Номер тот же, что

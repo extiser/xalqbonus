@@ -3,10 +3,13 @@ import { createError, type H3Error } from 'h3';
 import {
   CampaignAudienceEmptyError,
   CampaignNotLaunchableError,
+  CampaignOfficeDemoMismatchError,
+  CampaignPrizeDemoProductError,
   CampaignPrizeProductUnavailableError,
   CampaignPrizesLockedError,
   CampaignSecondHalfUnavailableError,
   CampaignSegmentArchivedError,
+  CampaignSegmentDemoMismatchError,
   CampaignSegmentUnknownError,
   CampaignSlugTakenError,
   CampaignStatusMismatchError,
@@ -90,6 +93,26 @@ export const explainCampaignFailure = (error: unknown): H3Error | null => {
     return reject(409, 'Conflict', CAMPAIGN_SEGMENT_ARCHIVED_TEXT);
   }
 
+  if (error instanceof CampaignSegmentDemoMismatchError) {
+    return reject(
+      409,
+      'Conflict',
+      error.campaignIsDemo
+        ? 'Демо-акция идёт только на демо-сегменте — выберите демо-сегмент.'
+        : 'Живая акция не идёт на демо-сегменте — выберите живой сегмент.',
+    );
+  }
+
+  if (error instanceof CampaignOfficeDemoMismatchError) {
+    return reject(
+      409,
+      'Conflict',
+      error.campaignIsDemo
+        ? 'Призы демо-акции выдаёт ДЕМО ОФИС — выберите его.'
+        : 'Призы живой акции не выдаёт ДЕМО ОФИС — выберите живой офис.',
+    );
+  }
+
   if (error instanceof CampaignSegmentUnknownError) {
     return reject(400, 'Bad Request', 'Такого сегмента нет.');
   }
@@ -131,6 +154,14 @@ export const explainCampaignFailure = (error: unknown): H3Error | null => {
       400,
       'Bad Request',
       `${campaignChestLabel(error.chest)}: товар не выдаётся — он не опубликован или в архиве. Выберите другой.`,
+    );
+  }
+
+  if (error instanceof CampaignPrizeDemoProductError) {
+    return reject(
+      400,
+      'Bad Request',
+      `${campaignChestLabel(error.chest)}: демо-товар не бывает призом живой акции. Выберите другой.`,
     );
   }
 

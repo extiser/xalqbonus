@@ -103,11 +103,19 @@ export default defineEventHandler(async (event): Promise<ManualRewardResponse> =
     }
 
     if (error instanceof RewardProductUnavailableError) {
-      throw rejectField(409, 'productId', 'этот товар не выдаётся: он черновик или в архиве');
+      throw rejectField(
+        409,
+        'productId',
+        'этот товар не выдаётся: он черновик, в архиве или демо, а водитель живой',
+      );
     }
 
     if (error instanceof RewardOfficeUnavailableError) {
-      throw rejectField(409, 'officeId', 'офис в архиве и наград не выдаёт');
+      throw rejectField(
+        409,
+        'officeId',
+        'офис наград этому водителю не выдаёт: он в архиве или не той стороны — демо-водителю только демо-офис, живому только живой',
+      );
     }
 
     if (error instanceof DriverAccountMissingError) {

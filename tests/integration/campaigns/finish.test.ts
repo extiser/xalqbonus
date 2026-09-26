@@ -79,6 +79,7 @@ const asDriver = (personId: string): LinkedDriver => ({
   callsign: null,
   points: 0n,
   language: 'ru',
+  isDemo: false,
 });
 
 /** Акция на одного водителя, вступившего в начале окна. */
@@ -95,6 +96,7 @@ const launch = async (prizes: CampaignPrizeInput[] = FULL_TEST_PRIZES): Promise<
       conditions: { ...EMPTY_SEGMENT_CONDITIONS, balanceMin: BALANCE_FROM, balanceMax: BALANCE_TO },
     },
     employeeId,
+    false,
   );
 
   trackTestSegment(segment.segmentId);
@@ -113,6 +115,7 @@ const launch = async (prizes: CampaignPrizeInput[] = FULL_TEST_PRIZES): Promise<
       rewardLifetimeDays: 7,
     },
     employeeId,
+    false,
   );
   const campaignId = created.campaign.campaignId;
 

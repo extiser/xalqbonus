@@ -50,6 +50,7 @@ defineProps<{
               :tone="mailingStatusTone(mailing.status)"
               :label="mailingStatusLabel(mailing.status)"
             />
+            <AtomsStatusBadge v-if="mailing.isDemo" tone="demo" label="ДЕМО" />
           </div>
           <p class="mt-0.5 text-xs text-slate-500">
             <template v-if="mailing.startedAt">Запущена {{ formatDate(mailing.startedAt) }}</template>

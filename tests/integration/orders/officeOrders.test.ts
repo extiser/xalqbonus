@@ -90,6 +90,7 @@ const placeScenario = async (): Promise<Scenario> => {
     officeId,
     items: [{ productId, quantity: 2 }],
     actor: 'mini_app',
+    driverIsDemo: false,
   });
 
   return { personId: person.personId, officeId, productId, order };

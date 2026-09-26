@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
+import { useDemoEditor } from '~/composables/useDemoEditor';
 import { useSegmentPreview } from '~/composables/useSegmentPreview';
 import { failureText } from '~/utils/requestError';
 import {
@@ -8,13 +9,18 @@ import {
   type SegmentConditionsDraft,
 } from '~/utils/segmentConditions';
 import { EMPTY_SEGMENT_CONDITIONS } from '#shared/segment';
-import type { SegmentRequestBody, SegmentResponse } from '#shared/types/segment';
+import type { SegmentCreateRequestBody, SegmentResponse } from '#shared/types/segment';
 
 /**
  * Новый сегмент: форма условий и предпросмотр состава по ним — до сохранения.
  *
  * Подбор границ и есть основная работа этого экрана: число пересчитывается по мере правки,
  * и сохраняется сегмент, когда оно устроило, а не ради того, чтобы его увидеть (issue #165).
+ *
+ * Поле «Демо» видит только владелец (issue #212); предпросмотр считает по нему же: демо-сегмент
+ * берёт только демо-водителей, живой — только живых. Включённая галочка очищает условия —
+ * в предпросмотре сразу все демо-водители; условия можно заполнить заново, снятие галочки
+ * их не трогает.
  */
 
 definePageMeta({
@@ -27,8 +33,20 @@ const name = ref('');
 const description = ref('');
 const conditions = ref<SegmentConditionsDraft>(toConditionsDraft(EMPTY_SEGMENT_CONDITIONS));
 
+const { ownsDemo } = useDemoEditor();
+
+/** Поле «Демо» нового сегмента. */
+const demo = ref(false);
+
+watch(demo, (isDemo) => {
+  if (isDemo) {
+    conditions.value = toConditionsDraft(EMPTY_SEGMENT_CONDITIONS);
+  }
+});
+
 const preview = useSegmentPreview(() => ({
   conditions: fromConditionsDraft(conditions.value),
+  isDemo: demo.value,
   savedSegmentId: null,
 }));
 
@@ -39,10 +57,11 @@ const create = async (): Promise<void> => {
   saving.value = true;
   saveError.value = null;
 
-  const body: SegmentRequestBody = {
+  const body: SegmentCreateRequestBody = {
     name: name.value,
     description: description.value,
     conditions: fromConditionsDraft(conditions.value),
+    isDemo: demo.value,
   };
 
   try {
@@ -74,8 +93,15 @@ const create = async (): Promise<void> => {
       submit-label="Завести сегмент"
       :saving="saving"
       :error="saveError"
+      :demo="demo"
       @submit="create"
-    />
+    >
+      <MoleculesDemoField
+        v-if="ownsDemo"
+        v-model="demo"
+        hint="Демо-сегмент берёт только демо-водителей, живой — только живых; без условий — всех демо-водителей. Галочка очищает условия. Демо-акция идёт только на демо-сегменте."
+      />
+    </OrganismsSegmentForm>
 
     <OrganismsSegmentPreview
       :state="preview.state.value"

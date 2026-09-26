@@ -2,6 +2,7 @@ import { consola } from 'consola';
 import { db } from '#server/db';
 import type { Prisma } from '#server/generated/prisma/client';
 import type { PointReason } from '#server/generated/prisma/enums';
+import { findDemoFlag } from '#server/repositories/demo';
 import { findOffice } from '#server/repositories/offices';
 import { findDriverAccountByPerson } from '#server/repositories/points';
 import { findProduct } from '#server/repositories/products';
@@ -39,6 +40,11 @@ import {
  *
  * Награду получает только участник программы — человек с водительским счётом. Вне программы
  * вручить её некуда: он не видит ни раздела, ни кода. Правило то же, что у ручной правки баллов.
+ *
+ * Офис — только своей стороны (issue #212): живому живой, демо-водителю демо. Резерв товара
+ * демо-награды в живом офисе занял бы живую штуку, а ДЕМО ОФИС живой водитель не видит.
+ * Товар живому — только живой, демо-водителю — любой, лежащий в демо-офисе. Отказы те же,
+ * что у архивных.
  *
  * **Блокировки.** Строк наград рождение не блокирует вовсе: оно вставляет новую, а не берёт
  * существующую. Товар берёт только строку остатка, баллы — только счета внутри перевода.
@@ -95,10 +101,14 @@ const originFields = (
         grantedByEmployeeId: null,
       };
 
-const requireOpenOffice = async (transaction: Transaction, officeId: string): Promise<void> => {
+const requireOpenOffice = async (
+  transaction: Transaction,
+  officeId: string,
+  personIsDemo: boolean,
+): Promise<void> => {
   const office = await findOffice(officeId, transaction);
 
-  if (!office || office.archivedAt !== null) {
+  if (!office || office.archivedAt !== null || office.isDemo !== personIsDemo) {
     throw new RewardOfficeUnavailableError(officeId);
   }
 };
@@ -182,14 +192,21 @@ const grantProduct = async (
   transaction: Transaction,
   input: GrantRewardInput,
   gift: Extract<RewardGift, { kind: 'product' }>,
+  personIsDemo: boolean,
 ): Promise<RewardRow> => {
-  await requireOpenOffice(transaction, gift.officeId);
+  await requireOpenOffice(transaction, gift.officeId, personIsDemo);
 
   const product = await findProduct(gift.productId, transaction);
 
   // Черновик и архивный наградой не выдаются — правило `isGrantableProduct`, общее с запуском
   // акции. Название проверяется ещё раз ради типа: дальше оно уходит в награду строкой.
-  if (!product || !isGrantableProduct(product) || !product.name) {
+  // Демо-товар живому — тем же отказом (issue #212).
+  if (
+    !product ||
+    !isGrantableProduct(product) ||
+    !product.name ||
+    (product.isDemo && !personIsDemo)
+  ) {
     throw new RewardProductUnavailableError(gift.productId);
   }
 
@@ -228,8 +245,9 @@ const grantCustom = async (
   transaction: Transaction,
   input: GrantRewardInput,
   gift: Extract<RewardGift, { kind: 'custom' }>,
+  personIsDemo: boolean,
 ): Promise<RewardRow> => {
-  await requireOpenOffice(transaction, gift.officeId);
+  await requireOpenOffice(transaction, gift.officeId, personIsDemo);
 
   return insertAwaitingReward(transaction, {
     personId: input.personId,
@@ -267,11 +285,13 @@ export const grantRewardInTransaction = async (
     return grantPoints(transaction, input, gift, driverAccount.id);
   }
 
+  const personIsDemo = (await findDemoFlag('person', input.personId, transaction)) ?? false;
+
   if (gift.kind === 'product') {
-    return grantProduct(transaction, input, gift);
+    return grantProduct(transaction, input, gift, personIsDemo);
   }
 
-  return grantCustom(transaction, input, gift);
+  return grantCustom(transaction, input, gift, personIsDemo);
 };
 
 /** Рождение награды своей транзакцией — для ручной выдачи. */

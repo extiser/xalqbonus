@@ -4,6 +4,7 @@ import {
   updateDraftCampaign,
   updateDraftCampaignFirstHalf,
 } from '#server/repositories/campaigns';
+import { checkCampaignOffice } from '#server/services/campaigns/checkCampaignOffice';
 import { checkCampaignSegment } from '#server/services/campaigns/checkCampaignSegment';
 import {
   CampaignStatusMismatchError,
@@ -35,7 +36,8 @@ export const updateCampaign = async (
     throw new CampaignStatusMismatchError(campaignId, current.status, 'draft');
   }
 
-  await checkCampaignSegment(fields.segmentId, current.segmentId);
+  await checkCampaignSegment(fields.segmentId, current.segmentId, current.isDemo);
+  await checkCampaignOffice(fields.officeId, current.officeId, current.isDemo);
 
   const updated = await db
     .$transaction(async (transaction) => {

@@ -1,6 +1,6 @@
 import { readProductFields, type ProductRequestFields } from '#server/services/products/fields';
 import { updateProduct } from '#server/services/products/updateProduct';
-import { requireEmployeeRole } from '#server/utils/employeeAuth';
+import { requireDemoEditor, requireEmployeeRole } from '#server/utils/employeeAuth';
 import { rethrowProductFailure } from '#server/utils/productFailure';
 import { requireUuidParam } from '#server/utils/query';
 import { CATALOG_ROLES } from '#shared/access';
@@ -12,9 +12,12 @@ import type { ProductResponse } from '#shared/types/catalog';
 //
 // Фото, публикация и архивность этим запросом не меняются — у каждого своя ручка.
 export default defineEventHandler(async (event): Promise<ProductResponse> => {
-  await requireEmployeeRole(event, CATALOG_ROLES);
+  const employee = await requireEmployeeRole(event, CATALOG_ROLES);
 
   const productId = requireUuidParam(event, 'productId');
+
+  await requireDemoEditor(employee, { kind: 'product', id: productId });
+
   const fields = readProductFields(await readBody<ProductRequestFields | null>(event));
 
   try {

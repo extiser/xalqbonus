@@ -4,7 +4,7 @@ import type { MiniAppOfficesResponse } from '#shared/types/miniapp';
 
 // Офисы, где водитель может обменять баллы: только работающие, с адресом и часами.
 export default defineEventHandler(async (event): Promise<MiniAppOfficesResponse> => {
-  await requireMember(event);
+  const driver = await requireMember(event);
 
-  return readMemberOffices();
+  return readMemberOffices({ isDemo: driver.isDemo });
 });

@@ -18,6 +18,8 @@ defineProps<{
   busyProductId: string | null;
   /** Ответ сервера на последнюю операцию. `null` — показывать нечего. */
   error: string | null;
+  /** Без прихода и правки: ДЕМО ОФИС у того, кто его не правит (issue #212). */
+  readonly?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -49,6 +51,7 @@ const emit = defineEmits<{
         :key="row.productId"
         :row="row"
         :busy="busyProductId === row.productId"
+        :readonly="readonly"
         @receive="emit('receive', { productId: row.productId, ...$event })"
         @adjust="emit('adjust', { productId: row.productId, ...$event })"
       />

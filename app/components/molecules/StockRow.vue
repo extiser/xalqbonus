@@ -17,6 +17,8 @@ const props = defineProps<{
   row: OfficeStockRow;
   /** Операция по этой строке в пути: обе формы на время гаснут. */
   busy: boolean;
+  /** Действий нет: ДЕМО ОФИС у того, кто его не правит (issue #212). */
+  readonly?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -95,7 +97,7 @@ const archived = computed(() => props.row.archivedAt !== null);
         <p class="text-sm text-slate-700">{{ formatNumber(row.reserved) }}</p>
       </div>
 
-      <div class="flex gap-2">
+      <div v-if="!readonly" class="flex gap-2">
         <AtomsActionButton label="Приход" :disabled="busy" @click="toggle('receive')" />
         <AtomsActionButton label="Поправить" :disabled="busy" @click="toggle('adjust')" />
       </div>

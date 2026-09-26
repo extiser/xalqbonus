@@ -15,6 +15,8 @@ import type { SelectOption } from '~/types/selectOption';
  * Число водителей в сегменте показывается здесь же, с пометкой «на сегодня»: сегмент хранит
  * условия, а не людей, и до запуска это число ползёт каждый день. Считает страница —
  * компонент данных не запрашивает (docs/frontend.md → «Данные в компоненты не ходят»).
+ *
+ * `readonly` — демо-акция у того, кто её не правит (issue #212): поля видны, но закрыты.
  */
 defineProps<{
   segmentOptions: SelectOption[];
@@ -27,6 +29,7 @@ defineProps<{
   segmentCount: { total: number; calculatedAt: string } | null;
   autosaveState: AutosaveState;
   autosaveError: string | null;
+  readonly?: boolean;
 }>();
 
 const emit = defineEmits<{ retry: [] }>();
@@ -46,110 +49,111 @@ const driversLabel = (total: number): string =>
 
 <template>
   <MoleculesSectionPanel title="Черновик">
-    <div class="space-y-5">
-      <div class="grid gap-4 sm:grid-cols-2">
-        <MoleculesFormField
-          v-model="title"
-          label="Название"
-          type="text"
-          hint="Для людей: его видят сотрудники и водители на экране акции."
-        />
-        <MoleculesFormField
-          v-model="slug"
-          label="Короткое имя"
-          type="text"
-          placeholder="comeback-wave-1"
-          hint="Строчная латиница, цифры и дефисы. От него строятся ключи начислений акции — после запуска не меняется."
-        />
-      </div>
-
-      <div class="space-y-2">
-        <label class="block">
-          <span class="mb-1 block text-sm font-medium text-slate-700">Сегмент</span>
-          <AtomsSelectInput v-model="segmentId" :options="segmentOptions">
-            <option value="">Выберите сегмент</option>
-          </AtomsSelectInput>
-        </label>
-        <div class="rounded-md bg-slate-50 px-3 py-2 text-sm">
-          <p v-if="segmentId === ''" class="text-slate-500">
-            Состав акции снимается из сегмента при запуске. В списке — только рабочие сегменты.
-          </p>
-          <p v-else-if="segmentArchived" class="text-red-700">
-            Сегмент в архиве. По нему акция не запустится — выберите рабочий.
-          </p>
-          <p v-else-if="segmentCountState === 'loading'" class="text-slate-500">Считаем состав…</p>
-          <p v-else-if="segmentCountState === 'error' || !segmentCount" class="text-red-700">
-            Состав посчитать не вышло. Это отказ запроса, а не пустой сегмент.
-          </p>
-          <template v-else>
-            <p class="text-slate-700">
-              На сегодня в сегменте
-              <span class="font-semibold text-slate-900">{{ driversLabel(segmentCount.total) }}</span>.
-            </p>
-            <p class="mt-0.5 text-xs text-slate-500">
-              Посчитано {{ formatDateTime(segmentCount.calculatedAt) }} в зоне {{ DISPLAY_TIME_ZONE_LABEL }}.
-              Завтра число будет другим: сегмент хранит условия, а не людей. Состав замрёт
-              в момент запуска.
-            </p>
-          </template>
-        </div>
-      </div>
-
-      <fieldset class="space-y-3">
-        <legend class="text-sm font-semibold text-slate-900">Окно половины А</legend>
+    <fieldset :disabled="readonly" class="min-w-0 space-y-5">
         <div class="grid gap-4 sm:grid-cols-2">
-          <MoleculesFormField v-model="startsOn" label="Первый день" type="date" />
-          <MoleculesFormField v-model="endsOn" label="Последний день" type="date" />
-        </div>
-        <p class="text-sm text-slate-500">
-          Сутки акции идут с 05:00 до 05:00 по Ташкенту: окно открывается в 05:00 первого дня,
-          а последний день кончается в 05:00 следующего утра.
-        </p>
-      </fieldset>
-
-      <div class="space-y-2">
-        <label class="flex items-center gap-3">
-          <input
-            v-model="splitEnabled"
-            type="checkbox"
-            class="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
+          <MoleculesFormField
+            v-model="title"
+            label="Название"
+            type="text"
+            hint="Для людей: его видят сотрудники и водители на экране акции."
           />
-          <span class="text-sm font-medium text-slate-900">Разделить состав 50 на 50</span>
-        </label>
-        <p class="text-sm text-slate-500">
-          Состав делится случайно на две равные половины. Половина А получает приглашение сейчас.
-          Половина Б — контроль: в эти дни ей ничего не уходит, её приглашают позже своим окном.
-          Эффект акции меряется сравнением половин за одни и те же дни.
-        </p>
-      </div>
+          <MoleculesFormField
+            v-model="slug"
+            label="Короткое имя"
+            type="text"
+            placeholder="comeback-wave-1"
+            hint="Строчная латиница, цифры и дефисы. От него строятся ключи начислений акции — после запуска не меняется."
+          />
+        </div>
 
-      <fieldset class="space-y-3">
-        <legend class="text-sm font-semibold text-slate-900">Награды</legend>
-        <div class="grid gap-4 sm:grid-cols-2">
+        <div class="space-y-2">
           <label class="block">
-            <span class="mb-1 block text-sm font-medium text-slate-700">Офис выдачи</span>
-            <AtomsSelectInput v-model="officeId" :options="officeOptions">
-              <option value="">Выберите офис</option>
+            <span class="mb-1 block text-sm font-medium text-slate-700">Сегмент</span>
+            <AtomsSelectInput v-model="segmentId" :options="segmentOptions">
+              <option value="">Выберите сегмент</option>
             </AtomsSelectInput>
           </label>
-          <MoleculesNumberField
-            v-model="rewardLifetimeDays"
-            label="Срок, дней"
-            :min="1"
-            hint="Через столько дней неполученная награда сгорает."
-          />
+          <div class="rounded-md bg-slate-50 px-3 py-2 text-sm">
+            <p v-if="segmentId === ''" class="text-slate-500">
+              Состав акции снимается из сегмента при запуске. В списке — только рабочие сегменты.
+            </p>
+            <p v-else-if="segmentArchived" class="text-red-700">
+              Сегмент в архиве. По нему акция не запустится — выберите рабочий.
+            </p>
+            <p v-else-if="segmentCountState === 'loading'" class="text-slate-500">Считаем состав…</p>
+            <p v-else-if="segmentCountState === 'error' || !segmentCount" class="text-red-700">
+              Состав посчитать не вышло. Это отказ запроса, а не пустой сегмент.
+            </p>
+            <template v-else>
+              <p class="text-slate-700">
+                На сегодня в сегменте
+                <span class="font-semibold text-slate-900">{{ driversLabel(segmentCount.total) }}</span>.
+              </p>
+              <p class="mt-0.5 text-xs text-slate-500">
+                Посчитано {{ formatDateTime(segmentCount.calculatedAt) }} в зоне {{ DISPLAY_TIME_ZONE_LABEL }}.
+                Завтра число будет другим: сегмент хранит условия, а не людей. Состав замрёт
+                в момент запуска.
+              </p>
+            </template>
+          </div>
         </div>
-        <p class="text-sm text-slate-500">
-          Призы акции лежат и выдаются в одном офисе: водитель получает их там по коду из раздела
-          «Мои награды». Сгоревший приз возвращается на полку свободным.
-        </p>
-      </fieldset>
 
-      <MoleculesAutosaveStatus
-        :state="autosaveState"
-        :error="autosaveError"
-        @retry="emit('retry')"
-      />
-    </div>
+        <fieldset class="space-y-3">
+          <legend class="text-sm font-semibold text-slate-900">Окно половины А</legend>
+          <div class="grid gap-4 sm:grid-cols-2">
+            <MoleculesFormField v-model="startsOn" label="Первый день" type="date" />
+            <MoleculesFormField v-model="endsOn" label="Последний день" type="date" />
+          </div>
+          <p class="text-sm text-slate-500">
+            Сутки акции идут с 05:00 до 05:00 по Ташкенту: окно открывается в 05:00 первого дня,
+            а последний день кончается в 05:00 следующего утра.
+          </p>
+        </fieldset>
+
+        <div class="space-y-2">
+          <label class="flex items-center gap-3">
+            <input
+              v-model="splitEnabled"
+              type="checkbox"
+              class="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
+            />
+            <span class="text-sm font-medium text-slate-900">Разделить состав 50 на 50</span>
+          </label>
+          <p class="text-sm text-slate-500">
+            Состав делится случайно на две равные половины. Половина А получает приглашение сейчас.
+            Половина Б — контроль: в эти дни ей ничего не уходит, её приглашают позже своим окном.
+            Эффект акции меряется сравнением половин за одни и те же дни.
+          </p>
+        </div>
+
+        <fieldset class="space-y-3">
+          <legend class="text-sm font-semibold text-slate-900">Награды</legend>
+          <div class="grid gap-4 sm:grid-cols-2">
+            <label class="block">
+              <span class="mb-1 block text-sm font-medium text-slate-700">Офис выдачи</span>
+              <AtomsSelectInput v-model="officeId" :options="officeOptions">
+                <option value="">Выберите офис</option>
+              </AtomsSelectInput>
+            </label>
+            <MoleculesNumberField
+              v-model="rewardLifetimeDays"
+              label="Срок, дней"
+              :min="1"
+              hint="Через столько дней неполученная награда сгорает."
+            />
+          </div>
+          <p class="text-sm text-slate-500">
+            Призы акции лежат и выдаются в одном офисе: водитель получает их там по коду из раздела
+            «Мои награды». Сгоревший приз возвращается на полку свободным.
+          </p>
+        </fieldset>
+
+        <MoleculesAutosaveStatus
+          v-if="!readonly"
+          :state="autosaveState"
+          :error="autosaveError"
+          @retry="emit('retry')"
+        />
+    </fieldset>
   </MoleculesSectionPanel>
 </template>

@@ -19,5 +19,5 @@ export const readSegmentPersonIds = async (segmentId: string): Promise<string[]>
     throw new UnknownSegmentError(segmentId);
   }
 
-  return listSegmentPersonIds(toSegmentConditions(row));
+  return listSegmentPersonIds(toSegmentConditions(row), row.isDemo);
 };

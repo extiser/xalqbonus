@@ -25,6 +25,9 @@ import type { Mailing } from '#shared/types/mailing';
  *
  * Фото копируется файлом, а не ссылкой: замена картинки в копии иначе переписала бы файл
  * оригинала.
+ *
+ * Признак демо копия берёт у оригинала (issue #212): копия демо-рассылки — демо, живой — живая.
+ * Иначе копия стала бы способом превратить одно в другое.
  */
 const log = consola.withTag('mailings:copy');
 
@@ -70,6 +73,7 @@ export const copyMailing = async (mailingId: string, createdById: string): Promi
     textUz: source.textUz,
     photoPath: null,
     createdById,
+    isDemo: source.isDemo,
   });
 
   // Сначала черновик, потом файл под его идентификатор: имя файла собирается из uuid

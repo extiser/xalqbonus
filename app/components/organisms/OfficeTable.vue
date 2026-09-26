@@ -48,6 +48,7 @@ defineProps<{
             {{ office.name }}
           </NuxtLink>
           <AtomsStatusBadge v-if="office.archivedAt" tone="muted" label="В архиве" />
+          <AtomsStatusBadge v-if="office.isDemo" tone="demo" label="ДЕМО" />
         </div>
         <p class="mt-1 text-sm text-slate-600">{{ office.address }}</p>
         <p v-if="office.workHours" class="mt-0.5 text-xs text-slate-500">{{ office.workHours }}</p>

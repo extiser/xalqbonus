@@ -112,6 +112,7 @@ const createTestSegment = async (conditions: SegmentConditions): Promise<string>
   const segment = await createSegment(
     { name: 'Тестовый сегмент', description: null, conditions },
     employeeId,
+    false,
   );
 
   trackTestSegment(segment.segmentId);
@@ -165,7 +166,7 @@ describe('сегменты', () => {
     const segmentId = await createTestSegment(WINDOW);
 
     const saved = await previewSavedSegment(segmentId, 0);
-    const draft = await previewSegmentConditions(WINDOW, 0);
+    const draft = await previewSegmentConditions(WINDOW, false, 0);
     const consumer = await readSegmentPersonIds(segmentId);
 
     expect(saved.total).toBe(2);
@@ -195,8 +196,8 @@ describe('сегменты', () => {
       personIds.push(await createDriver({ balance: BALANCE_FROM + 100 + index }));
     }
 
-    const first = await previewSegmentConditions(WINDOW, 0);
-    const second = await previewSegmentConditions(WINDOW, SEGMENT_PREVIEW_LIMIT);
+    const first = await previewSegmentConditions(WINDOW, false, 0);
+    const second = await previewSegmentConditions(WINDOW, false, SEGMENT_PREVIEW_LIMIT);
 
     expect(first.total).toBe(count);
     expect(first.rows).toHaveLength(SEGMENT_PREVIEW_LIMIT);
@@ -219,7 +220,7 @@ describe('сегменты', () => {
     // Нижняя граница ноль — самая широкая из возможных: пропустить она могла бы любого,
     // у кого давность вообще посчиталась.
     const conditions: SegmentConditions = { ...WINDOW, daysSinceTripMin: 0 };
-    const preview = await previewSegmentConditions(conditions, 0);
+    const preview = await previewSegmentConditions(conditions, false, 0);
 
     expect(preview.rows.map((row) => row.personId)).toEqual([travelledId]);
     expect(preview.rows[0]?.daysSinceTrip).toBe(30);
@@ -234,10 +235,12 @@ describe('сегменты', () => {
     // Границы давности берутся включительно и считаются в сутках парка.
     const inside = await previewSegmentConditions(
       { ...WINDOW, daysSinceTripMin: 30, daysSinceTripMax: 30 },
+      false,
       0,
     );
     const outside = await previewSegmentConditions(
       { ...WINDOW, daysSinceTripMin: 31, daysSinceTripMax: 90 },
+      false,
       0,
     );
 

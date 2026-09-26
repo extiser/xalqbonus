@@ -3,7 +3,14 @@ import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { db } from '#server/db';
 import { addDemoViewer, DEMO_DRIVER_OPENING_BALANCE } from '#server/services/demo/addDemoViewer';
 import { disableDemoViewer } from '#server/services/demo/disableDemoViewer';
-import { buildOpeningIdempotencyKey } from '#server/services/points/idempotencyKey';
+import { readBalanceTotals, readOpeningTotal } from '#server/repositories/points';
+import { ensureDriverAccount } from '#server/services/points/ensureDriverAccount';
+import { getSystemAccount } from '#server/services/points/getSystemAccount';
+import {
+  buildDemoGrantIdempotencyKey,
+  buildOpeningIdempotencyKey,
+} from '#server/services/points/idempotencyKey';
+import { transferPoints } from '#server/services/points/transfer';
 import {
   cleanupTestData,
   countTransfersByKey,
@@ -14,10 +21,11 @@ import {
 } from '../support/database';
 import { cleanupTestDemo, trackTestDemoViewer } from '../support/demo';
 import { cleanupTestEmployees, linkTestDriver, nextTestTelegramUserId } from '../support/employees';
+import { grantPoints } from '../support/points';
 import { disconnectQueues } from '../support/queues';
 
 /**
- * Демо-водитель (issue #205): баланс `DEMO_DRIVER_OPENING_BALANCE` ложится переводом `opening`
+ * Демо-водитель (issue #205): баланс `DEMO_DRIVER_OPENING_BALANCE` ложится переводом `demo_grant`
  * с `emission`, ровно один раз на демо-водителя, сколько бы раз зрителя ни вносили и ни выключали.
  *
  * У источника берутся только условия работы профиля, и баланс у него не нужен: фикстура — участник
@@ -65,7 +73,7 @@ describe('демо-водитель', () => {
     await disconnectQueues();
   });
 
-  it('получает фиксированный баланс одним переводом opening с эмиссии', async () => {
+  it('получает фиксированный баланс одним переводом demo_grant с эмиссии', async () => {
     await createSource();
     const telegramUserId = nextTestTelegramUserId();
 
@@ -79,8 +87,8 @@ describe('демо-водитель', () => {
 
     expect(result.balance).toBe(OPENING_BALANCE);
     expect(await readAccountBalance(result.personId)).toBe(OPENING_BALANCE);
-    expect(await countTransfersByKey(buildOpeningIdempotencyKey(result.personId))).toBe(1);
-    expect(await countTransfersByReason(result.personId, 'opening')).toBe(1);
+    expect(await countTransfersByKey(buildDemoGrantIdempotencyKey(result.personId))).toBe(1);
+    expect(await countTransfersByReason(result.personId, 'demo_grant')).toBe(1);
 
     const [link] = await readDemoLinks(result.personId);
 
@@ -102,7 +110,7 @@ describe('демо-водитель', () => {
     }
 
     expect(again.personId).toBe(first.personId);
-    expect(await countTransfersByReason(first.personId, 'opening')).toBe(1);
+    expect(await countTransfersByReason(first.personId, 'demo_grant')).toBe(1);
   });
 
   it('выключение закрывает привязку, повторное внесение возвращает того же водителя', async () => {
@@ -128,7 +136,43 @@ describe('демо-водитель', () => {
 
     expect(enabled).toEqual({ outcome: 'enabled', personId: first.personId, balance: OPENING_BALANCE });
     expect((await readDemoLinks(first.personId)).map((link) => link.closedAt === null)).toEqual([false, true]);
-    expect(await countTransfersByReason(first.personId, 'opening')).toBe(1);
+    expect(await countTransfersByReason(first.personId, 'demo_grant')).toBe(1);
+  });
+
+  it('итоги переноса не считают демо: ни заведение, ни правку, ни прежний opening', async () => {
+    await createSource();
+
+    const totalsBefore = await readBalanceTotals();
+    const openingBefore = await readOpeningTotal();
+
+    const result = await addViewer(nextTestTelegramUserId(), 'проверка итогов');
+
+    if (result.outcome !== 'created') {
+      throw new Error(`демо-водитель не заведён: ${result.outcome}`);
+    }
+
+    // Правка баллов демо-водителю — той же причиной `manual`, что у ручной правки.
+    await grantPoints(result.personId, 700);
+
+    // Демо-водитель, заведённый до `demo_grant`, — с переводом `opening`.
+    const legacyDemo = await createTestPerson({ inProgram: true });
+
+    await db.$executeRaw`UPDATE xb.persons SET "is_demo" = true WHERE "id" = ${legacyDemo.personId}::uuid`;
+
+    const account = await ensureDriverAccount(legacyDemo.personId);
+    const emission = await getSystemAccount('emission');
+
+    await transferPoints({
+      reason: 'opening',
+      idempotencyKey: buildOpeningIdempotencyKey(legacyDemo.personId),
+      amount: 300,
+      fromAccountId: emission.id,
+      toAccountId: account.id,
+      occurredAt: new Date(),
+    });
+
+    expect(await readBalanceTotals()).toEqual(totalsBefore);
+    expect(await readOpeningTotal()).toBe(openingBefore);
   });
 
   it('Telegram живого участника зрителем не становится', async () => {

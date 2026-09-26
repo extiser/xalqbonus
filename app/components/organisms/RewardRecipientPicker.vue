@@ -15,6 +15,9 @@ import type { DriverSearchRow } from '#shared/types/driver';
  *
  * За данными компонент не ходит: запрос поиска уходит наверх событием, найденное приходит
  * свойством (docs/frontend.md → «Данные в компоненты не ходят»).
+ *
+ * Демо-водитель помечен «ДЕМО» (issue #212) и выбирается любой ролью, как живой: на нём учат
+ * менеджеров и админов.
  */
 const props = defineProps<{
   canPickSegment: boolean;
@@ -50,7 +53,12 @@ const rowName = (row: DriverSearchRow): string =>
   'Без имени';
 
 const pick = (row: DriverSearchRow): void => {
-  emit('pick', { personId: row.personId, name: rowName(row), isMember: row.isMember });
+  emit('pick', {
+    personId: row.personId,
+    name: rowName(row),
+    isMember: row.isMember,
+    isDemo: row.isDemo,
+  });
 };
 </script>
 
@@ -82,6 +90,7 @@ const pick = (row: DriverSearchRow): void => {
           :tone="driver.isMember ? 'ok' : 'muted'"
           :label="driver.isMember ? 'в программе' : 'в программе не состоит'"
         />
+        <AtomsStatusBadge v-if="driver.isDemo" tone="demo" label="ДЕМО" />
         <AtomsActionButton label="Другой водитель" @click="emit('clear')" />
       </div>
 
@@ -115,6 +124,7 @@ const pick = (row: DriverSearchRow): void => {
               :tone="row.isMember ? 'ok' : 'muted'"
               :label="row.isMember ? 'в программе' : 'не в программе'"
             />
+            <AtomsStatusBadge v-if="row.isDemo" tone="demo" label="ДЕМО" />
             <AtomsActionButton label="Выбрать" @click="pick(row)" />
           </li>
         </ul>

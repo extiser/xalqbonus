@@ -1,6 +1,7 @@
 import type { H3Event } from 'h3';
 
 import type { EmployeeRole } from '#server/generated/prisma/enums';
+import { readDemoFlag, type DemoEntityRef } from '#server/services/demo/readDemoFlag';
 import {
   authenticateEmployee,
   type AuthenticatedEmployee,
@@ -9,6 +10,7 @@ import {
 import { denyAccess } from '#server/utils/denial';
 import { SESSION_COOKIE_NAME } from '#server/utils/employeeSession';
 import { readInitDataHeader } from '#server/utils/telegramAuth';
+import { canEditDemo } from '#shared/access';
 import type { ServerDenialCode } from '#shared/denials';
 
 /**
@@ -114,6 +116,28 @@ export const requireEmployeeRole = async (
   }
 
   return employee;
+};
+
+/**
+ * Правит ли этот сотрудник эту сущность: демо меняет только владелец (issue #212).
+ *
+ * Сущность — признаком, когда он пришёл телом заведения (`is_demo: true` в форме), или
+ * ссылкой, когда она уже есть: тогда признак читается из базы, а не берётся у клиента.
+ * Живую сущность проверка пропускает всякому, кого пустила роль, — решает она не про раздел,
+ * а про демо.
+ *
+ * С `allowDemo` не пересекается: тот решает, куда пускают демо-сотрудника, эта — кто
+ * правит демо-сущность. Остальные роли демо видят с пометкой и получают отказ на правку.
+ */
+export const requireDemoEditor = async (
+  employee: AuthenticatedEmployee,
+  target: boolean | DemoEntityRef,
+): Promise<void> => {
+  const isDemo = typeof target === 'boolean' ? target : await readDemoFlag(target);
+
+  if (!canEditDemo(employee.role, isDemo ?? false)) {
+    throw denyAccess('demo_owner_only');
+  }
 };
 
 /**

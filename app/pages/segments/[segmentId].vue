@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import { useDemoEditor } from '~/composables/useDemoEditor';
 import { useSegmentPreview } from '~/composables/useSegmentPreview';
 import { formatDateTime } from '~/utils/format';
 import { toLoadState } from '~/utils/loadState';
@@ -24,6 +25,8 @@ import type { SegmentRequestBody, SegmentResponse } from '#shared/types/segment'
  *
  * Архивный открывается целиком: из выбора он убран, а по ссылке из прежней рассылки
  * обязан показать, кого тогда звали.
+ *
+ * Демо-сегмент правит только владелец (issue #212): у остальных условия на чтение, архива нет.
  */
 
 definePageMeta({
@@ -42,6 +45,9 @@ useHead({ title: () => `${data.value?.segment.name ?? 'Сегмент'} — Xalq
 const state = computed(() => toLoadState(status.value));
 const segment = computed(() => data.value?.segment ?? null);
 const archived = computed(() => segment.value?.archivedAt !== null);
+
+const { canEdit } = useDemoEditor();
+const editable = computed(() => canEdit(segment.value?.isDemo ?? false));
 
 const name = ref('');
 const description = ref('');
@@ -70,6 +76,7 @@ const matchesSaved = computed(
 
 const preview = useSegmentPreview(() => ({
   conditions: draftConditions.value,
+  isDemo: segment.value?.isDemo ?? false,
   savedSegmentId: matchesSaved.value ? segmentId.value : null,
 }));
 
@@ -124,13 +131,20 @@ const toggleArchive = async (): Promise<void> => {
       <NuxtLink to="/segments" class="text-sm text-slate-500 underline underline-offset-2">
         ← Все сегменты
       </NuxtLink>
-      <h1 class="mt-2 text-xl font-semibold text-slate-900">{{ segment?.name ?? 'Сегмент' }}</h1>
+      <div class="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h1 class="text-xl font-semibold text-slate-900">{{ segment?.name ?? 'Сегмент' }}</h1>
+        <AtomsStatusBadge v-if="segment?.isDemo" tone="demo" label="ДЕМО" />
+      </div>
       <template v-if="segment">
+        <p v-if="segment.isDemo" class="mt-1 text-sm text-slate-500">
+          Демо-сегмент: берёт только демо-водителей.
+          {{ editable ? '' : 'Менять его может только владелец.' }}
+        </p>
         <p v-if="segment.description" class="mt-1 text-sm text-slate-600">
           {{ segment.description }}
         </p>
         <p class="mt-1 text-xs text-slate-500">
-          {{ describeSegmentConditions(segment.conditions).join(' · ') }}
+          {{ describeSegmentConditions(segment.conditions).join(' · ') || 'все демо-водители' }}
         </p>
         <p class="mt-1 text-xs text-slate-400">
           Завёл {{ segment.createdByName }} {{ formatDateTime(segment.createdAt) }} · изменён
@@ -158,6 +172,8 @@ const toggleArchive = async (): Promise<void> => {
         submit-label="Сохранить"
         :saving="saving"
         :error="saveError"
+        :demo="segment.isDemo"
+        :readonly="!editable"
         @submit="save"
       />
 
@@ -172,6 +188,7 @@ const toggleArchive = async (): Promise<void> => {
       />
 
       <MoleculesSectionPanel
+        v-if="editable"
         title="Архив"
         note="Удаления нет: на сегмент ссылаются рассылки и акции, и удалённый унёс бы ответ на вопрос «кого мы тогда звали»."
       >

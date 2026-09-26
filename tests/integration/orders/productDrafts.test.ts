@@ -70,7 +70,7 @@ const COMPLETE = {
 };
 
 const createDraft = async (fields: typeof EMPTY | typeof COMPLETE = EMPTY) => {
-  const product = await createProduct(fields);
+  const product = await createProduct(fields, false);
 
   trackTestProduct(product.productId);
 
@@ -161,7 +161,7 @@ describe('черновик товара', () => {
       }),
     );
 
-    const showcase = await readOfficeShowcase({ officeId, balance: 100n });
+    const showcase = await readOfficeShowcase({ officeId, balance: 100n, isDemo: false });
 
     expect(showcase?.products.map((product) => product.productId)).not.toContain(draft.productId);
 
@@ -171,13 +171,14 @@ describe('черновик товара', () => {
         officeId,
         items: [{ productId: draft.productId, quantity: 1 }],
         actor: 'mini_app',
+        driverIsDemo: false,
       }),
     ).rejects.toBeInstanceOf(ProductUnavailableError);
 
     // Опубликованный с тем же остатком виден и заказывается.
     await publishProduct(draft.productId);
 
-    const published = await readOfficeShowcase({ officeId, balance: 100n });
+    const published = await readOfficeShowcase({ officeId, balance: 100n, isDemo: false });
 
     expect(published?.products.map((product) => product.productId)).toContain(draft.productId);
   });

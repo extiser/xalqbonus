@@ -258,10 +258,10 @@ export type ManualRewardResponse = {
 
 /** Что можно выбрать в форме ручной выдачи. */
 export type RewardGrantOptionsResponse = {
-  /** Рабочие офисы. */
-  offices: { officeId: string; name: string }[];
-  /** Опубликованные товары не в архиве; призы помечены. */
-  products: { productId: string; name: string; promo: boolean }[];
+  /** Рабочие офисы своей стороны: по `?demo=true` — только демо, иначе только живые (#212). */
+  offices: { officeId: string; name: string; isDemo: boolean }[];
+  /** Опубликованные товары не в архиве; призы помечены. Демо — только по `?demo=true`. */
+  products: { productId: string; name: string; promo: boolean; isDemo: boolean }[];
 };
 
 // ---------------------------------------------------------------------------

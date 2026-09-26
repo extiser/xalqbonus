@@ -138,7 +138,9 @@ export const describeRegistrationResult = async ({
   }
 
   const refusal = REFUSALS[result.outcome];
-  const offices = refusal.kind === 'employee' ? [] : (await readMemberOffices()).offices;
+  // Регистрирующийся не демо: демо-водитель заводится целью, а не контактом (issue #212).
+  const offices =
+    refusal.kind === 'employee' ? [] : (await readMemberOffices({ isDemo: false })).offices;
 
   return {
     outcome: result.outcome,

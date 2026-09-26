@@ -31,6 +31,7 @@ export const toCampaign = (row: CampaignRow): Campaign => ({
   slug: row.slug,
   title: row.title,
   status: row.status,
+  isDemo: row.isDemo,
   office:
     row.officeId === null || row.officeName === null
       ? null
@@ -123,6 +124,8 @@ export type CampaignRequestFields = {
   splitEnabled?: unknown;
   officeId?: unknown;
   rewardLifetimeDays?: unknown;
+  /** Только у заведения: правка признак не трогает (issue #212). */
+  isDemo?: unknown;
 };
 
 export type CampaignWindowRequestFields = {

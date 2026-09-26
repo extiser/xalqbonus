@@ -3,7 +3,7 @@ import {
   UnknownOfficeError,
 } from '#server/services/offices/errors';
 import { setOfficeEmployees } from '#server/services/offices/setOfficeEmployees';
-import { requireEmployeeRole } from '#server/utils/employeeAuth';
+import { requireDemoEditor, requireEmployeeRole } from '#server/utils/employeeAuth';
 import { readUuid, requireUuidParam } from '#server/utils/query';
 import { CATALOG_ROLES } from '#shared/access';
 import type { OfficeEmployeesResponse } from '#shared/types/catalog';
@@ -18,9 +18,12 @@ type EmployeesBody = {
 };
 
 export default defineEventHandler(async (event): Promise<OfficeEmployeesResponse> => {
-  await requireEmployeeRole(event, CATALOG_ROLES);
+  const employee = await requireEmployeeRole(event, CATALOG_ROLES);
 
   const officeId = requireUuidParam(event, 'officeId');
+
+  await requireDemoEditor(employee, { kind: 'office', id: officeId });
+
   const body = await readBody<EmployeesBody>(event);
 
   if (!Array.isArray(body?.employeeIds)) {

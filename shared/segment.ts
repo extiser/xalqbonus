@@ -20,6 +20,17 @@ export const SEGMENT_PREVIEW_LIMIT = 25;
 export const hasSegmentConditions = (conditions: SegmentConditions): boolean =>
   Object.values(conditions).some((value) => value !== null);
 
+/**
+ * Ограничен ли отбор: условием или признаком демо (issue #212).
+ *
+ * Демо-сегменту условия необязательны: признак сам сужает отбор до демо-водителей, и пустые
+ * условия у него — «все демо-водители», а не весь реестр парка. Живому без условий по-прежнему
+ * нельзя. Правило одно на форму, предпросмотр, сохранение и построитель состава; в базе его
+ * держит `segments_has_condition_check`.
+ */
+export const isSegmentBounded = (conditions: SegmentConditions, isDemo: boolean): boolean =>
+  isDemo || hasSegmentConditions(conditions);
+
 /** Пустые условия — стартовое значение формы нового сегмента. */
 export const EMPTY_SEGMENT_CONDITIONS: SegmentConditions = {
   daysSinceTripMin: null,

@@ -41,6 +41,8 @@ export type CampaignRow = {
   slug: string | null;
   title: string | null;
   status: CampaignStatus;
+  /** Демо-акция (issue #212): на демо-сегменте и с ДЕМО ОФИСОМ. */
+  isDemo: boolean;
   segmentId: string | null;
   segmentName: string | null;
   segmentArchivedAt: Date | null;
@@ -87,6 +89,7 @@ const CAMPAIGN_SELECT = Prisma.sql`
          campaign."slug",
          campaign."title",
          campaign."status",
+         campaign."is_demo"        AS "isDemo",
          campaign."segment_id"     AS "segmentId",
          segment."name"            AS "segmentName",
          segment."archived_at"     AS "segmentArchivedAt",
@@ -124,6 +127,7 @@ const toCampaignRow = (row: CampaignFlatRow): CampaignRow => ({
   slug: row.slug,
   title: row.title,
   status: row.status,
+  isDemo: row.isDemo,
   segmentId: row.segmentId,
   segmentName: row.segmentName,
   segmentArchivedAt: row.segmentArchivedAt,
@@ -217,15 +221,19 @@ const windowEndSql = (endsOn: string | null): Prisma.Sql =>
   Prisma.sql`CASE WHEN ${endsOn}::date IS NULL THEN NULL
                   ELSE ${parkDayStartSql(Prisma.sql`${endsOn}::date + 1`)} END`;
 
-/** Заводит черновик. Строку окна половины А ставит сервис в той же транзакции. */
+/**
+ * Заводит черновик. Строку окна половины А ставит сервис в той же транзакции.
+ *
+ * Признак демо ставится только здесь: правка его не трогает (issue #212).
+ */
 export const insertDraftCampaign = async (
-  input: CampaignDraftFields & { createdById: string },
+  input: CampaignDraftFields & { createdById: string; isDemo: boolean },
   client: Executor = db,
 ): Promise<string> => {
   const rows = await client.$queryRaw<{ id: string }[]>`
     INSERT INTO xb.campaigns (
       "title", "slug", "segment_id", "split_enabled", "office_id", "reward_lifetime_days",
-      "status", "created_by_id"
+      "status", "created_by_id", "is_demo"
     )
     VALUES (
       ${input.title},
@@ -235,7 +243,8 @@ export const insertDraftCampaign = async (
       ${input.officeId}::uuid,
       ${input.rewardLifetimeDays}::int,
       'draft'::xb.campaign_status,
-      ${input.createdById}::uuid
+      ${input.createdById}::uuid,
+      ${input.isDemo}
     )
     RETURNING "id"
   `;
@@ -362,6 +371,7 @@ export const setCampaignSecondHalfWindow = async (
 export const insertCampaignParticipants = async (
   campaignId: string,
   conditions: SegmentConditions,
+  segmentIsDemo: boolean,
   splitEnabled: boolean,
   client: Executor,
 ): Promise<number> => {
@@ -378,7 +388,7 @@ export const insertCampaignParticipants = async (
            member."personId",
            ${halfSql},
            'invited'::xb.campaign_participant_state
-      FROM (${segmentMembersSql(conditions)}) AS member
+      FROM (${segmentMembersSql(conditions, segmentIsDemo)}) AS member
     ON CONFLICT ("campaign_id", "person_id") DO NOTHING
   `;
 };
