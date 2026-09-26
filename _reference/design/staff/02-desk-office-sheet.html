@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Сотрудник — шторка смены офиса</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&family=Unbounded:wght@200;300;600;700&display=swap">
+<style>
+/* ЭКРАН СОТРУДНИКА — ШТОРКА СМЕНЫ ОФИСА. Состояние шага 2 по «Сменить» в шапке.
+   Под шторкой — копия 02-desk.html, правится ТАМ. Шторка — копия ../app/catalog-office-sheet.html
+   (эталон шторок ../comeback/04-day-chests-sheet.html): без ручки и свайпа, затемнение не закрывает,
+   офисы строками с отметкой, у текущего отметка при открытии, «Выбрать» гранатом гаснет,
+   пока отмечен текущий, «Отменить» серой — «Выбрать» / «Отменить» (Руслан 26-09-2026).
+   Заголовок шторки — свой класс .s-title: общий .title стойки (Unbounded, flex) сбивал его с центра. В строке — «Ждут выдачи: N», как на выборе офиса.
+   Предупреждения нет: у сотрудника нечего терять при смене — набранный код сбрасывается.
+   На будущее (Руслан 26-09-2026): расписание менеджеров — офис вне сегодняшней смены
+   встанет сюда погашенной строкой с причиной; сейчас не рисуется.
+   Состояние снимка: текущий — Кадышева, отмечен Чиланзар.
+
+   Ниже — комментарий 02-desk.html.
+   ЭКРАН СОТРУДНИКА — СТОЙКА. Шаг 2 блока «Экраны сотрудника» (steps.md).
+   Собран 26-09-2026, сессия 64, по словам Руслана.
+
+   Главное на экране — список «Ждут выдачи» (решение 14-09-2026, #134: на прогоне список
+   под полем кода не заметили). Поле кода — быстрый способ найти в нём, а не единственная дверь.
+
+   Решения Руслана 26-09-2026:
+   - в списке заказы И награды одним списком. Сегодня наград в списке нет — только по коду
+     (EmployeePendingOrders.vue, /api/orders) — правка сервера при вёрстке
+   - новые сверху
+
+   Шапка — как на выборе офиса (01-office-picker.html): аватар (в профиль), имя, роль; «назад» нет —
+   менеджер в день работает в одном офисе (Руслан 26-09-2026). Справа — выбранный офис и «Сменить»,
+   как «Офис · Кадышева  Сменить» в каталоге (../app/catalog-office-picked.html); «Сменить» открывает
+   шторку выбора офиса по ../app/catalog-office-sheet.html. У менеджера с одним офисом «Сменить» нет.
+   Поле кода — крупно, основное окно (Руслан 26-09-2026). Карточки — как в ../app/profile-screen.html.
+   Код выдачи — 5 цифр (server/services/orders/orderCode.ts, CODE_LENGTH); заказы 0–4 первой
+   цифрой, награды 5–9 — поле одно, кто это, решает сервер. Набрано 5 — карточка открывается
+   сама, без кнопки «Найти». Номер заказа — «#1042», не «№ 1042» (#134). */
+
+html, body { background: #0B0D11; margin: 0; }
+body { display: flex; justify-content: center; }
+
+.screen {
+  position: relative; width: 100%; max-width: 520px; min-height: 100dvh;
+  box-sizing: border-box; background: #0B0D11; color: #F4F6F8;
+  font-family: Manrope, 'Segoe UI', system-ui, sans-serif;
+  display: flex; flex-direction: column;
+  padding-bottom: calc(40px + env(safe-area-inset-bottom));
+}
+
+/* ------------------------------------------------------- шапка — из 01-office-picker.html */
+.bar {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 12px;
+  height: 68px; box-sizing: border-box; padding: calc(14px + env(safe-area-inset-top)) 16px 14px;
+  background: rgba(11, 13, 17, 0.82);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.avatar {
+  width: 40px; height: 40px; border-radius: 999px; flex-shrink: 0; border: 0; padding: 0; cursor: pointer;
+  background: rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;
+}
+.who-me { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.who-me b, .who-me span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.who-me b { font-size: 16px; font-weight: 700; letter-spacing: -0.2px; }
+.who-me span { font-size: 13px; font-weight: 200; letter-spacing: 0.2px; color: #C2C9D3; }
+/* Офис справа: имя 15/700 белым (роль «Офис в каталоге»), «Сменить» под ним подчёркнутой
+   ссылкой 14/500 — как в каталоге, только столбиком: в строку рядом с именем не влезает. */
+.where { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; max-width: 45%; }
+.where b { font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.where .change { border: 0; background: none; padding: 0; cursor: pointer;
+  font-family: Manrope, sans-serif; font-size: 14px; font-weight: 500; color: #A9B2BF;
+  text-decoration: underline; text-decoration-color: rgba(169,178,191,.4); text-underline-offset: 3px; }
+
+.body { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px 20px; }
+
+/* ------------------------------------------------------- код выдачи — основное окно
+   Карточка с заголовком и одним крупным полем. Набрана пятая цифра — карточка заказа
+   или награды открывается сама. */
+/* Подложки-карточки вокруг кода нет (Руслан 26-09-2026): заголовок и поле стоят прямо на фоне. */
+.code-card { padding: 8px 2px 4px; }
+.code-card .h {
+  font-family: Unbounded, Manrope, sans-serif; font-size: 17px; font-weight: 600; letter-spacing: -0.3px;
+}
+.code-card .hint { margin-top: 4px; font-size: 13px; font-weight: 300; color: #8A93A2; }
+/* Одно поле, как сейчас в приложении (app/components/atoms/CodeInput.vue): по центру, крупно,
+   моноширинно, разрядка 0.3em, плейсхолдер «•••••» — на клетки не делится (Руслан 26-09-2026).
+   Правки Руслана 26-09-2026: белое поле резало глаза — выбран вариант А из compare-code-input.html:
+   тёмное, заливка #20242C светлее карточек, рамка 50 % (была 22 %, Руслан просил светлее). Высота
+   96 px (Руслан 26-09-2026), кегль прежний — 36. */
+.code {
+  display: block; width: 100%; box-sizing: border-box; margin-top: 16px;
+  height: 96px; padding: 0 16px; border-radius: 16px;
+  background: #20242C; border: 1px solid rgba(255,255,255,0.50); outline: 0;
+  color: #F4F6F8; text-align: center;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 36px; letter-spacing: 0.3em;
+  font-variant-numeric: tabular-nums;
+}
+.code::placeholder { color: #5C6470; }
+/* Фокус — стальной синий (вариант 1 из compare-code-input.html, Руслан 26-09-2026): не гранат —
+   гранат, золото и зелёный заняты смыслами. Вид прежний: 2 px с отступом 2 px. */
+.code:focus, .code.focus { outline: 2px solid #5E7AA3; outline-offset: 2px; border-color: #5E7AA3; }
+
+/* Заголовок блока — Unbounded 17/600, число ждущих рядом серым. */
+.title {
+  display: flex; align-items: baseline; gap: 8px; margin: 18px 2px 4px;
+  font-family: Unbounded, Manrope, sans-serif; font-size: 17px; font-weight: 600; letter-spacing: -0.3px;
+}
+.title .count { font-family: Manrope, sans-serif; font-size: 15px; font-weight: 400; color: #8A93A2; letter-spacing: 0; }
+
+/* ------------------------------------------------------- строка списка
+   Вся карточка — кнопка. Метка вида сверху: заказ — зелёная, награда — золотая
+   (всё про награды золотое, как у водителя; зелёный — заказ). Рамка у всех одна —
+   награда отличается только цветом метки (Руслан 26-09-2026). */
+.item {
+  display: flex; align-items: center; gap: 14px; cursor: pointer; text-align: left;
+  width: 100%; box-sizing: border-box; padding: 14px 14px 14px 16px;
+  border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.09);
+  background: #14171D; color: inherit; font-family: inherit;
+}
+.item:active { background: #1A1E25; }
+.item .info { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.item .kind { font-size: 11px; font-weight: 600; letter-spacing: 0.3px; }  /* мелкая подпись 11/600 по шкале (Руслан 26-09-2026) */
+.item.order .kind { color: #5FD08A; }
+.item.reward .kind { color: #F7BC3E; }
+/* Название карточки — 16/700. */
+.item .what { font-size: 16px; font-weight: 700; line-height: 1.3; }
+/* Уточнение серым — 13/300. */
+.item .who { font-size: 13px; font-weight: 300; color: #8A93A2; line-height: 1.4; }
+.item .who b { font-weight: 500; color: #C2C9D3; }
+.item .chev { flex-shrink: 0; }
+
+/* ------------------------------------------------------------- шторка смены офиса
+   Копия ../app/catalog-office-sheet.html. */
+.backdrop { position: fixed; inset: 0; z-index: 30; background: rgba(0,0,0,0.62); }
+.sheet {
+  position: fixed; left: 50%; bottom: 0; z-index: 31; width: 100%; max-width: 520px;
+  box-sizing: border-box; transform: translate(-50%, 0);
+  background: #14171D; border-radius: 26px 26px 0 0; box-shadow: 0 -18px 50px -20px rgba(0,0,0,0.9);
+  padding: 32px 20px calc(24px + env(safe-area-inset-bottom));
+  color: #F4F6F8; font-family: Manrope, 'Segoe UI', system-ui, sans-serif;
+}
+.sheet-head { text-align: center; }
+.sheet-head .s-title { font-size: 24px; font-weight: 800; letter-spacing: -0.2px; margin-bottom: 10px; }
+.sheet-head .sub { margin-top: 4px; font-size: 13px; font-weight: 300; line-height: 1.65; color: #A9B2BF; }
+.opts { display: flex; flex-direction: column; gap: 10px; margin-top: 22px; }
+.opt {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px;
+  box-sizing: border-box; padding: 10px 18px; cursor: pointer; text-align: left;
+  border: 1px solid rgba(255,255,255,0.09); border-radius: 16px; background: rgba(255,255,255,0.03);
+  font-family: inherit; color: inherit;
+}
+.opt .who { flex-grow: 1; min-width: 0; }
+.opt .name { font-size: 16px; font-weight: 700; color: #F4F6F8; }
+.opt .address { margin-top: 2px; font-size: 13px; font-weight: 300; color: #8A93A2; }
+.opt .wait { margin-top: 4px; font-size: 13px; font-weight: 600; color: #5FD08A; }
+.opt .mark { width: 22px; height: 22px; border-radius: 99px; flex-shrink: 0; box-sizing: border-box;
+  border: 1.5px solid rgba(255,255,255,0.22); display: flex; align-items: center; justify-content: center; }
+.opt.on { border-color: rgba(255,255,255,0.30); background: rgba(255,255,255,0.06); }
+.opt.on .mark { border: 0; background: #F4F6F8; }
+.opt:not(.on) .mark svg { display: none; }
+.sheet-btns { display: flex; flex-direction: column; gap: 10px; margin-top: 24px; }
+.sheet-btns button { width: 100%; height: 52px; padding: 0 16px; border: none; border-radius: 16px; cursor: pointer;
+  font-family: Manrope, sans-serif; font-size: 15px; font-weight: 600; }
+.sheet-btns .sheet-save { font-weight: 700; position: relative; z-index: 1; background: #E8365D; color: #fff; box-shadow: 0 8px 26px rgba(232,54,93,0.38); }
+.sheet-btns .sheet-save:disabled { opacity: 0.55; box-shadow: none; cursor: default; }
+.sheet-close { position: relative; z-index: 2; background: #21242A; color: #F4F6F8; border: 1px solid rgba(255,255,255,0.08); }
+.sheet-close:active { background: #2A2E35; }
+</style></head>
+<body>
+<div class="screen">
+
+  <div class="bar">
+    <button class="avatar" aria-label="Профиль">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="8.5" r="3.6" stroke="#B4BCC8" stroke-width="1.8"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" stroke="#B4BCC8" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
+    <div class="who-me"><b>Дилноза Каримова</b><span>Менеджер</span></div>
+    <div class="where"><b>Кадышева</b><button class="change">Сменить</button></div>
+  </div>
+
+  <div class="body">
+
+    <div class="code-card">
+      <div class="h">Код выдачи</div>
+      <div class="hint">5 цифр — водитель называет его или показывает в приложении</div>
+      <input class="code" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" placeholder="•••••" aria-label="Код заказа или награды, пять цифр" value="52">
+    </div>
+
+    <div class="title">Ждут выдачи <span class="count">4</span></div>
+
+    <button class="item reward">
+      <span class="info">
+        <span class="kind">Награда · из акции</span>
+        <span class="what">Тряпка для кузова</span>
+        <span class="who"><b>Рахимов Бахтиёр · А-247</b> · сегодня, 13:52</span>
+      </span>
+      <svg class="chev" viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M9.5 5.5L16 12l-6.5 6.5" stroke="#6B7483" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+
+    <button class="item order">
+      <span class="info">
+        <span class="kind">Заказ #1042</span>
+        <span class="what">3 товара · 1 250 баллов</span>
+        <span class="who"><b>Алиев Шерзод · Б-118</b> · сегодня, 12:10</span>
+      </span>
+      <svg class="chev" viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M9.5 5.5L16 12l-6.5 6.5" stroke="#6B7483" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+
+    <button class="item reward">
+      <span class="info">
+        <span class="kind">Награда · вручил парк</span>
+        <span class="what">Мойка в подарок</span>
+        <span class="who"><b>Турсунов Акмал · В-031</b> · вчера, 18:44</span>
+      </span>
+      <svg class="chev" viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M9.5 5.5L16 12l-6.5 6.5" stroke="#6B7483" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+
+    <button class="item order">
+      <span class="info">
+        <span class="kind">Заказ #1037</span>
+        <span class="what">1 товар · 400 баллов</span>
+        <span class="who"><b>Мирзаев Жасур · Г-502</b> · вчера, 16:05</span>
+      </span>
+      <svg class="chev" viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M9.5 5.5L16 12l-6.5 6.5" stroke="#6B7483" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+
+  </div>
+</div>
+
+<div class="backdrop"></div>
+<div class="sheet" role="dialog" aria-modal="true">
+  <div class="sheet-head">
+    <div class="s-title">Выберите офис</div>
+    <div class="sub">Стойка покажет заказы и награды этого офиса.</div>
+  </div>
+  <div class="opts">
+    <button class="opt" data-office="Кадышева"><span class="who"><span class="name">Кадышева</span><div class="address">ул. Кадышева, 12</div><div class="wait">Ждут выдачи: 4</div></span><i class="mark"><svg viewBox="0 0 24 24" width="14" height="14" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#0B0D11" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></i></button>
+    <button class="opt on" data-office="Чиланзар"><span class="who"><span class="name">Чиланзар</span><div class="address">Чиланзар, 9-й квартал, 4</div><div class="wait">Ждут выдачи: 1</div></span><i class="mark"><svg viewBox="0 0 24 24" width="14" height="14" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#0B0D11" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></i></button>
+  </div>
+  <div class="sheet-btns">
+    <button class="sheet-save" id="save">Выбрать</button>
+    <button class="sheet-close">Отменить</button>
+  </div>
+</div>
+
+<script>
+  // Отметка — нажатием; «Выбрать» гаснет на текущем офисе.
+  const CURRENT = 'Кадышева';
+  const opts = document.querySelectorAll('.opt'), save = document.getElementById('save');
+  const sync = (name) => { save.disabled = name === CURRENT; };
+  opts.forEach(o => o.addEventListener('click', () => { opts.forEach(x => x.classList.toggle('on', x === o)); sync(o.dataset.office); }));
+  sync('Чиланзар');
+</script>
+</body></html>

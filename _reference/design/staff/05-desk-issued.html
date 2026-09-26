@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Сотрудник — стойка, выдано</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&family=Unbounded:wght@200;300;600;700&display=swap">
+<style>
+/* ЭКРАН СОТРУДНИКА — СТОЙКА ПОСЛЕ ВЫДАЧИ. Шаг 5 (исходы), копия 02-desk.html — правится ТАМ.
+   Вернулись на стойку после «Да, выдать»: поле кода пустое, список перечитан (выданного заказа
+   в нём нет, 4 → 3), над полем — зелёная плашка «Выдано · заказ #N · водитель». Так же —
+   «Выдана награда · Тряпка для кузова · водитель» и «Отменено · заказ #N · баллы и товар вернулись
+   в остатки».
+
+   Ниже — комментарий 02-desk.html.
+   ЭКРАН СОТРУДНИКА — СТОЙКА. Шаг 2 блока «Экраны сотрудника» (steps.md).
+   Собран 26-09-2026, сессия 64, по словам Руслана.
+
+   Главное на экране — список «Ждут выдачи» (решение 14-09-2026, #134: на прогоне список
+   под полем кода не заметили). Поле кода — быстрый способ найти в нём, а не единственная дверь.
+
+   Решения Руслана 26-09-2026:
+   - в списке заказы И награды одним списком. Сегодня наград в списке нет — только по коду
+     (EmployeePendingOrders.vue, /api/orders) — правка сервера при вёрстке
+   - новые сверху
+
+   Шапка — как на выборе офиса (01-office-picker.html): аватар (в профиль), имя, роль; «назад» нет —
+   менеджер в день работает в одном офисе (Руслан 26-09-2026). Справа — выбранный офис и «Сменить»,
+   как «Офис · Кадышева  Сменить» в каталоге (../app/catalog-office-picked.html); «Сменить» открывает
+   шторку выбора офиса по ../app/catalog-office-sheet.html. У менеджера с одним офисом «Сменить» нет.
+   Поле кода — крупно, основное окно (Руслан 26-09-2026). Карточки — как в ../app/profile-screen.html.
+   Код выдачи — 5 цифр (server/services/orders/orderCode.ts, CODE_LENGTH); заказы 0–4 первой
+   цифрой, награды 5–9 — поле одно, кто это, решает сервер. Набрано 5 — карточка открывается
+   сама, без кнопки «Найти». Номер заказа — «#1042», не «№ 1042» (#134). */
+
+html, body { background: #0B0D11; margin: 0; }
+body { display: flex; justify-content: center; }
+
+.screen {
+  position: relative; width: 100%; max-width: 520px; min-height: 100dvh;
+  box-sizing: border-box; background: #0B0D11; color: #F4F6F8;
+  font-family: Manrope, 'Segoe UI', system-ui, sans-serif;
+  display: flex; flex-direction: column;
+  padding-bottom: calc(40px + env(safe-area-inset-bottom));
+}
+
+/* ------------------------------------------------------- шапка — из 01-office-picker.html */
+.bar {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 12px;
+  height: 68px; box-sizing: border-box; padding: calc(14px + env(safe-area-inset-top)) 16px 14px;
+  background: rgba(11, 13, 17, 0.82);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.avatar {
+  width: 40px; height: 40px; border-radius: 999px; flex-shrink: 0; border: 0; padding: 0; cursor: pointer;
+  background: rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;
+}
+.who-me { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.who-me b, .who-me span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.who-me b { font-size: 16px; font-weight: 700; letter-spacing: -0.2px; }
+.who-me span { font-size: 13px; font-weight: 200; letter-spacing: 0.2px; color: #C2C9D3; }
+/* Офис справа: имя 15/700 белым (роль «Офис в каталоге»), «Сменить» под ним подчёркнутой
+   ссылкой 14/500 — как в каталоге, только столбиком: в строку рядом с именем не влезает. */
+.where { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; max-width: 45%; }
+.where b { font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.where .change { border: 0; background: none; padding: 0; cursor: pointer;
+  font-family: Manrope, sans-serif; font-size: 14px; font-weight: 500; color: #A9B2BF;
+  text-decoration: underline; text-decoration-color: rgba(169,178,191,.4); text-underline-offset: 3px; }
+
+.body { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px 20px; }
+
+/* ------------------------------------------------------- код выдачи — основное окно
+   Карточка с заголовком и одним крупным полем. Набрана пятая цифра — карточка заказа
+   или награды открывается сама. */
+/* Подложки-карточки вокруг кода нет (Руслан 26-09-2026): заголовок и поле стоят прямо на фоне. */
+.code-card { padding: 8px 2px 4px; }
+.code-card .h {
+  font-family: Unbounded, Manrope, sans-serif; font-size: 17px; font-weight: 600; letter-spacing: -0.3px;
+}
+.code-card .hint { margin-top: 4px; font-size: 13px; font-weight: 300; color: #8A93A2; }
+/* Одно поле, как сейчас в приложении (app/components/atoms/CodeInput.vue): по центру, крупно,
+   моноширинно, разрядка 0.3em, плейсхолдер «•••••» — на клетки не делится (Руслан 26-09-2026).
+   Правки Руслана 26-09-2026: белое поле резало глаза — выбран вариант А из compare-code-input.html:
+   тёмное, заливка #20242C светлее карточек, рамка 50 % (была 22 %, Руслан просил светлее). Высота
+   96 px (Руслан 26-09-2026), кегль прежний — 36. */
+.code {
+  display: block; width: 100%; box-sizing: border-box; margin-top: 16px;
+  height: 96px; padding: 0 16px; border-radius: 16px;
+  background: #20242C; border: 1px solid rgba(255,255,255,0.50); outline: 0;
+  color: #F4F6F8; text-align: center;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 36px; letter-spacing: 0.3em;
+  font-variant-numeric: tabular-nums;
+}
+.code::placeholder { color: #5C6470; }
+/* Фокус — стальной синий (вариант 1 из compare-code-input.html, Руслан 26-09-2026): не гранат —
+   гранат, золото и зелёный заняты смыслами. Вид прежний: 2 px с отступом 2 px. */
+.code:focus, .code.focus { outline: 2px solid #5E7AA3; outline-offset: 2px; border-color: #5E7AA3; }
+
+/* Заголовок блока — Unbounded 17/600, число ждущих рядом серым. */
+.title {
+  display: flex; align-items: baseline; gap: 8px; margin: 18px 2px 4px;
+  font-family: Unbounded, Manrope, sans-serif; font-size: 17px; font-weight: 600; letter-spacing: -0.3px;
+}
+.title .count { font-family: Manrope, sans-serif; font-size: 15px; font-weight: 400; color: #8A93A2; letter-spacing: 0; }
+
+/* ------------------------------------------------------- строка списка
+   Вся карточка — кнопка. Метка вида сверху: заказ — зелёная, награда — золотая
+   (всё про награды золотое, как у водителя; зелёный — заказ). Рамка у всех одна —
+   награда отличается только цветом метки (Руслан 26-09-2026). */
+.item {
+  display: flex; align-items: center; gap: 14px; cursor: pointer; text-align: left;
+  width: 100%; box-sizing: border-box; padding: 14px 14px 14px 16px;
+  border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.09);
+  background: #14171D; color: inherit; font-family: inherit;
+}
+.item:active { background: #1A1E25; }
+.item .info { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.item .kind { font-size: 11px; font-weight: 600; letter-spacing: 0.3px; }  /* мелкая подпись 11/600 по шкале (Руслан 26-09-2026) */
+.item.order .kind { color: #5FD08A; }
+.item.reward .kind { color: #F7BC3E; }
+/* Название карточки — 16/700. */
+.item .what { font-size: 16px; font-weight: 700; line-height: 1.3; }
+/* Уточнение серым — 13/300. */
+.item .who { font-size: 13px; font-weight: 300; color: #8A93A2; line-height: 1.4; }
+.item .who b { font-weight: 500; color: #C2C9D3; }
+.item .chev { flex-shrink: 0; }
+
+/* ------------------------------------------------------- плашка исхода над полем кода
+   Удача — зелёная с галочкой, отказ — алая: тексты отказов — shared/orderDenials.ts.
+   Плашка исчезает, когда начинают набирать следующий код (так и в коде: notice снимается
+   следующим поиском, useOfficeDesk.ts). */
+.result { display: flex; align-items: flex-start; gap: 10px; margin-top: 14px; padding: 12px 14px;
+  border-radius: 14px; font-size: 14px; line-height: 1.45; }
+.result svg { flex-shrink: 0; margin-top: 1px; }
+.result.ok { background: rgba(95,208,138,0.10); border: 1px solid rgba(95,208,138,0.35); color: #5FD08A; font-weight: 600; }
+.result.ok span b { color: #F4F6F8; font-weight: 600; }
+.result.fail { background: rgba(255,92,120,0.08); border: 1px solid rgba(255,92,120,0.40); color: #FF7089; font-weight: 500; }
+</style></head>
+<body>
+<div class="screen">
+
+  <div class="bar">
+    <button class="avatar" aria-label="Профиль">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="8.5" r="3.6" stroke="#B4BCC8" stroke-width="1.8"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" stroke="#B4BCC8" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
+    <div class="who-me"><b>Дилноза Каримова</b><span>Менеджер</span></div>
+    <div class="where"><b>Кадышева</b><button class="change">Сменить</button></div>
+  </div>
+
+  <div class="body">
+
+    <div class="code-card">
+      <div class="h">Код выдачи</div>
+      <div class="hint">5 цифр — водитель называет его или показывает в приложении</div>
+      <div class="result ok"><svg viewBox="0 0 24 24" width="18" height="18" fill="none"><circle cx="12" cy="12" r="9" fill="#5FD08A"/><path d="M7.5 12.3l3 3 6-6.3" stroke="#0B0D11" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Выдано · заказ #1042 · <b>Алиев Шерзод</b></span></div>
+      <input class="code focus" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" placeholder="•••••" aria-label="Код заказа или награды, пять цифр">
+    </div>
+
+    <div class="title">Ждут выдачи <span class="count">3</span></div>
+
+    <button class="item reward">
+      <span class="info">
+        <span class="kind">Награда · из акции</span>
+        <span class="what">Тряпка для кузова</span>
+        <span class="who"><b>Рахимов Бахтиёр · А-247</b> · сегодня, 13:52</span>
+      </span>
+      <svg class="chev" viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M9.5 5.5L16 12l-6.5 6.5" stroke="#6B7483" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+
+
+    <button class="item reward">
+      <span class="info">
+        <span class="kind">Награда · вручил парк</span>
+        <span class="what">Мойка в подарок</span>
+        <span class="who"><b>Турсунов Акмал · В-031</b> · вчера, 18:44</span>
+      </span>
+      <svg class="chev" viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M9.5 5.5L16 12l-6.5 6.5" stroke="#6B7483" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+
+    <button class="item order">
+      <span class="info">
+        <span class="kind">Заказ #1037</span>
+        <span class="what">1 товар · 400 баллов</span>
+        <span class="who"><b>Мирзаев Жасур · Г-502</b> · вчера, 16:05</span>
+      </span>
+      <svg class="chev" viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M9.5 5.5L16 12l-6.5 6.5" stroke="#6B7483" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+
+  </div>
+</div>
+</body></html>
