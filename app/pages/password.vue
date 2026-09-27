@@ -19,7 +19,7 @@ import type { EmployeePasswordResponse } from '#shared/types/employee';
  * человек работать, «сменил пароль» и «прежние сессии закрыты» перестали бы совпадать.
  */
 
-useHead({ title: 'Смена пароля — XalqBonus' });
+useHead({ title: 'Смена пароля — Xalq Taxi Bonus' });
 
 const PASSWORD_HINT = 'Не короче десяти символов.';
 

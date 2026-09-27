@@ -16,7 +16,7 @@ definePageMeta({
   middleware: 'segments-access',
 });
 
-useHead({ title: 'Сегменты — XalqBonus' });
+useHead({ title: 'Сегменты — Xalq Taxi Bonus' });
 
 const { data, status } = await useFetch<SegmentListResponse>('/api/segments');
 

@@ -98,7 +98,7 @@ const headingText = computed(
   () => fields.value.title.trim() || (mailing.value ? 'Без заголовка' : 'Новая рассылка'),
 );
 
-useHead({ title: () => `${headingText.value} — XalqBonus` });
+useHead({ title: () => `${headingText.value} — Xalq Taxi Bonus` });
 
 /**
  * Строка под заголовком — фразами через пробел, собранная здесь, а не соседними `<template>`

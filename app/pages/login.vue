@@ -33,7 +33,7 @@ definePageMeta({
   layout: false,
 });
 
-useHead({ title: 'Вход — XalqBonus' });
+useHead({ title: 'Вход — Xalq Taxi Bonus' });
 
 const route = useRoute();
 const currentEmployee = useCurrentEmployee();
@@ -98,7 +98,7 @@ const submitting = ref(false);
  * Куда человек шёл до того, как его завернули на вход.
  *
  * Принимается только путь внутри приложения: `next`, пришедший из адресной строки,
- * пишет кто угодно, и без проверки ссылка «войдите в XalqBonus» уводила бы на чужой сайт
+ * пишет кто угодно, и без проверки ссылка «войдите в Xalq Taxi Bonus» уводила бы на чужой сайт
  * сразу после удачного входа.
  */
 const destination = (): string => {
@@ -140,7 +140,7 @@ const submit = async (): Promise<void> => {
 <template>
   <div class="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-10 font-sans text-slate-900">
     <div class="w-full max-w-sm">
-      <h1 class="text-xl font-semibold text-slate-900">XalqBonus</h1>
+      <h1 class="text-xl font-semibold text-slate-900">Xalq Taxi Bonus</h1>
       <p class="mt-1 text-sm text-slate-500">Вход для сотрудников парка</p>
 
       <p v-if="notice" class="mt-4 rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700">

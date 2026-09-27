@@ -15,7 +15,7 @@ import type { OfficeOrdersResponse } from '#shared/types/orders';
  * приходят только его офисы — список составляет сервер.
  */
 
-useHead({ title: 'Заказы — XalqBonus' });
+useHead({ title: 'Заказы — Xalq Taxi Bonus' });
 
 const ORDERS_LIMIT = 25;
 

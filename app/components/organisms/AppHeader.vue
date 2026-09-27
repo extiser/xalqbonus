@@ -33,7 +33,7 @@ const isCurrent = (path: string): boolean =>
 <template>
   <header class="border-b border-slate-200 bg-white">
     <div class="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-6">
-      <NuxtLink to="/" class="text-base font-semibold text-slate-900">XalqBonus</NuxtLink>
+      <NuxtLink to="/" class="text-base font-semibold text-slate-900">Xalq Taxi Bonus</NuxtLink>
       <nav class="flex flex-wrap gap-x-4 gap-y-1">
         <NuxtLink
           v-for="item in items"

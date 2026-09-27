@@ -81,7 +81,7 @@ const fullName = computed(() => {
     .join(' ');
 });
 
-useHead({ title: () => `${fullName.value} — XalqBonus` });
+useHead({ title: () => `${fullName.value} — Xalq Taxi Bonus` });
 
 const employee = useCurrentEmployee();
 

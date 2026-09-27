@@ -34,7 +34,7 @@ definePageMeta({
   middleware: 'demo-access',
 });
 
-useHead({ title: 'Демо — XalqBonus' });
+useHead({ title: 'Демо — Xalq Taxi Bonus' });
 
 const { data: overview, status, refresh } = await useFetch<DemoOverviewResponse>('/api/demo');
 
