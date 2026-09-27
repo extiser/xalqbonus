@@ -360,6 +360,11 @@ const toggleArchive = (): Promise<void> =>
     setProduct(updated.product);
   });
 
+/**
+ * Идёт ли загрузка фото. Пока идёт, публикация и удаление черновика недоступны (issue #257):
+ * загрузку они не прерывают, и товар ушёл бы водителям без фото, а ответ загрузки, собранный
+ * раньше публикации, перезаписал бы карточку состоянием черновика.
+ */
 const uploading = ref(false);
 const photoError = ref<string | null>(null);
 
@@ -495,9 +500,10 @@ const upload = async (file: File): Promise<void> => {
           <AtomsActionButton
             label="Опубликовать"
             tone="primary"
-            :disabled="acting || product === null || publishProblems.length > 0"
+            :disabled="acting || uploading || product === null || publishProblems.length > 0"
             @click="publish"
           />
+          <p v-if="uploading" class="mt-3 text-sm text-slate-500">Дождитесь загрузки фото</p>
           <ul
             v-if="publishProblems.length > 0"
             class="mt-3 list-inside list-disc space-y-0.5 text-sm text-red-700"
@@ -515,9 +521,10 @@ const upload = async (file: File): Promise<void> => {
           <AtomsActionButton
             label="Удалить черновик"
             tone="danger"
-            :disabled="acting"
+            :disabled="acting || uploading"
             @click="removeDraft"
           />
+          <p v-if="uploading" class="mt-3 text-sm text-slate-500">Дождитесь загрузки фото</p>
         </MoleculesSectionPanel>
       </template>
 

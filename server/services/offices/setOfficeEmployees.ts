@@ -7,6 +7,7 @@ import {
   replaceOfficeEmployees,
 } from '#server/repositories/offices';
 import {
+  OfficeEmployeeDisabledError,
   OfficeSideMismatchError,
   UnknownOfficeEmployeeError,
   UnknownOfficeError,
@@ -26,6 +27,10 @@ import type { OfficeEmployeesResponse } from '#shared/types/catalog';
  *
  * Сторона демо проверяется там же (issue #252): демо-сотрудник — только за демо-офисом,
  * живой — только за живым (`OfficeSideMismatchError`).
+ *
+ * Закрытая учётная запись новой в состав не входит (issue #257, `OfficeEmployeeDisabledError`),
+ * а уже закреплённая остаётся: снимают её отдельно, и сохранение соседней правки из-за неё
+ * отказывать не должно.
  */
 const log = consola.withTag('offices:employees');
 
@@ -57,6 +62,17 @@ export const setOfficeEmployees = async (
         [officeId],
         otherSide.map((employee) => employee.id),
       );
+    }
+
+    const attachedIds = new Set(
+      (await listOfficeEmployees(officeId, transaction)).map((employee) => employee.employeeId),
+    );
+    const newlyDisabled = known.filter(
+      (employee) => employee.disabledAt !== null && !attachedIds.has(employee.id),
+    );
+
+    if (newlyDisabled.length > 0) {
+      throw new OfficeEmployeeDisabledError(newlyDisabled.map((employee) => employee.id));
     }
 
     await replaceOfficeEmployees(officeId, unique, transaction);
