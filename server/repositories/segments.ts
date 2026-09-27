@@ -312,7 +312,8 @@ export type SegmentMemberRow = {
  * построитель, а здесь только то, что нужно показать.
  *
  * Порядок — по фамилии, затем идентификатором человека: без него две страницы одного запроса
- * могут показать одну и ту же строку дважды.
+ * могут показать одну и ту же строку дважды. Имена сравниваются естественно — числа в них
+ * по значению (`xb.natural_sort`, issue #257): «ВОДИТЕЛЬ 2» раньше «ВОДИТЕЛЬ 10».
  */
 export const listSegmentMembersPage = async (
   conditions: SegmentConditions,
@@ -352,8 +353,8 @@ export const listSegmentMembersPage = async (
           FROM xb.park_profiles AS candidate
          WHERE candidate."person_id" = member."personId"
       ) AS profiles ON TRUE
-     ORDER BY profile."lastName" ASC NULLS LAST,
-              profile."firstName" ASC NULLS LAST,
+     ORDER BY profile."lastName" COLLATE xb."natural_sort" ASC NULLS LAST,
+              profile."firstName" COLLATE xb."natural_sort" ASC NULLS LAST,
               member."personId" ASC
      LIMIT ${limit} OFFSET ${offset}
   `;

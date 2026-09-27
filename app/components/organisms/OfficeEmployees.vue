@@ -14,8 +14,8 @@ import type { SelectOption } from '~/types/selectOption';
  * однажды забудут позвать.
  *
  * Экраном учёток это не является: здесь ни телефона, ни признаков входа, ни приглашений
- * (issue #120 → «Не делать»). Выключенная учётка помечена словом — закрепить её можно,
- * но видно, что человек в систему не войдёт.
+ * (issue #120 → «Не делать»). Закрытую учётку закрепить нельзя (issue #257): в выборе её нет,
+ * и сервер такую откажет. Уже закреплённая закрытая остаётся в списке с пометкой — её снимают.
  */
 const props = defineProps<{
   employees: OfficeEmployee[];
@@ -38,25 +38,36 @@ const chosen = ref('');
 const attachedIds = computed(() => new Set(props.employees.map((employee) => employee.employeeId)));
 
 /**
- * В выборе только незакреплённые — закреплённый второй раз не добавляется — и только своей
- * стороны: демо-сотрудника за живым офисом сервер не закрепит (issue #252).
+ * В выборе только незакреплённые — закреплённый второй раз не добавляется, — только своей
+ * стороны: демо-сотрудника за живым офисом сервер не закрепит (issue #252), — и только
+ * с открытым доступом: закрытую учётку он не закрепит тоже (issue #257).
  */
 const candidates = computed(() =>
   (props.accounts ?? []).filter(
-    (account) => !attachedIds.value.has(account.employeeId) && account.isDemo === props.officeIsDemo,
+    (account) =>
+      !attachedIds.value.has(account.employeeId) &&
+      account.isDemo === props.officeIsDemo &&
+      !account.disabled,
   ),
 );
 
 /**
- * Подписи вариантов собирает экран, а не поле: «доступ закрыт» рядом с именем — то, что
- * должен знать закрепляющий, и поле про это ничего не знает.
+ * Закрытые из закреплённых — по списку учёток: состав офиса признака доступа не несёт,
+ * а список учёток на странице читается всё равно. Не приехал список — пометок нет.
  */
+const disabledIds = computed(
+  () =>
+    new Set(
+      (props.accounts ?? [])
+        .filter((account) => account.disabled)
+        .map((account) => account.employeeId),
+    ),
+);
+
 const candidateOptions = computed<SelectOption[]>(() =>
   candidates.value.map((account) => ({
     value: account.employeeId,
-    label: `${account.fullName} · ${employeeRoleLabel(account.role)}${
-      account.disabled ? ' · доступ закрыт' : ''
-    }`,
+    label: `${account.fullName} · ${employeeRoleLabel(account.role)}`,
   })),
 );
 
@@ -94,6 +105,9 @@ const remove = (employeeId: string): void => {
           <span class="text-sm text-slate-900">
             {{ employee.fullName }}
             <span class="text-slate-500">· {{ employeeRoleLabel(employee.role) }}</span>
+            <span v-if="disabledIds.has(employee.employeeId)" class="text-slate-500">
+              · доступ закрыт
+            </span>
           </span>
           <AtomsActionButton
             v-if="!readonly"
@@ -122,7 +136,7 @@ const remove = (employeeId: string): void => {
           :message="
             officeIsDemo
               ? 'Свободных демо-сотрудников нет: демо-менеджер заводится в разделе «Демо».'
-              : 'Свободных учёток нет: все заведённые сотрудники уже закреплены.'
+              : 'Свободных учёток нет: все сотрудники с открытым доступом уже закреплены.'
           "
         />
         <div v-else class="flex flex-wrap items-end gap-3">

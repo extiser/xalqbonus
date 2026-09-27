@@ -1,5 +1,6 @@
 import {
   OFFICE_SIDE_MISMATCH_MESSAGE,
+  OfficeEmployeeDisabledError,
   OfficeSideMismatchError,
   UnknownOfficeEmployeeError,
   UnknownOfficeError,
@@ -82,6 +83,14 @@ export default defineEventHandler(async (event): Promise<OfficeEmployeesResponse
         statusCode: 400,
         statusMessage: 'Bad Request',
         message: OFFICE_SIDE_MISMATCH_MESSAGE,
+      });
+    }
+
+    if (error instanceof OfficeEmployeeDisabledError) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Bad Request',
+        message: 'Учётная запись закрыта — закрепить её нельзя.',
       });
     }
 
