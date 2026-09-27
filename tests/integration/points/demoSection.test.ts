@@ -9,8 +9,10 @@ import { generateDemoDrivers } from '#server/services/demo/generateDemoDrivers';
 import { hideDemoDriver } from '#server/services/demo/hideDemoDriver';
 import { readDemoDrivers } from '#server/services/demo/readDemoOverview';
 import { revokeDemoInvite } from '#server/services/demo/revokeDemoInvite';
+import { setDemoManagerOffices } from '#server/services/demo/setDemoManagerOffices';
 import { searchDrivers } from '#server/services/drivers/searchDrivers';
-import { OfficeSideMismatchError } from '#server/services/offices/errors';
+import { requireOpenOffice, readEmployeeOffices } from '#server/services/offices/employeeOffices';
+import { OfficeNotOpenError, OfficeSideMismatchError } from '#server/services/offices/errors';
 import { setOfficeEmployees } from '#server/services/offices/setOfficeEmployees';
 import { buildDemoGrantIdempotencyKey } from '#server/services/points/idempotencyKey';
 import { previewSegmentConditions } from '#server/services/segments/previewSegment';
@@ -349,5 +351,74 @@ describe('раздел «Демо»', () => {
     ]);
 
     await db.$executeRaw`DELETE FROM xb.employee_offices WHERE "office_id" = ${demoOfficeId}::uuid`;
+  });
+
+  it('стойка открывает офисы только своей стороны: владельцу — живые, демо-сотруднику — его демо', async () => {
+    const liveOfficeId = await createTestOffice();
+    const demoOfficeId = await createTestOffice();
+    const { employeeId: ownerId } = await createTestEmployee({ role: 'owner' });
+    const [demoEmployee] = await db.$queryRaw<{ id: string }[]>`
+      INSERT INTO xb.employees ("role", "full_name", "phone_e164", "is_demo")
+      VALUES ('admin', 'Тестовый Демо', ${nextTestPhone()}, true)
+      RETURNING "id"
+    `;
+    const demoEmployeeId = demoEmployee?.id ?? '';
+
+    trackTestEmployee(demoEmployeeId);
+
+    await db.$executeRaw`UPDATE xb.offices SET "is_demo" = true WHERE "id" = ${demoOfficeId}::uuid`;
+
+    const owner = { employeeId: ownerId, role: 'owner' as const, isDemo: false };
+    const ownerOffices = (await readEmployeeOffices(owner)).map((office) => office.officeId);
+
+    expect(ownerOffices).toContain(liveOfficeId);
+    expect(ownerOffices).not.toContain(demoOfficeId);
+    await expect(requireOpenOffice(owner, demoOfficeId)).rejects.toBeInstanceOf(OfficeNotOpenError);
+
+    // Демо-сотрудник «любого офиса» — только демо-офисы: живой ему не открыт.
+    const demo = { employeeId: demoEmployeeId, role: 'admin' as const, isDemo: true };
+    const demoOffices = (await readEmployeeOffices(demo)).map((office) => office.officeId);
+
+    expect(demoOffices).toContain(demoOfficeId);
+    expect(demoOffices).not.toContain(liveOfficeId);
+    expect((await requireOpenOffice(demo, demoOfficeId)).officeId).toBe(demoOfficeId);
+    await expect(requireOpenOffice(demo, liveOfficeId)).rejects.toBeInstanceOf(OfficeNotOpenError);
+  });
+
+  it('демо-менеджер: офисы только демо, стойка показывает отмеченные и не открывает живой', async () => {
+    const liveOfficeId = await createTestOffice();
+    const demoOfficeId = await createTestOffice();
+    const otherDemoOfficeId = await createTestOffice();
+
+    await db.$executeRaw`
+      UPDATE xb.offices SET "is_demo" = true WHERE "id" IN (${demoOfficeId}::uuid, ${otherDemoOfficeId}::uuid)
+    `;
+
+    // Демо-менеджер один на базу (`employees_demo_role_key`); в тестовой базе его не заводит
+    // никто, кроме этого теста.
+    const [demoManager] = await db.$queryRaw<{ id: string }[]>`
+      INSERT INTO xb.employees ("role", "full_name", "phone_e164", "is_demo")
+      VALUES ('manager', 'Тестовый Демо-менеджер', ${nextTestPhone()}, true)
+      RETURNING "id"
+    `;
+    const employeeId = demoManager?.id ?? '';
+
+    trackTestEmployee(employeeId);
+
+    await expect(setDemoManagerOffices([liveOfficeId])).rejects.toBeInstanceOf(OfficeSideMismatchError);
+    expect(await setDemoManagerOffices([demoOfficeId])).toEqual({ officeIds: [demoOfficeId] });
+
+    // Живой офис, закреплённый до проверки стороны, стойку не открывает.
+    await db.$executeRaw`
+      INSERT INTO xb.employee_offices ("employee_id", "office_id") VALUES (${employeeId}::uuid, ${liveOfficeId}::uuid)
+    `;
+
+    const manager = { employeeId, role: 'manager' as const, isDemo: true };
+
+    expect((await readEmployeeOffices(manager)).map((office) => office.officeId)).toEqual([demoOfficeId]);
+    await expect(requireOpenOffice(manager, liveOfficeId)).rejects.toBeInstanceOf(OfficeNotOpenError);
+    await expect(requireOpenOffice(manager, otherDemoOfficeId)).rejects.toBeInstanceOf(OfficeNotOpenError);
+
+    await db.$executeRaw`DELETE FROM xb.employee_offices WHERE "employee_id" = ${employeeId}::uuid`;
   });
 });

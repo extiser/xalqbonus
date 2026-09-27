@@ -15,11 +15,19 @@ import { ANY_OFFICE_ROLES } from '../../../shared/access';
  *
  * Роль приходит из проверки доступа, то есть из базы на этом же запросе, а не из клиента
  * (docs/principles.md → «Доверие к входным данным»).
+ *
+ * Офисы — только стороны сотрудника (issue #252): живому — живые, демо-менеджеру — его
+ * демо-офисы. Владелец и админ «любого офиса» демо-офиса здесь не видят: демо-заказ, выданный
+ * живым сотрудником, выглядел бы в стойке и отчётах настоящим. На этой же функции стоит
+ * `requireOpenOffice`, и ручки стойки отвечают живому на демо-офис `office_not_open`.
+ * Раздел «Офисы» (`/api/offices`) идёт мимо неё и показывает всё.
  */
 
 export type OfficeWorker = {
   employeeId: string;
   role: EmployeeRole;
+  /** Демо-сотрудник — из проверки доступа, как и роль. */
+  isDemo: boolean;
 };
 
 const toEmployeeOffice = (row: OfficeRow): EmployeeOffice => ({
@@ -40,7 +48,9 @@ export const readEmployeeOffices = async (worker: OfficeWorker): Promise<Employe
     ? await listOffices()
     : await listEmployeeOffices(worker.employeeId);
 
-  return rows.map(toEmployeeOffice);
+  // Сторона — и у привязанных: закреплённое за чужой стороной до проверки в `setOfficeEmployees`
+  // стойку не открывает.
+  return rows.filter((row) => row.isDemo === worker.isDemo).map(toEmployeeOffice);
 };
 
 /**

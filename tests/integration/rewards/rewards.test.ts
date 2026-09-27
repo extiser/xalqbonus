@@ -134,7 +134,7 @@ const grantCustom = (scenario: Scenario, title: string) =>
     note: 'за стаж',
   });
 
-const worker = (scenario: Scenario) => ({ employeeId: scenario.employeeId, role: 'manager' as const });
+const worker = (scenario: Scenario) => ({ employeeId: scenario.employeeId, role: 'manager' as const, isDemo: false });
 
 describe('награды', () => {
   afterEach(async () => {
@@ -274,7 +274,7 @@ describe('награды', () => {
     const scenario = await prizeScenario();
     const reward = await grantPrize(scenario);
     const otherOffice = await createTestOffice();
-    const stranger = { employeeId: await createManager(otherOffice), role: 'manager' as const };
+    const stranger = { employeeId: await createManager(otherOffice), role: 'manager' as const, isDemo: false };
 
     await expect(
       findDeskItemByCode(stranger, otherOffice, reward.code ?? ''),
