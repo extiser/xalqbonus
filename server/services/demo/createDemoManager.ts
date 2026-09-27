@@ -2,7 +2,6 @@ import { consola } from 'consola';
 
 import { findDemoEmployee, findEmployeeByPhone, insertEmployee } from '#server/repositories/employees';
 import { findActiveLinkByTelegramOrPhone } from '#server/repositories/programMembership';
-import { DEMO_MANAGER_NAME, type CreateDemoResult } from '#server/services/demo/createDemo';
 import { normalizePhoneE164 } from '#server/utils/phoneNumber';
 import { describeDatabaseFailure, UNIQUE_VIOLATION } from '#server/utils/postgresErrors';
 
@@ -10,17 +9,25 @@ import { describeDatabaseFailure, UNIQUE_VIOLATION } from '#server/utils/postgre
  * Демо-менеджер из раздела «Демо» (issue #252) — без офиса: демо-офисы заводятся в «Офисах»
  * галочкой «Демо», а закрепляются за ним отдельно (`setDemoManagerOffices`).
  *
- * Проверки и исходы — как у `createDemo`: номер, водительская привязка до существующей
- * учётки, занятый телефон, уже заведённый демо-менеджер. Пароля и Telegram у него нет: под
- * ним входит только зритель, чья личность пришла подписанной `initData`. Демо-менеджер один
- * на роль — это держит частичный уникальный индекс `employees_demo_role_key`, а не только
- * проверка ниже.
+ * Проверки — номер, водительская привязка до существующей учётки, занятый телефон, уже
+ * заведённый демо-менеджер. Пароля и Telegram у него нет: под ним входит только зритель,
+ * чья личность пришла подписанной `initData`. Демо-менеджер один на роль — это держит частичный
+ * уникальный индекс `employees_demo_role_key`, а не только проверка ниже.
  */
 const log = consola.withTag('demo:manager');
 
+export const DEMO_MANAGER_NAME = 'ДЕМО МЕНЕДЖЕР';
+
 export type CreateDemoManagerResult =
   | { outcome: 'created'; employeeId: string }
-  | Exclude<CreateDemoResult, { outcome: 'created' }>;
+  /** Демо-менеджер уже есть. Ничего не изменено. */
+  | { outcome: 'already_exists'; employeeId: string; phoneE164: string; officeId: string | null }
+  /** Номер не приводится к виду `+998XXXXXXXXX`. */
+  | { outcome: 'phone_invalid' }
+  /** Телефон занят другой учёткой сотрудника. */
+  | { outcome: 'phone_taken' }
+  /** Телефон за активной водительской привязкой: водителем и сотрудником быть нельзя. */
+  | { outcome: 'driver_link_exists' };
 
 export const createDemoManager = async (phoneRaw: string): Promise<CreateDemoManagerResult> => {
   const phoneE164 = normalizePhoneE164(phoneRaw);

@@ -141,7 +141,7 @@ export type InsertEmployeeInput = {
   /** Cookie, выпущенный раньше этой отметки, недействителен. Пуста, пока сессии не гасили. */
   sessionsValidFrom: Date | null;
   telegramUserId: bigint | null;
-  /** Демо-сотрудник (issue #205). Пусто — живой: так заводятся все, кроме `make demo-create`. */
+  /** Демо-сотрудник (issue #205). Пусто — живой: так заводятся все, кроме демо-менеджера. */
   isDemo?: boolean;
 };
 
