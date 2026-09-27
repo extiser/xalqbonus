@@ -53,6 +53,7 @@ export const readDemoDrivers = async (): Promise<DemoDriverSummary[]> =>
     balance: Number(row.balance ?? 0n),
     programMember: row.programMember,
     lastTripAt: row.lastTripAt?.toISOString() ?? null,
+    tripsCount: row.tripsCount,
     viewerLabel: row.viewerLabel,
     hiddenAt: row.hiddenAt?.toISOString() ?? null,
   }));

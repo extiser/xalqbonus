@@ -1,14 +1,20 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { formatDayMonth, formatMinuteDateTime, formatNumber, pluralize } from '~/utils/format';
-import type { DemoDriverSummary } from '#shared/types/demo';
+import type { LoadState } from '~/types/loadState';
+import type { DemoDriverSummary, DemoDriverTrip } from '#shared/types/demo';
 
 /**
  * Демо-водители (issue #252): водители зрителей и сгенерированные. У каждого — «Добавить
  * поездки» формой в строке, у сгенерированного ещё «Спрятать».
  *
- * Спрятанные — по переключателю (решение Руслана 27-09-2026): спрятанный продолжает жить,
- * и невидимым быть не должен. Его строка — с пометкой «спрятан» и «Вернуть», без поездок.
+ * Спрятанные — по переключателю «Только спрятанные» (решение Руслана 27-09-2026): спрятанный
+ * продолжает жить и невидимым быть не должен. Переключатель — фильтр, а не добавка: среди
+ * тридцати водителей спрятанного иначе не найти. Строка спрятанного — с пометкой «спрятан»
+ * и «Вернуть», без формы поездок.
+ *
+ * «Поездки» раскрывают последние завершённые поездки с итогом по журналу. Приходят они
+ * страницей по событию: данные в компоненты не ходят.
  *
  * Поля формы у каждой строки свои и живут здесь: это ввод, а не данные, и страница о них
  * узнаёт только из события отправки.
@@ -20,21 +26,37 @@ const props = defineProps<{
   /** Итог последнего добавления поездок — строкой у своего водителя. */
   tripsResult: { personId: string; text: string } | null;
   error: string | null;
+  /** Раскрытые поездки — у одного водителя за раз. `null` — не раскрыты ни у кого. */
+  openTrips: { personId: string; state: LoadState; trips: DemoDriverTrip[] } | null;
 }>();
 
 const emit = defineEmits<{
   addTrips: [personId: string, count: number, endedAt: string];
   hide: [personId: string];
   unhide: [personId: string];
+  toggleTrips: [personId: string];
 }>();
 
-const showHidden = ref(false);
+const onlyHidden = ref(false);
 
 const hiddenCount = computed(() => props.drivers.filter((driver) => driver.hiddenAt !== null).length);
 
+// Спрятанных не осталось — переключатель выключается сам и пропадает: вернул последнего —
+// снова обычный список.
+watch(hiddenCount, (count) => {
+  if (count === 0) {
+    onlyHidden.value = false;
+  }
+});
+
 const shown = computed(() =>
-  showHidden.value ? props.drivers : props.drivers.filter((driver) => driver.hiddenAt === null),
+  props.drivers.filter((driver) => (driver.hiddenAt !== null) === onlyHidden.value),
 );
+
+const tripsOpenFor = (personId: string): boolean => props.openTrips?.personId === personId;
+
+const pointsText = (trip: DemoDriverTrip): string =>
+  trip.points === null ? 'не начислено' : `+${formatNumber(trip.points)}`;
 
 /**
  * Части строки после имени — одной строкой через « · »: разделитель, собранный разметкой
@@ -46,6 +68,7 @@ const detailsOf = (driver: DemoDriverSummary): string =>
     `${formatNumber(driver.balance)} ${pluralize(driver.balance, 'балл', 'балла', 'баллов')}`,
     driver.programMember ? 'участник' : 'не участник',
     `последняя поездка ${formatMinuteDateTime(driver.lastTripAt)}`,
+    `поездок: ${formatNumber(driver.tripsCount)}`,
     driver.viewerLabel ?? 'сгенерирован',
     ...(driver.hiddenAt === null ? [] : [`спрятан ${formatDayMonth(driver.hiddenAt)}`]),
   ].join(' · ');
@@ -94,18 +117,18 @@ const submit = (personId: string): void => {
     <div class="space-y-4">
       <label v-if="hiddenCount > 0" class="flex items-center gap-3">
         <input
-          v-model="showHidden"
+          v-model="onlyHidden"
           type="checkbox"
           class="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
         />
-        <span class="text-sm text-slate-900">Показать спрятанных ({{ hiddenCount }})</span>
+        <span class="text-sm text-slate-900">Только спрятанные ({{ hiddenCount }})</span>
       </label>
 
       <MoleculesStateNotice v-if="drivers.length === 0" state="empty" message="Демо-водителей пока нет." />
       <MoleculesStateNotice
         v-else-if="shown.length === 0"
         state="empty"
-        message="Все демо-водители спрятаны."
+        :message="onlyHidden ? 'Спрятанных нет.' : 'Все демо-водители спрятаны.'"
       />
       <ul v-else>
         <li
@@ -120,20 +143,59 @@ const submit = (personId: string): void => {
                 class="font-medium underline underline-offset-2 hover:text-slate-700"
               >{{ driver.name }}</NuxtLink><span class="text-slate-500">{{ ` · ${detailsOf(driver)}` }}</span>
             </span>
-            <AtomsActionButton
-              v-if="driver.hiddenAt !== null"
-              label="Вернуть"
-              tone="primary"
-              :disabled="busyPersonId === driver.personId"
-              @click="emit('unhide', driver.personId)"
+            <div class="flex flex-wrap gap-3">
+              <AtomsActionButton
+                :label="tripsOpenFor(driver.personId) ? 'Скрыть поездки' : 'Поездки'"
+                :disabled="driver.tripsCount === 0"
+                @click="emit('toggleTrips', driver.personId)"
+              />
+              <AtomsActionButton
+                v-if="driver.hiddenAt !== null"
+                label="Вернуть"
+                tone="primary"
+                :disabled="busyPersonId === driver.personId"
+                @click="emit('unhide', driver.personId)"
+              />
+              <AtomsActionButton
+                v-else-if="driver.viewerLabel === null"
+                label="Спрятать"
+                tone="danger"
+                :disabled="busyPersonId === driver.personId"
+                @click="emit('hide', driver.personId)"
+              />
+            </div>
+          </div>
+
+          <div v-if="openTrips && tripsOpenFor(driver.personId)" class="rounded-md bg-slate-50 p-3">
+            <MoleculesStateNotice v-if="openTrips.state === 'loading'" state="loading" message="Читаем поездки…" />
+            <MoleculesStateNotice
+              v-else-if="openTrips.state === 'error'"
+              state="error"
+              message="Поездки не прочитались. Это отказ запроса, а не пустой список."
             />
-            <AtomsActionButton
-              v-else-if="driver.viewerLabel === null"
-              label="Спрятать"
-              tone="danger"
-              :disabled="busyPersonId === driver.personId"
-              @click="emit('hide', driver.personId)"
+            <MoleculesStateNotice
+              v-else-if="openTrips.trips.length === 0"
+              state="empty"
+              message="Завершённых поездок нет."
             />
+            <template v-else>
+              <p class="mb-2 text-xs text-slate-500">
+                Последние {{ openTrips.trips.length }}, свежие первыми. Приветственные 300 — в истории
+                операций карточки.
+              </p>
+              <ul class="space-y-1">
+                <li
+                  v-for="trip in openTrips.trips"
+                  :key="trip.orderId"
+                  class="flex justify-between gap-4 text-sm"
+                >
+                  <span class="text-slate-900">{{ formatMinuteDateTime(trip.endedAt) }}</span>
+                  <span :class="trip.points === null ? 'text-slate-500' : 'text-emerald-700'">
+                    {{ pointsText(trip) }}
+                  </span>
+                </li>
+              </ul>
+            </template>
           </div>
 
           <div v-if="driver.hiddenAt === null" class="flex flex-wrap items-end gap-3">

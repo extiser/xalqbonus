@@ -361,6 +361,8 @@ export type DemoDriverListRow = {
   balance: bigint | null;
   programMember: boolean;
   lastTripAt: Date | null;
+  /** Завершённых поездок — все, по всем профилям человека. */
+  tripsCount: number;
   /** Подпись зрителя. Пусто — водитель сгенерирован. */
   viewerLabel: string | null;
   /** Спрятан. Пусто — виден в разделе, в сегментах и в поиске. */
@@ -384,6 +386,7 @@ export const listDemoDrivers = async (client: Executor = db): Promise<DemoDriver
            account."balance",
            (settings."person_id" IS NOT NULL)  AS "programMember",
            activity."lastTripAt",
+           activity."tripsCount",
            viewer."label"                      AS "viewerLabel",
            person."demo_hidden_at"             AS "hiddenAt"
       FROM xb.persons AS person
@@ -395,7 +398,8 @@ export const listDemoDrivers = async (client: Executor = db): Promise<DemoDriver
             LIMIT 1
       ) AS profile ON TRUE
       LEFT JOIN LATERAL (
-           SELECT max(trip."ended_at") AS "lastTripAt"
+           SELECT max(trip."ended_at") AS "lastTripAt",
+                  count(*)::int        AS "tripsCount"
              FROM xb.trips AS trip
              JOIN xb.park_profiles AS candidate ON candidate."profile_id" = trip."profile_id"
             WHERE candidate."person_id" = person."id"
@@ -407,6 +411,43 @@ export const listDemoDrivers = async (client: Executor = db): Promise<DemoDriver
       LEFT JOIN xb.demo_viewers AS viewer ON viewer."person_id" = person."id"
      WHERE person."is_demo"
      ORDER BY (viewer."person_id" IS NULL), person."created_at", person."id"
+  `;
+
+export type DemoDriverTripRow = {
+  orderId: string;
+  endedAt: Date;
+  /** Сумма начислений по поездке — `trip` и `recon`. Пусто — не начислено. */
+  points: bigint | null;
+};
+
+/**
+ * Последние завершённые поездки человека с итогом по журналу. Итог — переводы по заказу
+ * поездки (`point_transfers.trip_order_id`) с причинами `trip` и `recon` — ключи `trip:`
+ * и `recon:` (docs/points.md). Приветственный бонус сюда не входит: у него своя причина,
+ * и виден он в истории операций карточки.
+ */
+export const listDemoDriverTrips = async (
+  personId: string,
+  limit: number,
+  client: Executor = db,
+): Promise<DemoDriverTripRow[]> =>
+  client.$queryRaw<DemoDriverTripRow[]>`
+    SELECT trip."order_id" AS "orderId",
+           trip."ended_at" AS "endedAt",
+           accrual."points"
+      FROM xb.trips AS trip
+      JOIN xb.park_profiles AS profile ON profile."profile_id" = trip."profile_id"
+      LEFT JOIN LATERAL (
+           SELECT sum(transfer."amount")::bigint AS "points"
+             FROM xb.point_transfers AS transfer
+            WHERE transfer."trip_order_id" = trip."order_id"
+              AND transfer."reason" IN ('trip', 'recon')
+      ) AS accrual ON TRUE
+     WHERE profile."person_id" = ${personId}::uuid
+       AND trip."status" = ${COMPLETED_TRIP_STATUS}
+       AND trip."ended_at" IS NOT NULL
+     ORDER BY trip."ended_at" DESC, trip."order_id" DESC
+     LIMIT ${limit}
   `;
 
 export type DemoDriverLockRow = {

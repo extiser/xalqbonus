@@ -57,10 +57,25 @@ export type DemoDriverSummary = {
   balance: number;
   programMember: boolean;
   lastTripAt: string | null;
+  /** Завершённых поездок — все. */
+  tripsCount: number;
   /** Подпись зрителя. Пусто — сгенерирован. */
   viewerLabel: string | null;
   /** Спрятан. Пусто — виден в разделе, в сегментах и в поиске. */
   hiddenAt: string | null;
+};
+
+export type DemoDriverTrip = {
+  orderId: string;
+  endedAt: string;
+  /** Начислено по поездке — `trip` и `recon`. Пусто — не начислено. */
+  points: number | null;
+};
+
+/** Последние 30 завершённых поездок, свежие первыми. */
+export type DemoDriverTripsResponse = {
+  personId: string;
+  trips: DemoDriverTrip[];
 };
 
 export type DemoDriverHideResponse = {

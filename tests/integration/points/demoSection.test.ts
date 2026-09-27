@@ -8,7 +8,9 @@ import { createDemoInviteToken, hashDemoInviteToken } from '#server/services/dem
 import { generateDemoDrivers } from '#server/services/demo/generateDemoDrivers';
 import { hideDemoDriver } from '#server/services/demo/hideDemoDriver';
 import { unhideDemoDriver } from '#server/services/demo/unhideDemoDriver';
+import { readDemoDriverTrips } from '#server/services/demo/readDemoDriverTrips';
 import { readDemoDrivers } from '#server/services/demo/readDemoOverview';
+import { NotDemoDriverError } from '#server/services/demo/errors';
 import { revokeDemoInvite } from '#server/services/demo/revokeDemoInvite';
 import { setDemoManagerOffices } from '#server/services/demo/setDemoManagerOffices';
 import { searchDrivers } from '#server/services/drivers/searchDrivers';
@@ -182,6 +184,47 @@ describe('раздел «Демо»', () => {
     expect(listed?.viewerLabel).toBeNull();
     expect(listed?.balance).toBe(305);
     expect(listed?.lastTripAt).not.toBeNull();
+  });
+
+  it('поездки демо-водителя: участнику по +1, не участнику — не начислено, живому — отказ', async () => {
+    await createSource();
+    const since = new Date();
+    const base = {
+      balanceMin: 0,
+      balanceMax: 0,
+      tripsMin: 3,
+      tripsMax: 3,
+      lastTripDaysMin: 2,
+      lastTripDaysMax: 2,
+    };
+
+    await generateDemoDrivers({ ...base, count: 1, programMember: 'yes' });
+    await generateDemoDrivers({ ...base, count: 1, programMember: 'no' });
+
+    const [member, outsider] = await readGeneratedSince(since);
+
+    if (!member || !outsider) {
+      throw new Error('генератор не завёл двоих');
+    }
+
+    const memberTrips = await readDemoDriverTrips(member.personId);
+    const outsiderTrips = await readDemoDriverTrips(outsider.personId);
+
+    expect(memberTrips.trips.map((trip) => trip.points)).toEqual([1, 1, 1]);
+    expect(outsiderTrips.trips.map((trip) => trip.points)).toEqual([null, null, null]);
+    // Свежие первыми.
+    expect(memberTrips.trips.map((trip) => trip.endedAt)).toEqual(
+      [...memberTrips.trips.map((trip) => trip.endedAt)].sort().reverse(),
+    );
+
+    const listed = await readDemoDrivers();
+
+    expect(listed.find((row) => row.personId === member.personId)?.tripsCount).toBe(3);
+    expect(listed.find((row) => row.personId === outsider.personId)?.tripsCount).toBe(3);
+
+    const livePerson = await createTestPerson({ inProgram: true });
+
+    await expect(readDemoDriverTrips(livePerson.personId)).rejects.toBeInstanceOf(NotDemoDriverError);
   });
 
   it('генератор отказывает полем, ничего не заводя', async () => {

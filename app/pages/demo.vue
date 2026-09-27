@@ -3,9 +3,12 @@ import { computed, ref } from 'vue';
 import { failureField, failureText } from '~/utils/requestError';
 import { formatNumber, pluralize } from '~/utils/format';
 import { toLoadState } from '~/utils/loadState';
+import type { LoadState } from '~/types/loadState';
 import type { DemoTripsResponse } from '#shared/types/driver';
 import type {
   DemoDriverHideResponse,
+  DemoDriverTrip,
+  DemoDriverTripsResponse,
   DemoDriverUnhideResponse,
   DemoGenerateField,
   DemoGenerateRequestBody,
@@ -132,7 +135,7 @@ const addTrips = async (personId: string, count: number, endedAt: string): Promi
     });
 
     tripsResult.value = { personId, text: describeTrips(result) };
-    await refresh();
+    await Promise.all([refresh(), openTrips.value?.personId === personId ? loadTrips(personId) : undefined]);
   } catch (error) {
     driverError.value = failureText(error);
   } finally {
@@ -156,6 +159,39 @@ const hide = async (personId: string): Promise<void> => {
   } finally {
     driverBusyId.value = null;
   }
+};
+
+/** Раскрытые поездки — у одного водителя за раз. */
+const openTrips = ref<{ personId: string; state: LoadState; trips: DemoDriverTrip[] } | null>(null);
+
+const loadTrips = async (personId: string): Promise<void> => {
+  // Перечитывание раскрытого не прячет прежний список: он стоит, пока не придёт новый.
+  const previous = openTrips.value?.personId === personId ? openTrips.value.trips : [];
+
+  openTrips.value = { personId, state: 'loading', trips: previous };
+
+  try {
+    const result = await $fetch<DemoDriverTripsResponse>(`/api/demo/drivers/${personId}/trips`);
+
+    // Пока читали, могли раскрыть другого — чужой ответ не подставляется.
+    if (openTrips.value?.personId === personId) {
+      openTrips.value = { personId, state: 'ready', trips: result.trips };
+    }
+  } catch {
+    if (openTrips.value?.personId === personId) {
+      openTrips.value = { personId, state: 'error', trips: [] };
+    }
+  }
+};
+
+const toggleTrips = (personId: string): Promise<void> | undefined => {
+  if (openTrips.value?.personId === personId) {
+    openTrips.value = null;
+
+    return;
+  }
+
+  return loadTrips(personId);
 };
 
 const unhide = async (personId: string): Promise<void> => {
@@ -290,9 +326,11 @@ const saveManagerOffices = (officeIds: string[]): Promise<void> =>
         :busy-person-id="driverBusyId"
         :trips-result="tripsResult"
         :error="driverError"
+        :open-trips="openTrips"
         @add-trips="addTrips"
         @hide="hide"
         @unhide="unhide"
+        @toggle-trips="toggleTrips"
       />
 
       <OrganismsDemoGenerator
