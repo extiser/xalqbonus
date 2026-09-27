@@ -38,8 +38,8 @@
 
 Логотип, два блока приветствия — узбекский крупно и белым, русский тише:
 
-- «XalqTaxi BonusBot'ga xush kelibsiz!» — «Bu yerda safarlaringiz uchun ballar to'planadi — ularni park ofislarida sovg'alarga almashtirish mumkin.»
-- «Добро пожаловать в XalqTaxi BonusBot» — «Здесь копятся ваши баллы за поездки — их можно обменять на подарки в офисах парка.»
+- «Xalq Taxi Bonus'ga xush kelibsiz!» — «Bu yerda safarlaringiz uchun ballar to'planadi — ularni park ofislarida sovg'alarga almashtirish mumkin.»
+- «Добро пожаловать в Xalq Taxi Bonus» — «Здесь копятся ваши баллы за поездки — их можно обменять на подарки в офисах парка.»
 
 Внизу «Tilni tanlang / Выберите язык» и две равные серые кнопки: ни один язык не главный. Нажатие сразу ведёт на шаг 2, «Далее» нет. Низ последней кнопки на той же высоте, что низ кнопки номера на шаге 2.
 
