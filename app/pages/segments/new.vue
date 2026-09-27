@@ -27,7 +27,7 @@ definePageMeta({
   middleware: 'segments-access',
 });
 
-useHead({ title: 'Новый сегмент — XalqBonus' });
+useHead({ title: 'Новый сегмент — Xalq Taxi Bonus' });
 
 const name = ref('');
 const description = ref('');

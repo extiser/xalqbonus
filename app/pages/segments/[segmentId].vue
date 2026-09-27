@@ -40,7 +40,7 @@ const { data, status, refresh } = await useFetch<SegmentResponse>(
   () => `/api/segments/${segmentId.value}`,
 );
 
-useHead({ title: () => `${data.value?.segment.name ?? 'Сегмент'} — XalqBonus` });
+useHead({ title: () => `${data.value?.segment.name ?? 'Сегмент'} — Xalq Taxi Bonus` });
 
 const state = computed(() => toLoadState(status.value));
 const segment = computed(() => data.value?.segment ?? null);

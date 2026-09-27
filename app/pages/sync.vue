@@ -21,7 +21,7 @@ definePageMeta({
   middleware: 'sync-access',
 });
 
-useHead({ title: 'Синхронизация — XalqBonus' });
+useHead({ title: 'Синхронизация — Xalq Taxi Bonus' });
 
 /** Сколько строк журнала и пропущенного на странице. */
 const RUNS_LIMIT = 20;

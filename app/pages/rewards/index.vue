@@ -38,7 +38,7 @@ definePageMeta({
   middleware: 'rewards-access',
 });
 
-useHead({ title: 'Награды — XalqBonus' });
+useHead({ title: 'Награды — Xalq Taxi Bonus' });
 
 /** Сколько строк поиска показать: выбирают одного, листать незачем. */
 const SEARCH_LIMIT = 10;

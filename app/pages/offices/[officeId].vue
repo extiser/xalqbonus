@@ -50,7 +50,7 @@ const { data: feed, status: feedStatus, refresh: refreshFeed } =
 const { data: accounts, status: accountsStatus } =
   await useFetch<EmployeeAccountsResponse>('/api/employees');
 
-useHead({ title: () => `${card.value?.office.name ?? 'Офис'} — XalqBonus` });
+useHead({ title: () => `${card.value?.office.name ?? 'Офис'} — Xalq Taxi Bonus` });
 
 const cardState = computed(() => toLoadState(cardStatus.value));
 const stockState = computed(() => toLoadState(stockStatus.value));

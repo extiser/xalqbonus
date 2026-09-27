@@ -142,7 +142,7 @@ const headingText = computed(
   () => fields.value.title.trim() || (campaign.value ? 'Без названия' : 'Новая акция'),
 );
 
-useHead({ title: () => `${headingText.value} — XalqBonus` });
+useHead({ title: () => `${headingText.value} — Xalq Taxi Bonus` });
 
 const headerNote = computed(() => {
   const current = campaign.value;

@@ -16,7 +16,7 @@ definePageMeta({
   middleware: 'campaigns-access',
 });
 
-useHead({ title: 'Акции — XalqBonus' });
+useHead({ title: 'Акции — Xalq Taxi Bonus' });
 
 const { data, status } = await useFetch<CampaignListResponse>('/api/campaigns');
 

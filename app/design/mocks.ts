@@ -1368,11 +1368,11 @@ export const outdatedTelegramMock = {
 export const registrationLanguageMock = {
   welcome: {
     uz: {
-      title: "XalqTaxi BonusBot'ga\nxush kelibsiz!",
+      title: "Xalq Taxi Bonus'ga\nxush kelibsiz!",
       lead: "Bu yerda safarlaringiz uchun ballar to'planadi — ularni park ofislarida sovg'alarga almashtirish mumkin.",
     },
     ru: {
-      title: 'Добро пожаловать\nв XalqTaxi BonusBot',
+      title: 'Добро пожаловать\nв Xalq Taxi Bonus',
       lead: 'Здесь копятся ваши баллы за поездки —\nих можно обменять на подарки в офисах парка.',
     },
   },

@@ -124,7 +124,7 @@ const state = computed(() =>
 );
 
 useHead({
-  title: () => `${fields.value.name.trim() || (product.value ? 'Черновик товара' : 'Новый товар')} — XalqBonus`,
+  title: () => `${fields.value.name.trim() || (product.value ? 'Черновик товара' : 'Новый товар')} — Xalq Taxi Bonus`,
 });
 
 /**

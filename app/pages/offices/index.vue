@@ -25,7 +25,7 @@ definePageMeta({
   middleware: 'catalog-access',
 });
 
-useHead({ title: 'Офисы — XalqBonus' });
+useHead({ title: 'Офисы — Xalq Taxi Bonus' });
 
 const { data, status, refresh } = await useFetch<OfficeListResponse>('/api/offices');
 

@@ -15,7 +15,7 @@ definePageMeta({
   middleware: 'mailings-access',
 });
 
-useHead({ title: 'Рассылки — XalqBonus' });
+useHead({ title: 'Рассылки — Xalq Taxi Bonus' });
 
 const { data, status } = await useFetch<MailingListResponse>('/api/mailings');
 

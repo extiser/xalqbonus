@@ -29,7 +29,7 @@ definePageMeta({
   middleware: 'employees-access',
 });
 
-useHead({ title: 'Сотрудники — XalqBonus' });
+useHead({ title: 'Сотрудники — Xalq Taxi Bonus' });
 
 const { data: accounts, status: accountsStatus, refresh: refreshAccounts } =
   await useFetch<EmployeeAccountsResponse>('/api/employees');

@@ -10,7 +10,7 @@ import { toLoadState } from '~/utils/loadState';
  * коллеге ссылкой, а не пересказом того, что было набрано.
  */
 
-useHead({ title: 'Водители — XalqBonus' });
+useHead({ title: 'Водители — Xalq Taxi Bonus' });
 
 /** Сколько строк результата на странице. */
 const RESULTS_LIMIT = 25;

@@ -106,7 +106,7 @@ import {
 definePageMeta({ layout: false });
 
 useHead({
-  title: 'XalqBonus',
+  title: 'Xalq Taxi Bonus',
   /**
    * Mini App не масштабируется: двойной тап и щипок увеличивали экран, и вернуть его назад
    * водитель в поездке не мог. Здесь, а не в `nuxt.config.ts`: веб-админку это не касается.

@@ -15,7 +15,7 @@ definePageMeta({
   middleware: 'catalog-access',
 });
 
-useHead({ title: 'Каталог — XalqBonus' });
+useHead({ title: 'Каталог — Xalq Taxi Bonus' });
 
 const { data, status } = await useFetch<ProductListResponse>('/api/products');
 
