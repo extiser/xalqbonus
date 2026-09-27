@@ -54,6 +54,7 @@ export const readDemoDrivers = async (): Promise<DemoDriverSummary[]> =>
     programMember: row.programMember,
     lastTripAt: row.lastTripAt?.toISOString() ?? null,
     viewerLabel: row.viewerLabel,
+    hiddenAt: row.hiddenAt?.toISOString() ?? null,
   }));
 
 export const readDemoOverview = async (now: Date = new Date()): Promise<DemoOverviewResponse> => {

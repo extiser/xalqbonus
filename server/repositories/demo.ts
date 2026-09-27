@@ -363,11 +363,14 @@ export type DemoDriverListRow = {
   lastTripAt: Date | null;
   /** Подпись зрителя. Пусто — водитель сгенерирован. */
   viewerLabel: string | null;
+  /** Спрятан. Пусто — виден в разделе, в сегментах и в поиске. */
+  hiddenAt: Date | null;
 };
 
 /**
- * Демо-водители раздела: все с `is_demo`, кроме спрятанных. Водители выключенных зрителей
- * тоже здесь — их прячет выключение от зрителя, а не от владельца.
+ * Демо-водители раздела: все с `is_demo`, и спрятанные тоже — с отметкой: спрятанный
+ * продолжает жить, и раздел показывает его по переключателю (решение Руслана 27-09-2026).
+ * Водители выключенных зрителей тоже здесь — их прячет выключение от зрителя, а не от владельца.
  *
  * Профиль у демо-водителя один — заведённый вместе с ним, — и имя с позывным берутся из него.
  * Сначала водители зрителей, потом сгенерированные по времени заведения.
@@ -381,7 +384,8 @@ export const listDemoDrivers = async (client: Executor = db): Promise<DemoDriver
            account."balance",
            (settings."person_id" IS NOT NULL)  AS "programMember",
            activity."lastTripAt",
-           viewer."label"                      AS "viewerLabel"
+           viewer."label"                      AS "viewerLabel",
+           person."demo_hidden_at"             AS "hiddenAt"
       FROM xb.persons AS person
       LEFT JOIN LATERAL (
            SELECT candidate."first_name", candidate."last_name", candidate."callsign"
@@ -402,7 +406,6 @@ export const listDemoDrivers = async (client: Executor = db): Promise<DemoDriver
              ON account."person_id" = person."id" AND account."type" = 'driver'
       LEFT JOIN xb.demo_viewers AS viewer ON viewer."person_id" = person."id"
      WHERE person."is_demo"
-       AND person."demo_hidden_at" IS NULL
      ORDER BY (viewer."person_id" IS NULL), person."created_at", person."id"
   `;
 
@@ -413,7 +416,7 @@ export type DemoDriverLockRow = {
   hiddenAt: Date | null;
 };
 
-/** Человек под спрятать — с блокировкой строки. Пусто — такого нет. */
+/** Человек под «Спрятать» и «Вернуть» — с блокировкой строки. Пусто — такого нет. */
 export const lockDemoDriver = async (personId: string, client: Executor): Promise<DemoDriverLockRow | null> => {
   const rows = await client.$queryRaw<DemoDriverLockRow[]>`
     SELECT person."is_demo"                           AS "isDemo",
@@ -429,10 +432,15 @@ export const lockDemoDriver = async (personId: string, client: Executor): Promis
   return rows[0] ?? null;
 };
 
-export const updateDemoDriverHidden = async (personId: string, hiddenAt: Date, client: Executor): Promise<void> => {
+/** Прячет демо-водителя отметкой или возвращает — пустой. */
+export const updateDemoDriverHidden = async (
+  personId: string,
+  hiddenAt: Date | null,
+  client: Executor,
+): Promise<void> => {
   await client.$executeRaw`
     UPDATE xb.persons
-       SET "demo_hidden_at" = ${hiddenAt.toISOString()}::text::timestamptz,
+       SET "demo_hidden_at" = ${hiddenAt === null ? null : hiddenAt.toISOString()}::text::timestamptz,
            "updated_at"     = now()
      WHERE "id" = ${personId}::uuid
        AND "is_demo"

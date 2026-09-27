@@ -6,6 +6,7 @@ import { toLoadState } from '~/utils/loadState';
 import type { DemoTripsResponse } from '#shared/types/driver';
 import type {
   DemoDriverHideResponse,
+  DemoDriverUnhideResponse,
   DemoGenerateField,
   DemoGenerateRequestBody,
   DemoGenerateResponse,
@@ -140,7 +141,7 @@ const addTrips = async (personId: string, count: number, endedAt: string): Promi
 };
 
 const hide = async (personId: string): Promise<void> => {
-  if (!window.confirm('Спрятать демо-водителя? Он пропадёт из раздела, из сегментов и из поиска. Вернуть его нельзя.')) {
+  if (!window.confirm('Спрятать демо-водителя? Он пропадёт из раздела, из сегментов и из поиска.')) {
     return;
   }
 
@@ -149,6 +150,20 @@ const hide = async (personId: string): Promise<void> => {
 
   try {
     await $fetch<DemoDriverHideResponse>(`/api/demo/drivers/${personId}/hide`, { method: 'POST' });
+    await refresh();
+  } catch (error) {
+    driverError.value = failureText(error);
+  } finally {
+    driverBusyId.value = null;
+  }
+};
+
+const unhide = async (personId: string): Promise<void> => {
+  driverBusyId.value = personId;
+  driverError.value = null;
+
+  try {
+    await $fetch<DemoDriverUnhideResponse>(`/api/demo/drivers/${personId}/unhide`, { method: 'POST' });
     await refresh();
   } catch (error) {
     driverError.value = failureText(error);
@@ -277,6 +292,7 @@ const saveManagerOffices = (officeIds: string[]): Promise<void> =>
         :error="driverError"
         @add-trips="addTrips"
         @hide="hide"
+        @unhide="unhide"
       />
 
       <OrganismsDemoGenerator

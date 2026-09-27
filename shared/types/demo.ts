@@ -59,11 +59,18 @@ export type DemoDriverSummary = {
   lastTripAt: string | null;
   /** Подпись зрителя. Пусто — сгенерирован. */
   viewerLabel: string | null;
+  /** Спрятан. Пусто — виден в разделе, в сегментах и в поиске. */
+  hiddenAt: string | null;
 };
 
 export type DemoDriverHideResponse = {
   personId: string;
   hidden: true;
+};
+
+export type DemoDriverUnhideResponse = {
+  personId: string;
+  hidden: false;
 };
 
 export type DemoManagerSummary = {

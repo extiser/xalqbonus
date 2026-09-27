@@ -1,16 +1,19 @@
 <script setup lang="ts">
-import { reactive } from 'vue';
-import { formatDateTime, formatNumber } from '~/utils/format';
+import { computed, reactive, ref } from 'vue';
+import { formatDayMonth, formatMinuteDateTime, formatNumber, pluralize } from '~/utils/format';
 import type { DemoDriverSummary } from '#shared/types/demo';
 
 /**
  * Демо-водители (issue #252): водители зрителей и сгенерированные. У каждого — «Добавить
  * поездки» формой в строке, у сгенерированного ещё «Спрятать».
  *
+ * Спрятанные — по переключателю (решение Руслана 27-09-2026): спрятанный продолжает жить,
+ * и невидимым быть не должен. Его строка — с пометкой «спрятан» и «Вернуть», без поездок.
+ *
  * Поля формы у каждой строки свои и живут здесь: это ввод, а не данные, и страница о них
  * узнаёт только из события отправки.
  */
-defineProps<{
+const props = defineProps<{
   drivers: DemoDriverSummary[];
   /** Водитель, над которым идёт действие: его кнопки гаснут на время запроса. */
   busyPersonId: string | null;
@@ -22,7 +25,30 @@ defineProps<{
 const emit = defineEmits<{
   addTrips: [personId: string, count: number, endedAt: string];
   hide: [personId: string];
+  unhide: [personId: string];
 }>();
+
+const showHidden = ref(false);
+
+const hiddenCount = computed(() => props.drivers.filter((driver) => driver.hiddenAt !== null).length);
+
+const shown = computed(() =>
+  showHidden.value ? props.drivers : props.drivers.filter((driver) => driver.hiddenAt === null),
+);
+
+/**
+ * Части строки после имени — одной строкой через « · »: разделитель, собранный разметкой
+ * из соседних элементов, терял пробел на переносе строки шаблона.
+ */
+const detailsOf = (driver: DemoDriverSummary): string =>
+  [
+    driver.callsign,
+    `${formatNumber(driver.balance)} ${pluralize(driver.balance, 'балл', 'балла', 'баллов')}`,
+    driver.programMember ? 'участник' : 'не участник',
+    `последняя поездка ${formatMinuteDateTime(driver.lastTripAt)}`,
+    driver.viewerLabel ?? 'сгенерирован',
+    ...(driver.hiddenAt === null ? [] : [`спрятан ${formatDayMonth(driver.hiddenAt)}`]),
+  ].join(' · ');
 
 /**
  * Узбекистан живёт по UTC+5 круглый год, без перевода часов: время поля — ташкентское,
@@ -66,10 +92,24 @@ const submit = (personId: string): void => {
     note="Поездки руками идут тем же путём, что из синхронизации: балл за поездку, пятая после вступления приносит приветственные 300."
   >
     <div class="space-y-4">
+      <label v-if="hiddenCount > 0" class="flex items-center gap-3">
+        <input
+          v-model="showHidden"
+          type="checkbox"
+          class="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
+        />
+        <span class="text-sm text-slate-900">Показать спрятанных ({{ hiddenCount }})</span>
+      </label>
+
       <MoleculesStateNotice v-if="drivers.length === 0" state="empty" message="Демо-водителей пока нет." />
+      <MoleculesStateNotice
+        v-else-if="shown.length === 0"
+        state="empty"
+        message="Все демо-водители спрятаны."
+      />
       <ul v-else>
         <li
-          v-for="driver in drivers"
+          v-for="driver in shown"
           :key="driver.personId"
           class="space-y-2 border-t border-slate-200 py-3 first:border-t-0"
         >
@@ -78,21 +118,17 @@ const submit = (personId: string): void => {
               <NuxtLink
                 :to="`/drivers/${driver.personId}`"
                 class="font-medium underline underline-offset-2 hover:text-slate-700"
-              >
-                {{ driver.name }}
-              </NuxtLink>
-              <span class="text-slate-500"> · {{ driver.callsign }}</span>
-              <span class="text-slate-500"> · {{ formatNumber(driver.balance) }} баллов</span>
-              <span class="text-slate-500">
-                · {{ driver.programMember ? 'участник' : 'не участник' }}
-              </span>
-              <span class="text-slate-500">
-                · последняя поездка {{ formatDateTime(driver.lastTripAt) }}
-              </span>
-              <span class="text-slate-500">· {{ driver.viewerLabel ?? 'сгенерирован' }}</span>
+              >{{ driver.name }}</NuxtLink><span class="text-slate-500">{{ ` · ${detailsOf(driver)}` }}</span>
             </span>
             <AtomsActionButton
-              v-if="driver.viewerLabel === null"
+              v-if="driver.hiddenAt !== null"
+              label="Вернуть"
+              tone="primary"
+              :disabled="busyPersonId === driver.personId"
+              @click="emit('unhide', driver.personId)"
+            />
+            <AtomsActionButton
+              v-else-if="driver.viewerLabel === null"
               label="Спрятать"
               tone="danger"
               :disabled="busyPersonId === driver.personId"
@@ -100,7 +136,7 @@ const submit = (personId: string): void => {
             />
           </div>
 
-          <div class="flex flex-wrap items-end gap-3">
+          <div v-if="driver.hiddenAt === null" class="flex flex-wrap items-end gap-3">
             <label class="block w-28">
               <span class="mb-1 block text-sm font-medium text-slate-700">Сколько</span>
               <AtomsNumberInput v-model="formOf(driver.personId).count" :min="1" />

@@ -7,6 +7,7 @@ import { addDemoViewer, DEMO_DRIVER_OPENING_BALANCE } from '#server/services/dem
 import { createDemoInviteToken, hashDemoInviteToken } from '#server/services/demo/demoInviteToken';
 import { generateDemoDrivers } from '#server/services/demo/generateDemoDrivers';
 import { hideDemoDriver } from '#server/services/demo/hideDemoDriver';
+import { unhideDemoDriver } from '#server/services/demo/unhideDemoDriver';
 import { readDemoDrivers } from '#server/services/demo/readDemoOverview';
 import { revokeDemoInvite } from '#server/services/demo/revokeDemoInvite';
 import { setDemoManagerOffices } from '#server/services/demo/setDemoManagerOffices';
@@ -203,7 +204,7 @@ describe('раздел «Демо»', () => {
     expect(await readGeneratedSince(since)).toEqual([]);
   });
 
-  it('спрятанный уходит из раздела, из демо-сегмента и из поиска; водителя зрителя не прячут', async () => {
+  it('спрятанный уходит из демо-сегмента и поиска и возвращается туда же; водителя зрителя не прячут', async () => {
     await createSource();
     const since = new Date();
 
@@ -239,14 +240,26 @@ describe('раздел «Демо»', () => {
 
     const segmentAfter = await previewSegmentConditions(conditions, true, 0);
     const searchAfter = await searchDrivers({ query: hidden.callsign, limit: 100, offset: 0 });
-    const listed = (await readDemoDrivers()).map((row) => row.personId);
+    const listed = await readDemoDrivers();
 
     expect(segmentAfter.rows.map((row) => row.personId)).toEqual([kept.personId]);
     expect(searchAfter.rows.map((row) => row.personId)).not.toContain(hidden.personId);
-    expect(listed).not.toContain(hidden.personId);
-    expect(listed).toContain(kept.personId);
+    // Раздел показывает спрятанного по переключателю — строкой с отметкой.
+    expect(listed.find((row) => row.personId === hidden.personId)?.hiddenAt).not.toBeNull();
+    expect(listed.find((row) => row.personId === kept.personId)?.hiddenAt).toBeNull();
     // Журнал не трогается: баланс на месте.
     expect(await readAccountBalance(hidden.personId)).toBe(BigInt(BALANCE_WINDOW));
+
+    // «Вернуть»: снова в разделе, в демо-сегменте и в поиске; повтор — тот же исход.
+    expect(await unhideDemoDriver(hidden.personId)).toBe('shown');
+    expect(await unhideDemoDriver(hidden.personId)).toBe('shown');
+
+    const segmentBack = await previewSegmentConditions(conditions, true, 0);
+    const searchBack = await searchDrivers({ query: hidden.callsign, limit: 100, offset: 0 });
+
+    expect(segmentBack.rows.map((row) => row.personId).sort()).toEqual([hidden.personId, kept.personId].sort());
+    expect(searchBack.rows.map((row) => row.personId)).toContain(hidden.personId);
+    expect((await readDemoDrivers()).find((row) => row.personId === hidden.personId)?.hiddenAt).toBeNull();
 
     const telegramUserId = nextTestTelegramUserId();
     const viewer = await addDemoViewer({ telegramUserId, label: 'зритель' });
@@ -262,6 +275,7 @@ describe('раздел «Демо»', () => {
     const livePerson = await createTestPerson({ inProgram: true });
 
     expect(await hideDemoDriver(livePerson.personId)).toBe('not_demo');
+    expect(await unhideDemoDriver(livePerson.personId)).toBe('not_demo');
   });
 
   it('приглашение принимается один раз и заводит зрителя с демо-водителем', async () => {

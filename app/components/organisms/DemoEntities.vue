@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { DASH } from '~/utils/format';
 import type { DemoEntities } from '#shared/types/demo';
 
 /**
  * Сводка демо-офисов и демо-сущностей (issue #252) — ссылками на их карточки. Заводятся
  * они в своих разделах галочкой «Демо»; здесь только список, чтобы видеть витрину целиком.
+ *
+ * Карточки открываются в новой вкладке — пульт демо остаётся под рукой; пустая группа —
+ * прочерк: «нет» читалось двояко.
  */
 const props = defineProps<{
   demoOffices: { officeId: string; name: string }[];
@@ -69,10 +73,14 @@ const groups = computed<Group[]>(() => [
       <div v-for="group in groups" :key="group.title">
         <dt class="text-sm font-medium text-slate-700">{{ group.title }}</dt>
         <dd class="mt-1 text-sm">
-          <span v-if="group.links.length === 0" class="text-slate-500">нет</span>
+          <span v-if="group.links.length === 0" class="text-slate-500">{{ DASH }}</span>
           <ul v-else class="flex flex-wrap gap-x-4 gap-y-1">
             <li v-for="link in group.links" :key="link.key">
-              <NuxtLink :to="link.to" class="text-slate-900 underline underline-offset-2 hover:text-slate-700">
+              <NuxtLink
+                :to="link.to"
+                target="_blank"
+                class="text-slate-900 underline underline-offset-2 hover:text-slate-700"
+              >
                 {{ link.label }}
               </NuxtLink>
             </li>
