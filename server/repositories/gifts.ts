@@ -231,8 +231,9 @@ export const listPersonClaimableGifts = async (
   `;
 
 /**
- * Отмечает, что водитель видел шторку со своими подарками. Чужие идентификаторы и не подарки
- * отсекаются условием, а не проверкой до записи; отметка ставится один раз и не двигается.
+ * Отмечает, что водитель видел шторку со своими подарками и ручными наградами-товарами
+ * и произвольными (issue #266). Чужие идентификаторы и прочие награды отсекаются условием,
+ * а не проверкой до записи; отметка ставится один раз и не двигается.
  */
 export const markGiftsShown = async (personId: string, rewardIds: readonly string[]): Promise<number> =>
   db.$executeRaw`
@@ -241,7 +242,7 @@ export const markGiftsShown = async (personId: string, rewardIds: readonly strin
            "updated_at" = now()
      WHERE "person_id" = ${personId}::uuid
        AND "id" = ANY(${rewardIds}::text[]::uuid[])
-       AND "gift_grant_id" IS NOT NULL
+       AND ("gift_grant_id" IS NOT NULL OR ("source" = 'manual' AND "kind" IN ('product', 'custom')))
        AND "gift_shown_at" IS NULL
   `;
 

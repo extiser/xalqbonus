@@ -15,6 +15,9 @@ import { PHOTO_EXTENSION_BY_TYPE } from '../../../shared/photo';
  * раздачи, язык обложки и расширение по типу содержимого: `<id>-ru.jpg` (issue #236). Имя,
  * присланное клиентом, не используется нигде.
  *
+ * Обложки ручной награды (issue #266) лежат здесь же под uuid награды — колонки
+ * `rewards.cover_ru_path` и `cover_uz_path`: сообщение и шторка у неё те же, что у подарка.
+ *
  * Раздачи до #236 несли одну обложку на оба языка под именем `<id>.jpg`. Колонки ссылаются
  * на эти файлы и дальше, поэтому сверка имени принимает и прежний вид.
  *
@@ -25,8 +28,8 @@ import { PHOTO_EXTENSION_BY_TYPE } from '../../../shared/photo';
 /** Язык обложки — своим типом, а не перечислением базы: адаптер про базу не знает. */
 export type GiftCoverLanguage = 'ru' | 'uz';
 
-const fileNameFor = (giftGrantId: string, language: GiftCoverLanguage, extension: string): string =>
-  `${giftGrantId}-${language}.${extension}`;
+const fileNameFor = (ownerId: string, language: GiftCoverLanguage, extension: string): string =>
+  `${ownerId}-${language}.${extension}`;
 
 const coverDir = (): string => join(readUploadsDir(), GIFT_COVER_DIR);
 
@@ -35,9 +38,9 @@ export const ensureGiftCoverDir = (): void => {
   mkdirSync(coverDir(), { recursive: true });
 };
 
-/** Кладёт обложку языка на том и возвращает относительный путь для колонки раздачи. */
+/** Кладёт обложку языка на том и возвращает относительный путь для колонки раздачи или награды. */
 export const writeGiftCover = async (
-  giftGrantId: string,
+  ownerId: string,
   language: GiftCoverLanguage,
   contentType: string,
   bytes: Buffer,
@@ -49,7 +52,7 @@ export const writeGiftCover = async (
   }
 
   const dir = coverDir();
-  const fileName = fileNameFor(giftGrantId, language, extension);
+  const fileName = fileNameFor(ownerId, language, extension);
 
   await mkdir(dir, { recursive: true });
   await writeFile(join(dir, fileName), bytes);
@@ -73,7 +76,7 @@ const fileNameOfPath = (coverPath: string): string => {
 };
 
 /**
- * Удаляет обложку — когда раздача, под которую её положили, не записалась. Файла уже нет —
+ * Удаляет обложку — когда раздача или награда, под которую её положили, не записалась. Файла уже нет —
  * не отказ: снимать нечего.
  */
 export const deleteGiftCover = async (coverPath: string): Promise<void> => {

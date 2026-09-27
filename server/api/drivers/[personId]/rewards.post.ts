@@ -8,24 +8,23 @@ import {
 } from '#server/services/rewards/errors';
 import { grantManualReward } from '#server/services/rewards/grantManualReward';
 import { requireEmployeeRole } from '#server/utils/employeeAuth';
+import { readGiftCoverForm } from '#server/utils/giftCoverForm';
+import { explainGiftFailure } from '#server/utils/giftFailure';
 import { readUuid, requireUuidParam } from '#server/utils/query';
 import { REWARD_GRANT_ROLES } from '#shared/access';
-import type { ManualRewardField, ManualRewardResponse } from '#shared/types/rewards';
+import { GIFT_REASON_MAX_LENGTH } from '#shared/gift';
+import type { ManualRewardField, ManualRewardRequestBody, ManualRewardResponse } from '#shared/types/rewards';
 
 // Ручная выдача награды водителю (issue #172): источник `manual`, автор — вошедший сотрудник.
 // Доступ — ролью, тем же правилом, что ручная правка баллов. Товар и произвольная; баллы
 // сюда не принимаются — они вручаются подарком (`POST /api/gifts`, issue #219).
 //
+// Тело — `multipart/form-data`, как у раздачи подарка (issue #266): поля строками и обложки
+// на каждом языке файлами под теми же именами полей.
+//
 // Отказы доменных правил — строкой при своей ручке и с полем формы, к которому относятся,
-// как у ручной правки баллов (`points.post.ts`).
-type ManualRewardBody = {
-  kind?: unknown;
-  productId?: unknown;
-  title?: unknown;
-  officeId?: unknown;
-  lifetimeDays?: unknown;
-  note?: unknown;
-};
+// как у ручной правки баллов (`points.post.ts`). Отказы обложек и своего текста — те же,
+// что у подарка, теми же кодами и полями (`giftFailure.ts`).
 
 const PROBLEMS: Readonly<Record<ManualRewardProblem, { field: ManualRewardField; message: string }>> = {
   kind_invalid: { field: 'kind', message: 'выберите, что выдаётся: товар или своя награда' },
@@ -36,11 +35,12 @@ const PROBLEMS: Readonly<Record<ManualRewardProblem, { field: ManualRewardField;
   product_missing: { field: 'productId', message: 'выберите товар' },
   title_missing: { field: 'title', message: 'напишите, что выдаётся' },
   office_missing: { field: 'officeId', message: 'выберите офис, где водитель получит награду' },
-  lifetime_invalid: { field: 'lifetimeDays', message: 'срок — целое число дней, не меньше одного' },
-  note_missing: {
-    field: 'note',
-    message: 'пояснение обязательно: его видит сотрудник на стойке и водитель в разделе наград',
-  },
+  until_date_invalid: { field: 'untilDate', message: 'укажите дату, до которой забрать' },
+  until_date_too_early: { field: 'untilDate', message: 'дата — не раньше завтрашнего дня' },
+  note_ru_missing: { field: 'noteRu', message: 'пояснение на русском обязательно' },
+  note_uz_missing: { field: 'noteUz', message: 'пояснение на узбекском обязательно' },
+  note_ru_too_long: { field: 'noteRu', message: `не длиннее ${GIFT_REASON_MAX_LENGTH} знаков` },
+  note_uz_too_long: { field: 'noteUz', message: `не длиннее ${GIFT_REASON_MAX_LENGTH} знаков` },
 };
 
 const rejectField = (statusCode: 400 | 409, field: ManualRewardField, message: string) =>
@@ -50,21 +50,6 @@ const rejectField = (statusCode: 400 | 409, field: ManualRewardField, message: s
     message,
     data: { field },
   });
-
-/** Число из формы: строка с числом принимается наравне с числом. Пусто и не число — `null`. */
-const readNumber = (value: unknown): number | null => {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : null;
-  }
-
-  if (typeof value !== 'string' || value.trim() === '') {
-    return null;
-  }
-
-  const parsed = Number(value);
-
-  return Number.isFinite(parsed) ? parsed : null;
-};
 
 const readText = (value: unknown): string | null => {
   const text = typeof value === 'string' ? value.trim() : '';
@@ -76,22 +61,33 @@ export default defineEventHandler(async (event): Promise<ManualRewardResponse> =
   const employee = await requireEmployeeRole(event, REWARD_GRANT_ROLES);
 
   const personId = requireUuidParam(event, 'personId');
-  const body = await readBody<ManualRewardBody | null>(event);
+  const { fields, covers } = await readGiftCoverForm<keyof ManualRewardRequestBody>(event);
 
   try {
     const reward = await grantManualReward({
       personId,
       employeeId: employee.employeeId,
-      kind: typeof body?.kind === 'string' ? body.kind : '',
-      productId: readUuid(body?.productId),
-      title: readText(body?.title),
-      officeId: readUuid(body?.officeId),
-      lifetimeDays: readNumber(body?.lifetimeDays),
-      note: typeof body?.note === 'string' ? body.note : '',
+      kind: fields.kind ?? '',
+      productId: readUuid(fields.productId),
+      title: readText(fields.title),
+      officeId: readUuid(fields.officeId),
+      untilDate: fields.untilDate ?? '',
+      noteRu: fields.noteRu ?? '',
+      noteUz: fields.noteUz ?? '',
+      messageRu: fields.messageRu ?? '',
+      messageUz: fields.messageUz ?? '',
+      ...covers,
+      sendNow: fields.sendNow === 'true',
     });
 
     return { rewardId: reward.id, kind: reward.kind, code: reward.code };
   } catch (error) {
+    const giftFailure = explainGiftFailure(error);
+
+    if (giftFailure) {
+      throw giftFailure;
+    }
+
     if (error instanceof InvalidManualRewardError) {
       const problem = PROBLEMS[error.problem];
 

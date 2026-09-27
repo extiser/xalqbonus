@@ -86,7 +86,7 @@ const buildGift = (
       kind: 'product',
       productId: prize.productId,
       officeId: settings.officeId,
-      lifetimeDays: settings.lifetimeDays,
+      expiry: { lifetimeDays: settings.lifetimeDays },
     };
   }
 
@@ -95,7 +95,7 @@ const buildGift = (
       kind: 'custom',
       title: prize.title,
       officeId: settings.officeId,
-      lifetimeDays: settings.lifetimeDays,
+      expiry: { lifetimeDays: settings.lifetimeDays },
     };
   }
 

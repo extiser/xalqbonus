@@ -10,7 +10,7 @@ import type {
   MissingProduct,
   ShowcaseProduct,
 } from '#shared/types/miniapp';
-import type { MemberGift, MemberReward } from '#shared/types/rewards';
+import type { MemberGift, MemberReward, MemberSheetReward } from '#shared/types/rewards';
 import type { LoadState } from '~/types/loadState';
 import type {
   MemberCartLineView,
@@ -275,6 +275,18 @@ export const giftView = (gift: MemberGift): MemberGiftView => ({
   reason: gift.reasonText,
   deadline: gift.deadlineText,
   cover: gift.coverUrl,
+});
+
+/**
+ * Ручная награда в шторке подарков (issue #266) — свойствами той же карточки: название, «Почему»,
+ * где и до какого дня забрать, обложка.
+ */
+export const sheetRewardView = (reward: MemberSheetReward): MemberGiftView => ({
+  id: reward.rewardId,
+  title: reward.title,
+  reason: reward.reasonText,
+  deadline: reward.deadlineText,
+  cover: reward.coverUrl,
 });
 
 /** Блок наград на главной. Подарки считаются наградами: есть один подарок — блок не пуст. */

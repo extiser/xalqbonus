@@ -1970,6 +1970,17 @@ model Reward {
   /// стойки читает его как есть, у ручной выдачи сундука нет, а связь с сундуком держит
   /// `campaign_chests.reward_id`.
   sourceNote String?      @map("source_note")
+  /// «Почему» на узбекском — у ручной награды-товара и произвольной (issue #266). Водитель
+  /// на узбекском видит его, стойка и карточка водителя в вебе — русское `source_note`.
+  sourceNoteUz String?    @map("source_note_uz")
+  /// Свой текст сообщения о ручной награде на каждом языке (issue #266). Пусто — водителю
+  /// этого языка уходит системный текст.
+  messageRu    String?    @map("message_ru")
+  messageUz    String?    @map("message_uz")
+  /// Обложки сообщения и шторки на каждом языке — пути на томе, `gifts/<id награды>-ru.<ext>`,
+  /// рядом с обложками подарков. Обе или ни одной.
+  coverRuPath  String?    @map("cover_ru_path")
+  coverUzPath  String?    @map("cover_uz_path")
   /// Кто вручил — у источников `manual` и `gift`.
   grantedByEmployeeId String? @map("granted_by_employee_id") @db.Uuid
 
@@ -1979,7 +1990,8 @@ model Reward {
   claimedAt   DateTime?      @map("claimed_at") @db.Timestamptz(6)
   /// Забрал сам или зачислилось по сроку — вместе с `claimed_at`.
   claimMode   GiftClaimMode? @map("claim_mode")
-  /// Водитель видел шторку с этим подарком: второй раз сама она не показывается.
+  /// Водитель видел шторку с этой наградой: второй раз сама она не показывается. Есть
+  /// у подарка и у ручной награды-товара и произвольной (issue #266).
   giftShownAt DateTime?      @map("gift_shown_at") @db.Timestamptz(6)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)

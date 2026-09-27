@@ -1,11 +1,11 @@
-import { grantGift, type GiftCoverUpload, type GiftRecipient } from '#server/services/gifts/grantGift';
+import { grantGift, type GiftRecipient } from '#server/services/gifts/grantGift';
 import { readGiftGrant } from '#server/services/gifts/readGiftGrants';
 import { denyAccess } from '#server/utils/denial';
 import { requireEmployeeRole } from '#server/utils/employeeAuth';
+import { readGiftCoverForm } from '#server/utils/giftCoverForm';
 import { rethrowGiftFailure } from '#server/utils/giftFailure';
 import { readUuid } from '#server/utils/query';
 import { GIFT_SEGMENT_ROLES, REWARD_GRANT_ROLES } from '#shared/access';
-import { GIFT_COVER_RU_FIELD, GIFT_COVER_UZ_FIELD } from '#shared/gift';
 import type { GiftGrantRequestBody, GiftGrantResponse } from '#shared/types/rewards';
 
 // Раздача подарка от Xalq Taxi одному водителю или сегменту (issue #219). Тело —
@@ -21,42 +21,6 @@ type Fields = Partial<Record<keyof GiftGrantRequestBody, string>>;
 
 const badRequest = (message: string, field: string) =>
   createError({ statusCode: 400, statusMessage: 'Bad Request', message, data: { field } });
-
-type Covers = { coverRu: GiftCoverUpload | null; coverUz: GiftCoverUpload | null };
-
-const COVER_FIELDS: Readonly<Record<string, keyof Covers>> = {
-  [GIFT_COVER_RU_FIELD]: 'coverRu',
-  [GIFT_COVER_UZ_FIELD]: 'coverUz',
-};
-
-/** Поля и файлы из тела. Имя поля без файла — строка; повтор имени берёт первое значение. */
-const readForm = async (
-  event: Parameters<typeof readMultipartFormData>[0],
-): Promise<{ fields: Fields; covers: Covers }> => {
-  const parts = (await readMultipartFormData(event)) ?? [];
-  const fields: Record<string, string> = {};
-  const covers: Covers = { coverRu: null, coverUz: null };
-
-  for (const part of parts) {
-    if (!part.name) {
-      continue;
-    }
-
-    const coverKey = COVER_FIELDS[part.name];
-
-    if (coverKey) {
-      if (part.filename !== undefined && part.data.byteLength > 0 && covers[coverKey] === null) {
-        covers[coverKey] = { contentType: (part.type ?? '').toLowerCase(), bytes: part.data };
-      }
-
-      continue;
-    }
-
-    fields[part.name] ??= part.data.toString('utf8');
-  }
-
-  return { fields, covers };
-};
 
 /** Число из формы. Пусто и не число — `null`. */
 const readNumber = (value: string | undefined): number | null => {
@@ -91,7 +55,7 @@ const readRecipient = (fields: Fields): GiftRecipient => {
 
 export default defineEventHandler(async (event): Promise<GiftGrantResponse> => {
   const employee = await requireEmployeeRole(event, REWARD_GRANT_ROLES);
-  const { fields, covers } = await readForm(event);
+  const { fields, covers } = await readGiftCoverForm<keyof GiftGrantRequestBody>(event);
   const recipient = readRecipient(fields);
 
   if (recipient.kind === 'segment' && !GIFT_SEGMENT_ROLES.includes(employee.role)) {

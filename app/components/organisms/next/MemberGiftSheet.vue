@@ -17,11 +17,17 @@ import type { MemberGiftView } from '~/types/memberView';
  * Лопается последний — шторка отдаёт `close` сама, вместе с началом его лопания, а не после
  * схлопывания места (решение Руслана 24-09-2026): серпантин долетает поверх главной. Уезжает
  * она обычным выездом `MemberSheet`.
+ *
+ * Под подарками — ручные награды-товары и произвольные (issue #266), той же карточкой с «Открыть»:
+ * шторка одна, не две. «Забрать всё» считает только подарки; пока под ними есть награда, шторка
+ * с последним лопнувшим подарком не уезжает — награда ещё не открыта.
  */
 const props = withDefaults(
   defineProps<{
     open: boolean;
     gifts: MemberGiftView[];
+    /** Ручные награды под подарками — с «Открыть». */
+    rewards?: MemberGiftView[];
     /** Подарки, которые ждут ответа на «Забрать». */
     busy?: readonly string[];
     /** Забранные — лопаются. */
@@ -37,18 +43,29 @@ const props = withDefaults(
       take: string;
       takeAll: string;
       close: string;
+      /** «Открыть» — у награды. */
+      open?: string;
     };
   }>(),
-  { busy: () => [], popping: () => [], errors: () => ({}), takingAll: false },
+  { rewards: () => [], busy: () => [], popping: () => [], errors: () => ({}), takingAll: false },
 );
 
-const emit = defineEmits<{ take: [giftId: string]; takeAll: []; close: []; popped: [giftId: string] }>();
+const emit = defineEmits<{
+  take: [giftId: string];
+  takeAll: [];
+  close: [];
+  popped: [giftId: string];
+  open: [rewardId: string];
+}>();
 
 /** Шторка уезжает вместе с серпантином последнего подарка. */
 const CLOSE_WITH_LAST_MS = 260;
 
 const lastPopping = computed(
-  () => props.gifts.length > 0 && props.gifts.every((gift) => props.popping.includes(gift.id)),
+  () =>
+    props.rewards.length === 0 &&
+    props.gifts.length > 0 &&
+    props.gifts.every((gift) => props.popping.includes(gift.id)),
 );
 
 let closeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -84,6 +101,16 @@ function close(): void {
         :popping="popping.includes(gift.id)"
         @take="emit('take', gift.id)"
         @popped="emit('popped', gift.id)"
+      />
+      <MoleculesNextMemberGiftCard
+        v-for="reward in rewards"
+        :key="reward.id"
+        :gift="reward"
+        mode="open"
+        :take-label="texts.open"
+        reason-full
+        show-cover
+        @open="emit('open', reward.id)"
       />
     </div>
 

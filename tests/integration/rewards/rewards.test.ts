@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
 import { db } from '#server/db';
+import { InvalidGiftGrantError } from '#server/services/gifts/errors';
+import { markGiftsShown } from '#server/services/gifts/markGiftsShown';
 import { DeskCodeNotFoundError } from '#server/services/desk/errors';
 import { findDeskItemByCode } from '#server/services/desk/findDeskItemByCode';
 import { OfficeNotOpenError } from '#server/services/offices/errors';
@@ -26,6 +28,7 @@ import { readDriverRewards } from '#server/services/rewards/readDriverRewards';
 import { readMemberRewards } from '#server/services/rewards/readMemberRewards';
 import { readRewardGrantOptions } from '#server/services/rewards/readRewardGrantOptions';
 import { receiveStock } from '#server/services/stock/receiveStock';
+import { calendarDayMoment, formatDayMonthWord, parkDayKey, shiftDayKey } from '#server/utils/parkTime';
 import {
   cleanupTestData,
   countTransfersByReason,
@@ -41,6 +44,7 @@ import {
 import { cleanupTestEmployees, createTestEmployee, setTestProfilePhone } from '../support/employees';
 import { backdateTestGift, findGiftRewardId } from '../support/gifts';
 import { grantPoints } from '../support/points';
+import { disconnectQueues } from '../support/queues';
 import {
   backdateTestReward,
   countRewardsByPerson,
@@ -110,7 +114,19 @@ const prizeScenario = async (): Promise<Scenario> => {
   return { ...person, officeId, productId, employeeId };
 };
 
-const grantPrize = (scenario: Scenario, lifetimeDays = 7) =>
+/** Далёкий день «Забрать до»: награда ждёт, пока тест не сдвинет срок сам. */
+const FAR_UNTIL_DATE = '2099-01-01';
+
+/** Поля ручной выдачи без своего текста и обложек — то, что форма шлёт по умолчанию. */
+const PLAIN_MESSAGE = {
+  messageRu: '',
+  messageUz: '',
+  coverRu: null,
+  coverUz: null,
+  sendNow: false,
+} as const;
+
+const grantPrize = (scenario: Scenario, untilDate = FAR_UNTIL_DATE) =>
   grantManualReward({
     personId: scenario.personId,
     employeeId: scenario.employeeId,
@@ -118,8 +134,10 @@ const grantPrize = (scenario: Scenario, lifetimeDays = 7) =>
     productId: scenario.productId,
     title: null,
     officeId: scenario.officeId,
-    lifetimeDays,
-    note: 'за помощь новичкам',
+    untilDate,
+    noteRu: 'за помощь новичкам',
+    noteUz: 'yangi haydovchilarga yordam uchun',
+    ...PLAIN_MESSAGE,
   });
 
 const grantCustom = (scenario: Scenario, title: string) =>
@@ -130,8 +148,10 @@ const grantCustom = (scenario: Scenario, title: string) =>
     productId: null,
     title,
     officeId: scenario.officeId,
-    lifetimeDays: 7,
-    note: 'за стаж',
+    untilDate: FAR_UNTIL_DATE,
+    noteRu: 'за стаж',
+    noteUz: 'staj uchun',
+    ...PLAIN_MESSAGE,
   });
 
 const worker = (scenario: Scenario) => ({ employeeId: scenario.employeeId, role: 'manager' as const, isDemo: false });
@@ -150,7 +170,10 @@ describe('награды', () => {
     await cleanupTestData();
     await cleanupTestEmployees();
   });
-  afterAll(disconnectDatabase);
+  afterAll(async () => {
+    await disconnectDatabase();
+    await disconnectQueues();
+  });
 
   it('приз публикуется без цены в баллах, приходуется и на витрину не выходит', async () => {
     const officeId = await createTestOffice();
@@ -384,8 +407,10 @@ describe('награды', () => {
         productId: null,
         title: null,
         officeId: null,
-        lifetimeDays: null,
-        note: 'компенсация',
+        untilDate: FAR_UNTIL_DATE,
+        noteRu: 'компенсация',
+        noteUz: 'kompensatsiya',
+        ...PLAIN_MESSAGE,
       }),
     ).rejects.toMatchObject({ problem: 'points_via_gift' });
 
@@ -407,18 +432,19 @@ describe('награды', () => {
         productId: null,
         title: 'Сертификат на мойку',
         officeId,
-        lifetimeDays: 7,
-        note: 'за стаж',
+        untilDate: FAR_UNTIL_DATE,
+        noteRu: 'за стаж',
+        noteUz: 'staj uchun',
+        ...PLAIN_MESSAGE,
       }),
     ).rejects.toBeInstanceOf(DriverAccountMissingError);
     expect(await countRewardsByPerson(person.personId)).toBe(0);
   });
 
-  it('у товара и своей награды срок обязателен, пояснение — у всех', async () => {
+  it('отказы: «Забрать до» — не раньше завтра, «Почему» на обоих языках, текст влезает в сообщение', async () => {
     const scenario = await prizeScenario();
-
-    await expect(grantPrize(scenario, 0)).rejects.toMatchObject({ problem: 'lifetime_invalid' });
-    await expect(
+    const today = parkDayKey(new Date());
+    const custom = (fields: Partial<Parameters<typeof grantManualReward>[0]>) =>
       grantManualReward({
         personId: scenario.personId,
         employeeId: scenario.employeeId,
@@ -426,11 +452,104 @@ describe('награды', () => {
         productId: null,
         title: 'Мойка',
         officeId: scenario.officeId,
-        lifetimeDays: 7,
-        note: '   ',
-      }),
-    ).rejects.toBeInstanceOf(InvalidManualRewardError);
+        untilDate: FAR_UNTIL_DATE,
+        noteRu: 'за стаж',
+        noteUz: 'staj uchun',
+        ...PLAIN_MESSAGE,
+        ...fields,
+      });
+
+    await expect(grantPrize(scenario, today)).rejects.toMatchObject({ problem: 'until_date_too_early' });
+    await expect(grantPrize(scenario, '')).rejects.toMatchObject({ problem: 'until_date_invalid' });
+    await expect(custom({ noteRu: '   ' })).rejects.toMatchObject({ problem: 'note_ru_missing' });
+    await expect(custom({ noteUz: '' })).rejects.toMatchObject({ problem: 'note_uz_missing' });
+    await expect(custom({ noteRu: 'а'.repeat(61) })).rejects.toMatchObject({ problem: 'note_ru_too_long' });
+    await expect(custom({ noteUz: 'a'.repeat(61) })).rejects.toMatchObject({ problem: 'note_uz_too_long' });
+    await expect(custom({ messageUz: 'a'.repeat(5_000) })).rejects.toMatchObject({
+      problem: 'message_uz_too_long',
+    });
+    await expect(
+      custom({ coverRu: { contentType: 'image/jpeg', bytes: Buffer.from('jpeg') } }),
+    ).rejects.toBeInstanceOf(InvalidGiftGrantError);
+    await expect(custom({ kind: 'custom', title: '  ' })).rejects.toBeInstanceOf(InvalidManualRewardError);
     expect(await countRewardsByPerson(scenario.personId)).toBe(0);
+    expect(await readStock(scenario.officeId, scenario.productId)).toEqual({ onHand: 3, reserved: 0 });
+  });
+
+  it('«Забрать до» завтра — награда сгорает в 05:00 послезавтра по Ташкенту, водитель видит завтрашний день', async () => {
+    const scenario = await prizeScenario();
+    const tomorrow = shiftDayKey(parkDayKey(new Date()), 1);
+    const reward = await grantPrize(scenario, tomorrow);
+
+    expect(reward.expiresAt?.toISOString()).toBe(
+      new Date(`${shiftDayKey(tomorrow, 1)}T05:00:00+05:00`).toISOString(),
+    );
+
+    const { rewards } = await readMemberRewards({ personId: scenario.personId, language: 'ru' });
+    const day = formatDayMonthWord(calendarDayMoment(tomorrow), 'ru');
+
+    expect(rewards[0]).toMatchObject({
+      rewardId: reward.id,
+      stateHint: `до ${day}`,
+      claimHint: `заберите до ${day}`,
+      stateText: `Ждёт в офисе до ${day}`,
+    });
+  });
+
+  it('«Почему» — водителю на его языке, стойке — русское', async () => {
+    const scenario = await prizeScenario();
+    const reward = await grantPrize(scenario);
+
+    const russian = await readMemberRewards({ personId: scenario.personId, language: 'ru' });
+    const uzbek = await readMemberRewards({ personId: scenario.personId, language: 'uz' });
+
+    expect(russian.rewards[0]?.originText).toBe('Вручил парк · за помощь новичкам');
+    expect(uzbek.rewards[0]?.originText).toBe('Park tomonidan berildi · yangi haydovchilarga yordam uchun');
+    expect(uzbek.sheetRewards[0]?.reasonText).toBe('Xalq Taxi · yangi haydovchilarga yordam uchun');
+
+    const found = await findDeskItemByCode(worker(scenario), scenario.officeId, reward.code ?? '');
+
+    expect(found.kind === 'reward' ? found.reward.reasonText : null).toBe('Награда — вручную, за помощь новичкам');
+  });
+
+  it('шторка: ручная награда до отметки «видел», потом только в разделе; чужая отметка не ставится', async () => {
+    const scenario = await prizeScenario();
+    const stranger = await prizeScenario();
+    const tomorrow = shiftDayKey(parkDayKey(new Date()), 1);
+    const reward = await grantPrize(scenario, tomorrow);
+    const foreign = await grantPrize(stranger);
+
+    const before = await readMemberRewards({ personId: scenario.personId, language: 'ru' });
+
+    expect(before.sheetRewards).toEqual([
+      {
+        rewardId: reward.id,
+        title: 'Тестовый товар',
+        reasonText: 'Xalq Taxi · за помощь новичкам',
+        deadlineText: `Заберите в офисе Тестовый офис до ${formatDayMonthWord(calendarDayMoment(tomorrow), 'ru')}`,
+        coverUrl: null,
+      },
+    ]);
+    expect(before.giftsUnseen).toBe(false);
+
+    await markGiftsShown(scenario.personId, [reward.id, foreign.id]);
+
+    const after = await readMemberRewards({ personId: scenario.personId, language: 'ru' });
+
+    expect(after.sheetRewards).toEqual([]);
+    expect(after.rewards.map((entry) => entry.rewardId)).toEqual([reward.id]);
+    expect((await readMemberRewards({ personId: stranger.personId, language: 'ru' })).sheetRewards).toHaveLength(1);
+
+    // Выданная у стойки в шторку не попадает, даже если водитель её не видел.
+    const issued = await grantPrize(stranger);
+
+    await issueOfficeReward(worker(stranger), issued.id);
+
+    expect(
+      (await readMemberRewards({ personId: stranger.personId, language: 'ru' })).sheetRewards.map(
+        (entry) => entry.rewardId,
+      ),
+    ).toEqual([foreign.id]);
   });
 
   it('просроченная сгорает, товар возвращается на полку; выданную сгорание не трогает', async () => {

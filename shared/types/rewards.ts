@@ -148,6 +148,22 @@ export type MemberGift = {
   coverUrl: string | null;
 };
 
+/**
+ * Ручная награда-товар или произвольная в шторке подарков (issue #266) — той же карточкой,
+ * что подарок, с «Открыть» вместо «Забрать».
+ */
+export type MemberSheetReward = {
+  rewardId: string;
+  /** Название товара или произвольной награды. */
+  title: string;
+  /** «Xalq Taxi · за помощь новичкам» — «Почему» на языке водителя. */
+  reasonText: string;
+  /** «Заберите в офисе Чиланзар до 5 октября». */
+  deadlineText: string;
+  /** Обложка на языке водителя, рамкой 16:9. Пусто — без обложки. */
+  coverUrl: string | null;
+};
+
 export type MiniAppRewardsResponse = {
   /** Награды со своим видом. Ждущие подарки сюда не входят — они в `gifts`. */
   rewards: MemberReward[];
@@ -155,6 +171,12 @@ export type MiniAppRewardsResponse = {
   gifts: MemberGift[];
   /** Есть подарок, которого водитель ещё не видел в шторке: шторка показывается сама. */
   giftsUnseen: boolean;
+  /**
+   * Ждущие ручные награды-товары и произвольные, которых водитель ещё не видел в шторке,
+   * свежие первыми (issue #266). Есть хоть одна — шторка показывается сама. Сами награды
+   * при этом есть и в `rewards`.
+   */
+  sheetRewards: MemberSheetReward[];
 };
 
 /** «Забрать» (`POST /api/miniapp/gifts/{rewardId}/claim`): баланс после зачисления. */
@@ -162,7 +184,7 @@ export type MiniAppGiftClaimResponse = {
   balancePoints: number;
 };
 
-/** Тело отметки «шторку видел» (`POST /api/miniapp/gifts/shown`). */
+/** Тело отметки «шторку видел» (`POST /api/miniapp/gifts/shown`): подарки и награды шторки. */
 export type MiniAppGiftsShownBody = {
   rewardIds: string[];
 };
@@ -196,6 +218,10 @@ export type MemberRewardTexts = {
   giftTapHint: string;
   /** Сбой «Забрать» без ответа ручки. Отказ ручки говорит своим текстом. */
   giftTakeFailed: string;
+  /** «Открыть» — у награды в шторке (issue #266). */
+  rewardOpen: string;
+  /** Подзаголовок шторки, в которой только награды, без подарков. */
+  rewardSheetSubtitle: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -251,17 +277,27 @@ export type DriverRewardsResponse = {
 // ---------------------------------------------------------------------------
 
 /**
- * Тело ручной выдачи — то, что набрано в форме, строками. Какие поля нужны, зависит от вида:
- * у товара — товар, офис и срок, у произвольной — название, офис и срок. Пояснение обязательно
- * всегда. Баллы ручной выдачей не вручаются — они подарок (`GiftGrantRequestBody`, issue #219).
+ * Поля ручной выдачи (issue #172, #266) — то, что набрано в форме, строками. Уходят телом
+ * `multipart/form-data` вместе с обложками — под теми же именами полей, что у подарка
+ * (`GIFT_COVER_RU_FIELD`, `GIFT_COVER_UZ_FIELD`). Какие поля нужны, зависит от вида: у товара —
+ * товар, у произвольной — название; офис, «Забрать до» и «Почему» на обоих языках — у обоих.
+ * Баллы ручной выдачей не вручаются — они подарок (`GiftGrantRequestBody`, issue #219).
  */
 export type ManualRewardRequestBody = {
   kind: string;
   productId: string;
   title: string;
   officeId: string;
-  lifetimeDays: string;
-  note: string;
+  /** «Забрать до», `YYYY-MM-DD`. */
+  untilDate: string;
+  /** «Почему» на русском — его видит и стойка. */
+  noteRu: string;
+  noteUz: string;
+  /** Свой текст сообщения. Пусто — водителю этого языка уходит системный текст. */
+  messageRu: string;
+  messageUz: string;
+  /** Сообщение — без ожидания окна 09:00–21:00: `'true'` или пусто, как у подарка. */
+  sendNow: string;
 };
 
 /** Поле формы, к которому относится отказ, — текст встаёт рядом с ним. */
@@ -270,8 +306,13 @@ export type ManualRewardField =
   | 'productId'
   | 'title'
   | 'officeId'
-  | 'lifetimeDays'
-  | 'note';
+  | 'untilDate'
+  | 'noteRu'
+  | 'noteUz'
+  | 'messageRu'
+  | 'messageUz'
+  | 'coverRu'
+  | 'coverUz';
 
 export type ManualRewardResponse = {
   rewardId: string;
@@ -341,6 +382,22 @@ export type GiftMessagePreviewRequestBody = {
   untilDate: string;
 };
 
+/**
+ * Предпросмотр системного текста ручной награды (`POST /api/rewards/message-preview`,
+ * issue #266) — то, что набрано в форме. Пустое и неверное — подписью поля в фигурных скобках.
+ */
+export type RewardMessagePreviewRequestBody = {
+  kind: string;
+  productId: string;
+  title: string;
+  officeId: string;
+  /** `YYYY-MM-DD`. */
+  untilDate: string;
+  noteRu: string;
+  noteUz: string;
+};
+
+/** Системный текст подарка или награды: целиком и строкой под своим текстом. */
 export type GiftMessagePreviewResponse = {
   /** Системный текст целиком — уходит, если своё поле пусто. */
   systemRu: string;

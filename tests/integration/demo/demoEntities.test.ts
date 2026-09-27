@@ -316,8 +316,14 @@ describe('демо-сущности', () => {
     const manual = {
       employeeId: catalog.employeeId,
       title: null,
-      lifetimeDays: 7,
-      note: 'проверка демо',
+      untilDate: '2099-01-01',
+      noteRu: 'проверка демо',
+      noteUz: 'demo tekshiruvi',
+      messageRu: '',
+      messageUz: '',
+      coverRu: null,
+      coverUz: null,
+      sendNow: false,
     };
 
     await expect(

@@ -216,6 +216,9 @@ export type TextKey =
   | 'gift_take'
   | 'gifts_take_all'
   | 'gift_tap_hint'
+  | 'reward_open'
+  | 'reward_sheet_deadline'
+  | 'reward_sheet_subtitle'
   | 'order_denied_office_unavailable'
   | 'order_denied_product_unavailable'
   | 'order_denied_insufficient_stock'
@@ -275,6 +278,8 @@ export type TextKey =
   | 'notification_welcome_bonus'
   | 'notification_gift_received'
   | 'notification_gift_received_footer'
+  | 'notification_reward_received'
+  | 'notification_reward_received_footer'
   | 'notification_campaign_finished_chests'
   | 'notification_campaign_finished_returned'
   | 'notification_campaign_finished_joined'
@@ -1260,6 +1265,23 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     uz: 'olish uchun bosing',
   },
 
+  // Ручная награда в шторке подарков (issue #266): та же карточка, «Открыть» вместо «Забрать».
+  // Узбекский — черновой.
+  reward_open: {
+    ru: 'Открыть',
+    uz: 'Ochish',
+  },
+  /** Срок на карточке награды в шторке: где и до какого дня забрать. */
+  reward_sheet_deadline: {
+    ru: 'Заберите в офисе {office} до {date}',
+    uz: '{office} ofisidan {date} gacha oling',
+  },
+  /** Подзаголовок шторки, в которой только награды: у подарков — `gifts_subtitle`. */
+  reward_sheet_subtitle: {
+    ru: 'Покажите код в офисе — он на экране награды',
+    uz: "Kodni ofisda ko'rsating — u mukofot ekranida",
+  },
+
   // Отказы оформления и отмены. Разведены по причинам: экран обязан сказать, чего именно
   // не хватило, — баллов, товара на полке или открытого офиса, — потому что и действие
   // у водителя в каждом случае своё.
@@ -1596,6 +1618,19 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   notification_gift_received_footer: {
     ru: 'Заберите {points} в приложении до {date}.',
     uz: '{points}ni ilovada {date} gacha oling.',
+  },
+  /**
+   * Ручная награда-товар или произвольная ждёт в офисе (issue #266). `{title}` — название,
+   * `{reason}` — «Почему», `{date}` — день словом месяца. Узбекский — черновой.
+   */
+  notification_reward_received: {
+    ru: 'Xalq Taxi дарит вам {title} — {reason}. Заберите в офисе {office} до {date}, код — в приложении.',
+    uz: "Xalq Taxi sizga {title} sovg'a qiladi — {reason}. Uni {office} ofisidan {date} gacha oling, kod — ilovada.",
+  },
+  /** Системная строка под своим текстом награды: что, где и до какого дня забрать не теряются. */
+  notification_reward_received_footer: {
+    ru: 'Заберите {title} в офисе {office} до {date}, код — в приложении.',
+    uz: '{title}ni {office} ofisidan {date} gacha oling, kod — ilovada.',
   },
 
   // Итог и вскрытие акции (issue #182). Обе точки стоят на границах окна отправки 09:00–21:00.

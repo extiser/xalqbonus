@@ -1,9 +1,10 @@
 import type { Language } from '#server/generated/prisma/enums';
 import { listPersonClaimableGifts } from '#server/repositories/gifts';
-import { listPersonRewards } from '#server/repositories/rewards';
+import { listPersonRewards, listPersonSheetRewards } from '#server/repositories/rewards';
 import {
   describeMemberGift,
   describeMemberReward,
+  describeSheetReward,
 } from '#server/services/rewards/memberRewardScreen';
 import type { MiniAppRewardsResponse } from '#shared/types/rewards';
 
@@ -14,6 +15,9 @@ import type { MiniAppRewardsResponse } from '#shared/types/rewards';
  *
  * Ждущие подарки от Xalq Taxi — отдельным списком (issue #219): у них своя карточка
  * с «Забрать», а в общий список подарок попадает, когда лёг на баланс.
+ *
+ * Ручные награды, которых водитель не видел в шторке, — ещё одним списком (issue #266):
+ * шторка подарков показывает их под подарками. В общем списке они есть и так.
  */
 
 /**
@@ -30,14 +34,16 @@ export type MemberRewardsRequest = {
 export const readMemberRewards = async (
   request: MemberRewardsRequest,
 ): Promise<MiniAppRewardsResponse> => {
-  const [rows, gifts] = await Promise.all([
+  const [rows, gifts, sheetRewards] = await Promise.all([
     listPersonRewards(request.personId, REWARDS_LIMIT),
     listPersonClaimableGifts(request.personId),
+    listPersonSheetRewards(request.personId),
   ]);
 
   return {
     rewards: rows.map((row) => describeMemberReward(row, request.language)),
     gifts: gifts.map((gift) => describeMemberGift(gift, request.language)),
     giftsUnseen: gifts.some((gift) => gift.shownAt === null),
+    sheetRewards: sheetRewards.map((reward) => describeSheetReward(reward, request.language)),
   };
 };
