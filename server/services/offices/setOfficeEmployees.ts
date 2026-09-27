@@ -6,7 +6,11 @@ import {
   listOfficeEmployees,
   replaceOfficeEmployees,
 } from '#server/repositories/offices';
-import { UnknownOfficeEmployeeError, UnknownOfficeError } from '#server/services/offices/errors';
+import {
+  OfficeSideMismatchError,
+  UnknownOfficeEmployeeError,
+  UnknownOfficeError,
+} from '#server/services/offices/errors';
 import type { OfficeEmployeesResponse } from '#shared/types/catalog';
 
 /**
@@ -19,6 +23,9 @@ import type { OfficeEmployeesResponse } from '#shared/types/catalog';
  * Проверка и запись — в одной транзакции: между «сотрудник существует» и «строка вставлена»
  * иначе уместилось бы удаление учётки, и внешний ключ отказал бы пятисоткой вместо внятного
  * ответа. Повторов в присланном списке не боимся: набор приводится к множеству до записи.
+ *
+ * Сторона демо проверяется там же (issue #252): демо-сотрудник — только за демо-офисом,
+ * живой — только за живым (`OfficeSideMismatchError`).
  */
 const log = consola.withTag('offices:employees');
 
@@ -41,6 +48,15 @@ export const setOfficeEmployees = async (
       const knownIds = new Set(known.map((employee) => employee.id));
 
       throw new UnknownOfficeEmployeeError(unique.filter((id) => !knownIds.has(id)));
+    }
+
+    const otherSide = known.filter((employee) => employee.isDemo !== office.isDemo);
+
+    if (otherSide.length > 0) {
+      throw new OfficeSideMismatchError(
+        [officeId],
+        otherSide.map((employee) => employee.id),
+      );
     }
 
     await replaceOfficeEmployees(officeId, unique, transaction);

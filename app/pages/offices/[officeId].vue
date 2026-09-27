@@ -222,6 +222,7 @@ const adjust = (payload: { productId: string; onHand: number; note: string }): P
         :saving="savingEmployees"
         :error="employeesError"
         :readonly="!editable"
+        :office-is-demo="card.office.isDemo"
         @save="saveEmployees"
       />
 

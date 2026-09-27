@@ -256,6 +256,45 @@ export const replaceOfficeEmployees = async (
   `;
 };
 
+/**
+ * То же с другой стороны (issue #252): набор офисов сотрудника заменяется присланным.
+ * Строки те же, `employee_offices`, и правила те же — лишние снимаются, новые вставляются,
+ * уже закреплённые остаются со своим `created_at`.
+ */
+export const replaceEmployeeOffices = async (
+  employeeId: string,
+  officeIds: string[],
+  client: Executor,
+): Promise<void> => {
+  await client.$executeRaw`
+    DELETE FROM xb.employee_offices
+     WHERE "employee_id" = ${employeeId}::uuid
+       AND NOT ("office_id" = ANY(${officeIds}::uuid[]))
+  `;
+
+  if (officeIds.length === 0) {
+    return;
+  }
+
+  await client.$executeRaw`
+    INSERT INTO xb.employee_offices ("employee_id", "office_id")
+    SELECT ${employeeId}::uuid, "office_id"
+      FROM unnest(${officeIds}::uuid[]) AS "office_id"
+    ON CONFLICT ("employee_id", "office_id") DO NOTHING
+  `;
+};
+
+/** Офисы по списку идентификаторов — ради проверки, что все есть и все одной стороны. */
+export const findOfficesByIds = async (
+  officeIds: string[],
+  client: Executor = db,
+): Promise<OfficeRow[]> =>
+  client.$queryRaw<OfficeRow[]>`
+    SELECT ${OFFICE_COLUMNS}
+      FROM xb.offices
+     WHERE "id" = ANY(${officeIds}::uuid[])
+  `;
+
 export type DeskAwaitingCountRow = {
   officeId: string;
   awaitingCount: number;

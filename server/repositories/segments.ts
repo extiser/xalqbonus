@@ -252,6 +252,8 @@ export const segmentMembersSql = (conditions: SegmentConditions, isDemo: boolean
               LEFT JOIN xb.accounts AS account
                      ON account."person_id" = person."id" AND account."type" = 'driver'
              WHERE person."is_demo" = ${isDemo}::boolean
+               -- Спрятанный демо-водитель в срез не попадает (issue #252); у живого пусто всегда.
+               AND person."demo_hidden_at" IS NULL
            ) AS candidate
      WHERE (${conditions.daysSinceTripMin}::int IS NULL
             OR candidate."daysSinceTrip" >= ${conditions.daysSinceTripMin}::int)

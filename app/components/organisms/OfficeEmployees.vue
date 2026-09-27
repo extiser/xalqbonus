@@ -26,6 +26,8 @@ const props = defineProps<{
   error: string | null;
   /** Состав только на чтение: ДЕМО ОФИС у того, кто его не правит (issue #212). */
   readonly?: boolean;
+  /** Сторона офиса: демо-офису — только демо-сотрудники, живому — только живые (issue #252). */
+  officeIsDemo: boolean;
 }>();
 
 const emit = defineEmits<{ save: [employeeIds: string[]] }>();
@@ -35,9 +37,14 @@ const chosen = ref('');
 
 const attachedIds = computed(() => new Set(props.employees.map((employee) => employee.employeeId)));
 
-/** В выборе только незакреплённые: закреплённый второй раз не добавляется. */
+/**
+ * В выборе только незакреплённые — закреплённый второй раз не добавляется — и только своей
+ * стороны: демо-сотрудника за живым офисом сервер не закрепит (issue #252).
+ */
 const candidates = computed(() =>
-  (props.accounts ?? []).filter((account) => !attachedIds.value.has(account.employeeId)),
+  (props.accounts ?? []).filter(
+    (account) => !attachedIds.value.has(account.employeeId) && account.isDemo === props.officeIsDemo,
+  ),
 );
 
 /**
@@ -112,7 +119,11 @@ const remove = (employeeId: string): void => {
         <MoleculesStateNotice
           v-else-if="candidates.length === 0"
           state="empty"
-          message="Свободных учёток нет: все заведённые сотрудники уже закреплены."
+          :message="
+            officeIsDemo
+              ? 'Свободных демо-сотрудников нет: демо-менеджер заводится в разделе «Демо».'
+              : 'Свободных учёток нет: все заведённые сотрудники уже закреплены.'
+          "
         />
         <div v-else class="flex flex-wrap items-end gap-3">
           <label class="block min-w-56 flex-1">

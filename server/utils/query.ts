@@ -58,3 +58,21 @@ export const requireUuidParam = (event: H3Event, name: string): string => {
 
   return value;
 };
+
+/** Telegram ID — положительное целое до 19 знаков: влезает в `bigint` Postgres. */
+const TELEGRAM_USER_ID = /^[1-9][0-9]{0,18}$/;
+
+/** Telegram ID из пути запроса или отказ `400` — тем же устройством, что `requireUuidParam`. */
+export const requireTelegramUserIdParam = (event: H3Event, name: string): bigint => {
+  const value = getRouterParam(event, name);
+
+  if (value === undefined || !TELEGRAM_USER_ID.test(value)) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Bad Request',
+      message: `параметр ${name} не похож на Telegram ID`,
+    });
+  }
+
+  return BigInt(value);
+};

@@ -35,7 +35,7 @@ import { grantPoints } from '../support/points';
  * в разборе двойного нажатия — ответ «код не найден» под только что выданным заказом.
  */
 
-type Worker = { employeeId: string; role: EmployeeRole };
+type Worker = { employeeId: string; role: EmployeeRole; isDemo: boolean };
 
 /**
  * Заказ по коду — через поиск стойки, общий у заказов и наград (issue #172). Код заказа
@@ -72,7 +72,7 @@ const createWorker = async (role: EmployeeRole, officeIds: string[] = []): Promi
     linkedEmployeeIds.add(employeeId);
   }
 
-  return { employeeId, role };
+  return { employeeId, role, isDemo: false };
 };
 
 /** Водитель с сотней баллов, офис с пятью штуками по 40 и висящий заказ на две. */

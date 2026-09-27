@@ -11,7 +11,7 @@
  * которое не зависит от того, как дату пишут в локали смотрящего. Поэтому тип приходит
  * снаружи: это смысл поля, а не его вид.
  */
-type InputType = 'search' | 'text' | 'tel' | 'password' | 'url' | 'date';
+type InputType = 'search' | 'text' | 'tel' | 'password' | 'url' | 'date' | 'datetime-local';
 
 /** Крупное поле — там, где ввод и есть работа экрана. */
 type InputSize = 'medium' | 'large';

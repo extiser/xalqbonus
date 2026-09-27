@@ -60,7 +60,7 @@ export const buildEmployeeScreen = async (
     telegramId: telegramUserId.toString(),
     // Только признак: хеш из сервиса наружу не уходит ни в каком виде (issue #130).
     passwordSet: employee.passwordHash !== null,
-    offices: (await readEmployeeOffices({ employeeId: employee.id, role: employee.role })).filter(
+    offices: (await readEmployeeOffices({ employeeId: employee.id, role: employee.role, isDemo: employee.isDemo })).filter(
       (office) => !office.archived,
     ),
     demo,

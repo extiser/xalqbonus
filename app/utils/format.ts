@@ -217,6 +217,35 @@ export const formatMomentDate = (value: string | null): string => {
   });
 };
 
+/** Момент до минуты: «26.09.2026, 16:53». Секунды там, где важен день и час, — шум. */
+export const formatMinuteDateTime = (value: string | null): string => {
+  if (!value) {
+    return DASH;
+  }
+
+  return new Date(value).toLocaleString('ru-RU', {
+    timeZone: DISPLAY_TIME_ZONE,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+/** День и месяц: «27.09» — пометка недавнего события рядом с именем. */
+export const formatDayMonth = (value: string | null): string => {
+  if (!value) {
+    return DASH;
+  }
+
+  return new Date(value).toLocaleString('ru-RU', {
+    timeZone: DISPLAY_TIME_ZONE,
+    day: '2-digit',
+    month: '2-digit',
+  });
+};
+
 /**
  * Окно датами: «01.10.2026 — 07.10.2026», последний день включительно. Не назначено — прочерк.
  *

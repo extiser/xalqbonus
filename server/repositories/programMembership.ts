@@ -227,8 +227,9 @@ export const findActiveLinkByPerson = async (
 export const findActiveLinkByTelegramOrPhone = async (
   telegramUserId: bigint | null,
   phoneE164: string | null,
+  client: Executor = db,
 ): Promise<ActiveTelegramLinkRow | null> => {
-  const rows = await db.$queryRaw<ActiveTelegramLinkRow[]>`
+  const rows = await client.$queryRaw<ActiveTelegramLinkRow[]>`
     SELECT link."person_id"        AS "personId",
            link."telegram_chat_id" AS "telegramChatId"
       FROM xb.telegram_links AS link

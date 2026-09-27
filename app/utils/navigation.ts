@@ -2,6 +2,7 @@ import {
   ALL_EMPLOYEE_ROLES,
   CAMPAIGN_ROLES,
   CATALOG_ROLES,
+  DEMO_EDITOR_ROLES,
   MAILING_ROLES,
   ORDER_ROLES,
   REWARD_GRANT_ROLES,
@@ -43,6 +44,9 @@ const SERVICE_NAVIGATION: NavigationItem[] = [
   { title: 'Акции', path: '/campaigns', roles: CAMPAIGN_ROLES },
   { title: 'Сотрудники', path: '/employees', roles: STAFF_ROLES },
   { title: 'Синхронизация', path: '/sync', roles: SYNC_ROLES },
+  // Пульт демо — зрители, демо-водители, генератор, демо-менеджер (issue #252). Последним:
+  // это не работа парка, а витрина, которую показывает владелец.
+  { title: 'Демо', path: '/demo', roles: DEMO_EDITOR_ROLES },
 ];
 
 /** Что показать этой роли. Не вошедшему — ничего: переходить ему некуда. */
