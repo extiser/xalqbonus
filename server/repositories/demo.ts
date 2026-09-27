@@ -54,8 +54,8 @@ export const findDemoViewer = async (telegramUserId: bigint): Promise<DemoViewer
 };
 
 /**
- * То же внутри транзакции заведения или выключения — с блокировкой строки: два прогона
- * цели на один Telegram идут друг за другом, а не мимо друг друга.
+ * То же внутри транзакции заведения или выключения — с блокировкой строки: два запроса
+ * на один Telegram идут друг за другом, а не мимо друг друга.
  */
 export const lockDemoViewer = async (
   telegramUserId: bigint,
@@ -278,19 +278,6 @@ export const closeDemoLink = async (personId: string, closedAt: Date, client: Ex
      WHERE "person_id" = ${personId}::uuid
        AND "closed_at" IS NULL
   `;
-
-/** ДЕМО ОФИС — его заводит `make demo-create` вместе с демо-менеджером. */
-export const findDemoOfficeId = async (client: Executor = db): Promise<string | null> => {
-  const rows = await client.$queryRaw<{ id: string }[]>`
-    SELECT "id"
-      FROM xb.offices
-     WHERE "is_demo"
-     ORDER BY "created_at"
-     LIMIT 1
-  `;
-
-  return rows[0]?.id ?? null;
-};
 
 // ---------------------------------------------------------------------------
 // Признак демо у сущностей (issue #212)

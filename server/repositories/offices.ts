@@ -119,7 +119,7 @@ export type OfficeInput = {
   workHours: string | null;
   phoneE164: string | null;
   telegram: string | null;
-  /** ДЕМО ОФИС (issue #205). Пусто — живой: так заводятся все, кроме `make demo-create`. */
+  /** Демо-офис (issue #212) — форма офиса с галочкой «Демо». Пусто — живой. */
   isDemo?: boolean;
 };
 

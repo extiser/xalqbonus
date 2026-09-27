@@ -31,7 +31,7 @@ export const readDemoViewer = async (telegramUserId: bigint): Promise<DemoViewer
   // Ошибкой, а не отказом: зритель в роли менеджера есть, а менеджера нет — значит, демо
   // не заведено, и молчаливое «в программе не состоит» увело бы разбор не туда.
   if (!manager) {
-    throw new Error('демо не заведено: make demo-create');
+    throw new Error('демо-менеджер не заведён: раздел «Демо» → «Завести»');
   }
 
   return { role: 'manager', personId: viewer.personId, manager };
