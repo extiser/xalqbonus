@@ -342,8 +342,8 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   button_language_uz: { ru: "O'zbekcha", uz: "O'zbekcha" },
   /** Приветствие шага 1. Переносы строк — из макета: заголовок стоит в две строки. */
   registration_welcome_title: {
-    ru: 'Добро пожаловать\nв XalqTaxi BonusBot',
-    uz: "XalqTaxi BonusBot'ga\nxush kelibsiz!",
+    ru: 'Добро пожаловать\nв Xalq Taxi Bonus',
+    uz: "Xalq Taxi Bonus'ga\nxush kelibsiz!",
   },
   registration_welcome_lead: {
     ru: 'Здесь копятся ваши баллы за поездки —\nих можно обменять на подарки в офисах парка.',
@@ -1691,8 +1691,8 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   // на будущее, вычитка переводчиком позже. Ответ на ручки включения зрителя берёт те же
   // тексты: отказ один, где бы его ни встретили.
   demo_invite_accepted: {
-    ru: 'Вы в демо Xalq Bonus. Откройте приложение — вас ждёт демо-водитель с баллами.',
-    uz: "Siz Xalq Bonus demosidasiz. Ilovani oching — sizni ballari bor demo-haydovchi kutmoqda.",
+    ru: 'Вы в демо Xalq Taxi Bonus. Откройте приложение и посмотрите его глазами водителя и менеджера.',
+    uz: "Siz Xalq Taxi Bonus demosidasiz. Ilovani oching va uni haydovchi hamda menejer ko'zi bilan ko'ring.",
   },
   demo_invite_unknown: {
     ru: 'Ссылка не работает. Попросите новую.',
@@ -1711,16 +1711,16 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     uz: "Havola eskirgan — u bir kun amal qiladi. Yangisini so'rang.",
   },
   demo_invite_telegram_linked: {
-    ru: 'Этот Telegram уже участвует в программе как водитель — демо на него не завести.',
-    uz: "Bu Telegram dasturda haydovchi sifatida qatnashmoqda — unga demo ochib bo'lmaydi.",
+    ru: 'Этот Telegram уже участвует в программе как водитель — демо для него открыть нельзя.',
+    uz: "Bu Telegram dasturda haydovchi sifatida qatnashmoqda — u uchun demo ochib bo'lmaydi.",
   },
   demo_invite_telegram_employee: {
-    ru: 'Этот Telegram — сотрудника Xalq Taxi, демо на него не завести.',
-    uz: "Bu Telegram Xalq Taxi xodimiga tegishli — unga demo ochib bo'lmaydi.",
+    ru: 'Этот Telegram принадлежит сотруднику Xalq Taxi — демо для него открыть нельзя.',
+    uz: "Bu Telegram Xalq Taxi xodimiga tegishli — u uchun demo ochib bo'lmaydi.",
   },
   demo_invite_no_source: {
-    ru: 'Демо сейчас не завести. Сообщите тому, кто прислал ссылку.',
-    uz: "Hozir demo ochib bo'lmaydi. Havolani yuborgan kishiga xabar bering.",
+    ru: 'Демо сейчас недоступно. Сообщите тому, кто прислал ссылку.',
+    uz: "Hozir demo mavjud emas. Havolani yuborgan kishiga xabar bering.",
   },
 };
 
