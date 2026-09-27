@@ -14,6 +14,10 @@ import type { MemberGiftView } from '~/types/memberView';
  * справа «Забрать», под карточкой — строка ошибки, если забрать не вышло. Длинная причина
  * в карточке — до двух строк с многоточием, в шторке — целиком (`reasonFull`).
  *
+ * `open` — ручная награда-товар или произвольная в шторке (issue #266): та же карточка, обложка,
+ * строки и золото, справа «Открыть» — страница ведёт на экран награды с кодом. Знака балла
+ * у названия нет: это не баллы. Лопаться ей нечему — её не забирают, а открывают.
+ *
  * `popping` — подарок забран: карточка «нажимается» (0.97, 0.2 с) и «лопается» (1.05 со вспышкой
  * и в прозрачность, 0.5 с), через 0.26 с из неё летит серпантин, через 0.75 с схлопывается её
  * место — вместе со строкой ошибки. Схлопнулось — `popped`, подарок можно убирать из списка.
@@ -29,7 +33,7 @@ import type { MemberGiftView } from '~/types/memberView';
  * подарок забирают, — шторка и раздел — стоят с зазором 10, и без этого строка ниже доезжала бы
  * рывком.
  */
-type GiftCardMode = 'home' | 'take';
+type GiftCardMode = 'home' | 'take' | 'open';
 
 const props = withDefaults(
   defineProps<{
@@ -37,7 +41,7 @@ const props = withDefaults(
     mode: GiftCardMode;
     /** «нажмите, чтобы забрать» — хвост срока на главной. */
     hint?: string;
-    /** «Забрать». */
+    /** «Забрать» — или «Открыть» у награды. */
     takeLabel?: string;
     /** Причина целиком, без обрезки в две строки. */
     reasonFull?: boolean;
@@ -100,7 +104,7 @@ onBeforeUnmount(() => timers.forEach((timer) => clearTimeout(timer)));
   <div
     ref="slot"
     class="member-gift-slot"
-    :class="[mode === 'take' ? 'overflow-hidden' : '', gone ? 'member-gift-slot-gone' : '']"
+    :class="[mode === 'home' ? '' : 'overflow-hidden', gone ? 'member-gift-slot-gone' : '']"
     :style="slotHeight === null ? undefined : { height: `${slotHeight}px` }"
   >
     <AtomsNextMemberStreamerBurst ref="streamer">
@@ -117,7 +121,7 @@ onBeforeUnmount(() => timers.forEach((timer) => clearTimeout(timer)));
           <span class="flex items-center gap-3 px-3.5 py-[13px]">
             <span class="flex min-w-0 grow flex-col gap-px">
               <span class="flex items-center gap-1.5 text-[16px] font-bold leading-[1.25]">
-                <span class="flex text-xb-garnet"><AtomsNextMemberPointsIcon :size="15" /></span>
+                <span v-if="mode !== 'open'" class="flex text-xb-garnet"><AtomsNextMemberPointsIcon :size="15" /></span>
                 {{ gift.title }}
               </span>
               <span class="mb-[3px] mt-px text-[13px] font-light text-xb-grey" :class="reasonFull ? '' : 'line-clamp-2'">
@@ -126,6 +130,9 @@ onBeforeUnmount(() => timers.forEach((timer) => clearTimeout(timer)));
               <AtomsNextMemberStateLine tone="gold" :state="gift.deadline" :hint="mode === 'home' ? hint : undefined" />
             </span>
             <AtomsNextMemberChevron v-if="mode === 'home'" tone="gold" />
+            <AtomsNextMemberButton v-else-if="mode === 'open'" size="s" tone="gold-calm" @click="emit('open')">
+              {{ takeLabel }}
+            </AtomsNextMemberButton>
             <AtomsNextMemberButton v-else size="s" tone="gold-calm" :busy="busy" @click="emit('take')">
               {{ takeLabel }}
             </AtomsNextMemberButton>

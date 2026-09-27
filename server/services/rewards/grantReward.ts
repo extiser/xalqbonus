@@ -58,6 +58,12 @@ const log = consola.withTag('rewards:grant');
 /** Сколько кодов пробуем, прежде чем признать, что свободного не нашлось. Как у заказа. */
 const CODE_ATTEMPTS = 3;
 
+/**
+ * Срок ждущей в офисе. Сундук акции задаёт его днями от рождения, ручная выдача — днём
+ * «Забрать до», `YYYY-MM-DD`, как у подарка (issue #266).
+ */
+export type RewardExpiry = { lifetimeDays: number } | { untilDate: string };
+
 /** Что за награда. Офис и срок — только у тех, что ждут в офисе. */
 export type RewardGift =
   | {
@@ -67,15 +73,34 @@ export type RewardGift =
       reason: PointReason;
       idempotencyKey: IdempotencyKey;
     }
-  | { kind: 'product'; productId: string; officeId: string; lifetimeDays: number }
-  | { kind: 'custom'; title: string; officeId: string; lifetimeDays: number };
+  | { kind: 'product'; productId: string; officeId: string; expiry: RewardExpiry }
+  | { kind: 'custom'; title: string; officeId: string; expiry: RewardExpiry };
 
-/** Почему выдаётся — то, что сотрудник увидит на карточке у стойки. */
+/**
+ * Сообщение о ручной награде (issue #266): свой текст и обложки на каждом языке. Пусто —
+ * системный текст и без фото. Обложки обе или ни одной.
+ */
+export type RewardMessage = {
+  messageRu: string | null;
+  messageUz: string | null;
+  coverRuPath: string | null;
+  coverUzPath: string | null;
+};
+
+/**
+ * Почему выдаётся — то, что сотрудник увидит на карточке у стойки. У ручной — на двух языках:
+ * `note` русское, его видит стойка, `noteUz` — водитель на узбекском (issue #266).
+ */
 export type RewardOrigin =
-  | { source: 'manual'; employeeId: string; note: string }
+  | { source: 'manual'; employeeId: string; note: string; noteUz: string; message: RewardMessage }
   | { source: 'campaign'; campaignId: string; note: string | null };
 
 export type GrantRewardInput = {
+  /**
+   * Идентификатор, выданный до записи, — под него ручная выдача кладёт обложки (issue #266).
+   * Не задан — его выдаёт база.
+   */
+  rewardId?: string;
   personId: string;
   gift: RewardGift;
   origin: RewardOrigin;
@@ -83,23 +108,47 @@ export type GrantRewardInput = {
 
 type Transaction = Prisma.TransactionClient;
 
-/** Поля строки, общие для всех видов: кто, почему и откуда. */
-const originFields = (
-  origin: RewardOrigin,
-): Pick<InsertRewardInput, 'source' | 'campaignId' | 'sourceNote' | 'grantedByEmployeeId'> =>
+type OriginFields = Pick<
+  InsertRewardInput,
+  | 'source'
+  | 'campaignId'
+  | 'sourceNote'
+  | 'sourceNoteUz'
+  | 'messageRu'
+  | 'messageUz'
+  | 'coverRuPath'
+  | 'coverUzPath'
+  | 'grantedByEmployeeId'
+>;
+
+/** Поля строки, общие для всех видов: кто, почему и откуда, и сообщение ручной выдачи. */
+const originFields = (origin: RewardOrigin): OriginFields =>
   origin.source === 'manual'
     ? {
         source: 'manual',
         campaignId: null,
         sourceNote: origin.note,
+        sourceNoteUz: origin.noteUz,
+        ...origin.message,
         grantedByEmployeeId: origin.employeeId,
       }
     : {
         source: 'campaign',
         campaignId: origin.campaignId,
         sourceNote: origin.note,
+        sourceNoteUz: null,
+        messageRu: null,
+        messageUz: null,
+        coverRuPath: null,
+        coverUzPath: null,
         grantedByEmployeeId: null,
       };
+
+/** Срок строкой вставки: днями или днём «Забрать до». */
+const expiryFields = (expiry: RewardExpiry): Pick<InsertRewardInput, 'lifetimeDays' | 'untilDate'> =>
+  'untilDate' in expiry
+    ? { lifetimeDays: null, untilDate: expiry.untilDate }
+    : { lifetimeDays: expiry.lifetimeDays, untilDate: null };
 
 const requireOpenOffice = async (
   transaction: Transaction,
@@ -168,6 +217,7 @@ const grantPoints = async (
   }
 
   const reward = await insertReward(transaction, {
+    id: input.rewardId ?? null,
     personId: input.personId,
     kind: 'points',
     title: `Баллы: ${gift.points}`,
@@ -177,6 +227,7 @@ const grantPoints = async (
     code: null,
     status: 'credited',
     lifetimeDays: null,
+    untilDate: null,
     ...originFields(input.origin),
   });
 
@@ -217,6 +268,7 @@ const grantProduct = async (
   }
 
   const reward = await insertAwaitingReward(transaction, {
+    id: input.rewardId ?? null,
     personId: input.personId,
     kind: 'product',
     // Копия названия: товар переименуют, а награда обязана помнить, что обещали.
@@ -224,7 +276,7 @@ const grantProduct = async (
     points: null,
     productId: product.id,
     officeId: gift.officeId,
-    lifetimeDays: gift.lifetimeDays,
+    ...expiryFields(gift.expiry),
     ...originFields(input.origin),
   });
 
@@ -250,13 +302,14 @@ const grantCustom = async (
   await requireOpenOffice(transaction, gift.officeId, personIsDemo);
 
   return insertAwaitingReward(transaction, {
+    id: input.rewardId ?? null,
     personId: input.personId,
     kind: 'custom',
     title: gift.title,
     points: null,
     productId: null,
     officeId: gift.officeId,
-    lifetimeDays: gift.lifetimeDays,
+    ...expiryFields(gift.expiry),
     ...originFields(input.origin),
   });
 };

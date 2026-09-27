@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import type { GiftFields } from '~/types/rewardGrant';
+import type { GiftFields, RewardFields } from '~/types/rewardGrant';
 import type { SelectOption } from '~/types/selectOption';
 import { giftCustomMessageLimit, GIFT_FIELD_LABELS, GIFT_REASON_MAX_LENGTH } from '#shared/gift';
+import { REWARD_FIELD_LABELS } from '#shared/reward';
 import { isInSendWindow } from '#shared/sendWindow';
 import type {
   GiftMessagePreviewRequestBody,
   GiftMessagePreviewResponse,
-  ManualRewardRequestBody,
+  RewardMessagePreviewRequestBody,
 } from '#shared/types/rewards';
 
 /**
@@ -16,13 +17,17 @@ import type {
  * Баллы — всегда подарок с «Забрать»: водитель забирает их в приложении, а незабранное
  * зачисляется само в конце дня «Забрать до». Зачислить сразу — ручной правкой баллов
  * в карточке водителя. Сегменту вручаются только баллы; товар и своя награда — одному
- * водителю, с полями и правилами прежней выдачи из карточки (#172): офис, срок, пояснение.
+ * водителю: офис, «Забрать до» и «Почему» (#172).
  *
- * У подарка — свой текст сообщения и обложка на каждом языке (issue #236). Текст необязателен
+ * Товар и своя награда устроены как подарок (issue #266): срок — днём «Забрать до», «Почему» —
+ * на двух языках полями повода, свой текст сообщения и обложки — теми же блоками. Повод подарка
+ * и «Почему» награды — одни поля: сменили вид — набранное остаётся.
+ *
+ * Свой текст сообщения и обложка — на каждом языке (issue #236). Текст необязателен
  * на каждом языке сам по себе: над полем — системный текст, который уйдёт вместо пустого.
  * Обложки — обе или ни одной: выбрана одна — вторая обязательна, и «Вручить» гаснет до неё.
  *
- * Сообщение о подарке ждёт окна 09:00–21:00 по Ташкенту (issue #251). Вне окна форма говорит
+ * Сообщение ждёт окна 09:00–21:00 по Ташкенту (issue #251). Вне окна форма говорит
  * об этом под «Вручить» и даёт отправить сразу галочкой — по умолчанию снятой: окно остаётся
  * правилом, ночная отправка — осознанный выбор. Внутри окна сообщение и так уходит сразу,
  * и форма молчит.
@@ -45,13 +50,17 @@ const props = defineProps<{
   notice: string | null;
   /** Системный текст подарка по набранному — `draft` уходит наверх, текст приходит сюда. */
   messagePreview: GiftMessagePreviewResponse | null;
+  /** Системный текст награды по набранному — `rewardDraft` уходит наверх (issue #266). */
+  rewardMessagePreview: GiftMessagePreviewResponse | null;
 }>();
 
 const emit = defineEmits<{
   gift: [fields: GiftFields];
-  reward: [body: ManualRewardRequestBody];
+  reward: [fields: RewardFields];
   /** Сумма, повод и дата подарка, как набраны, — по ним собирается системный текст. */
   draft: [draft: GiftMessagePreviewRequestBody];
+  /** Что, где, до какого дня и почему — по ним собирается системный текст награды. */
+  rewardDraft: [draft: RewardMessagePreviewRequestBody];
 }>();
 
 type KindChoice = 'points' | 'product' | 'custom';
@@ -68,8 +77,6 @@ const coverUz = ref<File | null>(null);
 const productId = ref('');
 const title = ref('');
 const officeId = ref('');
-const lifetimeDays = ref('');
-const note = ref('');
 const sendNow = ref(false);
 
 /**
@@ -95,8 +102,10 @@ onBeforeUnmount(() => {
   }
 });
 
-/** Галочка и строка про 09:00 — только у подарка баллами и только вне окна. */
-const outsideSendWindow = computed(() => kind.value === 'points' && !inSendWindow.value);
+/** Галочка и строка про 09:00 — только вне окна. */
+const outsideSendWindow = computed(() => !inSendWindow.value);
+
+const isGift = computed(() => kind.value === 'points');
 
 const kindOptions = computed<SelectOption[]>(() => [
   { value: 'points', label: 'Баллы в подарок' },
@@ -137,7 +146,6 @@ watch(
     coverUz.value = null;
     productId.value = '';
     title.value = '';
-    note.value = '';
     sendNow.value = false;
   },
 );
@@ -162,6 +170,51 @@ watch(
   { immediate: true },
 );
 
+watch(
+  [kind, productId, title, officeId, untilDate, reasonRu, reasonUz],
+  () => {
+    emit('rewardDraft', {
+      kind: kind.value,
+      productId: productId.value,
+      title: title.value,
+      officeId: officeId.value,
+      untilDate: untilDate.value,
+      noteRu: reasonRu.value,
+      noteUz: reasonUz.value,
+    });
+  },
+  { immediate: true },
+);
+
+/** Системный текст того, что вручается: подарка или награды. */
+const activePreview = computed(() => (isGift.value ? props.messagePreview : props.rewardMessagePreview));
+
+/**
+ * Поля повода: у подарка — «Повод», у награды — «Почему» (issue #266). Модель одна, подписи,
+ * подсказки и поле отказа — свои.
+ */
+const reasonFields = computed(() =>
+  isGift.value
+    ? {
+        labelRu: GIFT_FIELD_LABELS.reasonRu,
+        labelUz: GIFT_FIELD_LABELS.reasonUz,
+        placeholderRu: 'ко Дню учителя',
+        placeholderUz: "O'qituvchilar kuni munosabati bilan",
+        errorRu: 'reasonRu',
+        errorUz: 'reasonUz',
+        hint: 'Оба обязательны. Короткой строкой: водитель видит повод на своём языке в карточке подарка и в сообщении — «Xalq Taxi · ко Дню учителя».',
+      }
+    : {
+        labelRu: REWARD_FIELD_LABELS.noteRu,
+        labelUz: REWARD_FIELD_LABELS.noteUz,
+        placeholderRu: 'за помощь новичкам в офисе',
+        placeholderUz: 'ofisda yangi haydovchilarga yordam uchun',
+        errorRu: 'noteRu',
+        errorUz: 'noteUz',
+        hint: 'Оба обязательны. Водитель видит на своём языке, сотрудник на стойке — русское.',
+      },
+);
+
 /**
  * С обложками сообщение уходит подписью к фото, и потолок у него ниже. Выбрана хотя бы одна —
  * считаем по подписи: одна без другой всё равно не вручится.
@@ -181,7 +234,7 @@ const coverUzNote = computed(() =>
   coverUz.value === null && coverRu.value !== null ? 'Обязательна, раз загружена обложка на русском' : null,
 );
 
-const submitBlocked = computed(() => kind.value === 'points' && coverPairIncomplete.value);
+const submitBlocked = computed(() => coverPairIncomplete.value);
 
 const fieldError = (field: string): string | null =>
   props.errorField === field ? props.error : null;
@@ -201,8 +254,8 @@ const FORM_FIELDS = [
   'productId',
   'title',
   'officeId',
-  'lifetimeDays',
-  'note',
+  'noteRu',
+  'noteUz',
 ];
 
 const generalError = computed(() =>
@@ -235,8 +288,14 @@ const submit = (): void => {
     productId: kind.value === 'product' ? productId.value : '',
     title: kind.value === 'custom' ? title.value.trim() : '',
     officeId: officeId.value,
-    lifetimeDays: lifetimeDays.value,
-    note: note.value.trim(),
+    untilDate: untilDate.value,
+    noteRu: reasonRu.value.trim(),
+    noteUz: reasonUz.value.trim(),
+    messageRu: messageRu.value.trim(),
+    messageUz: messageUz.value.trim(),
+    coverRu: coverRu.value,
+    coverUz: coverUz.value,
+    sendNow: outsideSendWindow.value && sendNow.value,
   });
 };
 </script>
@@ -248,154 +307,141 @@ const submit = (): void => {
       <AtomsSelectInput v-model="kindModel" :options="kindOptions" />
     </label>
 
-    <template v-if="kind === 'points'">
-      <div class="grid gap-4 sm:grid-cols-3">
-        <MoleculesNumberField
-          v-model="points"
-          :label="GIFT_FIELD_LABELS.points"
-          :min="1"
-          required
-          :error="fieldError('points')"
-        />
-        <MoleculesFormField
-          v-model="untilDate"
-          :label="GIFT_FIELD_LABELS.untilDate"
-          type="date"
-          required
-          :error="fieldError('untilDate')"
-          hint="Не раньше завтра. Незабранное к концу этого дня зачислится само."
-        />
-      </div>
-
-      <!-- Порядок языков — как у текстов рассылки: узбекский первым. -->
-      <div class="grid gap-4 sm:grid-cols-2">
-        <div>
-          <MoleculesTextAreaField
-            v-model="reasonUz"
-            :label="GIFT_FIELD_LABELS.reasonUz"
-            :rows="2"
-            placeholder="O'qituvchilar kuni munosabati bilan"
-            required
-            :maxlength="GIFT_REASON_MAX_LENGTH"
-            :invalid="fieldError('reasonUz') !== null || reasonUz.trim().length > GIFT_REASON_MAX_LENGTH"
-          />
-          <MoleculesLengthCounter :length="reasonUz.trim().length" :limit="GIFT_REASON_MAX_LENGTH" />
-          <p v-if="fieldError('reasonUz')" class="mt-1 text-sm text-red-700">{{ fieldError('reasonUz') }}</p>
-        </div>
-        <div>
-          <MoleculesTextAreaField
-            v-model="reasonRu"
-            :label="GIFT_FIELD_LABELS.reasonRu"
-            :rows="2"
-            placeholder="ко Дню учителя"
-            required
-            :maxlength="GIFT_REASON_MAX_LENGTH"
-            :invalid="fieldError('reasonRu') !== null || reasonRu.trim().length > GIFT_REASON_MAX_LENGTH"
-          />
-          <MoleculesLengthCounter :length="reasonRu.trim().length" :limit="GIFT_REASON_MAX_LENGTH" />
-          <p v-if="fieldError('reasonRu')" class="mt-1 text-sm text-red-700">{{ fieldError('reasonRu') }}</p>
-        </div>
-      </div>
-      <p class="text-sm text-slate-500">
-        Оба обязательны. Короткой строкой: водитель видит повод на своём языке в карточке подарка
-        и в сообщении — «Xalq Taxi · ко Дню учителя».
-      </p>
-
-      <div class="grid gap-4 sm:grid-cols-2">
-        <MoleculesGiftMessageField
-          v-model="messageUz"
-          label="Текст сообщения на узбекском"
-          :system-text="messagePreview?.systemUz ?? null"
-          :footer="messagePreview?.footerUz ?? null"
-          :limit="messageLimit(messagePreview?.footerUz ?? null)"
-          :error="fieldError('messageUz')"
-        />
-        <MoleculesGiftMessageField
-          v-model="messageRu"
-          label="Текст сообщения на русском"
-          :system-text="messagePreview?.systemRu ?? null"
-          :footer="messagePreview?.footerRu ?? null"
-          :limit="messageLimit(messagePreview?.footerRu ?? null)"
-          :error="fieldError('messageRu')"
-        />
-      </div>
-      <p class="text-sm text-slate-500">
-        Необязательно. Водителю уходит текст на языке его профиля: свой — если написан, иначе
-        системный.
-      </p>
-
-      <div class="grid gap-4 sm:grid-cols-2">
-        <MoleculesGiftCoverField
-          v-model="coverUz"
-          label="Обложка на узбекском"
-          :required-note="coverUzNote"
-          :error="fieldError('coverUz')"
-        />
-        <MoleculesGiftCoverField
-          v-model="coverRu"
-          label="Обложка на русском"
-          :required-note="coverRuNote"
-          :error="fieldError('coverRu')"
-        />
-      </div>
-      <p class="text-sm text-slate-500">
-        Необязательно, но обе или ни одной — можно одну и ту же картинку. С обложкой сообщение
-        водителю уходит фото с подписью; в приложении обложка видна в рамке 16:9, края обрезаются.
-      </p>
-    </template>
-
-    <template v-else>
-      <div class="grid gap-4 sm:grid-cols-3">
-        <label v-if="kind === 'product'" class="block sm:col-span-3">
-          <span class="mb-1 block text-sm font-medium text-slate-700">Товар</span>
-          <AtomsSelectInput v-model="productId" :options="productOptions" required>
-            <option value="">Выберите товар</option>
-          </AtomsSelectInput>
-          <span v-if="fieldError('productId')" class="mt-1 block text-sm text-red-700">
-            {{ fieldError('productId') }}
-          </span>
-        </label>
-
-        <div v-else class="sm:col-span-3">
-          <MoleculesFormField
-            v-model="title"
-            label="Что выдаётся"
-            type="text"
-            placeholder="сертификат на мойку"
-            required
-            :error="fieldError('title')"
-          />
-        </div>
-
-        <label class="block sm:col-span-2">
-          <span class="mb-1 block text-sm font-medium text-slate-700">Где получать</span>
-          <AtomsSelectInput v-model="officeId" :options="officeOptions" required>
-            <option value="">Выберите офис</option>
-          </AtomsSelectInput>
-          <span v-if="fieldError('officeId')" class="mt-1 block text-sm text-red-700">
-            {{ fieldError('officeId') }}
-          </span>
-        </label>
-        <MoleculesNumberField
-          v-model="lifetimeDays"
-          label="Срок, дней"
-          :min="1"
-          required
-          :error="fieldError('lifetimeDays')"
-          hint="Не забрали за срок — награда сгорает."
-        />
-      </div>
-
-      <MoleculesFormField
-        v-model="note"
-        label="Почему"
-        type="text"
-        placeholder="за помощь новичкам в офисе"
+    <div v-if="isGift" class="grid gap-4 sm:grid-cols-3">
+      <MoleculesNumberField
+        v-model="points"
+        :label="GIFT_FIELD_LABELS.points"
+        :min="1"
         required
-        :error="fieldError('note')"
-        hint="Обязательно: его видят сотрудник на стойке и водитель в разделе наград."
+        :error="fieldError('points')"
       />
-    </template>
+      <MoleculesFormField
+        v-model="untilDate"
+        :label="GIFT_FIELD_LABELS.untilDate"
+        type="date"
+        required
+        :error="fieldError('untilDate')"
+        hint="Не раньше завтра. Незабранное к концу этого дня зачислится само."
+      />
+    </div>
+
+    <div v-else class="grid gap-4 sm:grid-cols-3">
+      <label v-if="kind === 'product'" class="block sm:col-span-3">
+        <span class="mb-1 block text-sm font-medium text-slate-700">{{ REWARD_FIELD_LABELS.product }}</span>
+        <AtomsSelectInput v-model="productId" :options="productOptions" required>
+          <option value="">Выберите товар</option>
+        </AtomsSelectInput>
+        <span v-if="fieldError('productId')" class="mt-1 block text-sm text-red-700">
+          {{ fieldError('productId') }}
+        </span>
+      </label>
+
+      <div v-else class="sm:col-span-3">
+        <MoleculesFormField
+          v-model="title"
+          :label="REWARD_FIELD_LABELS.title"
+          type="text"
+          placeholder="сертификат на мойку"
+          required
+          :error="fieldError('title')"
+        />
+      </div>
+
+      <label class="block sm:col-span-2">
+        <span class="mb-1 block text-sm font-medium text-slate-700">{{ REWARD_FIELD_LABELS.office }}</span>
+        <AtomsSelectInput v-model="officeId" :options="officeOptions" required>
+          <option value="">Выберите офис</option>
+        </AtomsSelectInput>
+        <span v-if="fieldError('officeId')" class="mt-1 block text-sm text-red-700">
+          {{ fieldError('officeId') }}
+        </span>
+      </label>
+      <MoleculesFormField
+        v-model="untilDate"
+        :label="REWARD_FIELD_LABELS.untilDate"
+        type="date"
+        required
+        :error="fieldError('untilDate')"
+        hint="Не раньше завтра. Не забрали до конца этого дня — награда сгорает."
+      />
+    </div>
+
+    <!-- Порядок языков — как у текстов рассылки: узбекский первым. -->
+    <div class="grid gap-4 sm:grid-cols-2">
+      <div>
+        <MoleculesTextAreaField
+          v-model="reasonUz"
+          :label="reasonFields.labelUz"
+          :rows="2"
+          :placeholder="reasonFields.placeholderUz"
+          required
+          :maxlength="GIFT_REASON_MAX_LENGTH"
+          :invalid="fieldError(reasonFields.errorUz) !== null || reasonUz.trim().length > GIFT_REASON_MAX_LENGTH"
+        />
+        <MoleculesLengthCounter :length="reasonUz.trim().length" :limit="GIFT_REASON_MAX_LENGTH" />
+        <p v-if="fieldError(reasonFields.errorUz)" class="mt-1 text-sm text-red-700">
+          {{ fieldError(reasonFields.errorUz) }}
+        </p>
+      </div>
+      <div>
+        <MoleculesTextAreaField
+          v-model="reasonRu"
+          :label="reasonFields.labelRu"
+          :rows="2"
+          :placeholder="reasonFields.placeholderRu"
+          required
+          :maxlength="GIFT_REASON_MAX_LENGTH"
+          :invalid="fieldError(reasonFields.errorRu) !== null || reasonRu.trim().length > GIFT_REASON_MAX_LENGTH"
+        />
+        <MoleculesLengthCounter :length="reasonRu.trim().length" :limit="GIFT_REASON_MAX_LENGTH" />
+        <p v-if="fieldError(reasonFields.errorRu)" class="mt-1 text-sm text-red-700">
+          {{ fieldError(reasonFields.errorRu) }}
+        </p>
+      </div>
+    </div>
+    <p class="text-sm text-slate-500">{{ reasonFields.hint }}</p>
+
+    <div class="grid gap-4 sm:grid-cols-2">
+      <MoleculesGiftMessageField
+        v-model="messageUz"
+        label="Текст сообщения на узбекском"
+        :system-text="activePreview?.systemUz ?? null"
+        :footer="activePreview?.footerUz ?? null"
+        :limit="messageLimit(activePreview?.footerUz ?? null)"
+        :error="fieldError('messageUz')"
+      />
+      <MoleculesGiftMessageField
+        v-model="messageRu"
+        label="Текст сообщения на русском"
+        :system-text="activePreview?.systemRu ?? null"
+        :footer="activePreview?.footerRu ?? null"
+        :limit="messageLimit(activePreview?.footerRu ?? null)"
+        :error="fieldError('messageRu')"
+      />
+    </div>
+    <p class="text-sm text-slate-500">
+      Необязательно. Водителю уходит текст на языке его профиля: свой — если написан, иначе
+      системный.
+    </p>
+
+    <div class="grid gap-4 sm:grid-cols-2">
+      <MoleculesGiftCoverField
+        v-model="coverUz"
+        label="Обложка на узбекском"
+        :required-note="coverUzNote"
+        :error="fieldError('coverUz')"
+      />
+      <MoleculesGiftCoverField
+        v-model="coverRu"
+        label="Обложка на русском"
+        :required-note="coverRuNote"
+        :error="fieldError('coverRu')"
+      />
+    </div>
+    <p class="text-sm text-slate-500">
+      Необязательно, но обе или ни одной — можно одну и ту же картинку. С обложкой сообщение
+      водителю уходит фото с подписью; в приложении обложка видна в рамке 16:9, края обрезаются.
+    </p>
 
     <label v-if="outsideSendWindow" class="flex items-center gap-3">
       <input
@@ -411,7 +457,11 @@ const submit = (): void => {
       <p v-if="notice" class="text-sm font-medium text-emerald-700">{{ notice }}</p>
     </div>
     <p v-if="outsideSendWindow && !sendNow" class="text-sm text-slate-500">
-      Сообщение водителям уйдёт в 09:00, подарок в приложении появится сразу
+      {{
+        isGift
+          ? 'Сообщение водителям уйдёт в 09:00, подарок в приложении появится сразу'
+          : 'Сообщение водителю уйдёт в 09:00, награда в приложении появится сразу'
+      }}
     </p>
     <p v-if="generalError" class="text-sm text-red-700">{{ generalError }}</p>
   </form>

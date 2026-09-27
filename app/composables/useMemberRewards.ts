@@ -1,11 +1,11 @@
 import { ref } from 'vue';
 import { INIT_DATA_HEADER } from '#shared/types/miniapp';
-import type { MemberGift, MemberReward, MiniAppRewardsResponse } from '#shared/types/rewards';
+import type { MemberGift, MemberReward, MemberSheetReward, MiniAppRewardsResponse } from '#shared/types/rewards';
 import type { LoadState } from '~/types/loadState';
 
 /**
- * Раздел «Мои награды» в Mini App (issue #172): список наград участника и ждущие подарки
- * от Xalq Taxi (issue #220).
+ * Раздел «Мои награды» в Mini App (issue #172): список наград участника, ждущие подарки
+ * от Xalq Taxi (issue #220) и ручные награды, которых водитель ещё не видел в шторке (issue #266).
  *
  * Запрос живёт здесь, а не в компоненте: экран получает готовое свойствами
  * (docs/frontend.md → «Данные в компоненты не ходят»). Личность уходит заголовком
@@ -21,6 +21,7 @@ export const useMemberRewards = (readInitData: () => string, holdGift: (rewardId
   const rewards = ref<MemberReward[]>([]);
   const gifts = ref<MemberGift[]>([]);
   const giftsUnseen = ref(false);
+  const sheetRewards = ref<MemberSheetReward[]>([]);
 
   /**
    * Подарки после перечитывания: показанные стоят на своих местах со свежими строками, удержанные —
@@ -50,6 +51,7 @@ export const useMemberRewards = (readInitData: () => string, holdGift: (rewardId
     rewards.value = response.rewards;
     gifts.value = mergeGifts(response.gifts);
     giftsUnseen.value = response.giftsUnseen;
+    sheetRewards.value = response.sheetRewards;
     state.value = 'ready';
   };
 
@@ -81,5 +83,5 @@ export const useMemberRewards = (readInitData: () => string, holdGift: (rewardId
     gifts.value = gifts.value.filter((gift) => gift.rewardId !== rewardId);
   };
 
-  return { state, rewards, gifts, giftsUnseen, load, reload, removeGift };
+  return { state, rewards, gifts, giftsUnseen, sheetRewards, load, reload, removeGift };
 };

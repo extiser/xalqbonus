@@ -1,9 +1,10 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import type { GiftMessagePreviewRequestBody, GiftMessagePreviewResponse } from '#shared/types/rewards';
+import type { GiftMessagePreviewResponse } from '#shared/types/rewards';
 
 /**
  * Системный текст подарка по тому, что сейчас набрано в форме «Вручить» (issue #236): что
- * уйдёт водителю, если своё поле пусто, и строка, что встанет под своим текстом.
+ * уйдёт водителю, если своё поле пусто, и строка, что встанет под своим текстом. Ручная
+ * награда устроена так же (issue #266) — со своей ручкой и своими полями: `url` и `readSource`.
  *
  * Собирает его сервер — той же сборкой, что сообщение водителю, — и форма показывает ровно
  * то, что уйдёт. Перечитывается по мере правки суммы, повода и даты, не чаще раза в 300 мс;
@@ -16,7 +17,7 @@ import type { GiftMessagePreviewRequestBody, GiftMessagePreviewResponse } from '
 /** Пауза после правки поля: сумму и повод набирают по знаку, и спрашивать каждый незачем. */
 const PREVIEW_DELAY_MS = 300;
 
-export const useGiftMessagePreview = (readSource: () => GiftMessagePreviewRequestBody) => {
+export const useGiftMessagePreview = <Body extends object>(url: string, readSource: () => Body) => {
   const preview = ref<GiftMessagePreviewResponse | null>(null);
 
   /** Номер последнего запроса: ответ на прежний набор, приехавший позже, не показывается. */
@@ -27,7 +28,7 @@ export const useGiftMessagePreview = (readSource: () => GiftMessagePreviewReques
     const current = ++sequence;
 
     try {
-      const response = await $fetch<GiftMessagePreviewResponse>('/api/gifts/message-preview', {
+      const response = await $fetch<GiftMessagePreviewResponse>(url, {
         method: 'POST',
         body: readSource(),
       });

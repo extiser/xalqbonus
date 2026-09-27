@@ -7,7 +7,7 @@ import { formatNumber, pluralize } from '~/utils/format';
 import { toLoadState } from '~/utils/loadState';
 import { failureField, failureText } from '~/utils/requestError';
 import type { LoadState } from '~/types/loadState';
-import type { GiftFields, PickedDriver } from '~/types/rewardGrant';
+import type { GiftFields, PickedDriver, RewardFields } from '~/types/rewardGrant';
 import type { SelectOption } from '~/types/selectOption';
 import { GIFT_SEGMENT_ROLES } from '#shared/access';
 import type { DriverCardResponse, DriverSearchResponse, DriverSearchRow } from '#shared/types/driver';
@@ -20,6 +20,7 @@ import type {
   ManualRewardRequestBody,
   ManualRewardResponse,
   RewardGrantOptionsResponse,
+  RewardMessagePreviewRequestBody,
 } from '#shared/types/rewards';
 import type { SegmentListResponse } from '#shared/types/segment';
 
@@ -27,7 +28,8 @@ import type { SegmentListResponse } from '#shared/types/segment';
  * Раздел «Награды» (issue #219): вручить одному водителю или сегменту и список раздач подарков.
  *
  * Баллы отсюда — всегда подарок: водитель забирает его в приложении, незабранное зачисляется
- * само в назначенный день. Товар и своя награда — одному водителю, прежней ручной выдачей (#172).
+ * само в назначенный день. Товар и своя награда — одному водителю ручной выдачей (#172), с тем же
+ * сообщением в Telegram и шторкой в приложении, что у подарка (#266).
  * Сегменту — только баллы, и только владельцу и админу; перед раздачей — подтверждение с числом
  * водителей в сегменте.
  *
@@ -197,7 +199,22 @@ const requireRecipient = (): boolean => {
 
 /** Сумма, повод и дата подарка из формы — по ним сервер собирает системный текст (issue #236). */
 const giftDraft = ref<GiftMessagePreviewRequestBody>({ points: null, reasonRu: '', reasonUz: '', untilDate: '' });
-const { preview: giftMessagePreview } = useGiftMessagePreview(() => giftDraft.value);
+const { preview: giftMessagePreview } = useGiftMessagePreview('/api/gifts/message-preview', () => giftDraft.value);
+
+/** Что, где, до какого дня и почему — по ним сервер собирает системный текст награды (issue #266). */
+const rewardDraft = ref<RewardMessagePreviewRequestBody>({
+  kind: '',
+  productId: '',
+  title: '',
+  officeId: '',
+  untilDate: '',
+  noteRu: '',
+  noteUz: '',
+});
+const { preview: rewardMessagePreview } = useGiftMessagePreview(
+  '/api/rewards/message-preview',
+  () => rewardDraft.value,
+);
 
 /** Подарок, который ждёт подтверждения раздачи сегменту. */
 const pendingGift = ref<GiftFields | null>(null);
@@ -232,6 +249,31 @@ const confirmMessage = computed(() => {
   ].join('\n');
 });
 
+/**
+ * Поля строками и обложки файлами — одним запросом: ни раздача, ни награда не правятся,
+ * и черновика под картинку у них нет.
+ */
+const withCovers = (
+  fields: Readonly<Record<string, string>>,
+  covers: { coverRu: File | null; coverUz: File | null },
+): FormData => {
+  const body = new FormData();
+
+  for (const [name, value] of Object.entries(fields)) {
+    body.append(name, value);
+  }
+
+  if (covers.coverRu) {
+    body.append(GIFT_COVER_RU_FIELD, covers.coverRu);
+  }
+
+  if (covers.coverUz) {
+    body.append(GIFT_COVER_UZ_FIELD, covers.coverUz);
+  }
+
+  return body;
+};
+
 const sendGift = async (gift: GiftFields): Promise<void> => {
   saving.value = true;
 
@@ -248,23 +290,11 @@ const sendGift = async (gift: GiftFields): Promise<void> => {
     sendNow: gift.sendNow ? 'true' : '',
   };
 
-  // Одним запросом с обложками: раздача не правится, и черновика под картинку у неё нет.
-  const body = new FormData();
-
-  for (const [name, value] of Object.entries(fields)) {
-    body.append(name, value);
-  }
-
-  if (gift.coverRu) {
-    body.append(GIFT_COVER_RU_FIELD, gift.coverRu);
-  }
-
-  if (gift.coverUz) {
-    body.append(GIFT_COVER_UZ_FIELD, gift.coverUz);
-  }
-
   try {
-    const { grant } = await $fetch<GiftGrantResponse>('/api/gifts', { method: 'POST', body });
+    const { grant } = await $fetch<GiftGrantResponse>('/api/gifts', {
+      method: 'POST',
+      body: withCovers(fields, gift),
+    });
 
     appliedCount.value += 1;
     notice.value =
@@ -305,7 +335,7 @@ const confirmSegmentGift = async (): Promise<void> => {
   }
 };
 
-const grantReward = async (body: ManualRewardRequestBody): Promise<void> => {
+const grantReward = async (reward: RewardFields): Promise<void> => {
   resetOutcome();
 
   if (!requireRecipient() || !driver.value) {
@@ -314,10 +344,23 @@ const grantReward = async (body: ManualRewardRequestBody): Promise<void> => {
 
   saving.value = true;
 
+  const fields: ManualRewardRequestBody = {
+    kind: reward.kind,
+    productId: reward.productId,
+    title: reward.title,
+    officeId: reward.officeId,
+    untilDate: reward.untilDate,
+    noteRu: reward.noteRu,
+    noteUz: reward.noteUz,
+    messageRu: reward.messageRu,
+    messageUz: reward.messageUz,
+    sendNow: reward.sendNow ? 'true' : '',
+  };
+
   try {
     const result = await $fetch<ManualRewardResponse>(`/api/drivers/${driver.value.personId}/rewards`, {
       method: 'POST',
-      body,
+      body: withCovers(fields, reward),
     });
 
     appliedCount.value += 1;
@@ -340,7 +383,8 @@ watch([recipientKind, segmentId, driver], resetOutcome);
       <p class="mt-1 text-sm text-slate-500">
         Подарок баллами водитель забирает в приложении — ему придёт сообщение в Telegram.
         Незабранное зачисляется само в конце дня «Забрать до». Зачислить баллы сразу — ручной
-        правкой в карточке водителя.
+        правкой в карточке водителя. О товаре и своей награде водителю тоже придёт сообщение,
+        а код для офиса — в приложении.
       </p>
     </div>
 
@@ -369,9 +413,11 @@ watch([recipientKind, segmentId, driver], resetOutcome);
           :applied-count="appliedCount"
           :notice="notice"
           :message-preview="giftMessagePreview"
+          :reward-message-preview="rewardMessagePreview"
           @gift="grantGift"
           @reward="grantReward"
           @draft="giftDraft = $event"
+          @reward-draft="rewardDraft = $event"
         />
       </div>
     </MoleculesSectionPanel>

@@ -30,3 +30,24 @@ export type GiftFields = {
   /** Сообщение — без ожидания окна 09:00–21:00 (issue #251). Внутри окна всегда `false`. */
   sendNow: boolean;
 };
+
+/**
+ * Поля ручной награды-товара или произвольной, как их набрали в форме (issue #266): как
+ * у подарка — «Забрать до», «Почему» на двух языках, свой текст и обложки.
+ */
+export type RewardFields = {
+  kind: 'product' | 'custom';
+  productId: string;
+  title: string;
+  officeId: string;
+  /** «Забрать до», `YYYY-MM-DD`. */
+  untilDate: string;
+  noteRu: string;
+  noteUz: string;
+  messageRu: string;
+  messageUz: string;
+  coverRu: File | null;
+  coverUz: File | null;
+  /** Сообщение — без ожидания окна 09:00–21:00. Внутри окна всегда `false`. */
+  sendNow: boolean;
+};

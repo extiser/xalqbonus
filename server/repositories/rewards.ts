@@ -12,6 +12,7 @@ import {
   deskDriverJoins,
   type DeskDriverColumns,
 } from '#server/repositories/deskDriver';
+import { parkDayStartSql } from '#server/utils/parkDaySql';
 
 /**
  * Награды водителю (issue #172).
@@ -58,6 +59,11 @@ const REWARD_COLUMNS = Prisma.sql`
 `;
 
 export type InsertRewardInput = {
+  /**
+   * Выдаётся вызывающим до записи — под него ложатся обложки ручной награды (issue #266).
+   * Пусто — идентификатор выдаёт база.
+   */
+  id: string | null;
   personId: string;
   kind: RewardKind;
   title: string;
@@ -69,14 +75,30 @@ export type InsertRewardInput = {
   status: RewardStatus;
   /** Сколько дней награда ждёт в офисе. Пусто у баллов. Срок считает база — её часами. */
   lifetimeDays: number | null;
+  /**
+   * «Забрать до», `YYYY-MM-DD` — у ручной выдачи вместо `lifetimeDays` (issue #266). Задан —
+   * награда сгорает в конце этих суток парка, в 05:00 следующего дня по Ташкенту.
+   */
+  untilDate: string | null;
   source: RewardSource;
   campaignId: string | null;
   sourceNote: string | null;
+  /** «Почему» на узбекском — у ручной выдачи. */
+  sourceNoteUz: string | null;
+  /** Свой текст сообщения и обложки — у ручной выдачи. Обложки обе или ни одной. */
+  messageRu: string | null;
+  messageUz: string | null;
+  coverRuPath: string | null;
+  coverUzPath: string | null;
   grantedByEmployeeId: string | null;
 };
 
 /**
  * Вставляет награду.
+ *
+ * Срок — «Забрать до», если он задан: конец этих суток парка тем же выражением, что у подарка
+ * (`insertGiftRewards`), — незабранная награда и незабранный подарок кончаются в один миг.
+ * Иначе — `lifetime_days` от часов базы, как у приза акции.
  *
  * `null` означает ровно одно: код уже занят другой ждущей наградой. Отказ гасится
  * `ON CONFLICT … DO NOTHING` по частичному индексу, а не ловится исключением: отбитая вставка
@@ -89,10 +111,12 @@ export const insertReward = async (
 ): Promise<RewardRow | null> => {
   const rows = await client.$queryRaw<RewardRow[]>`
     INSERT INTO xb.rewards (
-      "person_id", "kind", "title", "points", "product_id", "office_id", "code", "status",
-      "expires_at", "source", "campaign_id", "source_note", "granted_by_employee_id"
+      "id", "person_id", "kind", "title", "points", "product_id", "office_id", "code", "status",
+      "expires_at", "source", "campaign_id", "source_note", "source_note_uz", "message_ru",
+      "message_uz", "cover_ru_path", "cover_uz_path", "granted_by_employee_id"
     )
     VALUES (
+      COALESCE(${input.id}::uuid, gen_random_uuid()),
       ${input.personId}::uuid,
       ${input.kind}::xb.reward_kind,
       ${input.title},
@@ -101,11 +125,19 @@ export const insertReward = async (
       ${input.officeId}::uuid,
       ${input.code},
       ${input.status}::xb.reward_status,
-      CASE WHEN ${input.lifetimeDays}::int IS NULL THEN NULL
-           ELSE now() + make_interval(days => ${input.lifetimeDays}::int) END,
+      CASE WHEN ${input.untilDate}::date IS NOT NULL
+             THEN ${parkDayStartSql(Prisma.sql`${input.untilDate}::date + 1`)}
+           WHEN ${input.lifetimeDays}::int IS NOT NULL
+             THEN now() + make_interval(days => ${input.lifetimeDays}::int)
+           ELSE NULL END,
       ${input.source}::xb.reward_source,
       ${input.campaignId}::uuid,
       ${input.sourceNote},
+      ${input.sourceNoteUz},
+      ${input.messageRu},
+      ${input.messageUz},
+      ${input.coverRuPath},
+      ${input.coverUzPath},
       ${input.grantedByEmployeeId}::uuid
     )
     ON CONFLICT ("code") WHERE "status" = 'awaiting' DO NOTHING
@@ -215,6 +247,8 @@ export type PersonRewardRow = Omit<PersonRewardColumns, 'status'> & {
    * кроме подарка.
    */
   giftReasonUz: string | null;
+  /** «Почему» ручной награды на узбекском (issue #266). Пусто у выданных до него и у прочих. */
+  sourceNoteUz: string | null;
   /** Офис выдачи целиком — архивный тоже: награда уже родилась с ним. Пуст у баллов. */
   office: OfficeRow | null;
   /** Фото и цена товара из каталога — у награды-товара. У остальных пусто. */
@@ -266,6 +300,7 @@ export const listPersonRewards = async (
            reward."claimed_at"   AS "claimedAt",
            reward."source",
            reward."source_note"  AS "sourceNote",
+           reward."source_note_uz" AS "sourceNoteUz",
            campaign."title"      AS "campaignTitle",
            gift_grant."reason_uz" AS "giftReasonUz",
            reward."created_at"   AS "createdAt",
@@ -329,6 +364,47 @@ export const listPersonRewards = async (
     }),
   );
 };
+
+/** Ручная награда для шторки в Mini App (issue #266). */
+export type SheetRewardRow = {
+  id: string;
+  title: string;
+  /** «Почему» на русском и на узбекском. Узбекского нет у выданных до #266. */
+  sourceNote: string | null;
+  sourceNoteUz: string | null;
+  officeName: string;
+  expiresAt: Date;
+  /** Обложка на каждом языке: водителю — на его. */
+  coverRuPath: string | null;
+  coverUzPath: string | null;
+};
+
+/**
+ * Ждущие ручные награды-товары и произвольные, которых водитель ещё не видел в шторке, свежие
+ * первыми. Человек входит в условие всегда: чужая награда отсюда не читается.
+ */
+export const listPersonSheetRewards = async (
+  personId: string,
+  client: Executor = db,
+): Promise<SheetRewardRow[]> =>
+  client.$queryRaw<SheetRewardRow[]>`
+    SELECT reward."id",
+           reward."title",
+           reward."source_note"    AS "sourceNote",
+           reward."source_note_uz" AS "sourceNoteUz",
+           office."name"           AS "officeName",
+           reward."expires_at"     AS "expiresAt",
+           reward."cover_ru_path"  AS "coverRuPath",
+           reward."cover_uz_path"  AS "coverUzPath"
+      FROM xb.rewards AS reward
+      JOIN xb.offices AS office ON office."id" = reward."office_id"
+     WHERE reward."person_id" = ${personId}::uuid
+       AND reward."status" = 'awaiting'
+       AND reward."source" = 'manual'
+       AND reward."kind" IN ('product', 'custom')
+       AND reward."gift_shown_at" IS NULL
+     ORDER BY reward."created_at" DESC, reward."id" DESC
+  `;
 
 export type OfficeRewardRow = DeskDriverColumns & {
   id: string;

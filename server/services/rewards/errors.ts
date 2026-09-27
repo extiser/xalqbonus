@@ -73,10 +73,16 @@ export type ManualRewardProblem =
   | 'title_missing'
   /** Товар или произвольная без офиса. */
   | 'office_missing'
-  /** Срок — не целое положительное число дней. */
-  | 'lifetime_invalid'
-  /** Пояснения нет. */
-  | 'note_missing'
+  /** «Забрать до» не читается как день календаря (issue #266). */
+  | 'until_date_invalid'
+  /** «Забрать до» раньше завтрашнего дня парка: награда сгорела бы этой же ночью. */
+  | 'until_date_too_early'
+  /** «Почему» нет на русском или на узбекском: оба обязательны. */
+  | 'note_ru_missing'
+  | 'note_uz_missing'
+  /** «Почему» длиннее `GIFT_REASON_MAX_LENGTH`: это строка карточки, как повод подарка. */
+  | 'note_ru_too_long'
+  | 'note_uz_too_long'
   /** Вид награды не из трёх. */
   | 'kind_invalid';
 

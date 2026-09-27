@@ -28,6 +28,7 @@ import { useMemberOrders } from '~/composables/useMemberOrders';
 import { useMemberRewards } from '~/composables/useMemberRewards';
 import { useOfficeDesk } from '~/composables/useOfficeDesk';
 import { useDesignFonts } from '~/design/fonts';
+import type { MemberSheetReward } from '#shared/types/rewards';
 import type {
   MemberCatalogOfficeView,
   MemberDemoRoleOptionView,
@@ -51,6 +52,7 @@ import {
   ordersScreenView,
   rewardDetailView,
   rewardsScreenView,
+  sheetRewardView,
   showcaseCheckoutView,
   showcaseProductsView,
 } from '~/utils/memberViews';
@@ -925,21 +927,38 @@ watch(currentScreen, (screen) => {
 /**
  * Шторка подарков на главной (issue #220). Открывается нажатием на подарок в блоке наград или сама.
  *
- * `giftsSeen` — подарки, которые шторка уже показала за этот заход. Сама она открывается только
- * ради подарка, которого здесь нет: перечитывание, пришедшее раньше отметки «видел» на сервере,
+ * `giftsSeen` — подарки и награды, которые шторка уже показала за этот заход. Сама она открывается
+ * только ради того, чего здесь нет: перечитывание, пришедшее раньше отметки «видел» на сервере,
  * иначе открыло бы её второй раз.
+ *
+ * Под подарками — ручные награды, которых водитель ещё не видел (issue #266): шторка одна.
+ * `sheetRewardsInSheet` — их снимок на время открытой шторки: отметка «видел» уносит их из свежего
+ * ответа, а из открытой шторки награда уходит, только когда её закрыли.
  */
 const giftSheetOpen = ref(false);
 const giftsSeen = ref<readonly string[]>([]);
+const sheetRewardsInSheet = ref<MemberSheetReward[]>([]);
 
 /** Шторка уезжает 0.34 с (`MemberSheet`): отказанные карточки уходят, когда её уже не видно. */
 const GIFT_SHEET_LEAVE_MS = 340;
 
 let giftSheetLeaveTimer: ReturnType<typeof setTimeout> | undefined;
 
-/** Подарки в открытой шторке — показанные: здесь и на сервере. Новых нет — отмечать нечего. */
+/** Награды, которых шторка ещё не показывала. */
+const unseenSheetRewards = (): MemberSheetReward[] =>
+  memberRewards.sheetRewards.value.filter((reward) => !giftsSeen.value.includes(reward.rewardId));
+
+/**
+ * Подарки и награды в открытой шторке — показанные: здесь и на сервере. Новые награды встают
+ * в шторку сверху — сервер отдаёт свежие первыми. Новых нет — отмечать нечего.
+ */
 const markGiftsSeen = (): void => {
-  const rewardIds = memberRewards.gifts.value.map((gift) => gift.rewardId);
+  sheetRewardsInSheet.value = [...unseenSheetRewards(), ...sheetRewardsInSheet.value];
+
+  const rewardIds = [
+    ...memberRewards.gifts.value.map((gift) => gift.rewardId),
+    ...sheetRewardsInSheet.value.map((reward) => reward.rewardId),
+  ];
 
   if (rewardIds.some((rewardId) => !giftsSeen.value.includes(rewardId))) {
     giftsSeen.value = [...new Set([...giftsSeen.value, ...rewardIds])];
@@ -947,9 +966,9 @@ const markGiftsSeen = (): void => {
   }
 };
 
-/** Открывает шторку — нажатием на подарок или сама — и отмечает её подарки показанными. */
+/** Открывает шторку — нажатием на подарок или сама — и отмечает её подарки и награды показанными. */
 const openGiftSheet = (): void => {
-  if (memberRewards.gifts.value.length === 0) {
+  if (memberRewards.gifts.value.length === 0 && unseenSheetRewards().length === 0) {
     return;
   }
 
@@ -958,30 +977,39 @@ const openGiftSheet = (): void => {
   markGiftsSeen();
 };
 
-/** «Закрыть», Escape и лопание последнего подарка. */
+/** «Закрыть», Escape и лопание последнего подарка. Награды уходят из шторки, когда она уехала. */
 const closeGiftSheet = (): void => {
   giftSheetOpen.value = false;
   clearTimeout(giftSheetLeaveTimer);
-  giftSheetLeaveTimer = setTimeout(() => memberGifts.dismissDenied(), GIFT_SHEET_LEAVE_MS);
+  giftSheetLeaveTimer = setTimeout(() => {
+    memberGifts.dismissDenied();
+    sheetRewardsInSheet.value = [];
+  }, GIFT_SHEET_LEAVE_MS);
 };
 
-// Подарок, пришедший перечитыванием при открытой шторке, показан в ней же: иначе после «Закрыть»
-// она открылась бы ради него второй раз. Перечитывание унесло все подарки — зачислились по сроку —
-// пустой шторке стоять незачем.
+// Подарок или награда, пришедшие перечитыванием при открытой шторке, показаны в ней же: иначе
+// после «Закрыть» она открылась бы ради них второй раз. Перечитывание унесло все подарки —
+// зачислились по сроку, — а наград в шторке нет: пустой шторке стоять незачем.
 watch(
-  () => memberRewards.gifts.value,
-  (gifts) => {
+  () => [memberRewards.gifts.value, memberRewards.sheetRewards.value],
+  () => {
     if (!giftSheetOpen.value) {
       return;
     }
 
-    if (gifts.length === 0) {
+    if (memberRewards.gifts.value.length === 0 && sheetRewardsInSheet.value.length === 0) {
       closeGiftSheet();
     } else {
       markGiftsSeen();
     }
   },
 );
+
+/** «Открыть» у награды в шторке: шторка закрывается, открывается экран награды с кодом. */
+const openSheetReward = (rewardId: string): void => {
+  closeGiftSheet();
+  openReward(rewardId);
+};
 
 /**
  * Шторка открывается сама (решение Руслана 25-09-2026): только на главной и когда поверх неё ничего
@@ -996,8 +1024,9 @@ const giftSheetDue = computed(
     currentScreen.value === 'home' &&
     !giftSheetOpen.value &&
     !demoSheetOpen.value &&
-    memberRewards.giftsUnseen.value &&
-    memberRewards.gifts.value.some((gift) => !giftsSeen.value.includes(gift.rewardId)),
+    ((memberRewards.giftsUnseen.value &&
+      memberRewards.gifts.value.some((gift) => !giftsSeen.value.includes(gift.rewardId))) ||
+      unseenSheetRewards().length > 0),
 );
 
 watch(giftSheetDue, (due) => {
@@ -1010,6 +1039,7 @@ watch(giftSheetDue, (due) => {
 // шторка закрыта.
 watch(currentScreen, () => {
   giftSheetOpen.value = false;
+  sheetRewardsInSheet.value = [];
   memberGifts.settle();
 });
 
@@ -1797,8 +1827,9 @@ const rewardsScreen = computed(() => {
 });
 
 /**
- * Шторка подарков: все ждущие подарки, заголовок по числу. Подарков стало меньше двух — «Забрать
- * всё» уходит само, заголовок становится единственным числом.
+ * Шторка подарков: все ждущие подарки и под ними награды, заголовок по числу карточек. Подарков
+ * стало меньше двух — «Забрать всё» уходит само. Подарков нет, только награды — подзаголовок
+ * про код, а не про баллы (issue #266).
  */
 const giftSheet = computed(() => {
   const current = member.value;
@@ -1809,15 +1840,18 @@ const giftSheet = computed(() => {
 
   const { rewardTexts } = current;
   const gifts = memberRewards.gifts.value.map(giftView);
+  const rewards = sheetRewardsInSheet.value.map(sheetRewardView);
 
   return {
     gifts,
+    rewards,
     texts: {
-      title: gifts.length <= 1 ? rewardTexts.giftsTitleOne : rewardTexts.giftsTitleMany,
-      subtitle: rewardTexts.giftsSubtitle,
+      title: gifts.length + rewards.length <= 1 ? rewardTexts.giftsTitleOne : rewardTexts.giftsTitleMany,
+      subtitle: gifts.length > 0 ? rewardTexts.giftsSubtitle : rewardTexts.rewardSheetSubtitle,
       take: rewardTexts.giftTake,
       takeAll: rewardTexts.giftsTakeAll,
       close: rewardTexts.giftsClose,
+      open: rewardTexts.rewardOpen,
     },
   };
 });
@@ -2010,6 +2044,7 @@ const resetScreenWork = (): void => {
   licenseRevealed.value = false;
   profileSheet.value = 'none';
   giftSheetOpen.value = false;
+  sheetRewardsInSheet.value = [];
   memberGifts.settle();
   resetCatalog();
 };
@@ -2629,6 +2664,7 @@ const openMap = (office: MemberOfficeView): void => {
           v-if="giftSheet"
           :open="giftSheetOpen"
           :gifts="giftSheet.gifts"
+          :rewards="giftSheet.rewards"
           :busy="memberGifts.busy.value"
           :popping="memberGifts.popping.value"
           :errors="memberGifts.errors.value"
@@ -2637,6 +2673,7 @@ const openMap = (office: MemberOfficeView): void => {
           @take="memberGifts.take"
           @take-all="memberGifts.takeAll(giftSheet.gifts.map((gift) => gift.id))"
           @popped="memberGifts.popped"
+          @open="openSheetReward"
           @close="closeGiftSheet"
         />
       </template>

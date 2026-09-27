@@ -2,15 +2,16 @@ import { countedPlainText, plainText } from '#server/bot/texts';
 import { giftCoverUrl } from '#server/adapters/uploads/giftCovers';
 import type { Language } from '#server/generated/prisma/enums';
 import type { MemberGiftRow } from '#server/repositories/gifts';
-import type { PersonRewardRow } from '#server/repositories/rewards';
+import type { PersonRewardRow, SheetRewardRow } from '#server/repositories/rewards';
 import { toMemberOffice } from '#server/services/offices/readMemberOffices';
 import {
   calendarDayMoment,
   formatCalendarDate,
   formatClockTime,
   formatDayMonthWord,
+  parkDayKey,
 } from '#server/utils/parkTime';
-import type { MemberGift, MemberReward, MemberRewardTexts } from '#shared/types/rewards';
+import type { MemberGift, MemberReward, MemberRewardTexts, MemberSheetReward } from '#shared/types/rewards';
 
 /**
  * Во что превращается награда на экране водителя. Решений здесь нет — только перевод строки
@@ -22,11 +23,25 @@ const formatMoment = (moment: Date): string =>
   `${formatCalendarDate(moment)}, ${formatClockTime(moment)}`;
 
 /**
- * Срок ждущей словом месяца: «5 октября». Пустого срока у ждущей не бывает — у баллов его нет,
- * но баллы и не ждут; пустая строка здесь лучше выдуманной даты.
+ * День, до которого забрать ручную награду: сутки парка её последнего мига. Срок ручной
+ * выдачи — 05:00 после дня «Забрать до» (issue #266), и календарный день этого мига назвал бы
+ * следующее число, а не то, что выбрал сотрудник и написано в сообщении.
  */
-const deadline = (row: PersonRewardRow, language: Language): string =>
-  row.expiresAt ? formatDayMonthWord(row.expiresAt, language) : '';
+const manualDeadlineDay = (expiresAt: Date): Date =>
+  calendarDayMoment(parkDayKey(new Date(expiresAt.getTime() - 1)));
+
+/**
+ * Срок ждущей словом месяца: «5 октября». Пустого срока у ждущей не бывает — у баллов его нет,
+ * но баллы и не ждут; пустая строка здесь лучше выдуманной даты. Приз акции называет
+ * календарный день срока, как до #266.
+ */
+const deadline = (row: Pick<PersonRewardRow, 'expiresAt' | 'source'>, language: Language): string => {
+  if (!row.expiresAt) {
+    return '';
+  }
+
+  return formatDayMonthWord(row.source === 'manual' ? manualDeadlineDay(row.expiresAt) : row.expiresAt, language);
+};
 
 /**
  * Откуда награда: источник и пояснение внутри него. Полной разборкой источника — новый
@@ -44,9 +59,25 @@ const sourceText = (row: PersonRewardRow, language: Language): string => {
   }
 };
 
-/** Пояснение внутри источника. У подарка — повод на языке водителя: русский лежит в награде. */
-const noteText = (row: PersonRewardRow, language: Language): string | null =>
-  row.source === 'gift' && language === 'uz' && row.giftReasonUz !== null ? row.giftReasonUz : row.sourceNote;
+/**
+ * Пояснение внутри источника на языке водителя: русское лежит в награде. У подарка узбекское —
+ * повод раздачи, у ручной — своё «Почему» (issue #266); у выданных до него узбекского нет,
+ * и водитель видит русское, как прежде.
+ */
+const noteText = (row: PersonRewardRow, language: Language): string | null => {
+  if (language !== 'uz') {
+    return row.sourceNote;
+  }
+
+  switch (row.source) {
+    case 'gift':
+      return row.giftReasonUz ?? row.sourceNote;
+    case 'manual':
+      return row.sourceNoteUz ?? row.sourceNote;
+    case 'campaign':
+      return row.sourceNote;
+  }
+};
 
 const originText = (row: PersonRewardRow, language: Language): string => {
   const source = sourceText(row, language);
@@ -135,6 +166,23 @@ export const describeMemberGift = (row: MemberGiftRow, language: Language): Memb
   coverUrl: giftCoverUrl(language === 'uz' ? row.coverUzPath : row.coverRuPath),
 });
 
+/**
+ * Ручная награда в шторке подарков на языке водителя (issue #266): «Почему» после «Xalq Taxi»,
+ * как повод подарка, офис и день «Забрать до», обложка на его языке.
+ */
+export const describeSheetReward = (row: SheetRewardRow, language: Language): MemberSheetReward => ({
+  rewardId: row.id,
+  title: row.title,
+  reasonText: plainText('gift_reason', language, {
+    reason: (language === 'uz' ? row.sourceNoteUz : null) ?? row.sourceNote ?? '',
+  }),
+  deadlineText: plainText('reward_sheet_deadline', language, {
+    office: row.officeName,
+    date: deadline({ expiresAt: row.expiresAt, source: 'manual' }, language),
+  }),
+  coverUrl: giftCoverUrl(language === 'uz' ? row.coverUzPath : row.coverRuPath),
+});
+
 /** Тексты раздела и экрана награды на языке участника. */
 export const memberRewardTexts = (language: Language): MemberRewardTexts => ({
   awaitingGroup: plainText('rewards_group_awaiting', language),
@@ -149,4 +197,6 @@ export const memberRewardTexts = (language: Language): MemberRewardTexts => ({
   giftsClose: plainText('button_close', language),
   giftTapHint: plainText('gift_tap_hint', language),
   giftTakeFailed: plainText('gift_take_failed', language),
+  rewardOpen: plainText('reward_open', language),
+  rewardSheetSubtitle: plainText('reward_sheet_subtitle', language),
 });
