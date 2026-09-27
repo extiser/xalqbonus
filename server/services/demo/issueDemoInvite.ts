@@ -7,7 +7,7 @@ import {
   hashDemoInviteToken,
 } from '#server/services/demo/demoInviteToken';
 import { DEMO_INVITE_LIFETIME_MS } from '#server/services/employees/config';
-import { BotUnavailableError } from '#server/services/employees/issueInvite';
+import { BotUnavailableError } from '#server/services/employees/botUnavailableError';
 
 /**
  * Выпуск приглашения в демо (issue #252) — по образцу приглашения сотрудника.

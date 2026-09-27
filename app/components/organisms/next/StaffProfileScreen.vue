@@ -3,13 +3,12 @@ import type { MemberProfileFieldView } from '~/types/memberView';
 import type { StaffProfileOfficeView } from '~/types/staffView';
 
 /**
- * Профиль сотрудника — `_reference/design/staff/06-profile.html`, пароль задан —
- * `06-profile-password-set.html` (issue #250). Устройство — как профиль водителя
- * (`MemberProfileScreen`): карточка человека, группы строками, сброс сессии отдельной кнопкой.
+ * Профиль сотрудника — `_reference/design/staff/06-profile.html` (issue #250). Устройство — как
+ * профиль водителя (`MemberProfileScreen`): карточка человека, группы строками, сброс сессии
+ * отдельной кнопкой.
  *
- * Открывается с аватара на выборе офиса и на стойке. Сюда уехал «Пароль для входа с компьютера»:
- * на рабочих экранах он светился постоянно. Не задан — «Задать» с шевроном, ведёт на форму;
- * задан — «Задан» серым, строка не нажимается, под карточкой — почему: сменить можно на сайте.
+ * Открывается с аватара на выборе офиса и на стойке. Группы «Настройки» с пунктом пароля нет:
+ * пароль задаётся только в вебе (issue #267), а другого пункта в ней не было.
  *
  * «Сбросить сессию» — через шторку подтверждения, как у водителя. Пока сброс в пути, «Сбросить»
  * ждёт с кольцом, «Отменить» гаснет.
@@ -20,15 +19,13 @@ withDefaults(
     name: string;
     fields: MemberProfileFieldView[];
     offices: StaffProfileOfficeView[];
-    passwordLabel: string;
-    passwordSet: boolean;
     resetOpen: boolean;
     resetting?: boolean;
   }>(),
   { resetting: false },
 );
 
-defineEmits<{ back: []; password: []; askReset: []; reset: []; close: [] }>();
+defineEmits<{ back: []; askReset: []; reset: []; close: [] }>();
 </script>
 
 <template>
@@ -52,19 +49,6 @@ defineEmits<{ back: []; password: []; askReset: []; reset: []; close: [] }>();
           </div>
         </AtomsNextMemberCard>
       </template>
-
-      <div class="px-0.5 pb-0.5 pt-[18px]">
-        <AtomsNextMemberGroupLabel label="Настройки" />
-      </div>
-      <AtomsNextMemberCard tone="plain" divided>
-        <MoleculesNextMemberSettingRow
-          :label="passwordLabel"
-          :value="passwordSet ? 'Задан' : 'Задать'"
-          :inert="passwordSet"
-          @open="$emit('password')"
-        />
-      </AtomsNextMemberCard>
-      <p v-if="passwordSet" class="m-0 -mt-0.5 px-1 text-[13px] font-light text-xb-grey">Сменить можно на сайте</p>
 
       <div class="mt-[22px]">
         <AtomsNextMemberButton size="l" tone="danger" @click="$emit('askReset')">Сбросить сессию</AtomsNextMemberButton>

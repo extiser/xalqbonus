@@ -1,8 +1,7 @@
-import { readSessionSecret } from '#server/services/employees/config';
 import { loginByPassword } from '#server/services/employees/loginByPassword';
 import { denyAccess } from '#server/utils/denial';
 import { readClientAddress } from '#server/utils/employeeAuth';
-import { signEmployeeSession, SESSION_COOKIE_NAME } from '#server/utils/employeeSession';
+import { issueSessionCookie } from '#server/utils/sessionCookie';
 import type { EmployeeLoginResponse } from '#shared/types/employee';
 
 // Вход сотрудника в веб: телефон и пароль в обмен на подписанный cookie. Решение о том,
@@ -10,8 +9,8 @@ import type { EmployeeLoginResponse } from '#shared/types/employee';
 // (docs/principles.md → «Слои и зависимости»). Текстов отказов здесь нет: исход сервиса
 // переводится в код, а текст к коду лежит в словаре (`shared/denials.ts`).
 //
-// Это единственная ручка приложения, которая работает без проверки доступа: ею доступ
-// и получают.
+// Без проверки доступа работает она и две ручки, выдающие тот же cookie по одноразовой ссылке:
+// принятие приглашения и пароль после сброса (issue #267). Ими доступ и получают.
 
 type LoginBody = {
   phone?: unknown;
@@ -62,27 +61,5 @@ export default defineEventHandler(async (event): Promise<EmployeeLoginResponse> 
     throw denyAccess('invalid_credentials');
   }
 
-  setCookie(event, SESSION_COOKIE_NAME, signEmployeeSession(result.session, readSessionSecret()), {
-    // Недоступен из JavaScript страницы: cookie сессии не нужен ни одному скрипту,
-    // а без флага его забирает первая же найденная XSS.
-    httpOnly: true,
-    // `lax`, а не `strict`: ссылка на админку из мессенджера при `strict` открывается
-    // разлогиненной, хотя сессия жива. Межсайтовых POST-запросов у нас нет.
-    sameSite: 'lax',
-    // Локально приложение открывается по http, и `secure` сделал бы вход невозможным.
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: result.maxAgeSeconds,
-  });
-
-  // Поимённо, как в `/api/auth/me`: признак демо (issue #205) — дело проверки доступа,
-  // а не ответа, и наружу он не уходит.
-  return {
-    employee: {
-      employeeId: result.employee.employeeId,
-      role: result.employee.role,
-      fullName: result.employee.fullName,
-      phoneE164: result.employee.phoneE164,
-    },
-  };
+  return { employee: issueSessionCookie(event, result) };
 });

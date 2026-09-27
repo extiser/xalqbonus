@@ -64,6 +64,25 @@ export const findEmployeeById = async (
   return rows[0] ?? null;
 };
 
+/**
+ * Учётка с блокировкой строки — для операций, которые решают по ней и пишут рядом одной
+ * транзакцией: выпуск ссылки к учётке (issue #267) идёт так, чтобы две одновременные кнопки
+ * не выпустили две открытые ссылки одного вида.
+ */
+export const lockEmployeeById = async (
+  employeeId: string,
+  client: Executor,
+): Promise<EmployeeRow | null> => {
+  const rows = await client.$queryRaw<EmployeeRow[]>`
+    SELECT ${EMPLOYEE_COLUMNS}
+      FROM xb.employees
+     WHERE "id" = ${employeeId}::uuid
+       FOR UPDATE
+  `;
+
+  return rows[0] ?? null;
+};
+
 export const findEmployeeByPhone = async (
   phoneE164: string,
   client: Executor = db,
@@ -112,9 +131,8 @@ export const findDemoEmployee = async (
 /**
  * Есть ли учётка на этот Telegram или на этот телефон — одним запросом.
  *
- * Именно так проверяется правило одной роли при принятии приглашения и при привязке
- * водителя: спрашивают оба признака сразу, потому что занятым может быть любой из них,
- * а исход у обоих один.
+ * Именно так проверяется правило одной роли при привязке водителя: спрашивают оба признака
+ * сразу, потому что занятым может быть любой из них, а исход у обоих один.
  */
 export const findEmployeeByTelegramOrPhone = async (
   telegramUserId: bigint | null,
@@ -197,6 +215,29 @@ export const updateEmployeePassword = async (
            "updated_at"          = now()
      WHERE "id" = ${employeeId}::uuid
   `;
+};
+
+/**
+ * Привязывает Telegram к учётке — только к той, у которой его ещё нет (issue #267).
+ *
+ * Условие стоит в самом `UPDATE`: перепривязки ссылкой не бывает, отвязка — отдельная
+ * операция, которой пока нет. `false` — Telegram у учётки уже был. Занятый другой учёткой
+ * Telegram отбивает уникальный индекс `employees_telegram_user_id_key`.
+ */
+export const setEmployeeTelegram = async (
+  employeeId: string,
+  telegramUserId: bigint,
+  client: Executor = db,
+): Promise<boolean> => {
+  const updated = await client.$executeRaw`
+    UPDATE xb.employees
+       SET "telegram_user_id" = ${telegramUserId},
+           "updated_at"       = now()
+     WHERE "id" = ${employeeId}::uuid
+       AND "telegram_user_id" IS NULL
+  `;
+
+  return updated === 1;
 };
 
 /**

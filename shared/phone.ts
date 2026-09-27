@@ -42,6 +42,27 @@ export const normalizePhoneE164 = (rawPhone: string): string | null => {
   return E164_UZBEKISTAN.test(withPlus) ? withPlus : null;
 };
 
+/** Логин сотрудника: плюс и от 7 до 15 цифр — рамка E.164 без проверки кода страны. */
+const E164_ANY = /^\+\d{7,15}$/;
+
+/**
+ * Приводит телефон входа сотрудника к виду `+XXXXXXXXXXX` или отвечает `null` (issue #267).
+ *
+ * Номер любой, не только узбекский, хоть заведомо несуществующий: СМС не шлём, телефон
+ * сотрудника — только логин. Правило разбора то же, что у `normalizePhoneE164`, — пробелы,
+ * дефисы и скобки убираются, плюс дописывается, — поэтому узбекский номер обе функции приводят
+ * к одному виду, и вход уже заведённых не ломается.
+ *
+ * Автопривязка водителя на эту функцию не переходит: она держится на узбекском номере,
+ * и чужой код страны нашёл бы в реестре постороннего человека.
+ */
+export const normalizeLoginPhone = (rawPhone: string): string | null => {
+  const digitsOnly = rawPhone.trim().replace(SEPARATORS, '');
+  const withPlus = digitsOnly.startsWith('+') ? digitsOnly : `+${digitsOnly}`;
+
+  return E164_ANY.test(withPlus) ? withPlus : null;
+};
+
 /** Номер для экрана: как показать и что положить в буфер обмена. */
 export type FormattedPhone = {
   /** «+998 90 123-45-67». */

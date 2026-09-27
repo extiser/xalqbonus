@@ -243,9 +243,6 @@ export const DESIGN_GROUPS: DesignGroup[] = [
       { slug: 'staff-desk-issued', title: 'Стойка — выдано', source: 'staff/05-desk-issued.html' },
       { slug: 'staff-desk-not-found', title: 'Стойка — код не найден', source: 'staff/05-desk-not-found.html' },
       { slug: 'staff-profile', title: 'Профиль — пароль не задан', source: 'staff/06-profile.html' },
-      { slug: 'staff-profile-password-set', title: 'Профиль — пароль задан', source: 'staff/06-profile-password-set.html' },
-      { slug: 'staff-password', title: 'Форма пароля — пароли не совпадают', source: 'staff/06-password.html' },
-      { slug: 'staff-password-saved', title: 'Пароль сохранён', source: 'staff/06-password-saved.html' },
     ],
   },
 ];

@@ -1,20 +1,24 @@
 import {
-  BotUnavailableError,
+  InviteInputError,
   issueInvite,
   RoleNotInvitableError,
 } from '#server/services/employees/issueInvite';
 import { isEmployeeRole } from '#server/services/employees/roles';
+import { readAppOrigin } from '#server/utils/appOrigin';
 import { requireEmployee } from '#server/utils/employeeAuth';
+import { rejectInviteIssue } from '#server/utils/employeeLinkFailure';
 import type { EmployeeInviteResponse } from '#shared/types/employee';
 
-// Выпуск приглашения сотрудника. Ссылка возвращается один раз и больше не восстанавливается
-// ниоткуда: в базе лежит только хеш токена.
+// Выпуск приглашения сотрудника (issue #267): роль, имя и телефон — от приглашающего, ссылка
+// ведёт на страницу веба на том же хосте. Она видна в списке живых, пока приглашение живо.
 //
-// Кого можно приглашать, решает сервис: «роль строго ниже своей» — это правило, а не разбор
+// Кого можно приглашать и годятся ли имя с телефоном, решает сервис: это правила, а не разбор
 // запроса (docs/principles.md → «Слои и зависимости»).
 
 type InviteBody = {
   role?: unknown;
+  fullName?: unknown;
+  phone?: unknown;
 };
 
 export default defineEventHandler(async (event): Promise<EmployeeInviteResponse> => {
@@ -33,11 +37,16 @@ export default defineEventHandler(async (event): Promise<EmployeeInviteResponse>
     const invite = await issueInvite({
       actor: { employeeId: employee.employeeId, role: employee.role },
       role: body.role,
+      fullName: typeof body.fullName === 'string' ? body.fullName : '',
+      phoneRaw: typeof body.phone === 'string' ? body.phone : '',
+      appOrigin: readAppOrigin(event),
     });
 
     return {
       inviteId: invite.inviteId,
       role: invite.role,
+      fullName: invite.fullName,
+      phoneE164: invite.phoneE164,
       expiresAt: invite.expiresAt.toISOString(),
       link: invite.link,
     };
@@ -50,14 +59,8 @@ export default defineEventHandler(async (event): Promise<EmployeeInviteResponse>
       });
     }
 
-    // Бота нет — вести ссылке некуда. Это состояние машины, а не ошибка сотрудника,
-    // поэтому 503, а не 400: выпуск заработает, как только появится токен.
-    if (error instanceof BotUnavailableError) {
-      throw createError({
-        statusCode: 503,
-        statusMessage: 'Service Unavailable',
-        message: 'бот не настроен: ссылку приглашения выписывать не на кого',
-      });
+    if (error instanceof InviteInputError) {
+      throw rejectInviteIssue(error.problem);
     }
 
     throw error;

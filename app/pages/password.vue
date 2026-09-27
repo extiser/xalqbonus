@@ -1,15 +1,20 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useAccessNotice, useCurrentEmployee } from '~/composables/useCurrentEmployee';
+import { toLoadState } from '~/utils/loadState';
 import { failureText } from '~/utils/requestError';
-import type { EmployeePasswordResponse } from '#shared/types/employee';
+import { PASSWORD_MIN_LENGTH } from '#shared/employee';
+import type { EmployeePasswordResponse, EmployeeTelegramLinkResponse } from '#shared/types/employee';
 
 /**
- * Смена своего пароля.
+ * Смена своего пароля и привязка Telegram.
  *
  * Только своего: ручки «поставить пароль другому» не существует, и адреса под неё тоже
  * (`server/api/employees/me/password.post.ts`). Забывшему пароль его сбрасывают на экране
- * сотрудников, а новый он задаёт себе сам в Mini App (issue #132).
+ * сотрудников, и новый он задаёт себе сам по ссылке «задать пароль» (issue #267).
+ *
+ * Telegram привязывается здесь же и по желанию: ссылкой на бота, которую сотрудник выпускает
+ * себе сам (issue #267). Нужен он, чтобы приложение сотрудника открывалось в боте.
  *
  * Прежнего пароля не спрашиваем: сюда попадает только тот, кто уже доказал, что он это он,
  * — сессией веба или подписью Mini App.
@@ -21,7 +26,7 @@ import type { EmployeePasswordResponse } from '#shared/types/employee';
 
 useHead({ title: 'Смена пароля — Xalq Taxi Bonus' });
 
-const PASSWORD_HINT = 'Не короче десяти символов.';
+const PASSWORD_HINT = `Не короче ${PASSWORD_MIN_LENGTH} символов.`;
 
 const currentEmployee = useCurrentEmployee();
 const notice = useAccessNotice();
@@ -29,6 +34,34 @@ const notice = useAccessNotice();
 const password = ref('');
 const error = ref<string | null>(null);
 const submitting = ref(false);
+
+const {
+  data: telegram,
+  status: telegramStatus,
+} = await useFetch<EmployeeTelegramLinkResponse>('/api/employees/me/telegram-link');
+
+const telegramState = computed(() => toLoadState(telegramStatus.value));
+const telegramIssuing = ref(false);
+const telegramError = ref<string | null>(null);
+
+const issueTelegramLink = async (): Promise<void> => {
+  if (telegramIssuing.value) {
+    return;
+  }
+
+  telegramIssuing.value = true;
+  telegramError.value = null;
+
+  try {
+    telegram.value = await $fetch<EmployeeTelegramLinkResponse>('/api/employees/me/telegram-link', {
+      method: 'POST',
+    });
+  } catch (failure) {
+    telegramError.value = failureText(failure);
+  } finally {
+    telegramIssuing.value = false;
+  }
+};
 
 const submit = async (): Promise<void> => {
   if (submitting.value) {
@@ -61,7 +94,8 @@ const submit = async (): Promise<void> => {
 </script>
 
 <template>
-  <div class="max-w-sm space-y-6">
+  <!-- Ссылка привязки длинная, и блоку Telegram нужно место шире формы пароля. -->
+  <div class="max-w-lg space-y-6">
     <div>
       <h1 class="text-xl font-semibold text-slate-900">Смена пароля</h1>
       <p class="mt-1 text-sm text-slate-500">
@@ -69,7 +103,7 @@ const submit = async (): Promise<void> => {
       </p>
     </div>
 
-    <form class="space-y-4" @submit.prevent="submit">
+    <form class="max-w-sm space-y-4" @submit.prevent="submit">
       <MoleculesFormField
         v-model="password"
         label="Новый пароль"
@@ -88,5 +122,14 @@ const submit = async (): Promise<void> => {
         />
       </div>
     </form>
+
+    <OrganismsEmployeeTelegramBinding
+      :state="telegramState"
+      :bound="telegram?.bound ?? false"
+      :link="telegram?.link ?? null"
+      :issuing="telegramIssuing"
+      :error="telegramError"
+      @issue="issueTelegramLink"
+    />
   </div>
 </template>

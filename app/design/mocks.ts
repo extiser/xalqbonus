@@ -1936,5 +1936,4 @@ export const staffProfileMock = {
     { id: 'kadysheva', name: 'Кадышева', address: 'ул. Кадышева, 12' },
     { id: 'chilanzar', name: 'Чиланзар', address: 'Чиланзар, 9-й квартал, 4' },
   ],
-  passwordLabel: 'Пароль для входа с компьютера',
 };

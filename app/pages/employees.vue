@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { failureText } from '~/utils/requestError';
+import { failureField, failureText } from '~/utils/requestError';
 import { toLoadState } from '~/utils/loadState';
+import type { InviteIssueField } from '#shared/employeeLinks';
 import type {
   EmployeeAccountsResponse,
   EmployeeDisabledResponse,
+  EmployeeInviteRequestBody,
   EmployeeInviteResponse,
   EmployeeInviteRevokeResponse,
   EmployeeInvitesResponse,
@@ -41,20 +43,34 @@ const invitesState = computed(() => toLoadState(invitesStatus.value));
 
 const issuing = ref(false);
 const issueError = ref<string | null>(null);
+const issueFieldError = ref<{ field: InviteIssueField; message: string } | null>(null);
 const issued = ref<EmployeeInviteResponse | null>(null);
 
-const issue = async (role: EmployeeInviteResponse['role']): Promise<void> => {
+const INVITE_FIELDS: readonly InviteIssueField[] = ['fullName', 'phone'];
+
+const isInviteField = (value: string | null): value is InviteIssueField =>
+  value !== null && (INVITE_FIELDS as readonly string[]).includes(value);
+
+const issue = async (request: EmployeeInviteRequestBody): Promise<void> => {
   issuing.value = true;
   issueError.value = null;
+  issueFieldError.value = null;
 
   try {
     issued.value = await $fetch<EmployeeInviteResponse>('/api/employee-invites', {
       method: 'POST',
-      body: { role },
+      body: request,
     });
     await refreshInvites();
   } catch (error) {
-    issueError.value = failureText(error);
+    const field = failureField(error);
+
+    // Отказ по полю встаёт под полем — имя или телефон, — остальное под формой.
+    if (isInviteField(field)) {
+      issueFieldError.value = { field, message: failureText(error) };
+    } else {
+      issueError.value = failureText(error);
+    }
   } finally {
     issuing.value = false;
   }
@@ -105,7 +121,7 @@ const enable = (employeeId: string): Promise<void> =>
 const resetPassword = (employeeId: string): Promise<void> | undefined => {
   if (
     !window.confirm(
-      `Сбросить пароль «${nameOf(employeeId)}»? Из веба сотрудник выйдет на всех устройствах, новый пароль задаст себе сам в приложении.`,
+      `Сбросить пароль «${nameOf(employeeId)}»? Из веба сотрудник выйдет на всех устройствах. Новый пароль он задаст сам по ссылке — её покажем здесь, перешлите её ему.`,
     )
   ) {
     return;
@@ -143,6 +159,7 @@ const revoke = (inviteId: string): Promise<void> =>
       v-if="accounts && accounts.invitableRoles.length > 0"
       :roles="accounts.invitableRoles"
       :issuing="issuing"
+      :field-error="issueFieldError"
       :error="issueError"
       :issued="issued"
       @issue="issue"

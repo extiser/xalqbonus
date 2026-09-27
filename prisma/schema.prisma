@@ -115,6 +115,17 @@ enum EmployeeRole {
   @@schema("xb")
 }
 
+/// Что открывает одноразовая ссылка к существующей учётке сотрудника (issue #267).
+enum EmployeeAccessLinkKind {
+  /// Задать пароль — выпускается сбросом пароля.
+  password
+  /// Привязать Telegram — сотрудник выпускает себе сам, в вебе.
+  telegram
+
+  @@map("employee_access_link_kind")
+  @@schema("xb")
+}
+
 /// Чем кончилась попытка водителя привязать Telegram в боте.
 ///
 /// Словарь наш и меняется нашей же миграцией — как остальные словари `xb`. Успешные
@@ -817,28 +828,28 @@ model Employee {
   id                String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   role              EmployeeRole
   fullName          String       @map("full_name")
-  /// Логин для входа в веб. Нормализуется тем же `phoneNumber.ts`, что и у водителей:
-  /// двух пониманий номера в системе быть не должно.
+  /// Логин для входа в веб — `+` и от 7 до 15 цифр, не только узбекский (`normalizeLoginPhone`,
+  /// issue #267). СМС на него не шлём: телефон только логин.
   ///
-  /// Обязателен: телефон у сотрудника есть всегда — владелец заводится с ним, принявший
-  /// приглашение присылает контакт. В базе колонка `NOT NULL` с миграции `#84`, и `String?`
+  /// Обязателен: телефон у сотрудника есть всегда — владелец заводится с ним, приглашённому
+  /// его задаёт приглашающий. В базе колонка `NOT NULL` с миграции `#84`, и `String?`
   /// здесь был расхождением модели с базой, а не вторым состоянием учётки (`#120`).
   phoneE164         String       @unique @map("phone_e164")
-  /// `argon2id`. Пуст у того, кто в веб не ходит.
+  /// `argon2id`. Пуст после сброса, пока сотрудник не задал новый по ссылке, и у демо-учётки.
   passwordHash      String?      @map("password_hash")
   /// Время последней смены пароля. Доступ им не решается — только отметкой годности ниже.
   passwordChangedAt DateTime?    @map("password_changed_at") @db.Timestamptz(6)
   /// Отметка годности выданных cookie: выпущенный раньше неё недействителен. Двигают её
   /// оба события, гасящие сессии, — выход из веба и смена пароля, — а проверяется она одна.
   sessionsValidFrom DateTime?    @map("sessions_valid_from") @db.Timestamptz(6)
-  /// Вторая дверь — Mini App. Заполняется принятием приглашения, руками не вводится
-  /// нигде: опечатка в числе отдала бы приложение постороннему.
+  /// Вторая дверь — Mini App. Заполняется ссылкой привязки из `from.id` апдейта (issue #267),
+  /// руками не вводится нигде: опечатка в числе отдала бы приложение постороннему.
   telegramUserId    BigInt?      @unique @map("telegram_user_id")
   /// Учётка выключена. Проверяется на каждом запросе, поэтому действует немедленно.
   disabledAt        DateTime?    @map("disabled_at") @db.Timestamptz(6)
   /// Демо-сотрудник (issue #205): под ним смотрит демо-зритель в роли менеджера. Своего входа
-  /// у него нет — ни пароля, ни Telegram, — и проверка «есть хотя бы один вход» его пропускает.
-  /// Один на роль — частичным уникальным индексом в миграции.
+  /// у него нет — ни пароля, ни Telegram (`employees_demo_no_login_check`). Один на роль —
+  /// частичным уникальным индексом в миграции.
   isDemo            Boolean      @default(false) @map("is_demo")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -859,6 +870,8 @@ model Employee {
   rewardsIssued   Reward[]         @relation("reward_issued_by")
   rewardsGranted  Reward[]         @relation("reward_granted_by")
   giftGrants      GiftGrant[]
+  accessLinks       EmployeeAccessLink[] @relation("access_link_employee")
+  accessLinksIssued EmployeeAccessLink[] @relation("access_link_issued_by")
 
   @@map("employees")
   @@schema("xb")
@@ -869,8 +882,9 @@ model Employee {
 /// Учётка создаётся в момент принятия, а не при выпуске ссылки, — поэтому `employee_id`
 /// пуст до принятия: неиспользованное приглашение не оставляет за собой мусорной учётки.
 ///
-/// Токен хранится хешем `sha256` и показывается один раз при выпуске: дамп базы не должен
-/// давать готовых приглашений.
+/// Принимается в вебе (issue #267): имя и телефон задаёт приглашающий, пароль — принявший.
+/// Токен лежит рядом с хешем, пока приглашение живо, — ссылку можно скопировать из списка;
+/// принятие и отзыв его стирают. Ищется приглашение по хешу.
 ///
 /// Журнала отказов по приглашениям нет намеренно, в отличие от `telegram_link_attempts`
 /// у водителей: попыток там тысячи и по ним считается доля дошедших до бота, а учёток
@@ -878,8 +892,14 @@ model Employee {
 model EmployeeInvite {
   id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   role        EmployeeRole
-  /// `sha256` от токена, hex. Самого токена в базе нет нигде.
+  /// Имя будущей учётки. Пусто у выпущенных до приёма в вебе — они отозваны миграцией.
+  fullName    String?      @map("full_name")
+  /// Логин будущей учётки, `normalizeLoginPhone`. Пусто у выпущенных до приёма в вебе.
+  phoneE164   String?      @map("phone_e164")
+  /// `sha256` от токена, hex.
   tokenHash   String       @unique @map("token_hash")
+  /// Сам токен — только у живого приглашения (`employee_invites_token_live_check`).
+  token       String?
   invitedById String       @map("invited_by_id") @db.Uuid
   expiresAt   DateTime     @map("expires_at") @db.Timestamptz(6)
   acceptedAt  DateTime?    @map("accepted_at") @db.Timestamptz(6)
@@ -894,6 +914,37 @@ model EmployeeInvite {
 
   @@index([invitedById])
   @@map("employee_invites")
+  @@schema("xb")
+}
+
+/// Одноразовая ссылка к существующей учётке (issue #267): задать пароль после сброса
+/// или привязать Telegram.
+///
+/// Живая ссылка каждого вида у учётки одна — частичным уникальным индексом в миграции:
+/// выпуск новой отзывает прежнюю. Токен лежит рядом с хешем, пока ссылка жива, — чтобы её
+/// можно было показать снова; использование и отзыв его стирают.
+model EmployeeAccessLink {
+  id         String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employeeId String                 @map("employee_id") @db.Uuid
+  kind       EmployeeAccessLinkKind
+  /// `sha256` от токена, hex. Ищется ссылка по нему.
+  tokenHash  String                 @unique @map("token_hash")
+  /// Сам токен — только у живой ссылки (`employee_access_links_token_live_check`).
+  token      String?
+  expiresAt  DateTime               @map("expires_at") @db.Timestamptz(6)
+  usedAt     DateTime?              @map("used_at") @db.Timestamptz(6)
+  revokedAt  DateTime?              @map("revoked_at") @db.Timestamptz(6)
+  /// Кто выпустил: сбросивший пароль или сам сотрудник — у ссылки привязки Telegram.
+  issuedById String                 @map("issued_by_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  employee Employee @relation("access_link_employee", fields: [employeeId], references: [id])
+  issuedBy Employee @relation("access_link_issued_by", fields: [issuedById], references: [id])
+
+  @@index([employeeId])
+  @@index([issuedById])
+  @@map("employee_access_links")
   @@schema("xb")
 }
 

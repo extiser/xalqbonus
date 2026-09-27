@@ -29,12 +29,6 @@ export const STAFF_ROLE_LABELS: Readonly<Record<MiniAppEmployeeScreen['role'], s
   manager: 'Менеджер',
 };
 
-/**
- * Номер пункта пароля — одно на экран и бота. Его же дословно цитирует бот после принятия
- * приглашения (`invite_accepted` в `server/bot/texts.ts`): меняется здесь — меняется и там.
- */
-export const EMPLOYEE_PASSWORD_LABEL = 'Пароль для входа с компьютера';
-
 /** Имени в профиле водителя нет — чем его заменить в вопросе шторки. */
 const NAME_MISSING = 'Имени в профиле нет — сверьте позывной';
 

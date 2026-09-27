@@ -20,7 +20,6 @@ import {
 } from '#shared/types/miniapp';
 import { useCountUp } from '~/composables/useCountUp';
 import { useDeskOffices } from '~/composables/useDeskOffices';
-import { useEmployeePassword } from '~/composables/useEmployeePassword';
 import { useLiveScreenPoll } from '~/composables/useLiveScreenPoll';
 import { useMemberGifts } from '~/composables/useMemberGifts';
 import { useMemberHistory } from '~/composables/useMemberHistory';
@@ -61,7 +60,6 @@ import { failureDenial } from '~/utils/requestError';
 import {
   cancelledOutcome,
   deskItemId,
-  EMPLOYEE_PASSWORD_LABEL,
   issuedOutcome,
   STAFF_ROLE_LABELS,
   staffDeskRowView,
@@ -349,23 +347,23 @@ const memberGifts = useMemberGifts(() => initData, {
 });
 
 /**
- * Экран сотрудника (issue #250): выбор офиса, стойка, карточка заказа или награды, профиль
- * и форма пароля — по макетам `_reference/design/staff/`.
+ * Экран сотрудника (issue #250): выбор офиса, стойка, карточка заказа или награды и профиль —
+ * по макетам `_reference/design/staff/`. Пункта пароля нет: пароль задаётся только в вебе
+ * (issue #267).
  *
- * Своего пути по экранам у него нет: что показать, выводится из состояния — открыт ли профиль
- * или форма пароля, выбран ли офис, открыта ли карточка (`employeeScreen`). «Назад» — только
- * там, где он в макете: у карточки, профиля и формы пароля. Со стойки сотрудник не уходит —
- * офис он меняет шторкой «Сменить».
+ * Своего пути по экранам у него нет: что показать, выводится из состояния — открыт ли профиль,
+ * выбран ли офис, открыта ли карточка (`employeeScreen`). «Назад» — только там, где он в макете:
+ * у карточки и профиля. Со стойки сотрудник не уходит — офис он меняет шторкой «Сменить».
  */
 const employee = ref<MiniAppEmployeeScreen | null>(null);
 const employeeOfficeId = ref<string | null>(null);
 const employeeCode = ref('');
 
 /**
- * Профиль и форма пароля — поверх рабочих экранов. Под ними ничего не сбрасывается: «Назад»
- * возвращает туда, откуда открыли, — к выбору офиса или к стойке с тем же офисом.
+ * Профиль — поверх рабочих экранов. Под ним ничего не сбрасывается: «Назад» возвращает туда,
+ * откуда открыли, — к выбору офиса или к стойке с тем же офисом.
  */
-const employeeView = ref<'work' | 'profile' | 'password'>('work');
+const employeeView = ref<'work' | 'profile'>('work');
 
 /** Открытая шторка: выдачи, отмены, смены офиса, сброса сессии — или никакой. Двух сразу не бывает. */
 const employeeSheet = ref<'none' | 'issue' | 'cancel' | 'office' | 'reset'>('none');
@@ -416,7 +414,7 @@ const employeeNoOffices = computed(
 );
 
 /** Какой экран сотрудника сейчас на месте. */
-const employeeScreen = computed((): 'password' | 'profile' | 'card' | 'picker' | 'desk' => {
+const employeeScreen = computed((): 'profile' | 'card' | 'picker' | 'desk' => {
   if (employeeView.value !== 'work') {
     return employeeView.value;
   }
@@ -645,17 +643,6 @@ const cancelDeskOrder = async (): Promise<void> => {
   await finishDeskAction(done, done && item?.kind === 'order' ? cancelledOutcome(item.order) : null);
 };
 
-/**
- * Пароль задан — строкой-состоянием в профиле. У демо-менеджера он задан всегда: своего входа
- * у демо-учётки не бывает, сервер такой пароль отвергнет (issue #205), и формы у него нет.
- */
-const employeePasswordSet = computed(() => employee.value !== null && (employee.value.passwordSet || employee.value.demo !== null));
-
-const employeePassword = useEmployeePassword(
-  () => ({ [INIT_DATA_HEADER]: initData }),
-  (error) => reportDoorDenial(error),
-);
-
 /** Профиль сотрудника: всё, что он показывает, уже пришло с экраном. */
 const staffProfile = computed(() => {
   const current = employee.value;
@@ -684,22 +671,6 @@ const openEmployeeProfile = (): void => {
 const closeEmployeeProfile = (): void => {
   employeeSheet.value = 'none';
   employeeView.value = 'work';
-};
-
-const openEmployeePassword = (): void => {
-  employeePassword.reset();
-  employeeView.value = 'password';
-};
-
-/**
- * Пароль сохранён — признак ставится в уже прочитанном экране, а не перечитыванием
- * `/api/miniapp/me`: экран читается один раз при открытии, и второй запрос ради одного признака
- * незачем. Строка в профиле после «Готово» уже «Задан».
- */
-const saveEmployeePassword = async (): Promise<void> => {
-  if ((await employeePassword.submit()) && employee.value) {
-    employee.value.passwordSet = true;
-  }
 };
 
 /** Шторку сброса не закрыть, пока сброс в пути: окно закроется само. */
@@ -2022,7 +1993,7 @@ const applyState = (state: MiniAppStateResponse): void => {
 
 /**
  * Снимает всё, что человек успел сделать на экране: выбранный офис, набранный код, открытый
- * заказ, пункт пароля, путь по экранам участника.
+ * заказ, открытый профиль, путь по экранам участника.
  *
  * Заглушка — это текст и больше ничего, и прежнее состояние под ней не хранится: «Обновить»
  * возвращает экран с начала, каким его показывает первое открытие, а не стойку с кодом,
@@ -2036,7 +2007,6 @@ const resetScreenWork = (): void => {
   employeeView.value = 'work';
   employeeSheet.value = 'none';
   officeSheetPicked.value = null;
-  employeePassword.reset();
   screens.value = ['home'];
   currentOrder.value = null;
   currentRewardId.value = null;
@@ -2142,7 +2112,7 @@ const loadState = async (): Promise<void> => {
  * не ответила — заглушка «не загрузилось», как при первом открытии.
  *
  * Отказ двери от доменного отличает словарь: `failureDenial` возвращает код только для
- * отказов из `shared/denials.ts`. Остальные — «заказ не найден», «пароль короче» — остаются
+ * отказов из `shared/denials.ts`. Остальные — «заказ не найден», «код не найден» — остаются
  * строкой у поля: композабл получает `false` и показывает их сам.
  */
 const reportDoorDenial = (error: unknown): boolean => {
@@ -2543,29 +2513,12 @@ const openMap = (office: MemberOfficeView): void => {
     <OrganismsNextMemberStubScreen v-else-if="stage === 'error' && stub" v-bind="stub" @retry="retry" />
 
     <template v-else-if="stage === 'employee' && employee && staffBar">
-      <OrganismsNextStaffPasswordScreen
-        v-if="employeeScreen === 'password'"
-        v-model:password="employeePassword.password.value"
-        v-model:repeat="employeePassword.repeat.value"
-        :phone="employee.phone.display"
-        :submitting="employeePassword.submitting.value"
-        :error="employeePassword.error.value"
-        :mismatch="employeePassword.mismatch.value"
-        :saved="employeePassword.saved.value"
-        @save="saveEmployeePassword"
-        @back="employeeView = 'profile'"
-        @done="employeeView = 'profile'"
-      />
-
       <OrganismsNextStaffProfileScreen
-        v-else-if="employeeScreen === 'profile' && staffProfile"
+        v-if="employeeScreen === 'profile' && staffProfile"
         v-bind="staffProfile"
-        :password-label="EMPLOYEE_PASSWORD_LABEL"
-        :password-set="employeePasswordSet"
         :reset-open="employeeSheet === 'reset'"
         :resetting="resetting"
         @back="closeEmployeeProfile"
-        @password="openEmployeePassword"
         @ask-reset="employeeSheet = 'reset'"
         @reset="resetSession"
         @close="closeEmployeeResetSheet"

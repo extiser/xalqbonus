@@ -9,7 +9,7 @@ import type { MiniAppDemo, MiniAppEmployeeDeniedScreen, MiniAppEmployeeScreen } 
  *
  * Спрашивается первым, до водительской привязки: сотрудник, открывший приложение, водительский
  * экран не видит никогда (T25). Одновременно водителем и сотрудником быть нельзя — правило
- * держится при принятии приглашения и при привязке водителя, — поэтому порядок проверок
+ * держится при привязке Telegram сотрудника и при привязке водителя, — поэтому порядок проверок
  * ничего не выбирает, а только экономит запрос водителю.
  *
  * Поиск по Telegram и сборка экрана по учётке разведены: демо-зритель в роли менеджера
@@ -58,8 +58,6 @@ export const buildEmployeeScreen = async (
     role: employee.role,
     phone: formatPhone(employee.phoneE164),
     telegramId: telegramUserId.toString(),
-    // Только признак: хеш из сервиса наружу не уходит ни в каком виде (issue #130).
-    passwordSet: employee.passwordHash !== null,
     offices: (await readEmployeeOffices({ employeeId: employee.id, role: employee.role, isDemo: employee.isDemo })).filter(
       (office) => !office.archived,
     ),

@@ -1,111 +1,126 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { formatDate } from '~/utils/format';
+import { formatDateTime } from '~/utils/format';
 import { employeeRoleLabel } from '~/utils/labels';
-import type { EmployeeInviteResponse } from '#shared/types/employee';
+import { EMPLOYEE_NAME_MAX_LENGTH } from '#shared/employee';
+import type { InviteIssueField } from '#shared/employeeLinks';
+import { formatPhone } from '#shared/phone';
+import type { EmployeeInviteRequestBody, EmployeeInviteResponse } from '#shared/types/employee';
 import type { SelectOption } from '~/types/selectOption';
 
 /**
- * Выпуск приглашения: роль — из тех, что строго ниже своей, — и ссылка один раз.
+ * Выпуск приглашения (issue #267): имя, телефон и роль — из тех, что строго ниже своей, —
+ * и ссылка на страницу веба, где приглашённый задаст пароль.
  *
- * Ссылка показывается, пока её не закрыли, и больше не восстанавливается ниоткуда: в базе
- * лежит только хеш токена. Потерял — выпускается новая, старая отзывается в списке.
+ * Выпущенная ссылка показывается сразу и остаётся видна в списке живых приглашений, пока
+ * приглашение живо: её можно скопировать и позже.
  *
  * Какие роли предложить, решает сервер (`invitableRoles`), а не этот компонент: правило
- * «строго ниже» живёт в одном месте.
+ * «строго ниже» живёт в одном месте. Годятся ли имя и телефон — тоже: отказ приходит с полем,
+ * к которому он относится.
  */
 const props = defineProps<{
   roles: EmployeeInviteResponse['role'][];
   issuing: boolean;
+  /** Отказ, отнесённый к полю формы. */
+  fieldError: { field: InviteIssueField; message: string } | null;
+  /** Отказ не про поле. */
   error: string | null;
   /** Только что выпущенное приглашение. `null` — показывать нечего. */
   issued: EmployeeInviteResponse | null;
 }>();
 
 const emit = defineEmits<{
-  issue: [role: EmployeeInviteResponse['role']];
+  issue: [request: EmployeeInviteRequestBody];
   dismiss: [];
 }>();
 
+const fullName = ref('');
+const phone = ref('');
 const chosen = ref('');
 
 const roleOptions = computed<SelectOption[]>(() =>
   props.roles.map((role) => ({ value: role, label: employeeRoleLabel(role) })),
 );
 
+const NAME_HINT = `Так сотрудник будет виден в списке и в журнале. До ${EMPLOYEE_NAME_MAX_LENGTH} знаков.`;
+const PHONE_HINT = 'Логин для входа. Любой номер: СМС не отправляем.';
+
+const errorFor = (field: InviteIssueField): string | null =>
+  props.fieldError?.field === field ? props.fieldError.message : null;
+
 const submit = (): void => {
   const role = props.roles.find((entry) => entry === chosen.value);
 
   if (role) {
-    emit('issue', role);
+    emit('issue', { role, fullName: fullName.value, phone: phone.value });
   }
 };
 
-/**
- * Скопировано ли. Буфер обмена браузер даёт не везде — на странице без https его нет вовсе,
- * — поэтому ссылка стоит на экране текстом и выделяется руками, а кнопка лишь экономит жест.
- */
-const copyState = ref<'idle' | 'copied' | 'failed'>('idle');
-
+// Форма очищается, когда ссылка выпущена: следующее приглашение — другому человеку.
 watch(
   () => props.issued?.inviteId,
-  () => {
-    copyState.value = 'idle';
+  (inviteId) => {
+    if (inviteId) {
+      fullName.value = '';
+      phone.value = '';
+      chosen.value = '';
+    }
   },
 );
-
-const copy = async (): Promise<void> => {
-  if (!props.issued) {
-    return;
-  }
-
-  try {
-    await navigator.clipboard.writeText(props.issued.link);
-    copyState.value = 'copied';
-  } catch {
-    copyState.value = 'failed';
-  }
-};
-
-const COPY_LABELS: Record<typeof copyState.value, string> = {
-  idle: 'Скопировать',
-  copied: 'Скопировано',
-  failed: 'Не скопировалось — выделите ссылку',
-};
 </script>
 
 <template>
   <MoleculesSectionPanel
     title="Пригласить сотрудника"
-    note="Приглашать можно роль ниже своей. Ссылка одноразовая, живёт 48 часов и показывается один раз."
+    note="Приглашать можно роль ниже своей. Ссылка одноразовая и живёт 48 часов; пока жива, её можно скопировать в списке ниже."
   >
     <div class="space-y-4">
       <div v-if="issued" class="space-y-3 rounded-md border border-amber-200 bg-amber-50 p-3">
         <p class="text-sm text-slate-900">
-          Ссылка для роли «{{ employeeRoleLabel(issued.role) }}», действует до
-          {{ formatDate(issued.expiresAt) }}. Больше её не покажет никто — отправьте сейчас.
+          Ссылка для «{{ issued.fullName }}», {{ formatPhone(issued.phoneE164).display }}, роль
+          «{{ employeeRoleLabel(issued.role) }}». Действует до {{ formatDateTime(issued.expiresAt) }}.
         </p>
-        <p class="font-mono text-xs break-all text-slate-700 select-all">{{ issued.link }}</p>
-        <div class="flex flex-wrap gap-3">
-          <AtomsActionButton :label="COPY_LABELS[copyState]" tone="primary" @click="copy" />
-          <AtomsActionButton label="Закрыть" @click="emit('dismiss')" />
-        </div>
+        <MoleculesCopyableLink :link="issued.link">
+          <template #actions>
+            <AtomsActionButton label="Закрыть" @click="emit('dismiss')" />
+          </template>
+        </MoleculesCopyableLink>
       </div>
 
-      <div class="flex flex-wrap items-end gap-3">
-        <label class="block min-w-56 flex-1">
-          <span class="mb-1 block text-sm font-medium text-slate-700">Роль</span>
-          <AtomsSelectInput v-model="chosen" :options="roleOptions">
-            <option value="">Выберите роль</option>
-          </AtomsSelectInput>
-        </label>
-        <AtomsActionButton
-          :label="issuing ? 'Выпускаем…' : 'Пригласить'"
-          tone="primary"
-          :disabled="issuing || chosen === ''"
-          @click="submit"
-        />
-      </div>
+      <form class="space-y-4" @submit.prevent="submit">
+        <div class="grid gap-4 sm:grid-cols-2">
+          <MoleculesFormField
+            v-model="fullName"
+            label="Имя"
+            type="text"
+            autocomplete="off"
+            :hint="NAME_HINT"
+            :error="errorFor('fullName')"
+            required
+          />
+          <MoleculesFormField
+            v-model="phone"
+            label="Телефон"
+            type="tel"
+            autocomplete="off"
+            placeholder="+998 90 123 45 67"
+            :hint="PHONE_HINT"
+            :error="errorFor('phone')"
+            required
+          />
+        </div>
+
+        <div class="flex flex-wrap items-end gap-3">
+          <label class="block min-w-56 flex-1">
+            <span class="mb-1 block text-sm font-medium text-slate-700">Роль</span>
+            <AtomsSelectInput v-model="chosen" :options="roleOptions" required>
+              <option value="">Выберите роль</option>
+            </AtomsSelectInput>
+          </label>
+          <AtomsSubmitButton :label="issuing ? 'Выпускаем…' : 'Пригласить'" :disabled="issuing" />
+        </div>
+      </form>
 
       <p v-if="error" class="text-sm text-red-700">{{ error }}</p>
     </div>

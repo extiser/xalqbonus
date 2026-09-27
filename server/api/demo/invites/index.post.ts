@@ -1,5 +1,5 @@
 import { DemoInviteLabelEmptyError, issueDemoInvite } from '#server/services/demo/issueDemoInvite';
-import { BotUnavailableError } from '#server/services/employees/issueInvite';
+import { BotUnavailableError } from '#server/services/employees/botUnavailableError';
 import { requireEmployeeRole } from '#server/utils/employeeAuth';
 import { DEMO_EDITOR_ROLES } from '#shared/access';
 import type { DemoInviteResponse } from '#shared/types/demo';

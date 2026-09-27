@@ -1,12 +1,16 @@
 import { db } from '#server/db';
-import type { EmployeeRole } from '#server/generated/prisma/enums';
+import type { EmployeeAccessLinkKind, EmployeeRole } from '#server/generated/prisma/enums';
+import { insertEmployeeInvite } from '#server/repositories/employeeInvites';
+import { INVITE_LIFETIME_MS } from '#server/services/employees/config';
+import { issueAccessLinkWithin } from '#server/services/employees/issueAccessLink';
+import { createInviteToken, hashInviteToken } from '#server/services/employees/inviteToken';
 
 /**
  * Фикстуры и уборка для тестов доступа сотрудников.
  *
  * Тесты ходят в настоящую базу, а не в заглушку, по той же причине, что тесты ядра баллов:
  * проверяются ровно те вещи, которых в заглушке нет — уникальность телефона и Telegram,
- * `CHECK` на способ входа, условие «принять можно только непринятое» внутри `UPDATE`.
+ * `CHECK` на токен живой ссылки, блокировка строки при принятии и использовании ссылки.
  *
  * Уборка идёт по заведённым здесь учёткам, а не `TRUNCATE` по таблицам: база общая
  * с остальными тестами и с разведкой.
@@ -43,8 +47,9 @@ export const nextTestTelegramUserId = (): bigint => {
 };
 
 /**
- * Телефоны фикстур: канонический вид `+998` плюс девять цифр, иначе нормализация
- * их не пропустит. Начало отсчёта случайное — по той же причине, что у идентификаторов.
+ * Телефоны фикстур: канонический вид `+998` плюс девять цифр — так их пропускает и водительская
+ * нормализация, и нормализация логина. Начало отсчёта случайное — по той же причине,
+ * что у идентификаторов.
  */
 let lastPhoneSuffix = 100_000_000 + Math.floor(Math.random() * 800_000_000);
 
@@ -102,6 +107,53 @@ export const readTestEmployee = async (employeeId: string) =>
 
 export const readInviteById = async (inviteId: string) =>
   db.employeeInvite.findUnique({ where: { id: inviteId } });
+
+export type InsertTestInviteInput = {
+  invitedById: string;
+  role?: 'admin' | 'manager';
+  fullName?: string;
+  phoneE164?: string;
+  expiresAt?: Date;
+};
+
+/**
+ * Приглашение прямо в базу, в обход `issueInvite`: тесту принятия нужен срок в прошлом
+ * и телефон, который выпуск отклонил бы, — а проверяет он то, что решает принятие по строке.
+ */
+export const insertTestInvite = async (
+  input: InsertTestInviteInput,
+): Promise<{ token: string; inviteId: string; phoneE164: string }> => {
+  const token = createInviteToken();
+  const phoneE164 = input.phoneE164 ?? nextTestPhone();
+  const invite = await insertEmployeeInvite({
+    role: input.role ?? 'manager',
+    fullName: input.fullName ?? 'Приглашённый Сотрудник',
+    phoneE164,
+    token,
+    tokenHash: hashInviteToken(token),
+    invitedById: input.invitedById,
+    expiresAt: input.expiresAt ?? new Date(Date.now() + INVITE_LIFETIME_MS),
+  });
+
+  return { token, inviteId: invite.id, phoneE164 };
+};
+
+/** Ссылка к учётке — тем же выпуском, что у сервисов, со своим сроком. */
+export const issueTestAccessLink = async (
+  employeeId: string,
+  kind: EmployeeAccessLinkKind,
+  lifetimeMs: number,
+  now: Date = new Date(),
+): Promise<string> => {
+  const issued = await db.$transaction((transaction) =>
+    issueAccessLinkWithin(transaction, { employeeId, kind, issuedById: employeeId, lifetimeMs, now }),
+  );
+
+  return issued.token;
+};
+
+export const readAccessLinkByToken = async (token: string) =>
+  db.employeeAccessLink.findUnique({ where: { tokenHash: hashInviteToken(token) } });
 
 /** Учётка по отправителю апдейта — «завелась ли она вообще» без знания её идентификатора. */
 export const findTestEmployeeByTelegram = async (telegramUserId: bigint) =>
@@ -177,8 +229,8 @@ export const setTestProfilePhone = async (profileId: string, phoneE164: string):
 /**
  * Убирает учётки, заведённые тестом, и всё, что на них ссылается.
  *
- * Приглашения уходят первыми: у них внешние ключи на учётку с обеих сторон — и выпустивший,
- * и заведённый.
+ * Приглашения и ссылки к учётке уходят первыми: у них внешние ключи на учётку с обеих
+ * сторон — и выпустивший, и заведённый.
  */
 export const cleanupTestEmployees = async (): Promise<void> => {
   const linkIds = [...createdLinkIds];
@@ -204,6 +256,11 @@ export const cleanupTestEmployees = async (): Promise<void> => {
   await db.$executeRaw`
     DELETE FROM xb.employee_invites
      WHERE "invited_by_id" = ANY(${employeeIds}::uuid[])
+        OR "employee_id" = ANY(${employeeIds}::uuid[])
+  `;
+  await db.$executeRaw`
+    DELETE FROM xb.employee_access_links
+     WHERE "issued_by_id" = ANY(${employeeIds}::uuid[])
         OR "employee_id" = ANY(${employeeIds}::uuid[])
   `;
   await db.$executeRaw`DELETE FROM xb.employees WHERE "id" = ANY(${employeeIds}::uuid[])`;

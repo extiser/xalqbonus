@@ -23,8 +23,19 @@ const MINIAPP_PATH = '/app';
 /** Служебная страница макетов (`app/pages/design/`) — только в разработке. */
 const DESIGN_PATH = '/design';
 
+/**
+ * Страницы одноразовых ссылок (issue #267): приглашение и «задать пароль». Открывший их входа
+ * не имеет — учётки ещё нет или пароль сброшен, — и доказывает себя токеном в адресе, который
+ * проверяют ручки этих страниц.
+ */
+const LINK_PAGE_PREFIXES = ['/invite/', '/set-password/'] as const;
+
 export default defineNuxtRouteMiddleware(async (to) => {
   if (to.path === LOGIN_PATH || to.path === MINIAPP_PATH || to.path.startsWith(`${MINIAPP_PATH}/`)) {
+    return;
+  }
+
+  if (LINK_PAGE_PREFIXES.some((prefix) => to.path.startsWith(prefix))) {
     return;
   }
 

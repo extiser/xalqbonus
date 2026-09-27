@@ -1,12 +1,11 @@
 /**
- * Контракт ручек сотрудников: вход в веб, приглашения, пароль.
+ * Контракт ручек сотрудников: вход в веб, приглашения, пароль, привязка Telegram.
  *
  * Типы лежат в `shared/`, потому что у них два потребителя — обработчик и разметка,
  * и второе описание тех же полей разошлось бы с первым на ближайшей правке.
  *
- * Ни в одном ответе нет ни хеша пароля, ни токена приглашения, кроме единственного места,
- * где токен и выпускается: ссылка показывается один раз, и восстановить её неоткуда —
- * в базе лежит только её хеш.
+ * Хеша пароля нет ни в одном ответе. Ссылки с токеном приезжают, пока живы, и только тому,
+ * кто вправе их выпустить (issue #267).
  */
 
 import type { EmployeeRole } from '../../server/generated/prisma/enums';
@@ -39,16 +38,76 @@ export type EmployeeLogoutResponse = {
 
 export type EmployeeInviteRequestBody = {
   role: EmployeeRole;
+  /** Имя будущей учётки: так сотрудник виден в списке и в журнале. */
+  fullName: string;
+  /** Логин для входа. Любой номер: СМС не отправляем. */
+  phone: string;
 };
 
-/** Выпущенное приглашение. Единственный ответ, содержащий готовую ссылку. */
+/** Выпущенное приглашение. Ссылка ведёт на страницу веба `/invite/<токен>`. */
 export type EmployeeInviteResponse = {
   inviteId: string;
   role: EmployeeRole;
+  fullName: string;
+  /** Канонический вид — тот, которым сотрудник будет входить. */
+  phoneE164: string;
   /** ISO-8601. Через 48 часов ссылка перестаёт работать. */
   expiresAt: string;
-  /** Показывается один раз: второй раз её не отдаст никто, включая нас. */
   link: string;
+};
+
+/** Чем кончилось приглашение, по которому уже не завести учётку. */
+export type EmployeeInviteDeadOutcome = 'not_found' | 'expired' | 'accepted' | 'revoked';
+
+/** Приглашение по токену — странице `/invite/<токен>`, без входа. */
+export type EmployeeInviteLookupResponse =
+  | {
+      outcome: 'live';
+      fullName: string;
+      role: EmployeeRole;
+      phoneE164: string;
+      /** ISO-8601. */
+      expiresAt: string;
+    }
+  | { outcome: EmployeeInviteDeadOutcome };
+
+export type EmployeeInviteAcceptBody = {
+  token: string;
+  password: string;
+};
+
+/** Чем кончилась ссылка к учётке, которой больше нельзя воспользоваться. */
+export type EmployeeAccessLinkDeadOutcome = 'not_found' | 'expired' | 'used' | 'revoked';
+
+/** Ссылка «задать пароль» по токену — странице `/set-password/<токен>`, без входа. */
+export type EmployeePasswordLinkLookupResponse =
+  | {
+      outcome: 'live';
+      fullName: string;
+      phoneE164: string;
+      /** ISO-8601. */
+      expiresAt: string;
+    }
+  | { outcome: EmployeeAccessLinkDeadOutcome };
+
+export type EmployeePasswordLinkConsumeBody = {
+  token: string;
+  password: string;
+};
+
+/** Живая ссылка: адрес и срок. */
+export type EmployeeLiveLink = {
+  link: string;
+  /** ISO-8601. */
+  expiresAt: string;
+};
+
+/** Привязка Telegram — странице `/password`. */
+export type EmployeeTelegramLinkResponse = {
+  /** Telegram привязан: приложение сотрудника открывается в боте. */
+  bound: boolean;
+  /** Живая ссылка привязки. `null` — не выпускали, истекла или Telegram уже привязан. */
+  link: EmployeeLiveLink | null;
 };
 
 export type EmployeeInviteRevokeResponse = {
@@ -86,8 +145,13 @@ export type EmployeeAccount = {
   phoneE164: string;
   /** Учётка выключена. Закрепить её за офисом можно, но в списке это видно. */
   disabled: boolean;
-  /** Пароль задан. Нет — сбрасывать нечего, а сотрудник задаёт его в Mini App. */
+  /** Пароль задан. Нет — только что сброшен или учётка демо. */
   passwordSet: boolean;
+  /**
+   * Живая ссылка «задать пароль» (issue #267) — только тому, кто вправе сбросить пароль этой
+   * учётке: ссылкой задают пароль и входят под этой учёткой.
+   */
+  passwordLink: EmployeeLiveLink | null;
   /** Закреплённые офисы из `employee_offices`. */
   offices: EmployeeAccountOffice[];
   /**
@@ -107,10 +171,13 @@ export type EmployeeAccountsResponse = {
   invitableRoles: EmployeeRole[];
 };
 
-/** Висящее приглашение: ссылки в нём нет — она показывается один раз при выпуске. */
+/** Висящее приглашение. */
 export type EmployeePendingInvite = {
   inviteId: string;
   role: EmployeeRole;
+  /** Пусто у выпущенных до приёма в вебе. */
+  fullName: string | null;
+  phoneE164: string | null;
   invitedByName: string;
   /** ISO-8601. */
   createdAt: string;
@@ -118,6 +185,11 @@ export type EmployeePendingInvite = {
   expiresAt: string;
   /** Смотрящий вправе отозвать: роль приглашения строго ниже его роли. */
   revocable: boolean;
+  /**
+   * Ссылка приглашения (issue #267) — тому, кто вправе её выпустить (`revocable`). `null` —
+   * права нет или токена нет: выпущено до того, как ссылки стали хранить.
+   */
+  link: string | null;
 };
 
 export type EmployeeInvitesResponse = {
@@ -129,8 +201,14 @@ export type EmployeeDisabledResponse = {
   disabled: boolean;
 };
 
+/**
+ * Пароля у учётки больше нет, выданные cookie погашены. Сам пароль не показывается никому:
+ * новый сотрудник задаёт сам по ссылке, которую ему пересылают (issue #267).
+ */
 export type EmployeePasswordResetResponse = {
   employeeId: string;
-  /** Пароля у учётки больше нет, выданные cookie погашены. Сам пароль не показывается никому. */
-  passwordReset: true;
+  /** Страница `/set-password/<токен>`. */
+  link: string;
+  /** ISO-8601. */
+  expiresAt: string;
 };
