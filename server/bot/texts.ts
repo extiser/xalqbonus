@@ -292,7 +292,15 @@ export type TextKey =
   | 'invite_contact_not_own'
   | 'invite_phone_invalid'
   | 'invite_driver_link_exists'
-  | 'invite_employee_exists';
+  | 'invite_employee_exists'
+  | 'demo_invite_accepted'
+  | 'demo_invite_unknown'
+  | 'demo_invite_used'
+  | 'demo_invite_revoked'
+  | 'demo_invite_expired'
+  | 'demo_invite_telegram_linked'
+  | 'demo_invite_telegram_employee'
+  | 'demo_invite_no_source';
 
 const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   /**
@@ -1676,6 +1684,43 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   invite_employee_exists: {
     ru: 'На этот аккаунт Telegram или на этот номер уже заведена учётная запись сотрудника. Откройте приложение кнопкой меню — вы уже в системе.',
     uz: "Bu Telegram akkaunti yoki bu raqam uchun xodim hisobi allaqachon mavjud. Menyu tugmasi orqali ilovani oching — siz tizimdasiz.",
+  },
+
+  // Приглашение в демо (issue #252). Отвечает бот всегда по-русски: у зрителя до принятия
+  // языка нет, а показывает демо владелец, который с ним и разговаривает. Узбекский —
+  // на будущее, вычитка переводчиком позже. Ответ на ручки включения зрителя берёт те же
+  // тексты: отказ один, где бы его ни встретили.
+  demo_invite_accepted: {
+    ru: 'Вы в демо Xalq Bonus. Откройте приложение — вас ждёт демо-водитель с баллами.',
+    uz: "Siz Xalq Bonus demosidasiz. Ilovani oching — sizni ballari bor demo-haydovchi kutmoqda.",
+  },
+  demo_invite_unknown: {
+    ru: 'Ссылка не работает. Попросите новую.',
+    uz: "Havola ishlamayapti. Yangisini so'rang.",
+  },
+  demo_invite_used: {
+    ru: 'Эта ссылка уже использована. Попросите новую.',
+    uz: "Bu havoladan allaqachon foydalanilgan. Yangisini so'rang.",
+  },
+  demo_invite_revoked: {
+    ru: 'Ссылку отозвали. Попросите новую.',
+    uz: "Havola bekor qilingan. Yangisini so'rang.",
+  },
+  demo_invite_expired: {
+    ru: 'Ссылка устарела — она действует сутки. Попросите новую.',
+    uz: "Havola eskirgan — u bir kun amal qiladi. Yangisini so'rang.",
+  },
+  demo_invite_telegram_linked: {
+    ru: 'Этот Telegram уже участвует в программе как водитель — демо на него не завести.',
+    uz: "Bu Telegram dasturda haydovchi sifatida qatnashmoqda — unga demo ochib bo'lmaydi.",
+  },
+  demo_invite_telegram_employee: {
+    ru: 'Этот Telegram — сотрудника Xalq Taxi, демо на него не завести.',
+    uz: "Bu Telegram Xalq Taxi xodimiga tegishli — unga demo ochib bo'lmaydi.",
+  },
+  demo_invite_no_source: {
+    ru: 'Демо сейчас не завести. Сообщите тому, кто прислал ссылку.',
+    uz: "Hozir demo ochib bo'lmaydi. Havolani yuborgan kishiga xabar bering.",
   },
 };
 

@@ -2,6 +2,7 @@ import { consola } from 'consola';
 import { Bot, webhookCallback } from 'grammy';
 import type { Update } from 'grammy/types';
 import type { BotConfig } from '#server/bot/config';
+import { registerDemoInviteHandlers } from '#server/bot/demoInvite';
 import { registerEmployeeInviteHandlers } from '#server/bot/employeeInvite';
 import { registerGreetingHandlers } from '#server/bot/greeting';
 
@@ -47,6 +48,10 @@ export const registerBotHandlers = (bot: Bot): void => {
 
     await next();
   });
+
+  // Приглашение в демо: `/start demo_<токен>`, принимается сразу, без контакта. Идёт перед
+  // приглашением сотрудника и уступает дальше всё, что не про демо (server/bot/demoInvite.ts).
+  registerDemoInviteHandlers(bot);
 
   // Приглашение сотрудника: `/start inv_<токен>` и контакт следом. Идёт первым и уступает
   // приветствию всё, что к приглашению не относится, — и `/start` без параметра, и контакт

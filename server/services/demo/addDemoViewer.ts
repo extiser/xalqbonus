@@ -3,36 +3,22 @@ import { consola } from 'consola';
 import { db } from '#server/db';
 import type { Prisma } from '#server/generated/prisma/client';
 import {
-  findDemoSource,
-  findDemoViewer,
-  insertDemoLicense,
   insertDemoLink,
-  insertDemoParkProfile,
-  insertDemoPerson,
   insertDemoViewer,
   lockDemoViewer,
   updateDemoViewerEnabled,
 } from '#server/repositories/demo';
 import { findEmployeeByTelegramUserId } from '#server/repositories/employees';
 import { findDriverAccountByPerson } from '#server/repositories/points';
-import { findActiveLinkByTelegramOrPhone, upsertPersonSettings } from '#server/repositories/programMembership';
-import { ensureDriverAccount } from '#server/services/points/ensureDriverAccount';
+import { findActiveLinkByTelegramOrPhone } from '#server/repositories/programMembership';
+import { createDemoDriver, NoDemoSourceError } from '#server/services/demo/createDemoDriver';
 import { getSystemAccount } from '#server/services/points/getSystemAccount';
-import { buildDemoGrantIdempotencyKey } from '#server/services/points/idempotencyKey';
-import { transferPoints } from '#server/services/points/transfer';
 
 /**
  * Внесение демо-зрителя (issue #205).
  *
- * Новому зрителю заводится свой демо-водитель. У живого участника-источника берутся только
- * условия работы профиля; имя, позывной, удостоверение и машина выдуманы, телефона нет вовсе:
- * по демо-водителю живого не узнать.
- *
- * Баланс — фиксированный, `DEMO_DRIVER_OPENING_BALANCE`, и ложится не записью в счёт, а переводом
- * с `emission` своей причиной `demo_grant` (issue #212): не `opening`, иначе итог переноса
- * посчитал бы выдуманные баллы перенесёнными. Ключ — от демо-водителя, поэтому второго
- * перевода на один счёт не бывает. Заведённые до #212 с `opening` не переписываются: итоги
- * отсекают их по `persons.is_demo`.
+ * Новому зрителю заводится свой демо-водитель (`createDemoDriver`): имя, позывной и баланс
+ * у всех зрителей одни — `DEMO_DRIVER_*`, — и он сразу участник программы.
  *
  * Демо-водитель привязан к Telegram зрителя обычной строкой `telegram_links`: дальше зритель
  * для приложения, бота, уведомлений и рассылок — обычный участник.
@@ -42,6 +28,8 @@ import { transferPoints } from '#server/services/points/transfer';
  *
  * Всё одной транзакцией: демо-водитель без привязки — выдуманный человек, до которого
  * не дойти, а привязка без строки списка — Telegram, который зрителем себя не знает.
+ * Транзакцию может принести вызывающий (`addDemoViewerWithin`): приём приглашения в демо
+ * решает по строке приглашения и пишет зрителя одной транзакцией (issue #252).
  */
 const log = consola.withTag('demo:viewer');
 
@@ -54,12 +42,6 @@ export const DEMO_DRIVER_CALLSIGN = 'ДЕМО';
  * не копируется — чужой баланс, показанный клиенту, говорил бы о живом водителе.
  */
 export const DEMO_DRIVER_OPENING_BALANCE = 5000;
-
-/** Откуда пришло участие — рядом с `telegram`, `legacy_import`, `operator`. */
-const DEMO_JOINED_SOURCE = 'demo';
-
-/** Сколько знаков `person_id` идёт в номер удостоверения демо-водителя. */
-const DEMO_LICENSE_ID_LENGTH = 8;
 
 export type AddDemoViewerRequest = {
   telegramUserId: bigint;
@@ -83,59 +65,68 @@ export type AddDemoViewerResult =
   | { outcome: 'no_source' };
 
 /** Исходы, после которых у зрителя есть действующий демо-водитель. */
-type DemoViewerAdded = Extract<AddDemoViewerResult, { personId: string }>;
-
-/** Копировать не с кого — отказ изнутри транзакции, чтобы она откатилась целиком. */
-class NoDemoSourceError extends Error {
-  constructor() {
-    super('нет участника программы с работающим профилем — копировать демо-водителю не с кого');
-  }
-}
+export type DemoViewerAdded = Extract<AddDemoViewerResult, { personId: string }>;
 
 const balanceOf = async (personId: string, client: Prisma.TransactionClient): Promise<bigint> =>
   (await findDriverAccountByPerson(personId, client))?.balance ?? 0n;
 
-/** Новый демо-водитель с условиями работы источника. Возвращает его и зачисленный баланс. */
-const createDemoDriver = async (
-  client: Prisma.TransactionClient,
-  emissionAccountId: string,
-  now: Date,
-): Promise<{ personId: string; balance: bigint }> => {
-  const source = await findDemoSource(client);
+export type AddDemoViewerWithinRequest = {
+  telegramUserId: bigint;
+  /** Подпись, уже обрезанная и непустая. */
+  label: string;
+  now: Date;
+  emissionAccountId: string;
+};
 
-  if (!source) {
-    throw new NoDemoSourceError();
+/** Отказы, после которых ничего не записано. */
+export type DemoViewerRefused = Extract<AddDemoViewerResult, { outcome: 'telegram_linked' | 'telegram_employee' }>;
+
+/**
+ * Внесение зрителя в транзакции вызывающего. Копировать не с кого — `NoDemoSourceError`:
+ * транзакция обязана откатиться целиком, и решает это тот, кто её открыл.
+ */
+export const addDemoViewerWithin = async (
+  client: Prisma.TransactionClient,
+  request: AddDemoViewerWithinRequest,
+): Promise<DemoViewerAdded | DemoViewerRefused> => {
+  const { telegramUserId, label, now } = request;
+  const viewer = await lockDemoViewer(telegramUserId, client);
+
+  // У действующего зрителя активная привязка есть, и она его собственная — к демо-водителю.
+  // Проверки одной роли — для всех остальных: зритель не бывает живым участником или сотрудником.
+  if (viewer && viewer.disabledAt === null) {
+    await updateDemoViewerEnabled(telegramUserId, label, client);
+
+    return { outcome: 'label_updated', personId: viewer.personId, balance: await balanceOf(viewer.personId, client) };
   }
 
-  const personId = await insertDemoPerson(client);
+  if (await findActiveLinkByTelegramOrPhone(telegramUserId, null, client)) {
+    return { outcome: 'telegram_linked' };
+  }
 
-  await insertDemoLicense(personId, `DEMO-${personId.slice(0, DEMO_LICENSE_ID_LENGTH)}`, client);
-  await insertDemoParkProfile(
-    {
-      personId,
-      sourceProfileId: source.profileId,
-      firstName: DEMO_DRIVER_FIRST_NAME,
-      callsign: DEMO_DRIVER_CALLSIGN,
-      now,
-    },
-    client,
-  );
-  await upsertPersonSettings([{ personId, language: 'ru', joinedAt: now }], DEMO_JOINED_SOURCE, client);
+  if (await findEmployeeByTelegramUserId(telegramUserId, client)) {
+    return { outcome: 'telegram_employee' };
+  }
 
-  const account = await ensureDriverAccount(personId, client);
+  if (viewer) {
+    await insertDemoLink(viewer.personId, telegramUserId, client);
+    await updateDemoViewerEnabled(telegramUserId, label, client);
 
-  await transferPoints({
-    reason: 'demo_grant',
-    idempotencyKey: buildDemoGrantIdempotencyKey(personId),
-    amount: DEMO_DRIVER_OPENING_BALANCE,
-    fromAccountId: emissionAccountId,
-    toAccountId: account.id,
-    occurredAt: now,
-    context: { actor: 'demo' },
-    client,
+    return { outcome: 'enabled', personId: viewer.personId, balance: await balanceOf(viewer.personId, client) };
+  }
+
+  const driver = await createDemoDriver(client, request.emissionAccountId, {
+    firstName: DEMO_DRIVER_FIRST_NAME,
+    callsign: DEMO_DRIVER_CALLSIGN,
+    balance: DEMO_DRIVER_OPENING_BALANCE,
+    programMember: true,
+    now,
   });
 
-  return { personId, balance: BigInt(DEMO_DRIVER_OPENING_BALANCE) };
+  await insertDemoLink(driver.personId, telegramUserId, client);
+  await insertDemoViewer({ telegramUserId, label, personId: driver.personId }, client);
+
+  return { outcome: 'created', ...driver };
 };
 
 export const addDemoViewer = async (request: AddDemoViewerRequest): Promise<AddDemoViewerResult> => {
@@ -145,62 +136,26 @@ export const addDemoViewer = async (request: AddDemoViewerRequest): Promise<AddD
     return { outcome: 'label_empty' };
   }
 
-  const now = request.now ?? new Date();
   const telegramUserId = request.telegramUserId;
-  const current = await findDemoViewer(telegramUserId);
-
-  // У действующего зрителя активная привязка есть, и она его собственная — к демо-водителю.
-  // Проверки одной роли — для всех остальных: зритель не бывает живым участником или сотрудником.
-  if (current === null || current.disabledAt !== null) {
-    if (await findActiveLinkByTelegramOrPhone(telegramUserId, null)) {
-      return { outcome: 'telegram_linked' };
-    }
-
-    if (await findEmployeeByTelegramUserId(telegramUserId)) {
-      return { outcome: 'telegram_employee' };
-    }
-  }
-
   const emission = await getSystemAccount('emission');
 
   try {
-    const result = await db.$transaction(async (transaction): Promise<DemoViewerAdded> => {
-      const viewer = await lockDemoViewer(telegramUserId, transaction);
+    const result = await db.$transaction((transaction) =>
+      addDemoViewerWithin(transaction, {
+        telegramUserId,
+        label,
+        now: request.now ?? new Date(),
+        emissionAccountId: emission.id,
+      }),
+    );
 
-      if (viewer && viewer.disabledAt === null) {
-        await updateDemoViewerEnabled(telegramUserId, label, transaction);
-
-        return {
-          outcome: 'label_updated',
-          personId: viewer.personId,
-          balance: await balanceOf(viewer.personId, transaction),
-        };
-      }
-
-      if (viewer) {
-        await insertDemoLink(viewer.personId, telegramUserId, transaction);
-        await updateDemoViewerEnabled(telegramUserId, label, transaction);
-
-        return {
-          outcome: 'enabled',
-          personId: viewer.personId,
-          balance: await balanceOf(viewer.personId, transaction),
-        };
-      }
-
-      const driver = await createDemoDriver(transaction, emission.id, now);
-
-      await insertDemoLink(driver.personId, telegramUserId, transaction);
-      await insertDemoViewer({ telegramUserId, label, personId: driver.personId }, transaction);
-
-      return { outcome: 'created', ...driver };
-    });
-
-    log.info('демо-зритель внесён', {
-      telegramUserId: telegramUserId.toString(),
-      outcome: result.outcome,
-      personId: result.personId,
-    });
+    if ('personId' in result) {
+      log.info('демо-зритель внесён', {
+        telegramUserId: telegramUserId.toString(),
+        outcome: result.outcome,
+        personId: result.personId,
+      });
+    }
 
     return result;
   } catch (error) {

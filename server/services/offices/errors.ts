@@ -44,3 +44,24 @@ export class UnknownOfficeEmployeeError extends OfficeError {
     super(`сотрудников ${employeeIds.join(', ')} нет`);
   }
 }
+
+/**
+ * Сотрудник и офис с разных сторон (issue #252): демо-сотрудник закрепляется только
+ * за демо-офисом, живой — только за живым.
+ *
+ * Демо-менеджер за живым офисом получил бы его стойку: ручки стойки открыты ему через
+ * `allowDemo`, а ограничивают его только его офисы. Живой сотрудник за демо-офисом выдавал
+ * бы демо-заказы как настоящие.
+ */
+export class OfficeSideMismatchError extends OfficeError {
+  constructor(
+    public readonly officeIds: string[],
+    public readonly employeeIds: string[],
+  ) {
+    super(`офисы ${officeIds.join(', ')} и сотрудники ${employeeIds.join(', ')} с разных сторон демо`);
+  }
+}
+
+/** Текст отказа — один на обе двери закрепления: со стороны офиса и со стороны демо-менеджера. */
+export const OFFICE_SIDE_MISMATCH_MESSAGE =
+  'Демо-сотрудника закрепляют только за демо-офисом, живого — только за живым.';

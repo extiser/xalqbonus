@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { db } from '#server/db';
 import { Prisma } from '#server/generated/prisma/client';
 import type { DemoRole } from '#server/generated/prisma/enums';
+import { COMPLETED_TRIP_STATUS } from '#server/utils/tripStatus';
 
 /**
  * Демо-доступ (issue #205): список демо-зрителей и заведение демо-водителя.
@@ -332,4 +333,185 @@ export const findDemoFlag = async (
   `;
 
   return rows[0]?.isDemo ?? null;
+};
+
+// ---------------------------------------------------------------------------
+// Раздел «Демо» (issue #252)
+// ---------------------------------------------------------------------------
+
+export type DemoViewerListRow = DemoViewerRow & {
+  createdAt: Date;
+};
+
+/** Все зрители — действующие и выключенные, свежие первыми. */
+export const listDemoViewers = async (client: Executor = db): Promise<DemoViewerListRow[]> =>
+  client.$queryRaw<DemoViewerListRow[]>`
+    SELECT ${DEMO_VIEWER_COLUMNS},
+           "created_at" AS "createdAt"
+      FROM xb.demo_viewers
+     ORDER BY "created_at" DESC
+  `;
+
+export type DemoDriverListRow = {
+  personId: string;
+  firstName: string | null;
+  lastName: string | null;
+  callsign: string | null;
+  /** Нет водительского счёта — пусто; у демо-водителя счёт заводится вместе с ним. */
+  balance: bigint | null;
+  programMember: boolean;
+  lastTripAt: Date | null;
+  /** Подпись зрителя. Пусто — водитель сгенерирован. */
+  viewerLabel: string | null;
+};
+
+/**
+ * Демо-водители раздела: все с `is_demo`, кроме спрятанных. Водители выключенных зрителей
+ * тоже здесь — их прячет выключение от зрителя, а не от владельца.
+ *
+ * Профиль у демо-водителя один — заведённый вместе с ним, — и имя с позывным берутся из него.
+ * Сначала водители зрителей, потом сгенерированные по времени заведения.
+ */
+export const listDemoDrivers = async (client: Executor = db): Promise<DemoDriverListRow[]> =>
+  client.$queryRaw<DemoDriverListRow[]>`
+    SELECT person."id"                         AS "personId",
+           profile."first_name"                AS "firstName",
+           profile."last_name"                 AS "lastName",
+           profile."callsign",
+           account."balance",
+           (settings."person_id" IS NOT NULL)  AS "programMember",
+           activity."lastTripAt",
+           viewer."label"                      AS "viewerLabel"
+      FROM xb.persons AS person
+      LEFT JOIN LATERAL (
+           SELECT candidate."first_name", candidate."last_name", candidate."callsign"
+             FROM xb.park_profiles AS candidate
+            WHERE candidate."person_id" = person."id"
+            ORDER BY candidate."api_updated_at" DESC
+            LIMIT 1
+      ) AS profile ON TRUE
+      LEFT JOIN LATERAL (
+           SELECT max(trip."ended_at") AS "lastTripAt"
+             FROM xb.trips AS trip
+             JOIN xb.park_profiles AS candidate ON candidate."profile_id" = trip."profile_id"
+            WHERE candidate."person_id" = person."id"
+              AND trip."status" = ${COMPLETED_TRIP_STATUS}
+      ) AS activity ON TRUE
+      LEFT JOIN xb.person_settings AS settings ON settings."person_id" = person."id"
+      LEFT JOIN xb.accounts AS account
+             ON account."person_id" = person."id" AND account."type" = 'driver'
+      LEFT JOIN xb.demo_viewers AS viewer ON viewer."person_id" = person."id"
+     WHERE person."is_demo"
+       AND person."demo_hidden_at" IS NULL
+     ORDER BY (viewer."person_id" IS NULL), person."created_at", person."id"
+  `;
+
+export type DemoDriverLockRow = {
+  isDemo: boolean;
+  /** Водитель зрителя: есть строка `demo_viewers`. */
+  hasViewer: boolean;
+  hiddenAt: Date | null;
+};
+
+/** Человек под спрятать — с блокировкой строки. Пусто — такого нет. */
+export const lockDemoDriver = async (personId: string, client: Executor): Promise<DemoDriverLockRow | null> => {
+  const rows = await client.$queryRaw<DemoDriverLockRow[]>`
+    SELECT person."is_demo"                           AS "isDemo",
+           EXISTS (
+             SELECT 1 FROM xb.demo_viewers AS viewer WHERE viewer."person_id" = person."id"
+           )                                          AS "hasViewer",
+           person."demo_hidden_at"                    AS "hiddenAt"
+      FROM xb.persons AS person
+     WHERE person."id" = ${personId}::uuid
+       FOR UPDATE
+  `;
+
+  return rows[0] ?? null;
+};
+
+export const updateDemoDriverHidden = async (personId: string, hiddenAt: Date, client: Executor): Promise<void> => {
+  await client.$executeRaw`
+    UPDATE xb.persons
+       SET "demo_hidden_at" = ${hiddenAt.toISOString()}::text::timestamptz,
+           "updated_at"     = now()
+     WHERE "id" = ${personId}::uuid
+       AND "is_demo"
+  `;
+};
+
+/**
+ * Ключ блокировки нумерации сгенерированных. Постоянное число, а не имя: транзакционной
+ * рекомендательной блокировке нужен `bigint`, и выбирается он здесь один раз.
+ */
+const DEMO_GENERATOR_LOCK_KEY = 252_000_001;
+
+/**
+ * Нумерация генератора — по одному: два прогона генератора разом иначе оба прочитали бы
+ * один наибольший номер и завели двух «ДЕМО ВОДИТЕЛЬ 7». Держится до конца транзакции.
+ */
+export const lockDemoGenerator = async (client: Executor): Promise<void> => {
+  await client.$executeRaw`SELECT pg_advisory_xact_lock(${DEMO_GENERATOR_LOCK_KEY}::bigint)`;
+};
+
+/**
+ * Наибольший номер среди сгенерированных — включая спрятанных: номер спрятанного второму
+ * не достаётся. Сгенерированный — демо-водитель без строки `demo_viewers`; номер — из имени
+ * профиля `<префикс> <N>`. Ни одного — ноль.
+ */
+export const findMaxGeneratedDemoNumber = async (namePrefix: string, client: Executor): Promise<number> => {
+  const rows = await client.$queryRaw<{ maximum: number | null }[]>`
+    SELECT max(substring(profile."first_name" FROM '[0-9]+$')::int) AS "maximum"
+      FROM xb.park_profiles AS profile
+      JOIN xb.persons AS person ON person."id" = profile."person_id"
+     WHERE person."is_demo"
+       AND NOT EXISTS (
+             SELECT 1 FROM xb.demo_viewers AS viewer WHERE viewer."person_id" = person."id"
+           )
+       AND profile."first_name" LIKE ${`${namePrefix} %`}
+       AND profile."first_name" ~ '[0-9]+$'
+  `;
+
+  return rows[0]?.maximum ?? 0;
+};
+
+export type DemoNamedRow = {
+  id: string;
+  /** Название: у товара, рассылки и акции пусто бывает только у черновика. */
+  name: string | null;
+};
+
+/** Демо-офисы — работающие первыми, как в общем списке. */
+export const listDemoOffices = async (client: Executor = db): Promise<{ id: string; name: string }[]> =>
+  client.$queryRaw<{ id: string; name: string }[]>`
+    SELECT "id", "name"
+      FROM xb.offices
+     WHERE "is_demo"
+     ORDER BY ("archived_at" IS NOT NULL), "name"
+  `;
+
+export type DemoEntitiesRows = {
+  products: DemoNamedRow[];
+  mailings: DemoNamedRow[];
+  segments: DemoNamedRow[];
+  campaigns: DemoNamedRow[];
+};
+
+/** Демо-товары, рассылки, сегменты и акции — свежие первыми, архивные тоже: сводка, а не выбор. */
+export const listDemoEntities = async (client: Executor = db): Promise<DemoEntitiesRows> => {
+  const [products, mailings, segments, campaigns] = await Promise.all([
+    client.$queryRaw<DemoNamedRow[]>`
+      SELECT "id", "name" FROM xb.products WHERE "is_demo" ORDER BY "created_at" DESC
+    `,
+    client.$queryRaw<DemoNamedRow[]>`
+      SELECT "id", "title" AS "name" FROM xb.mailings WHERE "is_demo" ORDER BY "created_at" DESC
+    `,
+    client.$queryRaw<DemoNamedRow[]>`
+      SELECT "id", "name" FROM xb.segments WHERE "is_demo" ORDER BY "created_at" DESC
+    `,
+    client.$queryRaw<DemoNamedRow[]>`
+      SELECT "id", "title" AS "name" FROM xb.campaigns WHERE "is_demo" ORDER BY "created_at" DESC
+    `,
+  ]);
+
+  return { products, mailings, segments, campaigns };
 };

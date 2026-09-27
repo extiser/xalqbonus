@@ -47,7 +47,7 @@ export type DriverSearchCriteria = {
  * строки запроса из кусков: собранный конкатенацией SQL — это то место, где однажды
  * оказывается пользовательский ввод.
  */
-const matchedPersons = (criteria: DriverSearchCriteria): Prisma.Sql => Prisma.sql`
+const matchedBranches = (criteria: DriverSearchCriteria): Prisma.Sql => Prisma.sql`
   SELECT license."person_id" AS "personId"
     FROM xb.person_licenses AS license
    WHERE ${criteria.licenseCanonical}::text IS NOT NULL
@@ -80,6 +80,14 @@ const matchedPersons = (criteria: DriverSearchCriteria): Prisma.Sql => Prisma.sq
      -- Вхождение и без учёта регистра — ровно как у имени: позывные в парке пишутся
      -- как придётся, и требовать точного совпадения значит не находить половину.
      AND profile."callsign" ILIKE '%' || ${criteria.callsignTerm} || '%'
+`;
+
+/** Люди под запрос, кроме спрятанных демо-водителей (issue #252): у живого пусто всегда. */
+const matchedPersons = (criteria: DriverSearchCriteria): Prisma.Sql => Prisma.sql`
+  SELECT found."personId"
+    FROM (${matchedBranches(criteria)}) AS found
+    JOIN xb.persons AS person ON person."id" = found."personId"
+   WHERE person."demo_hidden_at" IS NULL
 `;
 
 export type DriverSearchListRow = {

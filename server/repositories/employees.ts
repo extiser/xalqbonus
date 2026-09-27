@@ -272,6 +272,8 @@ export type EmployeeAccountRow = {
   fullName: string;
   role: EmployeeRole;
   disabledAt: Date | null;
+  /** Демо-сотрудник (issue #205): править его может только владелец (issue #212). */
+  isDemo: boolean;
 };
 
 export type EmployeeDirectoryOfficeRow = {
@@ -286,8 +288,6 @@ export type EmployeeDirectoryRow = EmployeeAccountRow & {
   passwordSet: boolean;
   /** Офисы из `employee_offices`: работающие первыми, архивные последними. */
   offices: EmployeeDirectoryOfficeRow[];
-  /** Демо-сотрудник (issue #205): править его может только владелец (issue #212). */
-  isDemo: boolean;
 };
 
 /**
@@ -332,7 +332,7 @@ export const listEmployeeDirectory = async (
 /**
  * Учётки по списку идентификаторов. Нужна проверке состава офиса: закрепить можно
  * за существующей учёткой, и «столько же строк, сколько спросили» — единственное,
- * что об этом говорит.
+ * что об этом говорит. Признак демо — для проверки стороны офиса (issue #252).
  */
 export const findEmployeesByIds = async (
   employeeIds: string[],
@@ -342,7 +342,8 @@ export const findEmployeesByIds = async (
     SELECT "id",
            "full_name"   AS "fullName",
            "role",
-           "disabled_at" AS "disabledAt"
+           "disabled_at" AS "disabledAt",
+           "is_demo"     AS "isDemo"
       FROM xb.employees
      WHERE "id" = ANY(${employeeIds}::uuid[])
   `;

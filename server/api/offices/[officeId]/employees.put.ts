@@ -1,4 +1,6 @@
 import {
+  OFFICE_SIDE_MISMATCH_MESSAGE,
+  OfficeSideMismatchError,
   UnknownOfficeEmployeeError,
   UnknownOfficeError,
 } from '#server/services/offices/errors';
@@ -72,6 +74,14 @@ export default defineEventHandler(async (event): Promise<OfficeEmployeesResponse
         statusCode: 400,
         statusMessage: 'Bad Request',
         message: 'в списке есть сотрудник, которого больше нет: обновите страницу',
+      });
+    }
+
+    if (error instanceof OfficeSideMismatchError) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Bad Request',
+        message: OFFICE_SIDE_MISMATCH_MESSAGE,
       });
     }
 

@@ -146,6 +146,19 @@ describe('ответ бота на входящее сообщение', () => {
     expect(bot.sent.at(-1)?.text).toBe(text('employee_greeting', 'ru'));
   });
 
+  it('ссылка в демо разбирается своим обработчиком, а не приглашением сотрудника и не приветствием', async () => {
+    const bot = createBotDouble();
+    const telegramUserId = nextTestTelegramUserId();
+
+    await bot.handleUpdate(
+      privateMessageUpdate(telegramUserId, commandContent('/start', 'demo_нет-такого')),
+    );
+
+    // Ответ сразу, без запроса контакта: зритель входит по `from.id` (issue #252).
+    expect(bot.sent.map((message) => message.text)).toEqual([text('demo_invite_unknown', 'ru')]);
+    expect(await findTestEmployeeByTelegram(telegramUserId)).toBeNull();
+  });
+
   it('сотрудник получает своё приветствие, а не водительское', async () => {
     const bot = createBotDouble();
     const { telegramUserId } = await createTestEmployee({ role: 'manager' });
