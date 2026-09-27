@@ -42,14 +42,17 @@ const state = computed(() => toLoadState(status.value));
 
 const issuing = ref(false);
 const issueError = ref<string | null>(null);
-const issued = ref<DemoInviteResponse | null>(null);
+/** Только что выпущенное: его строку страница выделяет, ссылка — в самой строке. */
+const issuedInviteId = ref<string | null>(null);
 
 const issue = async (label: string): Promise<void> => {
   issuing.value = true;
   issueError.value = null;
 
   try {
-    issued.value = await $fetch<DemoInviteResponse>('/api/demo/invites', { method: 'POST', body: { label } });
+    const issued = await $fetch<DemoInviteResponse>('/api/demo/invites', { method: 'POST', body: { label } });
+
+    issuedInviteId.value = issued.invite.inviteId;
     await refresh();
   } catch (error) {
     issueError.value = failureText(error);
@@ -258,11 +261,10 @@ const saveManagerOffices = (officeIds: string[]): Promise<void> =>
         :viewers="overview.viewers"
         :issuing="issuing"
         :issue-error="issueError"
-        :issued="issued"
+        :issued-invite-id="issuedInviteId"
         :busy-key="viewerBusyKey"
         :error="viewerError"
         @issue="issue"
-        @dismiss="issued = null"
         @revoke="revoke"
         @disable="disable"
         @enable="enable"

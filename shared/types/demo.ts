@@ -2,7 +2,8 @@
  * Контракт раздела «Демо» (issue #252): зрители по приглашению, демо-водители, генератор,
  * демо-менеджер и сводка демо-сущностей.
  *
- * Ссылка приглашения есть ровно в одном ответе — выпуска: в базе лежит только хеш токена.
+ * Ссылка приглашения — в ответе выпуска и у живого приглашения в сводке: токен хранится,
+ * пока приглашение живо.
  */
 
 import type { DemoRole } from '../../server/generated/prisma/enums';
@@ -12,6 +13,11 @@ export type DemoInviteSummary = {
   inviteId: string;
   label: string;
   expiresAt: string;
+  /**
+   * Ссылка, пока приглашение живо (решение Руслана 27-09-2026). Пусто у выпущенных до того,
+   * как токен стали хранить, и на машине, где бот не отвечает.
+   */
+  link: string | null;
 };
 
 export type DemoInviteRequestBody = {
@@ -20,7 +26,7 @@ export type DemoInviteRequestBody = {
 
 export type DemoInviteResponse = {
   invite: DemoInviteSummary;
-  /** Ссылка целиком. Показывается один раз. */
+  /** Ссылка целиком. */
   link: string;
 };
 

@@ -86,6 +86,7 @@ const createInvite = async (expiresAt: Date): Promise<string> => {
   const token = createDemoInviteToken();
   const invite = await insertDemoInvite({
     label: 'проверка приглашения',
+    token,
     tokenHash: hashDemoInviteToken(token),
     invitedById: employeeId,
     expiresAt,
@@ -97,6 +98,15 @@ const createInvite = async (expiresAt: Date): Promise<string> => {
 };
 
 const inADay = (): Date => new Date(Date.now() + 24 * 60 * 60 * 1_000);
+
+/** Токен, который лежит у приглашения, — по хешу: ссылку показывают только живому. */
+const readStoredToken = async (token: string): Promise<string | null | undefined> => {
+  const rows = await db.$queryRaw<{ token: string | null }[]>`
+    SELECT "token" FROM xb.demo_invites WHERE "token_hash" = ${hashDemoInviteToken(token)}
+  `;
+
+  return rows[0]?.token;
+};
 
 describe('раздел «Демо»', () => {
   afterEach(async () => {
@@ -269,6 +279,9 @@ describe('раздел «Демо»', () => {
 
     trackTestDemoViewer(first, accepted.personId);
 
+    // Принятие стирает токен: ссылку больше не показать.
+    expect(await readStoredToken(token)).toBeNull();
+
     expect(await readAccountBalance(accepted.personId)).toBe(BigInt(DEMO_DRIVER_OPENING_BALANCE));
     expect(await acceptDemoInvite({ token, telegramUserId: nextTestTelegramUserId() })).toEqual({
       outcome: 'invite_used',
@@ -286,6 +299,8 @@ describe('раздел «Демо»', () => {
     expect(await acceptDemoInvite({ token, telegramUserId: driverTelegram })).toEqual({
       outcome: 'telegram_linked',
     });
+    // Отказ внесения ссылку не гасит — и токен у неё остаётся.
+    expect(await readStoredToken(token)).toBe(token);
 
     const { telegramUserId: employeeTelegram } = await createTestEmployee({ role: 'manager' });
 
@@ -320,6 +335,7 @@ describe('раздел «Демо»', () => {
     `;
 
     expect(await revokeDemoInvite(revokedInvite?.id ?? '')).toBe('revoked');
+    expect(await readStoredToken(revokedToken)).toBeNull();
     expect(await revokeDemoInvite(revokedInvite?.id ?? '')).toBe('not_pending');
     expect(await acceptDemoInvite({ token: revokedToken, telegramUserId: nextTestTelegramUserId() })).toEqual({
       outcome: 'invite_revoked',

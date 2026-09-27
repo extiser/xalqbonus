@@ -13,8 +13,8 @@ import { BotUnavailableError } from '#server/services/employees/issueInvite';
  * Выпуск приглашения в демо (issue #252) — по образцу приглашения сотрудника.
  *
  * Зритель здесь не заводится: он появляется в момент принятия, по `from.id` того, кто открыл
- * ссылку, — Telegram ID руками не вводится нигде. Ссылка возвращается один раз: в базе лежит
- * только хеш токена.
+ * ссылку, — Telegram ID руками не вводится нигде. Токен лежит рядом с хешем, пока приглашение
+ * живо: ссылку показывает и сводка раздела (решение Руслана 27-09-2026).
  */
 
 export class DemoInviteLabelEmptyError extends Error {
@@ -34,7 +34,7 @@ export type IssuedDemoInvite = {
   inviteId: string;
   label: string;
   expiresAt: Date;
-  /** Ссылка целиком. Второй раз её не отдаст никто. */
+  /** Ссылка целиком. Пока приглашение живо, её отдаёт и сводка. */
   link: string;
 };
 
@@ -59,6 +59,7 @@ export const issueDemoInvite = async (request: IssueDemoInviteRequest): Promise<
 
   const invite = await insertDemoInvite({
     label,
+    token,
     tokenHash: hashDemoInviteToken(token),
     invitedById: request.invitedById,
     expiresAt: new Date(now.getTime() + DEMO_INVITE_LIFETIME_MS),

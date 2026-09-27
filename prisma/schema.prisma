@@ -702,8 +702,11 @@ model DemoInvite {
   id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   /// Подпись будущего зрителя — уходит в `demo_viewers.label` при принятии.
   label                  String
-  /// `sha256` от токена, hex. Самого токена в базе нет нигде.
+  /// `sha256` от токена, hex. Бот ищет приглашение по нему.
   tokenHash              String    @unique @map("token_hash")
+  /// Сам токен — чтобы ссылку можно было скопировать, пока приглашение живо (решение Руслана
+  /// 27-09-2026). Стирается принятием и отзывом. Пусто у выпущенных до этой колонки.
+  token                  String?
   invitedById            String    @map("invited_by_id") @db.Uuid
   expiresAt              DateTime  @map("expires_at") @db.Timestamptz(6)
   acceptedAt             DateTime? @map("accepted_at") @db.Timestamptz(6)

@@ -4,8 +4,7 @@ import { requireEmployeeRole } from '#server/utils/employeeAuth';
 import { DEMO_EDITOR_ROLES } from '#shared/access';
 import type { DemoInviteResponse } from '#shared/types/demo';
 
-// Приглашение в демо (issue #252). Ссылка возвращается один раз и больше не восстанавливается
-// ниоткуда: в базе лежит только хеш токена.
+// Приглашение в демо (issue #252). Ссылку, пока приглашение живо, отдаёт и сводка раздела.
 type DemoInviteBody = {
   label?: unknown;
 };
@@ -30,7 +29,12 @@ export default defineEventHandler(async (event): Promise<DemoInviteResponse> => 
     const invite = await issueDemoInvite({ label: body.label, invitedById: employee.employeeId });
 
     return {
-      invite: { inviteId: invite.inviteId, label: invite.label, expiresAt: invite.expiresAt.toISOString() },
+      invite: {
+        inviteId: invite.inviteId,
+        label: invite.label,
+        expiresAt: invite.expiresAt.toISOString(),
+        link: invite.link,
+      },
       link: invite.link,
     };
   } catch (error) {
