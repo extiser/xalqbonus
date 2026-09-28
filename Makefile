@@ -7,7 +7,7 @@ COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
 .DEFAULT_GOAL := help
 
 .PHONY: help up up-d down restart logs ps shell psql sql migrate migrate-rolled-back migrate-create migrate-diff migrate-sql generate typecheck old-engine-guard test test-db \
-        db-restore db-schema invariants license-collisions legacy-vs-api import-legacy import-legacy-awarded-trips \
+        db-restore db-drop db-schema invariants license-collisions legacy-vs-api import-legacy import-legacy-awarded-trips \
         employee-owner prod-employee-owner \
         import-legacy-dump \
         sync-orders sync-registry sync-state \
@@ -233,6 +233,19 @@ typecheck: ## Проверить типы (nuxt typecheck)
 # его текст — `esbuild --target=es5` без ошибок, без переписанного синтаксиса и без вызовов
 # новее ES5. На хосте, как `typecheck`: базе и контейнеру здесь делать нечего. Конфиг — Nuxt:
 # в нём живут псевдонимы `#shared` и `~`, которыми скрипт собирается.
+# Удаление базы локального стека — прежде всего базы репетиции переноса, которую
+# scripts/rehearse-legacy-import.sh не переиспользует. Рабочая база не удаляется никогда:
+# цель берёт только имя вида <рабочая>_<суффикс> (xalqbonus_0928, xalqbonus_test), всё
+# остальное — отказ без изменений. Проверки идут внутри контейнера, по его же POSTGRES_DB,
+# а не по тому, что думает о нём хост.
+db-drop: ## Удалить базу локального стека, не рабочую. Использование: make db-drop db=xalqbonus_0928
+	@test -n "$(db)" || { echo "укажите базу: make db-drop db=<база>"; exit 1; }
+	@case "$(db)" in *[!A-Za-z0-9_]*) echo "имя базы — только латиница, цифры и _: $(db)"; exit 1;; esac
+	@$(COMPOSE) exec -T postgres sh -c '\
+		if [ "$$1" = "$$POSTGRES_DB" ]; then echo "$$1 — рабочая база, не удаляется"; exit 1; fi; \
+		case "$$1" in "$$POSTGRES_DB"_?*) ;; *) echo "удаляются только базы вида $${POSTGRES_DB}_<суффикс>, а не $$1"; exit 1;; esac; \
+		dropdb -U "$$POSTGRES_USER" "$$1" && echo "база $$1 удалена"' sh "$(db)"
+
 old-engine-guard: ## Проверить, что скрипт проверки движка Mini App написан на ES5
 	npx tsx --tsconfig .nuxt/tsconfig.app.json scripts/check-old-engine-guard.ts
 
