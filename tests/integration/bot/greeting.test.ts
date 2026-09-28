@@ -6,8 +6,12 @@ import { cleanupTestData, createTestPerson, disconnectDatabase } from '../suppor
 import {
   commandContent,
   createBotDouble,
+  inlineCallbackUpdate,
+  privateCallbackUpdate,
   privateMessageUpdate,
+  type BotDouble,
   type MessageContent,
+  type SentMessage,
 } from '../support/bot';
 import {
   cleanupTestEmployees,
@@ -31,10 +35,22 @@ import {
  * сотрудник со ссылкой вместо привязки получил рекламу приложения (docs/infra.md → «Тесты»).
  *
  * Второе, что здесь проверяется, — молчания больше нет. Бот, не ответивший ничего, не виден
- * ни в чате, ни в журнале: ровно так эта задача и нашлась, прогоном руками (`#93`).
+ * ни в чате, ни в журнале: ровно так эта задача и нашлась, прогоном руками (`#93`). То же —
+ * для нажатий кнопок старого бота, оставшихся в чатах водителей после переключения (`#284`).
  */
 
 const CHAT_TEXT = 'Здравствуйте, хочу баллы';
+
+/** Служебное сообщение, которым приветствие снимает клавиатуру старого бота под полем ввода. */
+const isKeyboardRemoval = (message: SentMessage): boolean => {
+  const markup = message.replyMarkup;
+
+  return typeof markup === 'object' && markup !== null && 'remove_keyboard' in markup;
+};
+
+/** Экраны бота — то, что водитель читает, без служебных сообщений снятия клавиатуры. */
+const screensOf = (bot: BotDouble): string[] =>
+  bot.sent.filter((message) => !isKeyboardRemoval(message)).map((message) => message.text);
 
 /** Контакт, присланный кнопкой Telegram: `user_id` есть, и он равен отправителю. */
 const ownContact = (telegramUserId: bigint, phoneE164: string): MessageContent => ({
@@ -79,8 +95,7 @@ describe('ответ бота на входящее сообщение', () => {
       privateMessageUpdate(telegramUserId, ownContact(telegramUserId, nextTestPhone())),
     );
 
-    expect(bot.sent).toHaveLength(1);
-    expect(bot.sent[0]?.text).toBe(text('start_greeting', 'ru'));
+    expect(screensOf(bot)).toEqual([text('start_greeting', 'ru')]);
     // Регистрация уехала в Mini App целиком: присланный боту контакт её не начинает,
     // и строки в журнале попыток от него не остаётся (`#86`).
     expect(await countTestLinkAttempts(telegramUserId)).toBe(0);
@@ -95,7 +110,7 @@ describe('ответ бота на входящее сообщение', () => {
 
     await bot.handleUpdate(privateMessageUpdate(telegramUserId, commandContent('/start', `inv_${token}`)));
 
-    expect(bot.sent.map((message) => message.text)).toEqual([text('start_greeting', 'ru')]);
+    expect(screensOf(bot)).toEqual([text('start_greeting', 'ru')]);
     expect(await findTestEmployeeByTelegram(telegramUserId)).toBeNull();
   });
 
@@ -187,7 +202,7 @@ describe('ответ бота на входящее сообщение', () => {
     await bot.handleUpdate(privateMessageUpdate(telegramUserId, { text: CHAT_TEXT }));
 
     // Кнопка запуска та же: какой экран показать, приложение решает само (T25).
-    expect(bot.sent.map((message) => message.text)).toEqual([text('employee_greeting', 'ru')]);
+    expect(screensOf(bot)).toEqual([text('employee_greeting', 'ru')]);
   });
 
   it('текст, фото, стикер, голосовое и пересланное дают одно и то же приветствие', async () => {
@@ -226,14 +241,54 @@ describe('ответ бота на входящее сообщение', () => {
 
     const greeting = text('start_greeting', 'ru');
 
-    expect(bot.sent).toHaveLength(contents.length);
-    expect(bot.sent.every((message) => message.text === greeting)).toBe(true);
+    expect(screensOf(bot)).toEqual(contents.map(() => greeting));
 
-    // В чате остаётся одно сообщение бота: каждая отправка снимает прежнюю, и удалений
-    // ровно на одно меньше, чем отправок.
-    expect(bot.deleted.map((message) => message.messageId)).toEqual(
-      bot.sent.slice(0, -1).map((message) => message.messageId),
-    );
+    // В чате остаётся одно сообщение бота — последнее приветствие: служебное сообщение снятия
+    // клавиатуры удаляется сразу, каждое приветствие снимает прежнее.
+    const deletedIds = new Set(bot.deleted.map((message) => message.messageId));
+    const remaining = bot.sent.filter((message) => !deletedIds.has(message.messageId));
+
+    expect(bot.deleted).toHaveLength(bot.sent.length - 1);
+    expect(remaining.map((message) => message.messageId)).toEqual([bot.sent.at(-1)?.messageId]);
     expect(await countTestLinkAttempts(telegramUserId)).toBe(0);
+  });
+
+  it('приветствие снимает клавиатуру старого бота под полем ввода и не оставляет следа', async () => {
+    const bot = createBotDouble();
+
+    await bot.handleUpdate(privateMessageUpdate(nextTestTelegramUserId(), { text: CHAT_TEXT }));
+
+    // Клавиатура снимается только отправкой, и одним сообщением с приветствием это не сделать:
+    // у приветствия в `reply_markup` кнопка приложения. Поэтому перед ним — служебное
+    // сообщение с `remove_keyboard`, и сразу его удаление.
+    const [removal, greeting] = bot.sent;
+
+    expect(bot.calls).toEqual(['sendMessage', 'deleteMessage', 'sendMessage']);
+    expect(removal?.replyMarkup).toEqual({ remove_keyboard: true });
+    expect(bot.deleted.map((message) => message.messageId)).toEqual([removal?.messageId]);
+    expect(greeting?.text).toBe(text('start_greeting', 'ru'));
+  });
+
+  it('нажатие незнакомой кнопки в личном чате — ответ на нажатие и приветствие', async () => {
+    const bot = createBotDouble();
+    const update = privateCallbackUpdate(nextTestTelegramUserId(), 'language_set_uz');
+
+    await bot.handleUpdate(update);
+
+    // Ответ на нажатие — первым: он снимает индикатор загрузки на кнопке. Дальше то же, что
+    // на сообщение: снятие клавиатуры и приветствие.
+    expect(bot.answeredCallbackQueries).toEqual([update.callback_query?.id]);
+    expect(bot.calls).toEqual(['answerCallbackQuery', 'sendMessage', 'deleteMessage', 'sendMessage']);
+    expect(screensOf(bot)).toEqual([text('start_greeting', 'ru')]);
+  });
+
+  it('нажатие под inline-сообщением — только ответ на нажатие, приветствовать некуда', async () => {
+    const bot = createBotDouble();
+    const update = inlineCallbackUpdate(nextTestTelegramUserId(), 'language_set_uz');
+
+    await bot.handleUpdate(update);
+
+    expect(bot.answeredCallbackQueries).toEqual([update.callback_query?.id]);
+    expect(bot.calls).toEqual(['answerCallbackQuery']);
   });
 });
