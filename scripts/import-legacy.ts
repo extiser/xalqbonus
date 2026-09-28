@@ -16,7 +16,9 @@
  * По отношению к `public` скрипт работает только на чтение, и это свойство сеанса,
  * а не дисциплины: соединение к старой схеме открыто с `default_transaction_read_only = on`.
  *
- * Запуск: make import-legacy
+ * Запуск: make import-legacy. На машине — собранным бандлом `.output/import-legacy.mjs`
+ * (`npm run build:import-legacy`): в боевом образе нет ни исходников, ни tsx. Порядок дня
+ * выката — docker/DEPLOY-MANUAL.md → «Перенос старой базы в день выката».
  */
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
