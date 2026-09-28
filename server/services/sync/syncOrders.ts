@@ -110,6 +110,7 @@ const emptyAccrual = (): TripAccrualSummary => ({
   withoutEndedAt: 0,
   outsideProgram: 0,
   unknownTrip: 0,
+  awardedByLegacy: 0,
 });
 
 const addAccrual = (total: TripAccrualSummary, page: TripAccrualSummary): TripAccrualSummary => ({
@@ -121,6 +122,7 @@ const addAccrual = (total: TripAccrualSummary, page: TripAccrualSummary): TripAc
   withoutEndedAt: total.withoutEndedAt + page.withoutEndedAt,
   outsideProgram: total.outsideProgram + page.outsideProgram,
   unknownTrip: total.unknownTrip + page.unknownTrip,
+  awardedByLegacy: total.awardedByLegacy + page.awardedByLegacy,
 });
 
 const toTripInput = (order: FleetOrder): TripInput => ({
@@ -399,6 +401,7 @@ export const runOrdersSync = async (
     withoutEndedAt: accrual.withoutEndedAt,
     outsideProgram: accrual.outsideProgram,
     unknownTrip: accrual.unknownTrip,
+    awardedByLegacy: accrual.awardedByLegacy,
   });
 
   try {
@@ -563,6 +566,7 @@ export const runOrdersSync = async (
     awarded: accrual.awarded,
     welcomeAwarded: accrual.welcomeAwarded,
     alreadyAwarded: accrual.alreadyAwarded,
+    awardedByLegacy: accrual.awardedByLegacy,
     outsideProgram: accrual.outsideProgram,
     notCompleted: accrual.notCompleted,
     skippedUnknownProfile,

@@ -7,11 +7,12 @@ COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
 .DEFAULT_GOAL := help
 
 .PHONY: help up up-d down restart logs ps shell psql sql migrate migrate-rolled-back migrate-create migrate-diff migrate-sql generate typecheck old-engine-guard test test-db \
-        db-restore db-schema invariants license-collisions legacy-vs-api import-legacy \
+        db-restore db-drop db-schema invariants license-collisions legacy-vs-api import-legacy import-legacy-awarded-trips \
         employee-owner prod-employee-owner \
         import-legacy-dump \
         sync-orders sync-registry sync-state \
         prod-up prod-down prod-restart prod-logs prod-ps prod-shell prod-psql prod-invariants prod-migrate prod-migrate-rolled-back \
+        prod-import-legacy prod-import-legacy-awarded-trips \
         prod-deploy prod-rollback \
         proxy-up proxy-down proxy-ps proxy-logs proxy-validate proxy-reload
 
@@ -154,6 +155,12 @@ legacy-vs-api: ## Сверка старой базы с Fleet API: потеря 
 import-legacy: ## Перенести реестр парка и балансы из public в xb (идемпотентно)
 	$(COMPOSE) exec -T app npx tsx scripts/import-legacy.ts
 
+# Один шаг переноса отдельно: заказы, за которые балл уже дал старый бот (issue #274).
+# Для базы, где перенос прошёл раньше, чем шаг появился: граница со старым ботом обязана
+# лечь до первого догоняющего прогона. Выгрузка реестра не нужна, остальные шаги не идут.
+import-legacy-awarded-trips: ## Перенести только засчитанные старым ботом заказы (идемпотентно)
+	$(COMPOSE) exec -T app npx tsx scripts/import-legacy.ts --only legacy-awarded-trips
+
 # Проверочный прогон переноса на другом дампе старой базы — в отдельной базе рядом,
 # рабочая копия не трогается. Контрольные цифры больше не зашиты в код, и убедиться,
 # что эталон снимается сам, можно только на дампе с другими цифрами: в день выката дамп
@@ -227,6 +234,19 @@ typecheck: ## Проверить типы (nuxt typecheck)
 # его текст — `esbuild --target=es5` без ошибок, без переписанного синтаксиса и без вызовов
 # новее ES5. На хосте, как `typecheck`: базе и контейнеру здесь делать нечего. Конфиг — Nuxt:
 # в нём живут псевдонимы `#shared` и `~`, которыми скрипт собирается.
+# Удаление базы локального стека — прежде всего базы репетиции переноса, которую
+# scripts/rehearse-legacy-import.sh не переиспользует. Рабочая база не удаляется никогда:
+# цель берёт только имя вида <рабочая>_<суффикс> (xalqbonus_0928, xalqbonus_test), всё
+# остальное — отказ без изменений. Проверки идут внутри контейнера, по его же POSTGRES_DB,
+# а не по тому, что думает о нём хост.
+db-drop: ## Удалить базу локального стека, не рабочую. Использование: make db-drop db=xalqbonus_0928
+	@test -n "$(db)" || { echo "укажите базу: make db-drop db=<база>"; exit 1; }
+	@case "$(db)" in *[!A-Za-z0-9_]*) echo "имя базы — только латиница, цифры и _: $(db)"; exit 1;; esac
+	@$(COMPOSE) exec -T postgres sh -c '\
+		if [ "$$1" = "$$POSTGRES_DB" ]; then echo "$$1 — рабочая база, не удаляется"; exit 1; fi; \
+		case "$$1" in "$$POSTGRES_DB"_?*) ;; *) echo "удаляются только базы вида $${POSTGRES_DB}_<суффикс>, а не $$1"; exit 1;; esac; \
+		dropdb -U "$$POSTGRES_USER" "$$1" && echo "база $$1 удалена"' sh "$(db)"
+
 old-engine-guard: ## Проверить, что скрипт проверки движка Mini App написан на ES5
 	npx tsx --tsconfig .nuxt/tsconfig.app.json scripts/check-old-engine-guard.ts
 
@@ -282,6 +302,29 @@ prod-psql: ## Войти в psql prod-БД
 # на самой машине, руками: CLI на серверы не ходит (CLAUDE.md → «Важные ограничения»).
 prod-invariants: ## Прогнать запросы инвариантов по prod-БД (ненулевой код при расхождении)
 	$(COMPOSE_PROD) exec -T postgres sh -c 'PGPASSWORD="$$POSTGRES_PASSWORD" psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -q' < scripts/invariants.sql
+
+# Перенос старой базы на боевой машине — бандлом из образа, одноразовым контейнером `app`
+# (docker/DEPLOY-MANUAL.md → «Перенос старой базы в день выката», шаги 7 и 10). Каталог
+# выгрузки и отчётов монтируется внутрь как `/import`, отчёт ложится туда же, на хост.
+# `profiles=` и `report=` — имена файлов в этом каталоге, без пути: всё, что перенос читает
+# и пишет на машине, лежит в одном месте. Запускается на самой машине, руками: CLI на серверы
+# не ходит (CLAUDE.md → «Важные ограничения»).
+PROD_IMPORT_DIR ?= /srv/xalqbonus-import
+
+prod-import-legacy: ## Перенос старой базы на проде. make prod-import-legacy profiles=driver-profiles-<дата>.jsonl [report=import-report.md]
+	@test -n "$(profiles)" || { echo "укажите выгрузку: make prod-import-legacy profiles=driver-profiles-<дата>.jsonl [report=import-report.md]"; exit 1; }
+	@case "$(profiles) $(report)" in */*) echo "profiles= и report= — имена файлов в $(PROD_IMPORT_DIR), без каталога"; exit 1;; esac
+	@test -f "$(PROD_IMPORT_DIR)/$(profiles)" || { echo "нет выгрузки: $(PROD_IMPORT_DIR)/$(profiles)"; exit 1; }
+	@test -f "$(PROD_IMPORT_DIR)/$(basename $(profiles)).meta.json" || { echo "рядом с выгрузкой нет $(basename $(profiles)).meta.json — по нему ставится отметка реестра"; exit 1; }
+	$(COMPOSE_PROD) run --rm -T -v "$(PROD_IMPORT_DIR):/import" \
+		app node .output/import-legacy.mjs "/import/$(profiles)" "/import/$(or $(report),import-report.md)"
+
+# Один шаг переноса отдельно — засчитанные старым ботом заказы (issue #274): для машины, где
+# перенос прошёл раньше, чем шаг появился. Выгрузка реестра не нужна.
+prod-import-legacy-awarded-trips: ## Перенести на проде только засчитанные старым ботом заказы. make prod-import-legacy-awarded-trips [report=import-report-awarded-trips.md]
+	@case "$(report)" in */*) echo "report= — имя файла в $(PROD_IMPORT_DIR), без каталога"; exit 1;; esac
+	$(COMPOSE_PROD) run --rm -T -v "$(PROD_IMPORT_DIR):/import" \
+		app node .output/import-legacy.mjs --only legacy-awarded-trips "/import/$(or $(report),import-report-awarded-trips.md)"
 
 # Обе прод-цели миграций идут одноразовым контейнером, а не `exec`: так же мигрирует сам выкат
 # (`docker/scripts/deploy-manual.sh`, шаг 4), и работающий `app` для них не нужен. Образ берётся

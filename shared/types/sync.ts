@@ -62,6 +62,8 @@ export type OrdersRunDetails = {
   withoutEndedAt: number;
   outsideProgram: number;
   unknownTrip: number;
+  /** Балл за заказ дал старый бот: он лежит в перенесённом балансе, второй раз не начисляется. */
+  awardedByLegacy: number;
 };
 
 /** Счётчики прогона реестра. Пусто у прогонов, прошедших до появления таблицы деталей. */

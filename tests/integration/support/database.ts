@@ -131,6 +131,44 @@ export const markPersonAsLegacy = async (personId: string): Promise<void> => {
   `;
 };
 
+/** Заказы в `legacy_awarded_trips`, положенные тестами. Уборка — по ним и только по ним. */
+const trackedLegacyAwardedOrderIds = new Set<string>();
+
+/** Отдаёт уборке заказы, которые в `legacy_awarded_trips` положил сам код под тестом. */
+export const trackLegacyAwardedTrips = (orderIds: readonly string[]): void => {
+  for (const orderId of orderIds) {
+    trackedLegacyAwardedOrderIds.add(orderId);
+  }
+};
+
+/**
+ * Отмечает заказ засчитанным старым ботом — настоящей строкой `legacy_awarded_trips`,
+ * как её кладёт шаг переноса. Пропуск живёт в запросе к таблице, и заглушка подтвердила бы
+ * работу кода, а не границы.
+ */
+export const markTripAwardedByLegacy = async (tripOrderId: string): Promise<void> => {
+  trackedLegacyAwardedOrderIds.add(tripOrderId);
+
+  await db.$executeRaw`
+    INSERT INTO xb.legacy_awarded_trips ("order_id", "legacy_driver_id", "booked_at")
+    VALUES (${tripOrderId}, ${nextLegacyDriverId()}, now())
+  `;
+};
+
+/** Убирает строки `legacy_awarded_trips`, заведённые тестами. Внешних ключей у таблицы нет. */
+export const cleanupLegacyAwardedTrips = async (): Promise<void> => {
+  const orderIds = [...trackedLegacyAwardedOrderIds];
+  trackedLegacyAwardedOrderIds.clear();
+
+  if (orderIds.length === 0) {
+    return;
+  }
+
+  await db.$executeRaw`
+    DELETE FROM xb.legacy_awarded_trips WHERE "order_id" = ANY(${orderIds}::text[])
+  `;
+};
+
 /**
  * Переводит профиль парка на другого человека — так выглядит переоформление в парке
  * и склейка двойных учётных записей: профилей два, человек один.
@@ -442,6 +480,10 @@ export const readTransferByKey = async (
  * («сумма записей по счёту равна кэшу») справедливо расходился бы после уборки.
  */
 export const cleanupTestData = async (): Promise<void> => {
+  // До проверки «ничего не заводилось»: у таблицы нет связи с людьми, и тест шага переноса
+  // кладёт в неё строки, не заводя ни одного человека.
+  await cleanupLegacyAwardedTrips();
+
   const personIds = [...createdPersonIds];
   createdPersonIds.clear();
 

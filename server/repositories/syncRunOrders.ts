@@ -27,6 +27,8 @@ export type SyncRunOrdersCounters = {
   withoutEndedAt: number;
   outsideProgram: number;
   unknownTrip: number;
+  /** Балл за заказ дал старый бот: заказ в `legacy_awarded_trips`. */
+  awardedByLegacy: number;
 };
 
 /**
@@ -43,7 +45,7 @@ export const saveSyncRunOrders = async (
       "run_id", "pages", "orders_inserted", "orders_updated",
       "malformed", "skipped_unknown_profile", "unknown_profiles",
       "awarded", "welcome_awarded", "already_awarded", "not_completed",
-      "without_ended_at", "outside_program", "unknown_trip"
+      "without_ended_at", "outside_program", "unknown_trip", "awarded_by_legacy"
     )
     VALUES (
       ${runId}::uuid,
@@ -59,7 +61,8 @@ export const saveSyncRunOrders = async (
       ${counters.notCompleted},
       ${counters.withoutEndedAt},
       ${counters.outsideProgram},
-      ${counters.unknownTrip}
+      ${counters.unknownTrip},
+      ${counters.awardedByLegacy}
     )
     ON CONFLICT ("run_id") DO UPDATE
        SET "pages"                   = EXCLUDED."pages",
@@ -74,6 +77,7 @@ export const saveSyncRunOrders = async (
            "not_completed"           = EXCLUDED."not_completed",
            "without_ended_at"        = EXCLUDED."without_ended_at",
            "outside_program"         = EXCLUDED."outside_program",
-           "unknown_trip"            = EXCLUDED."unknown_trip"
+           "unknown_trip"            = EXCLUDED."unknown_trip",
+           "awarded_by_legacy"       = EXCLUDED."awarded_by_legacy"
   `;
 };

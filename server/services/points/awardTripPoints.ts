@@ -1,4 +1,5 @@
 import { consola } from 'consola';
+import { findLegacyAwardedOrderIds } from '#server/repositories/legacyAwardedTrips';
 import { findTripsForAccrual, type TripForAccrual } from '#server/repositories/trips';
 import { awardWelcomeBonus } from '#server/services/points/awardWelcomeBonus';
 import { ensureDriverAccount } from '#server/services/points/ensureDriverAccount';
@@ -45,6 +46,8 @@ export type TripAccrualSummary = {
   outsideProgram: number;
   /** Идентификатора заказа нет в `xb.trips`. */
   unknownTrip: number;
+  /** Балл за заказ дал старый бот, и он лежит в перенесённом балансе. */
+  awardedByLegacy: number;
 };
 
 const emptySummary = (requested: number): TripAccrualSummary => ({
@@ -56,10 +59,11 @@ const emptySummary = (requested: number): TripAccrualSummary => ({
   withoutEndedAt: 0,
   outsideProgram: 0,
   unknownTrip: 0,
+  awardedByLegacy: 0,
 });
 
 /** Причина, по которой балл за поездку не начисляется. Имя причины — поле сводки. */
-type SkipReason = 'notCompleted' | 'withoutEndedAt' | 'outsideProgram';
+type SkipReason = 'notCompleted' | 'withoutEndedAt' | 'outsideProgram' | 'awardedByLegacy';
 
 type AccrualDecision =
   | { accrue: true; occurredAt: Date }
@@ -69,12 +73,21 @@ type AccrualDecision =
  * Решает, начисляется ли балл за поездку. Время операции — время завершения поездки,
  * а не время прогона: журнал должен показывать, когда операция произошла на самом деле.
  */
-const decideAccrual = (trip: TripForAccrual): AccrualDecision => {
+const decideAccrual = (trip: TripForAccrual, awardedByLegacy: boolean): AccrualDecision => {
   // Поездка в промежуточном статусе не начисляется и не помечается обработанной: она
   // вернётся позже с временем завершения в прошлом и начислится тогда. Именно на этом
   // старый бот терял пятую часть поездок (docs/analysis.md).
   if (trip.status !== COMPLETED_TRIP_STATUS) {
     return { accrue: false, skipReason: 'notCompleted' };
+  }
+
+  // Балл за этот заказ дал старый бот, и он уже сидит в перенесённом балансе. Пропуск
+  // окончательный, как у начисленной: разбирать поездку снова незачем. Проверка — до
+  // участия в программе, чтобы сводка догона показывала границу целиком. Застывший
+  // у старого бота заказ в таблицу не попал и начисляется обычным порядком
+  // (docs/decisions.md → «Граница со старым ботом — по засчитанным заказам»).
+  if (awardedByLegacy) {
+    return { accrue: false, skipReason: 'awardedByLegacy' };
   }
 
   if (!trip.endedAt) {
@@ -106,13 +119,16 @@ export const awardTripPoints = async (tripOrderIds: string[]): Promise<TripAccru
   const trips = await findTripsForAccrual(uniqueOrderIds);
   summary.unknownTrip = uniqueOrderIds.length - trips.length;
 
+  // Одним запросом на пачку, а не по запросу на поездку.
+  const legacyAwardedOrderIds = await findLegacyAwardedOrderIds(uniqueOrderIds);
+
   const emissionAccount = await getSystemAccount('emission');
 
   // Поездки обрабатываются по одной, а не пачкой параллельных транзакций: у пачки
   // начислений одному водителю все переводы дерутся за один и тот же счёт, и выигрыш
   // от параллелизма съедается ожиданием блокировки.
   for (const trip of trips) {
-    const decision = decideAccrual(trip);
+    const decision = decideAccrual(trip, legacyAwardedOrderIds.has(trip.tripOrderId));
 
     if (!decision.accrue) {
       summary[decision.skipReason] += 1;

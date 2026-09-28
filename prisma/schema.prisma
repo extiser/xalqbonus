@@ -1204,6 +1204,8 @@ model SyncRunOrders {
   withoutEndedAt Int @default(0) @map("without_ended_at")
   outsideProgram Int @default(0) @map("outside_program")
   unknownTrip    Int @default(0) @map("unknown_trip")
+  /// Балл за заказ уже дал старый бот, и он лежит в перенесённом балансе (`legacy_awarded_trips`).
+  awardedByLegacy Int @default(0) @map("awarded_by_legacy")
 
   run SyncRun @relation(fields: [runId], references: [id])
 
@@ -1359,6 +1361,28 @@ model LegacyDriverMap {
   @@index([personId])
   @@index([profileId])
   @@map("legacy_driver_map")
+  @@schema("xb")
+}
+
+/// Заказы, за которые балл уже дал старый бот: граница между ним и нашим сборщиком.
+///
+/// Баланс переносится одной операцией `opening`, и баллы старого бота за поездки уже
+/// лежат в нём. Ключ `trip:<order_id>` знает только наш журнал — без этой таблицы первый
+/// догоняющий прогон начислил бы неделю поездок второй раз (docs/decisions.md → «Граница
+/// со старым ботом — по засчитанным заказам»).
+///
+/// Внешнего ключа на `trips` нет намеренно: таблица наполняется переносом, когда заказа
+/// в `xb.trips` может ещё не быть, — его принесёт сборщик позже.
+model LegacyAwardedTrip {
+  /// `public."Trips".trip_id` — тот же id заказа Яндекса, что `trips.order_id`. В старой
+  /// базе уникального индекса на нём нет, дубли схлопываются здесь первичным ключом.
+  orderId        String   @id @map("order_id")
+  /// `public."Drivers".id` той строки `Trips`, что взята при схлопывании дублей.
+  legacyDriverId Int      @map("legacy_driver_id")
+  bookedAt       DateTime @map("booked_at") @db.Timestamptz(6)
+  importedAt     DateTime @default(now()) @map("imported_at") @db.Timestamptz(6)
+
+  @@map("legacy_awarded_trips")
   @@schema("xb")
 }
 
