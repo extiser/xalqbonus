@@ -13,11 +13,10 @@
  * (docs/yandex-fleet.md).
  */
 import type { OrdersWindow } from '#server/adapters/fleet/orders';
-import type { OrdersSyncKind, SyncConfig } from '#server/services/sync/config';
+import type { SyncConfig } from '#server/services/sync/config';
 
 export type OrdersWindowInput = {
-  kind: OrdersSyncKind;
-  /** Отметка синхронизации этого вида. Пусто — прогонов ещё не было. */
+  /** Отметка скользящего прогона. Пусто — прогонов ещё не было. */
   watermark: Date | null;
   now: Date;
   config: SyncConfig;
@@ -25,6 +24,7 @@ export type OrdersWindowInput = {
 
 const MINUTE_MS = 60_000;
 const SECOND_MS = 1_000;
+const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
 
 const shift = (moment: Date, milliseconds: number): Date =>
@@ -49,46 +49,110 @@ const buildLiveWindow = (input: OrdersWindowInput): OrdersWindow => {
 };
 
 /**
- * Догоняющее окно: широкая полоса порядка недели, своя отметка, тот же код записи.
- *
- * Заказ, провисевший в промежуточном статусе несколько дней, получает время завершения
- * в прошлом. Если скользящее окно эту точку уже прошло, такой заказ не увидит никто
- * и никогда — тот же класс ошибки, что убил старого бота, зашедший с другой стороны
- * (docs/decisions.md → «Скользящего окна недостаточно»).
- *
- * Нижняя граница берётся более ранней из двух: заданной ширины и собственной отметки
- * с перекрытием. Первое даёт постоянную глубину перепросмотра, второе не даёт пропуска,
- * если догоняющий прогон не отработал несколько суток подряд.
- */
-const buildCatchupWindow = (input: OrdersWindowInput): OrdersWindow => {
-  const { config } = input;
-  const endedTo = shift(input.now, -config.lagSeconds * SECOND_MS);
-  const wideFrom = shift(endedTo, -config.catchupDays * DAY_MS);
-
-  // Без отметки брать нечего, кроме заданной ширины: перекрытие пристраивается к отметке,
-  // а не к пустому месту.
-  if (!input.watermark) {
-    return { endedFrom: wideFrom, endedTo };
-  }
-
-  const fromWatermark = shift(input.watermark, -config.overlapMinutes * MINUTE_MS);
-
-  return {
-    endedFrom: fromWatermark < wideFrom ? fromWatermark : wideFrom,
-    endedTo,
-  };
-};
-
-/**
- * Возвращает окно прогона или `null`, если запрашивать нечего.
+ * Возвращает окно скользящего прогона или `null`, если запрашивать нечего.
  *
  * Пустое окно — не ошибка: так выглядит прогон, запущенный чаще, чем идёт время
  * (интервал меньше отставания), или сразу после предыдущего успешного. Прогон при этом
  * не заводится вовсе, и отметка остаётся на месте.
  */
 export const buildOrdersWindow = (input: OrdersWindowInput): OrdersWindow | null => {
-  const window =
-    input.kind === 'orders_catchup' ? buildCatchupWindow(input) : buildLiveWindow(input);
+  const window = buildLiveWindow(input);
 
   return window.endedTo > window.endedFrom ? window : null;
+};
+
+/**
+ * Догоняющий прогон: широкая полоса проходами, своя отметка, тот же код записи.
+ *
+ * Заказ, провисевший в промежуточном статусе несколько дней, получает время завершения
+ * в прошлом. Если скользящее окно эту точку уже прошло, такой заказ не увидит никто
+ * и никогда — тот же класс ошибки, что убил старого бота, зашедший с другой стороны
+ * (docs/decisions.md → «Скользящего окна недостаточно»).
+ *
+ * Неделю одним прогоном лимит ключа не отпускает: 28-09-2026 на проде догон падал
+ * на первой и на четырнадцатой странице из полусотни, а упавший прогон начинал следующий
+ * с первой страницы — те же страницы, тот же отказ (issue #286). Поэтому:
+ *
+ *   - **проход** — полоса `[from, to]`, границы которой фиксируются при его начале
+ *     и внутри прохода не сдвигаются;
+ *   - проход режется на **куски** по `SYNC_CATCHUP_SLICE_HOURS`, куски идут от старых
+ *     к новым, и каждый — свой прогон со своей строкой `sync_runs`;
+ *   - **позиция** — отметка `orders_catchup`, конец последнего пройденного куска.
+ *     Упавший кусок её не двигает и повторяется со своего начала, пройденные не читаются
+ *     заново.
+ */
+export type CatchupPass = {
+  from: Date;
+  to: Date;
+};
+
+/** То, что о догоне знает `sync_state`. */
+export type CatchupState = {
+  /** Позиция прохода. Пусто — строки догона ещё нет. */
+  watermark: Date | null;
+  /** Границы прохода. Пусто — прохода нет: догон ни разу не начинал его. */
+  passFrom: Date | null;
+  passTo: Date | null;
+};
+
+export type CatchupPlan =
+  /** Прохода нет или пройденному пора смениться: начинается новый, позиция — его начало. */
+  | { action: 'start'; pass: CatchupPass }
+  /** Проход идёт: куски от позиции до конца прохода. */
+  | { action: 'continue'; pass: CatchupPass; position: Date }
+  /** Проход пройден, новому рано. Запрашивать нечего. */
+  | { action: 'wait'; pass: CatchupPass; nextPassAt: Date };
+
+/** Пройден ли проход: позиция дошла до его конца. */
+export const isCatchupPassComplete = (pass: CatchupPass, position: Date | null): boolean =>
+  position !== null && position >= pass.to;
+
+/** Решает, что делать запуску догона: начать проход, продолжить идущий или ждать. */
+export const planCatchupPass = (state: CatchupState, now: Date, config: SyncConfig): CatchupPlan => {
+  if (state.passFrom && state.passTo) {
+    const pass: CatchupPass = { from: state.passFrom, to: state.passTo };
+
+    if (!isCatchupPassComplete(pass, state.watermark)) {
+      return { action: 'continue', pass, position: state.watermark ?? pass.from };
+    }
+
+    // Отсчёт — от конца прохода, а не от момента, когда он дошёл: иначе проход, шедший
+    // полдня, сдвигал бы следующий на те же полдня, и сутки расползались бы с каждым разом.
+    const nextPassAt = shift(pass.to, config.catchupPassEveryHours * HOUR_MS);
+
+    if (now < nextPassAt) {
+      return { action: 'wait', pass, nextPassAt };
+    }
+  }
+
+  const to = shift(now, -config.lagSeconds * SECOND_MS);
+
+  return { action: 'start', pass: { from: shift(to, -config.catchupDays * DAY_MS), to } };
+};
+
+/**
+ * Следующий кусок прохода от позиции или `null`, если проход пройден.
+ *
+ * Кусок идёт от позиции на `SYNC_CATCHUP_SLICE_HOURS` вперёд, последний упирается в конец
+ * прохода и выходит короче. Каждый кусок, кроме первого, начинается на перекрытие раньше
+ * позиции: включает ли Fleet границы `ended_at.from` и `ended_at.to`, не проверено, и заказ
+ * ровно на стыке иначе мог бы не попасть ни в один кусок. Повтор на стыке отсекается
+ * уникальностью заказа и ключом начисления — тот же довод, что у перекрытия живого окна.
+ */
+export const nextCatchupSlice = (
+  pass: CatchupPass,
+  position: Date,
+  config: SyncConfig,
+): OrdersWindow | null => {
+  if (isCatchupPassComplete(pass, position)) {
+    return null;
+  }
+
+  // Позиция в начале прохода — это первый кусок: перекрываться ему не с чем.
+  const isFirst = position <= pass.from;
+  const sliceStart = isFirst ? pass.from : position;
+  const endedFrom = isFirst ? pass.from : shift(position, -config.overlapMinutes * MINUTE_MS);
+  const sliceEnd = shift(sliceStart, config.catchupSliceHours * HOUR_MS);
+
+  return { endedFrom, endedTo: sliceEnd < pass.to ? sliceEnd : pass.to };
 };

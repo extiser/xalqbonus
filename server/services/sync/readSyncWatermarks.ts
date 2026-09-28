@@ -1,4 +1,5 @@
-import { readAllSyncStates } from '#server/repositories/syncState';
+import { readAllSyncStates, type SyncStateRow } from '#server/repositories/syncState';
+import { isCatchupPassComplete } from '#server/services/sync/buildOrdersWindow';
 import {
   readSyncConfig,
   staleWatermarkThresholdMs,
@@ -19,6 +20,10 @@ import type { SyncStateResponse, SyncWatermark, WatermarkState } from '#shared/t
  * Тревога — это застрявшая отметка, а не упавший прогон. Отдельные падения по лимиту
  * Fleet API штатны: упавший прогон не двигает отметку, следующий забирает то же окно
  * и догоняет. Красным поэтому горит только отметка, не сдвинувшаяся дольше порога.
+ *
+ * У догона отметка — позиция прохода, и стоит она на неделю в прошлом штатно. Тревога
+ * у него — проход, который начат и не двигается; пройденный проход, ждущий следующего,
+ * спокоен, как бы давно ни стояла позиция.
  */
 
 /** Виды прогона, у которых бывает расписание, в порядке показа. */
@@ -55,6 +60,31 @@ const decideState = (
   return lagMs > staleThresholdMs ? 'stale' : 'ok';
 };
 
+/**
+ * Состояние догона. Меряется не отставанием позиции от «сейчас», а тем, как давно
+ * её трогали: `updated_at` строки двигается с каждым пройденным куском и с началом прохода.
+ */
+const decideCatchupState = (
+  scheduled: boolean,
+  state: SyncStateRow | null,
+  now: Date,
+  staleThresholdMs: number,
+): WatermarkState => {
+  if (!scheduled) {
+    return 'disabled';
+  }
+
+  if (!state?.passFrom || !state.passTo) {
+    return 'never';
+  }
+
+  if (isCatchupPassComplete({ from: state.passFrom, to: state.passTo }, state.watermark)) {
+    return 'ok';
+  }
+
+  return now.getTime() - state.updatedAt.getTime() > staleThresholdMs ? 'stale' : 'ok';
+};
+
 export const readSyncWatermarks = async (): Promise<SyncStateResponse> => {
   const config = readSyncConfig();
   const states = await readAllSyncStates();
@@ -68,16 +98,21 @@ export const readSyncWatermarks = async (): Promise<SyncStateResponse> => {
     const lagMs = watermark ? now.getTime() - watermark.getTime() : null;
     const scheduled = isScheduled(kind, config);
     const staleThresholdMs = staleWatermarkThresholdMs(kind, config);
+    const isCatchup = kind === 'orders_catchup';
 
     return {
       kind,
       watermark: watermark?.toISOString() ?? null,
       lagMs,
       updatedAt: state?.updatedAt.toISOString() ?? null,
-      state: decideState(scheduled, lagMs, staleThresholdMs),
+      state: isCatchup
+        ? decideCatchupState(scheduled, state, now, staleThresholdMs)
+        : decideState(scheduled, lagMs, staleThresholdMs),
       scheduled,
       intervalSec: Math.round(syncIntervalMs(kind, config) / 1_000),
       staleThresholdMs,
+      passFrom: isCatchup ? (state?.passFrom?.toISOString() ?? null) : null,
+      passTo: isCatchup ? (state?.passTo?.toISOString() ?? null) : null,
     };
   });
 

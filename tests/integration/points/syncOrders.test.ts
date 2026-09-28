@@ -155,7 +155,7 @@ describe('прогон синхронизации заказов', () => {
     driver = await createTestPerson({ inProgram: true });
     const orderId = `order-${driver.profileId}`;
 
-    const summary = await runOrdersSync('orders', {
+    const summary = await runOrdersSync({
       now: NOW,
       client: makeTransport([
         [buildRawOrder(orderId, driver.profileId, 'complete', '2026-08-28T11:50:00.000+00:00')],
@@ -188,14 +188,14 @@ describe('прогон синхронизации заказов', () => {
     const orderId = `order-${driver.profileId}`;
     const order = buildRawOrder(orderId, driver.profileId, 'complete', '2026-08-28T11:50:00.000+00:00');
 
-    await runOrdersSync('orders', { now: NOW, client: makeTransport([[order]]) });
+    await runOrdersSync({ now: NOW, client: makeTransport([[order]]) });
 
     const balanceAfterFirst = await readAccountBalance(driver.personId);
     const eventsAfterFirst = await countTripEvents(orderId);
 
     // Второй прогон: окно строится от отметки минус перекрытие, то есть заходит на уже
     // прочитанное. Тот же заказ приезжает второй раз — так и задумано.
-    const second = await runOrdersSync('orders', {
+    const second = await runOrdersSync({
       now: new Date(NOW.getTime() + 60_000),
       client: makeTransport([[order]]),
     });
@@ -214,7 +214,7 @@ describe('прогон синхронизации заказов', () => {
     driver = await createTestPerson({ inProgram: true });
     const orderId = `order-${driver.profileId}`;
 
-    const first = await runOrdersSync('orders', {
+    const first = await runOrdersSync({
       now: NOW,
       client: makeTransport([[buildRawOrder(orderId, driver.profileId, 'transporting', null)]]),
     });
@@ -226,7 +226,7 @@ describe('прогон синхронизации заказов', () => {
 
     // Тот же заказ, завершившийся позже. Ровно здесь старый бот терял пятую часть поездок:
     // его окно по времени бронирования этот заказ больше не возвращало.
-    const second = await runOrdersSync('orders', {
+    const second = await runOrdersSync({
       now: new Date(NOW.getTime() + 60_000),
       client: makeTransport([
         [buildRawOrder(orderId, driver.profileId, 'complete', '2026-08-28T11:55:00.000+00:00')],
@@ -242,7 +242,7 @@ describe('прогон синхронизации заказов', () => {
     driver = await createTestPerson({ inProgram: false });
     const orderId = `order-${driver.profileId}`;
 
-    const summary = await runOrdersSync('orders', {
+    const summary = await runOrdersSync({
       now: NOW,
       client: makeTransport([
         [buildRawOrder(orderId, driver.profileId, 'complete', '2026-08-28T11:50:00.000+00:00')],
@@ -259,7 +259,7 @@ describe('прогон синхронизации заказов', () => {
     driver = await createTestPerson({ inProgram: true });
     const knownOrderId = `order-${driver.profileId}`;
 
-    const summary = await runOrdersSync('orders', {
+    const summary = await runOrdersSync({
       now: NOW,
       client: makeTransport([
         [
@@ -283,7 +283,7 @@ describe('прогон синхронизации заказов', () => {
   it('упавший прогон не двигает отметку и остаётся в базе отказом', async () => {
     driver = await createTestPerson({ inProgram: true });
 
-    await runOrdersSync('orders', {
+    await runOrdersSync({
       now: NOW,
       client: makeTransport([
         [buildRawOrder(`order-${driver.profileId}`, driver.profileId, 'complete', '2026-08-28T11:50:00.000+00:00')],
@@ -293,7 +293,7 @@ describe('прогон синхронизации заказов', () => {
     const watermarkBefore = await readSyncWatermark('orders');
 
     await expect(
-      runOrdersSync('orders', { now: new Date(NOW.getTime() + 60_000), client: failingTransport() }),
+      runOrdersSync({ now: new Date(NOW.getTime() + 60_000), client: failingTransport() }),
     ).rejects.toThrow('связь оборвалась');
 
     // Именно сдвиг отметки при неуспехе породил в старом боте счётчик дней простоя
@@ -311,7 +311,7 @@ describe('прогон синхронизации заказов', () => {
   it('несколько страниц читаются курсором до конца выборки', async () => {
     driver = await createTestPerson({ inProgram: true });
 
-    const summary = await runOrdersSync('orders', {
+    const summary = await runOrdersSync({
       now: NOW,
       client: makeTransport([
         [buildRawOrder(`order-1-${driver.profileId}`, driver.profileId, 'complete', '2026-08-28T11:50:00.000+00:00')],
@@ -355,7 +355,7 @@ describe('журнал прогона синхронизации', () => {
     // не начисляется. В деталях прогона это отдельный счётчик, а не потеря.
     const outsider = await createTestPerson({ inProgram: false });
 
-    const summary = await runOrdersSync('orders', {
+    const summary = await runOrdersSync({
       now: NOW,
       client: makeTransport([
         [
@@ -398,7 +398,7 @@ describe('журнал прогона синхронизации', () => {
     driver = await createTestPerson({ inProgram: true });
 
     await expect(
-      runOrdersSync('orders', {
+      runOrdersSync({
         now: NOW,
         client: transportFailingAfter([
           [
@@ -429,7 +429,7 @@ describe('журнал прогона синхронизации', () => {
     driver = await createTestPerson({ inProgram: true });
     const order = buildRawOrder('order-stranger', 'profile-never-seen', 'complete', '2026-08-28T11:50:00.000+00:00');
 
-    const first = await runOrdersSync('orders', { now: NOW, client: makeTransport([[order]]) });
+    const first = await runOrdersSync({ now: NOW, client: makeTransport([[order]]) });
 
     const afterFirst = await readSyncSkips();
     expect(afterFirst).toHaveLength(1);
@@ -445,7 +445,7 @@ describe('журнал прогона синхронизации', () => {
     // Перекрытие окон приносит тот же пропущенный заказ каждый прогон. Без уникальности
     // по паре «причина + ссылка» таблица росла бы линейно по времени, и вопрос «сколько
     // потеряно» перестал бы иметь ответ.
-    const second = await runOrdersSync('orders', {
+    const second = await runOrdersSync({
       now: new Date(NOW.getTime() + 60_000),
       client: makeTransport([[order]]),
     });
@@ -462,7 +462,7 @@ describe('журнал прогона синхронизации', () => {
       buildRawOrder(`order-stranger-${index}`, `profile-never-seen-${index}`, 'complete', '2026-08-28T11:50:00.000+00:00'),
     );
 
-    const summary = await runOrdersSync('orders', { now: NOW, client: makeTransport([strangers]) });
+    const summary = await runOrdersSync({ now: NOW, client: makeTransport([strangers]) });
 
     expect(summary.skippedUnknownProfile).toBe(60);
     // Список в сводке — образец для одной строки лога, и он обрезан.
@@ -479,7 +479,7 @@ describe('журнал прогона синхронизации', () => {
     const broken = buildRawOrder(orderId, driver.profileId, 'complete', '2026-08-28T11:50:00.000+00:00');
     delete broken['payment_method'];
 
-    const first = await runOrdersSync('orders', { now: NOW, client: makeTransport([[broken]]) });
+    const first = await runOrdersSync({ now: NOW, client: makeTransport([[broken]]) });
 
     expect(first.malformed).toBe(1);
     const afterFirst = await readSyncSkips();
@@ -491,7 +491,7 @@ describe('журнал прогона синхронизации', () => {
 
     // Тот же заказ, пришедший целым. `resolved_at` и есть разница между «что потеряно
     // до сих пор» и «что когда-либо пропускалось».
-    await runOrdersSync('orders', {
+    await runOrdersSync({
       now: new Date(NOW.getTime() + 60_000),
       client: makeTransport([
         [buildRawOrder(orderId, driver.profileId, 'complete', '2026-08-28T11:50:00.000+00:00')],
@@ -514,7 +514,7 @@ describe('журнал прогона синхронизации', () => {
     );
     order['category'] = 'hyperloop';
 
-    const summary = await runOrdersSync('orders', { now: NOW, client: makeTransport([[order]]) });
+    const summary = await runOrdersSync({ now: NOW, client: makeTransport([[order]]) });
 
     // Заказ записан: чужой словарь нам не принадлежит, и новое значение на той стороне
     // не роняет синхронизацию (docs/decisions.md).
@@ -543,7 +543,7 @@ describe('журнал прогона синхронизации', () => {
     order['status'] = 'teleport';
     order['events'] = [{ event_at: '2026-08-28T11:50:00.000+00:00', order_status: 'teleport' }];
 
-    await runOrdersSync('orders', { now: NOW, client: makeTransport([[order]]) });
+    await runOrdersSync({ now: NOW, client: makeTransport([[order]]) });
 
     // Ссылкой служит строка `словарь=значение` целиком. Будь ею одно значение, эти две
     // записи схлопнулись бы уникальностью в одну, и словарь, в котором расширение,

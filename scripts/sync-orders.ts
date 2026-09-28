@@ -11,13 +11,15 @@
  * он снимает расписание, а не запрещает синхронизацию.
  *
  * Запуск: make sync-orders            — скользящее окно
- *         make sync-orders kind=orders_catchup — догоняющее
+ *         make sync-orders kind=orders_catchup — догоняющий: тот же запуск, что делает
+ *           расписание, — продолжает проход кусками или начинает новый, если пора
  */
 import { consola } from 'consola';
 
 import { db } from '#server/db';
 import type { OrdersSyncKind } from '#server/services/sync/config';
-import { runOrdersSync } from '#server/services/sync/syncOrders';
+import { runOrdersSync, type OrdersSyncSummary } from '#server/services/sync/syncOrders';
+import { runOrdersCatchup } from '#server/services/sync/syncOrdersCatchup';
 
 const log = consola.withTag('sync-orders');
 
@@ -31,14 +33,7 @@ const readKind = (): OrdersSyncKind => {
   return requested;
 };
 
-const main = async (): Promise<void> => {
-  const summary = await runOrdersSync(readKind());
-
-  if (summary.status === 'skipped') {
-    log.info('Прогон не заводился: окно пусто');
-    return;
-  }
-
+const logSummary = (summary: OrdersSyncSummary): void => {
   log.info('Сводка прогона', {
     kind: summary.kind,
     runId: summary.runId,
@@ -59,6 +54,29 @@ const main = async (): Promise<void> => {
     unknownValues: summary.unknownValues,
     accrual: summary.accrual,
   });
+};
+
+const main = async (): Promise<void> => {
+  if (readKind() === 'orders_catchup') {
+    const catchup = await runOrdersCatchup();
+
+    if (catchup.status === 'waiting') {
+      log.info('Проход пройден, следующему рано — прогонов не было');
+      return;
+    }
+
+    catchup.slices.forEach(logSummary);
+    return;
+  }
+
+  const summary = await runOrdersSync();
+
+  if (summary.status === 'skipped') {
+    log.info('Прогон не заводился: окно пусто');
+    return;
+  }
+
+  logSummary(summary);
 };
 
 main()
