@@ -67,6 +67,9 @@ const reasonOf = (error: unknown): string => (error instanceof Error ? error.mes
  * там кнопка приложения. Поэтому служебное сообщение уходит отдельно и сразу удаляется —
  * клавиатура снимается отправкой, удаление её не возвращает.
  *
+ * Служебное сообщение уходит без звука: иначе телефон водителя вздрагивал бы на каждом
+ * приветствии, а уведомление «·» успевало бы показаться до удаления.
+ *
  * Без памяти «уже снимали»: приветствие редкое, и два лишних вызова дешевле состояния.
  * Неудача снятия приветствие не отменяет — строка в лог и дальше.
  */
@@ -76,6 +79,7 @@ const removeLegacyKeyboard = async (context: Context, chatId: bigint): Promise<v
   try {
     const message = await context.reply(KEYBOARD_REMOVAL_TEXT, {
       reply_markup: { remove_keyboard: true },
+      disable_notification: true,
     });
 
     messageId = message.message_id;

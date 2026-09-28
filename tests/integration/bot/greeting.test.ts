@@ -265,6 +265,8 @@ describe('ответ бота на входящее сообщение', () => {
 
     expect(bot.calls).toEqual(['sendMessage', 'deleteMessage', 'sendMessage']);
     expect(removal?.replyMarkup).toEqual({ remove_keyboard: true });
+    // Без звука: иначе телефон водителя вздрагивал бы на каждом приветствии.
+    expect(removal?.disableNotification).toBe(true);
     expect(bot.deleted.map((message) => message.messageId)).toEqual([removal?.messageId]);
     expect(greeting?.text).toBe(text('start_greeting', 'ru'));
   });

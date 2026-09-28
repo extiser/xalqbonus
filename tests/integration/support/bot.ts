@@ -25,6 +25,8 @@ export type SentMessage = {
   messageId: number;
   /** Клавиатура сообщения как ушла в Telegram; пусто — без неё. */
   replyMarkup: unknown;
+  /** Ушло без звука и уведомления. */
+  disableNotification: boolean;
 };
 
 /** Удалённое ботом сообщение — прежний экран, который снимает `sendScreen`. */
@@ -97,6 +99,7 @@ export const createBotDouble = (): BotDouble => {
         text: readString(payload, 'text'),
         messageId: lastMessageId,
         replyMarkup: payload.reply_markup,
+        disableNotification: payload.disable_notification === true,
       });
 
       return { message_id: lastMessageId, date: 0, chat: { id: 0, type: 'private', first_name: '' } };
