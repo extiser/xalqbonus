@@ -13,8 +13,11 @@
 # Шаги — те же, что в день выката (docker/DEPLOY-MANUAL.md → «Перенос старой базы в день
 # выката»), кроме снятия дампов: они уже лежат в `_backup/`.
 #
+# Выгрузка реестра — аргументом, обязательно: её снимает scripts/export-registry.py, и рядом
+# с ней должен лежать `.meta.json`. Какую выгрузку репетировать, решает запускающий.
+#
 # Запуск из корня репозитория, при поднятом локальном стеке (`make up-d`):
-#   bash scripts/rehearse-legacy-import.sh [выгрузка реестра .jsonl]
+#   bash scripts/rehearse-legacy-import.sh <выгрузка реестра .jsonl>
 set -Eeuo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -26,19 +29,23 @@ DB_NAME="xalqbonus_0928"
 XB_DUMP="_backup/xalqbonus_20260928_064051.sql.gz"
 # `pg_dump -Fc -n public` старого бота из системного Postgres машины.
 PUBLIC_DUMP="_backup/legacy-public-2026-09-28.dump"
-# Реестр приходит из Fleet API, а не из дампов, и к их дате отношения не имеет. Свежей выгрузки
-# локально нет — берётся последняя; записи старой базы, заведённые после неё, уйдут
-# в несопоставленные, и эталон это учтёт: он снимается по той же выгрузке.
-PROFILES="${1:-_reference/fleet-api/dumps/driver-profiles-2026-08-27.jsonl}"
+# Реестр приходит из Fleet API, а не из дампов, и к их дате отношения не имеет. Записи старой
+# базы, заведённые после выгрузки, уйдут в несопоставленные, и эталон это учтёт: он снимается
+# по той же выгрузке.
+PROFILES="${1:-}"
 REPORT="_reference/legacy/import-report-${DB_NAME}.md"
 
 COMPOSE_FILE="docker/compose.local.yml"
 ENV_FILE=".env"
 
-case "${1:-}" in
+case "$PROFILES" in
   -h | --help)
-    sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit 0
+    ;;
+  '')
+    log_error старт "выгрузка реестра не названа: bash scripts/rehearse-legacy-import.sh <выгрузка .jsonl>"
+    exit 1
     ;;
 esac
 
@@ -101,7 +108,15 @@ compose exec -T app sh -c \
   sh "$DB_NAME"
 log_info миграция "применены к ${DB_NAME}"
 
-# --- 5. Перенос — бандлом, который поедет на машину -------------------------------------
+# --- 5. Столкновения привязок — тем же запросом, что на машине перед переносом ----------
+#
+# Непустой результат — остановка: перенос на такой базе упал бы посередине на уникальном
+# индексе привязок. Столкновения на копии прода решаются так же, как на машине, — руками.
+compose exec -T postgres sh -c 'psql -X -q -U "$POSTGRES_USER" -d "$1"' \
+  sh "$DB_NAME" < docker/scripts/legacy-link-collisions.sql
+log_info привязки "столкновений нет"
+
+# --- 6. Перенос — бандлом, который поедет на машину -------------------------------------
 #
 # Не `npx tsx scripts/import-legacy.ts`: на машине исполняется `.output/import-legacy.mjs`,
 # и репетировать надо его. Собирается внутри app-контейнера — там же, где потом запускается.
@@ -113,7 +128,7 @@ compose exec -T app sh -c \
   sh "$DB_NAME" "$PROFILES" "$REPORT"
 log_info перенос "отчёт: ${REPORT}"
 
-# --- 6. Инварианты журнала — как `make prod-invariants` после переноса на машине ---------
+# --- 7. Инварианты журнала — как `make prod-invariants` после переноса на машине ---------
 
 compose exec -T postgres sh -c 'psql -X -q -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$1"' \
   sh "$DB_NAME" < scripts/invariants.sql
