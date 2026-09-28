@@ -322,6 +322,11 @@ prod-sql: ## Прогнать SQL-файл по prod-БД одной сесси�
 # окружением (DEPLOY-MANUAL.md → шаги 9 и 10). Остановленный контейнер с прежней
 # конфигурацией `up -d` поднимает так же, как `start`. Образ не собирается — `--build` есть
 # только у `prod-up`.
+#
+# Зависимости `prod-start` не трогает — `--no-deps`. Без флага `up -d` сверяет и `postgres`
+# с `redis` и пересоздаёт их, если их конфигурация изменилась: цель, названная про приложение
+# и воркер, рвала бы соединения с базой посреди переноса или восстановления. Во всех местах
+# сценария, где цель стоит, база и очередь уже подняты.
 PROD_APP_SERVICES = app worker
 
 prod-stop: ## Остановить приложение и/или воркер prod-стека. make prod-stop services="app worker"
@@ -336,7 +341,7 @@ prod-start: ## Поднять приложение и/или воркер prod-�
 	@for service in $(services); do \
 		case " $(PROD_APP_SERVICES) " in *" $$service "*) ;; *) echo "сервис $$service целью не поднимается — только $(PROD_APP_SERVICES); весь стек — make prod-up"; exit 1;; esac; \
 	done
-	$(COMPOSE_PROD) up -d $(services)
+	$(COMPOSE_PROD) up -d --no-deps $(services)
 
 # Возврат prod-БД из копии `pg-backup.sh` (DEPLOY-MANUAL.md → «Откат образа ≠ откат базы»
 # и «Перенос старой базы в день выката», шаг 11). Копия — простой SQL, снятый без `--clean`:

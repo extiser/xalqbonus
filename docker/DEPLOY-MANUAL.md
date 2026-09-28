@@ -787,10 +787,18 @@ ls -1 /srv/xalqbonus-backups/pre-migrate/
 # 2. Погасить приложение и воркер, чтобы никто не писал в базу во время восстановления
 make prod-stop services="app worker"
 
-# 3. Восстановить (ОСТОРОЖНО: перезапишет данные, появившиеся после дампа)
+# 3. Снести схемы: копия pg-backup.sh снята без --clean и поверх существующих таблиц
+#    не ложится — prod-db-restore на непустых схемах откажет
+make prod-psql
+#   DROP SCHEMA xb CASCADE;
+#   DROP SCHEMA public CASCADE;
+#   CREATE SCHEMA public;
+#   \q
+
+# 4. Восстановить (ОСТОРОЖНО: перезапишет данные, появившиеся после дампа)
 make prod-db-restore dump=/srv/xalqbonus-backups/pre-migrate/<файл>.sql.gz
 
-# 4. Вернуть образ, на котором эта схема работала
+# 5. Вернуть образ, на котором эта схема работала
 make prod-rollback sha=<sha до неудачного выката>
 ```
 
