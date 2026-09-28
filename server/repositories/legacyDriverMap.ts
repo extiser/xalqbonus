@@ -156,3 +156,45 @@ export const hasLegacyRecord = async (personId: string): Promise<boolean> => {
 
   return rows[0]?.exists ?? false;
 };
+
+export type LegacyDebt = {
+  personId: string;
+  /** Записи старой базы человека: у склеенной пары их две. */
+  legacyDriverIds: number[];
+  /** Долг — отрицательным числом, как он лежит на счёте после переноса. */
+  points: number;
+};
+
+/**
+ * Долги, перенесённые из старой базы: операции `opening` со счёта водителя (issue #276).
+ *
+ * Читается по журналу, а не по счётчикам прогона — по той же причине, что и остальные
+ * цифры отчёта. Номера записей берутся из карты переноса: `note` операции пишется для
+ * человека, и разбирать его обратно в числа незачем.
+ */
+export const readLegacyDebts = async (): Promise<LegacyDebt[]> => {
+  const rows = await db.$queryRaw<
+    { personId: string; legacyDriverIds: number[]; amount: bigint }[]
+  >`
+    SELECT account."person_id"                                    AS "personId",
+           COALESCE(
+             array_agg(map."legacy_driver_id" ORDER BY map."legacy_driver_id")
+               FILTER (WHERE map."legacy_driver_id" IS NOT NULL),
+             '{}'
+           )                                                      AS "legacyDriverIds",
+           transfer."amount"                                      AS "amount"
+      FROM xb.point_transfers AS transfer
+      JOIN xb.accounts AS account
+        ON account."id" = transfer."from_account_id" AND account."type" = 'driver'
+      LEFT JOIN xb.legacy_driver_map AS map ON map."person_id" = account."person_id"
+     WHERE transfer."reason" = 'opening'
+     GROUP BY transfer."id", account."person_id", transfer."amount"
+     ORDER BY transfer."amount" DESC, account."person_id"
+  `;
+
+  return rows.map((row) => ({
+    personId: row.personId,
+    legacyDriverIds: row.legacyDriverIds,
+    points: -Number(row.amount),
+  }));
+};

@@ -4,8 +4,8 @@ import { db } from '#server/db';
  * Фикстуры и уборка для тестов ядра баллов.
  *
  * Тесты ходят в настоящую базу, а не в заглушку: проверяются ровно те вещи, которых
- * в заглушке нет — уникальное ограничение на ключ идемпотентности, `CHECK` на минусовой
- * баланс, блокировки и инкремент на стороне базы. Заглушка подтвердила бы работу кода,
+ * в заглушке нет — уникальное ограничение на ключ идемпотентности, проверка остатка
+ * под блокировкой счёта, инкремент на стороне базы. Заглушка подтвердила бы работу кода,
  * а не работу ядра.
  *
  * Уборка идёт по людям, заведённым тестом, а не `TRUNCATE` по таблицам: локальная база
@@ -411,6 +411,24 @@ export const readTransfer = async (
     SELECT "reason"::text AS "reason", "amount", "order_id" AS "orderId"
       FROM xb.point_transfers
      WHERE "id" = ${transferId}::uuid
+  `;
+
+  return rows[0] ?? null;
+};
+
+/** Перевод по ключу идемпотентности вместе с парой счетов: откуда и куда он шёл. */
+export const readTransferByKey = async (
+  idempotencyKey: string,
+): Promise<{ reason: string; amount: bigint; fromAccountId: string; toAccountId: string } | null> => {
+  const rows = await db.$queryRaw<
+    { reason: string; amount: bigint; fromAccountId: string; toAccountId: string }[]
+  >`
+    SELECT "reason"::text     AS "reason",
+           "amount",
+           "from_account_id"  AS "fromAccountId",
+           "to_account_id"    AS "toAccountId"
+      FROM xb.point_transfers
+     WHERE "idempotency_key" = ${idempotencyKey}
   `;
 
   return rows[0] ?? null;

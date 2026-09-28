@@ -77,17 +77,22 @@ const FIGURES: readonly {
     baselineSource: '`public."Drivers"` ⋈ реестр парка',
     actualSource: '`xb.legacy_driver_map`',
   },
+  // Долг из старой базы переносится долгом (issue #276), и обе стороны считают его одним
+  // правилом. Перенесённые баллы — сумма со знаком: эталон складывает `points` как есть,
+  // отрицательные тоже, результат — записи `opening` на водительских счетах, где долг лежит
+  // минусом. Положительные балансы — только строго больше нуля: запись с долгом в них
+  // не входит ни с одной стороны.
   {
     key: 'pointsTransferred',
-    title: 'перенесённых баллов',
-    baselineSource: 'сумма `public."Drivers".points` по сопоставленным',
-    actualSource: 'сумма операций `opening` в журнале `xb`',
+    title: 'перенесённых баллов, долги минусом',
+    baselineSource: 'сумма `public."Drivers".points` со знаком по сопоставленным',
+    actualSource: 'сумма записей `opening` на водительских счетах `xb`',
   },
   {
     key: 'positiveBalances',
     title: 'записей старой базы с положительным балансом',
-    baselineSource: '`public."Drivers"` ⋈ реестр парка',
-    actualSource: '`xb.legacy_driver_map`',
+    baselineSource: '`public."Drivers"` ⋈ реестр парка, `points > 0`',
+    actualSource: '`xb.legacy_driver_map`, `legacy_points > 0`',
   },
   {
     key: 'personsWithSeveralProfiles',

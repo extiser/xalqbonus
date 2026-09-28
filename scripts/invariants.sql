@@ -75,16 +75,31 @@ HAVING SUM(delta) <> 0
 ;
 SELECT :ROW_COUNT > 0 AS violated_third \gset
 
-\warn '=== 4. Водительский счёт с отрицательным балансом ==='
+\warn '=== 4. Водительский счёт в минусе без долга из переноса или глубже него ==='
 -- invariant:begin 4
 -- Ловит двойное списание при обмене. Эмиссионный счёт в минусе — норма:
 -- его отрицательный баланс и есть объём выданных баллов.
+--
+-- Минус у водительского счёта допустим в одном случае — долг из старой базы, перенесённый
+-- долгом: операция `opening` со счёта водителя в `emission` (issue #276). Проверки в базе
+-- на это нет — она не видит причину операции, — поэтому держит её этот запрос: минус без
+-- такой операции и минус глубже её суммы — нарушение. Поездки долг уменьшают, а углубить
+-- его не может ни одно списание.
 SELECT
-    id,
-    person_id,
-    balance
-FROM xb.accounts
-WHERE type = 'driver' AND balance < 0
+    account.id,
+    account.person_id,
+    account.balance,
+    COALESCE(debt.amount, 0) AS opening_debt
+FROM xb.accounts AS account
+LEFT JOIN (
+    SELECT from_account_id,
+           SUM(amount)::bigint AS amount
+      FROM xb.point_transfers
+     WHERE reason = 'opening'
+     GROUP BY from_account_id
+) AS debt ON debt.from_account_id = account.id
+WHERE account.type = 'driver'
+  AND account.balance < -COALESCE(debt.amount, 0)
 -- invariant:end
 ;
 SELECT :ROW_COUNT > 0 AS violated_fourth \gset

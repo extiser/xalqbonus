@@ -29,6 +29,7 @@ import { db } from '#server/db';
 import {
   countByMatchMethod,
   countByTelegramStatus,
+  readLegacyDebts,
   readLegacyDriverMapCounts,
 } from '#server/repositories/legacyDriverMap';
 import { openLegacyReadSession } from '#server/repositories/legacyPublic';
@@ -114,6 +115,7 @@ const main = async (): Promise<void> => {
   const totals = await readBalanceTotals();
   const mapCounts = await readLegacyDriverMapCounts();
   const openingTotal = await readOpeningTotal();
+  const debts = await readLegacyDebts();
   const telegramStatuses = await countByTelegramStatus();
   const matchMethods = await countByMatchMethod();
   const confirmedBy = await countByConfirmedBy();
@@ -160,6 +162,7 @@ const main = async (): Promise<void> => {
     totals,
     watermark,
     openingTotal,
+    debts,
     telegramStatuses,
     matchMethods,
     confirmedBy,
@@ -192,6 +195,7 @@ type ReportInput = {
   totals: Awaited<ReturnType<typeof readBalanceTotals>>;
   watermark: Awaited<ReturnType<typeof markRegistryWatermark>>;
   openingTotal: number;
+  debts: Awaited<ReturnType<typeof readLegacyDebts>>;
   telegramStatuses: Awaited<ReturnType<typeof countByTelegramStatus>>;
   matchMethods: Awaited<ReturnType<typeof countByMatchMethod>>;
   confirmedBy: Awaited<ReturnType<typeof countByConfirmedBy>>;
@@ -210,7 +214,9 @@ const renderReport = (input: ReportInput): string => {
     `Сеанс чтения старой схемы: \`default_transaction_read_only = ${input.readOnlyMode}\` — записать что-либо в \`public\` он не может физически.`,
   );
   lines.push('');
-  lines.push('Персональных данных в отчёте нет: только агрегаты.');
+  lines.push(
+    'Персональных данных в отчёте нет: только агрегаты и номера `Drivers.id` записей, перенесённых долгом.',
+  );
   lines.push('');
 
   lines.push('## Контрольные цифры');
@@ -364,11 +370,34 @@ const renderReport = (input: ReportInput): string => {
     ),
   );
   lines.push(
+    renderRow(
+      'перенесено долгом',
+      `${formatNumber(input.debts.length)} человек, сумма ${formatNumber(
+        input.debts.reduce((total, debt) => total + debt.points, 0),
+      )}`,
+    ),
+  );
+  lines.push(
     renderRow('**перенесено операциями `opening`**', `**${formatNumber(input.openingTotal)}**`),
   );
   lines.push(renderRow('сумма балансов в `xb`', formatNumber(input.totals.driverBalanceTotal)));
   lines.push(renderRow('баланс счёта `emission`', formatNumber(input.totals.emissionBalance)));
   lines.push('');
+  lines.push(
+    'Сумма операций `opening` — со знаком: долг из старой базы переносится долгом, операцией со счёта водителя в `emission`, и входит в сумму минусом.',
+  );
+  lines.push('');
+
+  if (input.debts.length > 0) {
+    lines.push('Перенесено долгом:');
+    lines.push('');
+    lines.push('| `Drivers.id` | долг |');
+    lines.push('|---|---:|');
+    for (const debt of input.debts) {
+      lines.push(`| ${debt.legacyDriverIds.join(', ')} | ${formatNumber(debt.points)} |`);
+    }
+    lines.push('');
+  }
 
   lines.push('## Отметка синхронизации');
   lines.push('');
