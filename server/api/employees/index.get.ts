@@ -1,4 +1,5 @@
 import { readEmployeeAccounts } from '#server/services/employees/readEmployeeAccounts';
+import { readAppOrigin } from '#server/utils/appOrigin';
 import { requireEmployeeRole } from '#server/utils/employeeAuth';
 import { STAFF_ROLES } from '#shared/access';
 import type { EmployeeAccountsResponse } from '#shared/types/employee';
@@ -12,5 +13,6 @@ export default defineEventHandler(async (event): Promise<EmployeeAccountsRespons
 
   return readEmployeeAccounts({
     actor: { employeeId: employee.employeeId, role: employee.role },
+    appOrigin: readAppOrigin(event),
   });
 });

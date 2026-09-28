@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { formatDate } from '~/utils/format';
+import { formatDate, formatDateTime } from '~/utils/format';
 import { employeeRoleLabel } from '~/utils/labels';
+import { formatPhone } from '#shared/phone';
 import type { EmployeeAccount, EmployeePendingInvite } from '#shared/types/employee';
 import type { LoadState } from '~/types/loadState';
 
@@ -14,7 +15,20 @@ import type { LoadState } from '~/types/loadState';
  *
  * Офисы здесь только показываются: закрепление правится на странице офиса (issue #132 →
  * «Не делать»).
+ *
+ * Ссылки — приглашения и «задать пароль» — видны, пока живы, и копируются (issue #267): их
+ * пересылают человеку, и потерять ссылку, не успев отправить, больше нельзя. Приезжают они
+ * только тому, кто вправе их выпустить. Истекла ссылка пароля — «Сбросить пароль» выпускает
+ * новую.
+ *
+ * Привязан ли Telegram, видно в каждой строке: руководитель выпускает ссылку привязки сам
+ * и по списку видит, дошло ли дело (issue #267). Кнопка «Ссылка для Telegram» — у непривязанной
+ * учётки, которой смотрящий вправе её выпустить: чужой управляемой и своей.
  */
+
+/** Кнопка ссылки привязки: Telegram не привязан, право есть, живой ссылки нет. */
+const canIssueTelegram = (account: EmployeeAccount): boolean =>
+  !account.telegramBound && account.telegramLinkIssuable && account.telegramLink === null;
 const props = defineProps<{
   accountsState: LoadState;
   accounts: EmployeeAccount[] | null;
@@ -29,6 +43,7 @@ const emit = defineEmits<{
   disable: [employeeId: string];
   enable: [employeeId: string];
   resetPassword: [employeeId: string];
+  issueTelegramLink: [employeeId: string];
   revoke: [inviteId: string];
 }>();
 
@@ -51,7 +66,7 @@ const empty = computed(
 <template>
   <MoleculesSectionPanel
     title="Сотрудники"
-    note="Доступ решает роль. Выключенная учётная запись не входит ни в веб, ни в приложение; сброшенный пароль сотрудник задаёт себе сам в приложении."
+    note="Доступ решает роль. Выключенная учётная запись не входит ни в веб, ни в приложение; сброшенный пароль сотрудник задаёт себе сам — по ссылке, которую вы ему перешлёте."
   >
     <MoleculesStateNotice v-if="state === 'loading'" state="loading" message="Читаем сотрудников…" />
     <MoleculesStateNotice
@@ -69,22 +84,38 @@ const empty = computed(
         >
           <div class="min-w-48 flex-1">
             <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <span class="text-sm font-semibold text-slate-900">Приглашение</span>
+              <span class="text-sm font-semibold text-slate-900">{{ invite.fullName ?? 'Приглашение' }}</span>
               <span class="text-sm text-slate-500">{{ employeeRoleLabel(invite.role) }}</span>
               <AtomsStatusBadge tone="warn" label="Приглашение ждёт" />
             </div>
+            <p v-if="invite.phoneE164" class="mt-0.5 text-xs text-slate-500">
+              {{ formatPhone(invite.phoneE164).display }}
+            </p>
             <p class="mt-0.5 text-xs text-slate-500">
               Выписал {{ invite.invitedByName }} {{ formatDate(invite.createdAt) }}, действует до
-              {{ formatDate(invite.expiresAt) }}
+              {{ formatDateTime(invite.expiresAt) }}
             </p>
           </div>
           <AtomsActionButton
-            v-if="invite.revocable"
+            v-if="invite.revocable && invite.link === null"
             label="Отозвать"
             tone="danger"
             :disabled="busyId === invite.inviteId"
             @click="emit('revoke', invite.inviteId)"
           />
+          <div v-if="invite.link" class="w-full">
+            <MoleculesCopyableLink :link="invite.link">
+              <template #actions>
+                <AtomsActionButton
+                  v-if="invite.revocable"
+                  label="Отозвать"
+                  tone="danger"
+                  :disabled="busyId === invite.inviteId"
+                  @click="emit('revoke', invite.inviteId)"
+                />
+              </template>
+            </MoleculesCopyableLink>
+          </div>
         </li>
 
         <li
@@ -101,6 +132,10 @@ const empty = computed(
                 :label="account.disabled ? 'Выключена' : 'Работает'"
               />
               <AtomsStatusBadge v-if="!account.passwordSet" tone="muted" label="Без пароля" />
+              <AtomsStatusBadge
+                :tone="account.telegramBound ? 'ok' : 'muted'"
+                :label="account.telegramBound ? 'Telegram привязан' : 'Telegram не привязан'"
+              />
               <AtomsStatusBadge v-if="account.isDemo" tone="demo" label="ДЕМО" />
             </div>
             <p class="mt-0.5 text-xs text-slate-500">{{ account.phoneE164 }}</p>
@@ -120,27 +155,52 @@ const empty = computed(
               </template>
             </p>
           </div>
-          <div v-if="account.manageable" class="flex flex-wrap gap-2">
+          <div v-if="account.manageable || canIssueTelegram(account)" class="flex flex-wrap gap-2">
+            <!-- Пока ссылка жива, второй выпуск не нужен: ссылка ниже. Истекла — кнопка
+                 возвращается и выпускает новую. -->
             <AtomsActionButton
-              v-if="account.passwordSet"
+              v-if="canIssueTelegram(account)"
+              label="Ссылка для Telegram"
+              :disabled="busyId === account.employeeId"
+              @click="emit('issueTelegramLink', account.employeeId)"
+            />
+            <!-- У демо-учётки пароля не бывает. -->
+            <AtomsActionButton
+              v-if="account.manageable && !account.isDemo && account.passwordLink === null"
               label="Сбросить пароль"
               :disabled="busyId === account.employeeId"
               @click="emit('resetPassword', account.employeeId)"
             />
             <AtomsActionButton
-              v-if="account.disabled"
+              v-if="account.manageable && account.disabled"
               label="Включить"
               tone="primary"
               :disabled="busyId === account.employeeId"
               @click="emit('enable', account.employeeId)"
             />
             <AtomsActionButton
-              v-else
+              v-else-if="account.manageable"
               label="Выключить"
               tone="danger"
               :disabled="busyId === account.employeeId"
               @click="emit('disable', account.employeeId)"
             />
+          </div>
+          <div v-if="account.passwordLink" class="w-full space-y-2">
+            <p class="text-xs text-slate-500">
+              Ссылка для пароля · до {{ formatDateTime(account.passwordLink.expiresAt) }}
+            </p>
+            <MoleculesCopyableLink :link="account.passwordLink.link" />
+          </div>
+          <div v-if="account.telegramLink && !account.telegramBound" class="w-full space-y-2">
+            <p class="text-xs text-slate-500">
+              Ссылка для Telegram · до {{ formatDateTime(account.telegramLink.expiresAt) }}
+            </p>
+            <MoleculesCopyableLink :link="account.telegramLink.link">
+              <template #actions>
+                <AtomsActionLink label="Открыть в Telegram" :href="account.telegramLink.link" />
+              </template>
+            </MoleculesCopyableLink>
           </div>
         </li>
       </ul>

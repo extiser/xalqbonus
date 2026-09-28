@@ -33,7 +33,6 @@ export type TextKey =
   | 'button_language_ru'
   | 'button_language_uz'
   | 'ask_phone'
-  | 'button_send_phone'
   | 'checking_phone'
   | 'client_outdated'
   | 'client_outdated_title'
@@ -288,16 +287,15 @@ export type TextKey =
   | 'notification_revealed_points_line'
   | 'notification_revealed_office_line'
   | 'notification_revealed_pickup'
-  | 'invite_ask_contact'
-  | 'invite_accepted'
-  | 'invite_not_found'
-  | 'invite_expired'
-  | 'invite_already_accepted'
-  | 'invite_revoked'
-  | 'invite_contact_not_own'
-  | 'invite_phone_invalid'
-  | 'invite_driver_link_exists'
-  | 'invite_employee_exists'
+  | 'employee_telegram_bound'
+  | 'employee_telegram_not_found'
+  | 'employee_telegram_expired'
+  | 'employee_telegram_used'
+  | 'employee_telegram_revoked'
+  | 'employee_telegram_demo'
+  | 'employee_telegram_driver'
+  | 'employee_telegram_employee'
+  | 'employee_telegram_already_bound'
   | 'demo_invite_accepted'
   | 'demo_invite_unknown'
   | 'demo_invite_used'
@@ -387,10 +385,6 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Telegram спросит разрешение отправить номер — нажмите «Поделиться».',
     uz: "Telegram raqamni yuborishga ruxsat so'raydi — «Ulashish» tugmasini bosing.",
   },
-  button_send_phone: {
-    ru: '📱 Отправить номер телефона',
-    uz: '📱 Telefon raqamini yuborish',
-  },
   checking_phone: {
     ru: 'Проверяем ваш номер в базе таксопарка, это займёт несколько секунд…',
     uz: "Telefon raqamingiz taksopark ma'lumotlar bazasida tekshirilmoqda, bu bir necha soniya davom etadi…",
@@ -411,10 +405,7 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Обновите Telegram',
     uz: "Telegram'ni yangilang",
   },
-  /**
-   * Кнопка номера в приложении — своим ключом, а не `button_send_phone`: у бота на кнопке
-   * значок, а в приложении кнопка своя и значка не носит.
-   */
+  /** Кнопка номера в приложении. */
   miniapp_send_phone: {
     ru: 'Отправить номер телефона',
     uz: 'Telefon raqamini yuborish',
@@ -1670,55 +1661,44 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     uz: "Sovg'alarni «{office}» ofisidan {date} gacha olib keting: «Mukofotlarim va sovg'alarim» bo'limidagi kodni ko'rsating.",
   },
 
-  // Приглашение сотрудника. Отказы разведены по причинам все до одного: учётка заводится
-  // в офисе, рядом с тем, кто выписал ссылку, и «что-то пошло не так» здесь означает
-  // разговор двух людей, которые оба не понимают, что чинить.
-  invite_ask_contact: {
-    ru: 'Вас приглашают сотрудником Xalq Taxi. Нажмите кнопку ниже, чтобы подтвердить номер телефона — по нему вы будете входить в систему.',
-    uz: "Sizni Xalq Taxi xodimi sifatida taklif qilishmoqda. Telefon raqamingizni tasdiqlash uchun pastdagi tugmani bosing — tizimga shu raqam orqali kirasiz.",
+  // Привязка Telegram к учётке сотрудника (issue #267): `/start emp_<токен>`. Отказы разведены
+  // по причинам: ссылку выпускает руководитель и пересылает человеку, и понять, просить ли новую
+  // или открывать эту с другого Telegram, человек должен по ответу бота.
+  employee_telegram_bound: {
+    ru: 'Telegram привязан. Откройте приложение — там ваша стойка.',
+    uz: "Telegram ulandi. Ilovani oching — u yerda sizning ish joyingiz.",
   },
-  /**
-   * Приглашение принято — дальше человеку нужен пароль для веба.
-   *
-   * Название пункта цитируется дословно и на узбекском тоже по-русски: экран сотрудника
-   * одноязычный (docs/frontend.md → «Язык»), и найти пункт человек должен глазами, а не переводом.
-   * Меняется `EMPLOYEE_PASSWORD_LABEL` в `app/pages/app.vue` — меняется и здесь (issue #130).
-   */
-  invite_accepted: {
-    ru: 'Готово, {name}: учётная запись сотрудника создана. Чтобы входить с компьютера, откройте приложение кнопкой меню и задайте пароль в пункте «Пароль для входа с компьютера».',
-    uz: "Tayyor, {name}: xodim hisobi yaratildi. Kompyuterdan kirish uchun menyu tugmasi orqali ilovani oching va «Пароль для входа с компьютера» bo'limida parol belgilang.",
+  employee_telegram_not_found: {
+    ru: 'Ссылка не работает. Попросите новую.',
+    uz: "Havola ishlamayapti. Yangisini so'rang.",
   },
-  invite_not_found: {
-    ru: 'Такого приглашения нет. Проверьте, полностью ли скопирована ссылка, или попросите выписать новую.',
-    uz: "Bunday taklif topilmadi. Havola to'liq nusxalanganini tekshiring yoki yangisini so'rang.",
+  employee_telegram_expired: {
+    ru: 'Ссылка устарела — она действует двое суток. Попросите новую.',
+    uz: "Havola eskirgan — u ikki kun amal qiladi. Yangisini so'rang.",
   },
-  invite_expired: {
-    ru: 'Срок действия приглашения истёк — ссылка живёт двое суток. Попросите выписать новую.',
-    uz: "Taklif muddati tugagan — havola ikki kun amal qiladi. Yangisini so'rang.",
+  employee_telegram_used: {
+    ru: 'Эта ссылка уже не действует. Попросите новую.',
+    uz: "Bu havola endi amal qilmaydi. Yangisini so'rang.",
   },
-  invite_already_accepted: {
-    ru: 'Этим приглашением уже воспользовались: ссылка одноразовая. Если учётную запись завели не вы, сообщите тому, кто выписал ссылку.',
-    uz: "Bu takliddan allaqachon foydalanilgan: havola bir martalik. Agar hisobni siz yaratmagan bo'lsangiz, havolani bergan xodimga xabar bering.",
+  employee_telegram_revoked: {
+    ru: 'Эта ссылка уже не действует. Попросите новую.',
+    uz: "Bu havola endi amal qilmaydi. Yangisini so'rang.",
   },
-  invite_revoked: {
-    ru: 'Приглашение отозвано. Если это ошибка, попросите выписать новую ссылку.',
-    uz: "Taklif bekor qilingan. Agar bu xato bo'lsa, yangi havola so'rang.",
+  employee_telegram_demo: {
+    ru: 'Этот Telegram открыт как демо-доступ — привязать его к учётной записи сотрудника нельзя.',
+    uz: "Bu Telegram demo-kirish sifatida ochilgan — uni xodim hisobiga ulab bo'lmaydi.",
   },
-  invite_contact_not_own: {
-    ru: 'Отправьте, пожалуйста, свой номер телефона кнопкой ниже — чужой контакт мы принять не можем.',
-    uz: "Iltimos, pastdagi tugma bilan o'z telefon raqamingizni yuboring — boshqa shaxsning kontaktini qabul qila olmaymiz.",
+  employee_telegram_driver: {
+    ru: 'Этот Telegram участвует в программе как водитель — привязать его к учётной записи сотрудника нельзя.',
+    uz: "Bu Telegram dasturda haydovchi sifatida qatnashmoqda — uni xodim hisobiga ulab bo'lmaydi.",
   },
-  invite_phone_invalid: {
-    ru: 'Не получилось разобрать ваш номер телефона. Учётную запись сотрудника заводят на узбекский номер вида +998 XX XXX XX XX.',
-    uz: "Telefon raqamingizni aniqlay olmadik. Xodim hisobi +998 XX XXX XX XX ko'rinishidagi o'zbek raqamiga ochiladi.",
+  employee_telegram_employee: {
+    ru: 'Этот Telegram уже привязан к другой учётной записи сотрудника.',
+    uz: "Bu Telegram boshqa xodim hisobiga ulangan.",
   },
-  invite_driver_link_exists: {
-    ru: 'Этот аккаунт Telegram или этот номер уже зарегистрирован как водитель Xalq Taxi. Водителем и сотрудником одновременно быть нельзя: сообщите тому, кто выписал ссылку, — он закроет водительскую регистрацию или заведёт вас на другой аккаунт.',
-    uz: "Bu Telegram akkaunti yoki bu raqam Xalq Taxi haydovchisi sifatida ro'yxatdan o'tgan. Bir vaqtning o'zida ham haydovchi, ham xodim bo'lish mumkin emas: havolani bergan xodimga ayting — u haydovchi ro'yxatini yopadi yoki sizni boshqa akkauntga biriktiradi.",
-  },
-  invite_employee_exists: {
-    ru: 'На этот аккаунт Telegram или на этот номер уже заведена учётная запись сотрудника. Откройте приложение кнопкой меню — вы уже в системе.',
-    uz: "Bu Telegram akkaunti yoki bu raqam uchun xodim hisobi allaqachon mavjud. Menyu tugmasi orqali ilovani oching — siz tizimdasiz.",
+  employee_telegram_already_bound: {
+    ru: 'К этой учётной записи Telegram уже привязан.',
+    uz: "Bu hisobga Telegram allaqachon ulangan.",
   },
 
   // Приглашение в демо (issue #252). Отвечает бот всегда по-русски: у зрителя до принятия

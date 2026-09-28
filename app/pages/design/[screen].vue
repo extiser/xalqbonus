@@ -683,8 +683,6 @@ const staffSheet = ref<'none' | 'issue' | 'cancel' | 'office' | 'reset'>(
         : 'none',
 );
 const staffPicked = ref<string | null>('chilanzar');
-const staffPassword = ref('qwerty2026x');
-const staffRepeat = ref(slug.value === 'staff-password' ? 'qwerty20' : 'qwerty2026x');
 const staffOutcome = slug.value === 'staff-desk-issued' ? staffIssuedMock : slug.value === 'staff-desk-not-found' ? staffNotFoundMock : null;
 const staffDeskRows = slug.value === 'staff-desk-empty' ? [] : slug.value === 'staff-desk-issued' ? staffDeskRowsMock.filter((row) => row.id !== 'order-1042') : staffDeskRowsMock;
 const STAFF_FAILED = 'Приложение не ответило. Проверьте связь и попробуйте снова.';
@@ -752,26 +750,11 @@ function go(target: string): void {
         <OrganismsNextStaffProfileScreen
           v-else-if="slug.startsWith('staff-profile')"
           v-bind="staffProfileMock"
-          :password-set="slug === 'staff-profile-password-set'"
           :reset-open="staffSheet === 'reset'"
           @back="go('staff-desk')"
-          @password="go('staff-password')"
           @ask-reset="staffSheet = 'reset'"
           @reset="staffSheet = 'none'"
           @close="staffSheet = 'none'"
-        />
-        <OrganismsNextStaffPasswordScreen
-          v-else-if="slug.startsWith('staff-password')"
-          v-model:password="staffPassword"
-          v-model:repeat="staffRepeat"
-          phone="+998 90 765-43-21"
-          :submitting="false"
-          :error="null"
-          :mismatch="slug === 'staff-password' && staffPassword !== staffRepeat"
-          :saved="slug === 'staff-password-saved'"
-          @save="go('staff-password-saved')"
-          @back="go('staff-profile')"
-          @done="go('staff-profile-password-set')"
         />
         <template v-else>
           <OrganismsNextStaffDesk

@@ -1,16 +1,16 @@
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
-import { insertEmployeeInvite } from '#server/repositories/employeeInvites';
 import { acceptInvite } from '#server/services/employees/acceptInvite';
-import { INVITE_LIFETIME_MS } from '#server/services/employees/config';
-import { createInviteToken, hashInviteToken } from '#server/services/employees/inviteToken';
-import { issueInvite, RoleNotInvitableError } from '#server/services/employees/issueInvite';
+import { InviteInputError, issueInvite, RoleNotInvitableError } from '#server/services/employees/issueInvite';
+import { loginByPassword } from '#server/services/employees/loginByPassword';
+import { readInviteByToken } from '#server/services/employees/readInviteByToken';
 import { canInviteRole } from '#server/services/employees/roles';
 import { revokeInvite } from '#server/services/employees/revokeInvite';
 import { cleanupTestData, createTestPerson, disconnectDatabase } from '../support/database';
 import {
   cleanupTestEmployees,
   createTestEmployee,
+  insertTestInvite,
   linkTestDriver,
   nextTestPhone,
   nextTestTelegramUserId,
@@ -19,35 +19,42 @@ import {
   setTestProfilePhone,
   trackTestEmployee,
 } from '../support/employees';
+import { disconnectQueues } from '../support/queues';
 
 /**
- * Приглашения сотрудников: срок, одноразовость, правило «роль строго ниже своей»
- * и отказ при пересечении ролей.
+ * Приглашения сотрудников в вебе (issue #267): выпуск с именем и телефоном, принятие с паролем,
+ * срок, одноразовость, правило «роль строго ниже своей» и отказ при пересечении ролей.
  *
- * Приглашения кладутся в базу репозиторием, а не `issueInvite`: тот перед записью ходит
- * в Telegram за именем бота, чтобы собрать ссылку, а тесту сеть не нужна и не должна быть
- * нужна. Проверяется здесь то, что решает `acceptInvite`, — и решает он по строке в базе.
- *
- * Правило ролей при этом проверяется и на самом `issueInvite`: отказ по роли случается
- * до всякого обращения к Telegram, и ровно это в нём и важно.
+ * Принятие проверяется и на строках, положенных в базу фикстурой: срок в прошлом и телефон,
+ * который выпуск отклонил бы, — это то, что решает принятие по строке, а не выпуск.
  */
 
 const HOUR_MS = 60 * 60 * 1_000;
+const PASSWORD = 'довольно-длинный-пароль';
+const APP_ORIGIN = 'https://bonus.example';
+const CLIENT_ADDRESS = '203.0.113.9';
 
-const insertInviteFor = async (
-  invitedById: string,
-  role: 'admin' | 'manager',
-  expiresAt: Date,
-): Promise<{ token: string; inviteId: string }> => {
-  const token = createInviteToken();
-  const invite = await insertEmployeeInvite({
-    role,
-    tokenHash: hashInviteToken(token),
-    invitedById,
-    expiresAt,
-  });
+/** Иностранный номер фикстуры: `+7` и десять цифр, начало случайное, как у узбекских. */
+let lastForeignSuffix = 9_000_000_000 + Math.floor(Math.random() * 900_000_000);
 
-  return { token, inviteId: invite.id };
+const nextForeignPhone = (): string => {
+  lastForeignSuffix += 1;
+
+  return `+7${lastForeignSuffix}`;
+};
+
+const issueRejection = async (promise: Promise<unknown>): Promise<string | null> => {
+  try {
+    await promise;
+
+    return null;
+  } catch (error) {
+    if (error instanceof InviteInputError) {
+      return error.problem;
+    }
+
+    throw error;
+  }
 };
 
 describe('приглашения сотрудников', () => {
@@ -55,7 +62,10 @@ describe('приглашения сотрудников', () => {
     await cleanupTestEmployees();
     await cleanupTestData();
   });
-  afterAll(disconnectDatabase);
+  afterAll(async () => {
+    await disconnectDatabase();
+    await disconnectQueues();
+  });
 
   it('приглашать можно только роль строго ниже своей', async () => {
     expect(canInviteRole('owner', 'admin')).toBe(true);
@@ -67,264 +77,183 @@ describe('приглашения сотрудников', () => {
     expect(canInviteRole('admin', 'owner')).toBe(false);
     expect(canInviteRole('manager', 'manager')).toBe(false);
     expect(canInviteRole('owner', 'owner')).toBe(false);
-  });
 
-  it('выпуск приглашения на роль не ниже своей отбивается до обращения к Telegram', async () => {
     const admin = await createTestEmployee({ role: 'admin' });
 
     await expect(
-      issueInvite({ actor: { employeeId: admin.employeeId, role: 'admin' }, role: 'admin' }),
-    ).rejects.toBeInstanceOf(RoleNotInvitableError);
-
-    await expect(
-      issueInvite({ actor: { employeeId: admin.employeeId, role: 'admin' }, role: 'owner' }),
+      issueInvite({
+        actor: { employeeId: admin.employeeId, role: 'admin' },
+        role: 'admin',
+        fullName: 'Второй Админ',
+        phoneRaw: nextForeignPhone(),
+        appOrigin: APP_ORIGIN,
+      }),
     ).rejects.toBeInstanceOf(RoleNotInvitableError);
   });
 
-  it('приглашение принимается один раз: вторая попытка учётки не создаёт', async () => {
+  it('выпуск с иностранным номером даёт ссылку на страницу веба, и по ней видно имя, роль и телефон', async () => {
     const owner = await createTestEmployee({ role: 'owner' });
-    const { token } = await insertInviteFor(
-      owner.employeeId,
-      'admin',
-      new Date(Date.now() + INVITE_LIFETIME_MS),
-    );
-    const telegramUserId = nextTestTelegramUserId();
-    const phone = nextTestPhone();
+    const phone = nextForeignPhone();
 
-    const first = await acceptInvite({
-      token,
-      telegramUserId,
-      contactUserId: telegramUserId,
+    const invite = await issueInvite({
+      actor: { employeeId: owner.employeeId, role: 'owner' },
+      role: 'admin',
+      fullName: '  Азиз Каримов  ',
       phoneRaw: phone,
-      fullName: 'Азиз Каримов',
+      appOrigin: APP_ORIGIN,
     });
 
-    expect(first.outcome).toBe('accepted');
+    expect(invite.link.startsWith(`${APP_ORIGIN}/invite/`)).toBe(true);
+    expect(invite.fullName).toBe('Азиз Каримов');
+    expect(invite.phoneE164).toBe(phone);
 
-    if (first.outcome !== 'accepted') {
+    // Токен лежит рядом с хешем, пока приглашение живо, — ссылку можно скопировать снова.
+    const token = invite.link.slice(`${APP_ORIGIN}/invite/`.length);
+
+    expect((await readInviteById(invite.inviteId))?.token).toBe(token);
+    expect(await readInviteByToken(token)).toMatchObject({
+      outcome: 'live',
+      invite: { role: 'admin', fullName: 'Азиз Каримов', phoneE164: phone },
+    });
+  });
+
+  it('выпуск отклоняет пустое и длинное имя, неразборчивый и занятый телефон', async () => {
+    const owner = await createTestEmployee({ role: 'owner' });
+    const existing = await createTestEmployee({ role: 'manager' });
+    const actor = { employeeId: owner.employeeId, role: 'owner' as const };
+    const issue = (fullName: string, phoneRaw: string) =>
+      issueInvite({ actor, role: 'manager', fullName, phoneRaw, appOrigin: APP_ORIGIN });
+
+    expect(await issueRejection(issue('   ', nextForeignPhone()))).toBe('full_name_missing');
+    expect(await issueRejection(issue('я'.repeat(81), nextForeignPhone()))).toBe('full_name_too_long');
+    expect(await issueRejection(issue('Кто-то', '12-34'))).toBe('phone_invalid');
+    expect(await issueRejection(issue('Кто-то', existing.phoneE164))).toBe('phone_taken');
+
+    // Телефон живого приглашения — тоже занятый логин.
+    const phone = nextForeignPhone();
+
+    await issue('Первый', phone);
+
+    expect(await issueRejection(issue('Второй', phone))).toBe('phone_taken');
+  });
+
+  it('приглашение на телефон активного водителя не выпускается', async () => {
+    const owner = await createTestEmployee({ role: 'owner' });
+    const driver = await createTestPerson({ inProgram: true });
+    const phone = nextTestPhone();
+    const chatId = nextTestTelegramUserId();
+
+    await setTestProfilePhone(driver.profileId, phone);
+    await linkTestDriver(driver.personId, chatId, chatId);
+
+    const rejection = await issueRejection(
+      issueInvite({
+        actor: { employeeId: owner.employeeId, role: 'owner' },
+        role: 'manager',
+        fullName: 'Водитель',
+        phoneRaw: phone,
+        appOrigin: APP_ORIGIN,
+      }),
+    );
+
+    expect(rejection).toBe('driver_link_exists');
+  });
+
+  it('принятие заводит учётку с паролем и без Telegram, входит по иностранному номеру, второй раз не принимается', async () => {
+    const owner = await createTestEmployee({ role: 'owner' });
+    const phone = nextForeignPhone();
+    const { token, inviteId } = await insertTestInvite({
+      invitedById: owner.employeeId,
+      role: 'admin',
+      fullName: 'Азиз Каримов',
+      phoneE164: phone,
+    });
+
+    const first = await acceptInvite({ token, password: PASSWORD });
+
+    expect(first.outcome).toBe('signed_in');
+
+    if (first.outcome !== 'signed_in') {
       return;
     }
 
-    trackTestEmployee(first.employeeId);
+    trackTestEmployee(first.employee.employeeId);
 
-    const created = await readTestEmployee(first.employeeId);
+    const created = await readTestEmployee(first.employee.employeeId);
 
-    // В учётке проставлены оба признака входа сразу — это и есть смысл одного действия
-    // человека: телефон из контакта, идентификатор из подписи апдейта.
-    expect(created?.role).toBe('admin');
-    expect(created?.phoneE164).toBe(phone);
-    expect(created?.telegramUserId).toBe(telegramUserId);
-    // Пароля нет: его сотрудник задаёт себе сам, из Mini App.
-    expect(created?.passwordHash).toBeNull();
+    expect(created).toMatchObject({ role: 'admin', fullName: 'Азиз Каримов', phoneE164: phone, telegramUserId: null });
+    expect(created?.passwordHash).not.toBeNull();
 
-    const second = await acceptInvite({
-      token,
-      telegramUserId: nextTestTelegramUserId(),
-      contactUserId: null,
-      phoneRaw: nextTestPhone(),
-      fullName: 'Кто-то ещё',
-    });
+    // Принятое приглашение называет учётку, и токен стёрт: дамп базы готовой ссылки не даёт.
+    expect(await readInviteById(inviteId)).toMatchObject({ employeeId: first.employee.employeeId, token: null });
 
-    expect(second.outcome).toBe('already_accepted');
+    expect((await acceptInvite({ token, password: PASSWORD })).outcome).toBe('accepted');
+    expect((await readInviteByToken(token)).outcome).toBe('accepted');
+
+    const login = await loginByPassword({ phoneRaw: phone, password: PASSWORD, clientAddress: CLIENT_ADDRESS });
+
+    expect(login.outcome).toBe('signed_in');
   });
 
-  it('просроченное приглашение отклоняется и учётки не создаёт', async () => {
+  it('короткий пароль приглашение не тратит', async () => {
     const owner = await createTestEmployee({ role: 'owner' });
-    // Срок — 48 часов; час назад истёк.
-    const { token, inviteId } = await insertInviteFor(
-      owner.employeeId,
-      'manager',
-      new Date(Date.now() - HOUR_MS),
-    );
-    const telegramUserId = nextTestTelegramUserId();
+    const { token, inviteId } = await insertTestInvite({ invitedById: owner.employeeId });
 
-    const result = await acceptInvite({
-      token,
-      telegramUserId,
-      contactUserId: telegramUserId,
-      phoneRaw: nextTestPhone(),
-      fullName: 'Опоздавший',
-    });
-
-    expect(result.outcome).toBe('expired');
-
-    const invite = await readInviteById(inviteId);
-
-    expect(invite?.acceptedAt).toBeNull();
-    expect(invite?.employeeId).toBeNull();
+    expect((await acceptInvite({ token, password: 'коротко' })).outcome).toBe('password_too_short');
+    expect((await readInviteById(inviteId))?.acceptedAt).toBeNull();
   });
 
-  it('отозванное приглашение не принимается, а повторный отзыв отвечает «нечего отзывать»', async () => {
+  it('просроченное, отозванное и выдуманное приглашение не принимаются', async () => {
     const owner = await createTestEmployee({ role: 'owner' });
-    const { token, inviteId } = await insertInviteFor(
-      owner.employeeId,
-      'manager',
-      new Date(Date.now() + INVITE_LIFETIME_MS),
-    );
+    const expired = await insertTestInvite({
+      invitedById: owner.employeeId,
+      expiresAt: new Date(Date.now() - HOUR_MS),
+    });
+    const revoked = await insertTestInvite({ invitedById: owner.employeeId });
     const actor = { employeeId: owner.employeeId, role: 'owner' as const };
 
-    expect(await revokeInvite({ actor, inviteId })).toBe('revoked');
-    expect(await revokeInvite({ actor, inviteId })).toBe('not_pending');
+    expect(await revokeInvite({ actor, inviteId: revoked.inviteId })).toBe('revoked');
+    expect(await revokeInvite({ actor, inviteId: revoked.inviteId })).toBe('not_pending');
+    // Отзыв стирает токен так же, как принятие.
+    expect((await readInviteById(revoked.inviteId))?.token).toBeNull();
 
-    const telegramUserId = nextTestTelegramUserId();
-    const result = await acceptInvite({
-      token,
-      telegramUserId,
-      contactUserId: telegramUserId,
-      phoneRaw: nextTestPhone(),
-      fullName: 'Отозванный',
-    });
-
-    expect(result.outcome).toBe('revoked');
+    expect((await acceptInvite({ token: expired.token, password: PASSWORD })).outcome).toBe('expired');
+    expect((await acceptInvite({ token: revoked.token, password: PASSWORD })).outcome).toBe('revoked');
+    expect((await acceptInvite({ token: 'нет-такого', password: PASSWORD })).outcome).toBe('not_found');
+    expect((await readInviteById(expired.inviteId))?.employeeId).toBeNull();
   });
 
   it('отозвать приглашение роли не ниже своей нельзя', async () => {
     const owner = await createTestEmployee({ role: 'owner' });
     const manager = await createTestEmployee({ role: 'manager' });
-    const { inviteId } = await insertInviteFor(
-      owner.employeeId,
-      'admin',
-      new Date(Date.now() + INVITE_LIFETIME_MS),
-    );
+    const { inviteId } = await insertTestInvite({ invitedById: owner.employeeId, role: 'admin' });
 
     expect(
-      await revokeInvite({
-        actor: { employeeId: manager.employeeId, role: 'manager' },
-        inviteId,
-      }),
+      await revokeInvite({ actor: { employeeId: manager.employeeId, role: 'manager' }, inviteId }),
     ).toBe('forbidden');
   });
 
-  it('чужой контакт приглашение не принимает', async () => {
+  it('телефон, занятый между выпуском и принятием, приглашение не принимает', async () => {
     const owner = await createTestEmployee({ role: 'owner' });
-    const { token, inviteId } = await insertInviteFor(
-      owner.employeeId,
-      'manager',
-      new Date(Date.now() + INVITE_LIFETIME_MS),
-    );
+    const { token, phoneE164 } = await insertTestInvite({ invitedById: owner.employeeId });
 
-    const result = await acceptInvite({
-      token,
-      telegramUserId: nextTestTelegramUserId(),
-      // Контакт из адресной книги: прислан одним человеком, принадлежит другому.
-      contactUserId: nextTestTelegramUserId(),
-      phoneRaw: nextTestPhone(),
-      fullName: 'Скрепка',
-    });
+    await createTestEmployee({ role: 'manager', phoneE164 });
 
-    expect(result.outcome).toBe('contact_not_own');
-    expect((await readInviteById(inviteId))?.acceptedAt).toBeNull();
+    expect((await acceptInvite({ token, password: PASSWORD })).outcome).toBe('phone_taken');
   });
 
-  it('Telegram за активной водительской привязкой приглашение не принимает', async () => {
+  it('телефон, ставший водительским между выпуском и принятием, приглашение не принимает', async () => {
     const owner = await createTestEmployee({ role: 'owner' });
-    const { token } = await insertInviteFor(
-      owner.employeeId,
-      'manager',
-      new Date(Date.now() + INVITE_LIFETIME_MS),
-    );
+    const { token, inviteId, phoneE164 } = await insertTestInvite({ invitedById: owner.employeeId });
     const driver = await createTestPerson({ inProgram: true });
-    const telegramUserId = nextTestTelegramUserId();
-
-    await linkTestDriver(driver.personId, telegramUserId, telegramUserId);
-
-    const result = await acceptInvite({
-      token,
-      telegramUserId,
-      contactUserId: telegramUserId,
-      phoneRaw: nextTestPhone(),
-      fullName: 'Водитель',
-    });
-
-    expect(result.outcome).toBe('driver_link_exists');
-  });
-
-  it('перенесённая привязка — только chat_id, без отправителя — приглашение тоже не принимает', async () => {
-    const owner = await createTestEmployee({ role: 'owner' });
-    const { token } = await insertInviteFor(
-      owner.employeeId,
-      'manager',
-      new Date(Date.now() + INVITE_LIFETIME_MS),
-    );
-    const driver = await createTestPerson({ inProgram: true });
-    const telegramChatId = nextTestTelegramUserId();
-
-    // Так выглядит почти весь парк: у 4 091 привязки, перенесённой из старой базы,
-    // заполнен один `chat_id`, а отправителя старый бот не записывал вовсе. Проверка,
-    // смотрящая только на `telegram_user_id`, пропустила бы их все.
-    await linkTestDriver(driver.personId, telegramChatId);
-
-    const result = await acceptInvite({
-      token,
-      telegramUserId: telegramChatId,
-      contactUserId: telegramChatId,
-      phoneRaw: nextTestPhone(),
-      fullName: 'Перенесённый водитель',
-    });
-
-    expect(result.outcome).toBe('driver_link_exists');
-  });
-
-  it('телефон за активной водительской привязкой приглашение не принимает', async () => {
-    const owner = await createTestEmployee({ role: 'owner' });
-    const { token } = await insertInviteFor(
-      owner.employeeId,
-      'manager',
-      new Date(Date.now() + INVITE_LIFETIME_MS),
-    );
-    const driver = await createTestPerson({ inProgram: true });
-    const phone = nextTestPhone();
-    const driverChatId = nextTestTelegramUserId();
+    const chatId = nextTestTelegramUserId();
 
     // Телефон живёт на профиле парка, а привязка — на человеке: пересечение доходит
     // до приглашения именно этим путём.
-    await setTestProfilePhone(driver.profileId, phone);
-    await linkTestDriver(driver.personId, driverChatId, driverChatId);
+    await setTestProfilePhone(driver.profileId, phoneE164);
+    await linkTestDriver(driver.personId, chatId, chatId);
 
-    const telegramUserId = nextTestTelegramUserId();
-    const result = await acceptInvite({
-      token,
-      telegramUserId,
-      contactUserId: telegramUserId,
-      phoneRaw: phone,
-      fullName: 'Тот же номер',
-    });
-
-    expect(result.outcome).toBe('driver_link_exists');
-  });
-
-  it('телефон, уже занятый сотрудником, приглашение не принимает', async () => {
-    const owner = await createTestEmployee({ role: 'owner' });
-    const existing = await createTestEmployee({ role: 'manager' });
-    const { token } = await insertInviteFor(
-      owner.employeeId,
-      'manager',
-      new Date(Date.now() + INVITE_LIFETIME_MS),
-    );
-    const telegramUserId = nextTestTelegramUserId();
-
-    const result = await acceptInvite({
-      token,
-      telegramUserId,
-      contactUserId: telegramUserId,
-      phoneRaw: existing.phoneE164 as string,
-      fullName: 'Второй раз',
-    });
-
-    expect(result.outcome).toBe('employee_exists');
-  });
-
-  it('несуществующий токен не принимается', async () => {
-    const telegramUserId = nextTestTelegramUserId();
-
-    const result = await acceptInvite({
-      token: createInviteToken(),
-      telegramUserId,
-      contactUserId: telegramUserId,
-      phoneRaw: nextTestPhone(),
-      fullName: 'Ниоткуда',
-    });
-
-    expect(result.outcome).toBe('not_found');
+    expect((await acceptInvite({ token, password: PASSWORD })).outcome).toBe('driver_link_exists');
+    expect((await readInviteById(inviteId))?.acceptedAt).toBeNull();
   });
 });

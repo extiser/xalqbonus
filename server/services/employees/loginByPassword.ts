@@ -1,20 +1,15 @@
 import { consola } from 'consola';
 
 import { findEmployeeByPhone } from '#server/repositories/employees';
-import type { AuthenticatedEmployee } from '#server/services/employees/authenticate';
 import {
   clearLoginFailures,
   readLoginFailures,
   registerLoginFailure,
 } from '#server/repositories/loginAttempts';
-import {
-  LOGIN_FAILURE_LIMIT,
-  LOGIN_FAILURE_WINDOW_SECONDS,
-  SESSION_MAX_AGE_SECONDS,
-} from '#server/services/employees/config';
+import { LOGIN_FAILURE_LIMIT, LOGIN_FAILURE_WINDOW_SECONDS } from '#server/services/employees/config';
+import { openSession, type OpenedSession } from '#server/services/employees/openSession';
 import { verifyPassword } from '#server/services/employees/password';
-import { normalizePhoneE164 } from '#server/utils/phoneNumber';
-import type { EmployeeSession } from '#server/utils/employeeSession';
+import { normalizeLoginPhone } from '#server/utils/phoneNumber';
 
 /**
  * Вход в веб по телефону и паролю.
@@ -47,15 +42,7 @@ export type LoginRequest = {
 };
 
 export type LoginResult =
-  | {
-      outcome: 'signed_in';
-      /** То, что уедет в подписанный cookie. */
-      session: EmployeeSession;
-      /** Кто вошёл — то же, что отдаёт проверка доступа на следующих запросах. */
-      employee: AuthenticatedEmployee;
-      /** Сколько живёт cookie — ручке, которая его ставит. */
-      maxAgeSeconds: number;
-    }
+  | ({ outcome: 'signed_in' } & OpenedSession)
   | {
       outcome: 'throttled';
       retryAfterSeconds: number;
@@ -67,7 +54,9 @@ export type LoginResult =
   | { outcome: 'disabled' };
 
 export const loginByPassword = async (request: LoginRequest): Promise<LoginResult> => {
-  const phoneE164 = normalizePhoneE164(request.phoneRaw);
+  // Любой номер, а не только узбекский (issue #267): логин сотрудника не обязан быть местным.
+  // Узбекский приводится к тому же виду, что прежде, — вход уже заведённых не ломается.
+  const phoneE164 = normalizeLoginPhone(request.phoneRaw);
 
   // Номер, который не приводится к каноническому виду, в базе искать нечем: `phone_e164`
   // хранится только в каноническом виде, и счётчик попыток на такой номер заводить незачем.
@@ -124,24 +113,7 @@ export const loginByPassword = async (request: LoginRequest): Promise<LoginResul
 
   await clearLoginFailures(phoneE164, request.clientAddress);
 
-  const now = request.now ?? new Date();
-
   log.info('вход в веб', { employeeId: employee.id, role: employee.role });
 
-  return {
-    outcome: 'signed_in',
-    session: {
-      employeeId: employee.id,
-      role: employee.role,
-      issuedAtSeconds: Math.floor(now.getTime() / 1000),
-    },
-    employee: {
-      employeeId: employee.id,
-      role: employee.role,
-      fullName: employee.fullName,
-      phoneE164: employee.phoneE164,
-      isDemo: employee.isDemo,
-    },
-    maxAgeSeconds: SESSION_MAX_AGE_SECONDS,
-  };
+  return { outcome: 'signed_in', ...openSession(employee, request.now ?? new Date()) };
 };

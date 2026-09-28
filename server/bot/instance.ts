@@ -3,7 +3,7 @@ import { Bot, webhookCallback } from 'grammy';
 import type { Update } from 'grammy/types';
 import type { BotConfig } from '#server/bot/config';
 import { registerDemoInviteHandlers } from '#server/bot/demoInvite';
-import { registerEmployeeInviteHandlers } from '#server/bot/employeeInvite';
+import { registerEmployeeTelegramHandlers } from '#server/bot/employeeTelegram';
 import { registerGreetingHandlers } from '#server/bot/greeting';
 
 const log = consola.withTag('bot');
@@ -32,7 +32,7 @@ const updateKind = (update: Update): string =>
 /**
  * Обработчики апдейтов в том порядке, в котором они разбирают апдейт.
  *
- * Отдельной функцией и экспортом наружу — ради теста разведения приглашения и приветствия:
+ * Отдельной функцией и экспортом наружу — ради теста разведения ссылок и приветствия:
  * порядок здесь и есть то, что он проверяет, а собранный в тесте заново, он проверял бы
  * свою же копию (tests/integration/bot/greeting.test.ts).
  */
@@ -49,14 +49,15 @@ export const registerBotHandlers = (bot: Bot): void => {
     await next();
   });
 
-  // Приглашение в демо: `/start demo_<токен>`, принимается сразу, без контакта. Идёт перед
-  // приглашением сотрудника и уступает дальше всё, что не про демо (server/bot/demoInvite.ts).
+  // Приглашение в демо: `/start demo_<токен>`, принимается сразу, без контакта. Уступает дальше
+  // всё, что не про демо (server/bot/demoInvite.ts).
   registerDemoInviteHandlers(bot);
 
-  // Приглашение сотрудника: `/start inv_<токен>` и контакт следом. Идёт первым и уступает
-  // приветствию всё, что к приглашению не относится, — и `/start` без параметра, и контакт
-  // от чата, который ссылку не открывал (server/bot/employeeInvite.ts).
-  registerEmployeeInviteHandlers(bot);
+  // Привязка Telegram к учётке сотрудника: `/start emp_<токен>`, сразу, без контакта (issue #267).
+  // Уступает дальше всё, что не про привязку (server/bot/employeeTelegram.ts). Приглашение
+  // сотрудника бот больше не принимает — оно принимается в вебе, — и `/start inv_<токен>`
+  // уходит в приветствие.
+  registerEmployeeTelegramHandlers(bot);
 
   // Всё, что осталось от водительской части: приветствие с кнопкой запуска приложения —
   // ответ на любое сообщение в личном чате. Идёт последним и отвечает на то, что не разобрал

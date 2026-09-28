@@ -73,7 +73,8 @@ export type AuthRequest = {
   now?: Date;
 };
 
-const asAuthenticated = (employee: EmployeeRow): AuthenticatedEmployee => ({
+/** Учётка в том виде, в каком её получают ручки. Ею же отвечают вход и открытие сессии. */
+export const asAuthenticated = (employee: EmployeeRow): AuthenticatedEmployee => ({
   employeeId: employee.id,
   role: employee.role,
   fullName: employee.fullName,

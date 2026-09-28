@@ -1,10 +1,8 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { text } from '#server/bot/texts';
-import { insertEmployeeInvite } from '#server/repositories/employeeInvites';
-import { INVITE_LIFETIME_MS } from '#server/services/employees/config';
-import { createInviteToken, hashInviteToken } from '#server/services/employees/inviteToken';
-import { cleanupTestData, disconnectDatabase } from '../support/database';
+import { TELEGRAM_LINK_LIFETIME_MS } from '#server/services/employees/config';
+import { cleanupTestData, createTestPerson, disconnectDatabase } from '../support/database';
 import {
   commandContent,
   createBotDouble,
@@ -16,17 +14,21 @@ import {
   countTestLinkAttempts,
   createTestEmployee,
   findTestEmployeeByTelegram,
+  insertTestInvite,
+  issueTestAccessLink,
+  linkTestDriver,
   nextTestPhone,
   nextTestTelegramUserId,
+  readTestEmployee,
 } from '../support/employees';
 
 /**
- * Ответ бота на входящее сообщение: приветствие всем, приглашение — приглашённому.
+ * Ответ бота на входящее сообщение: приветствие всем, привязка Telegram — сотруднику со ссылкой.
  *
- * Тестом покрыт не интерфейс бота, а разведение двух случаев одного и того же апдейта:
- * контакт в незакрытом потоке приглашения заводит учётку сотрудника, контакт вне его —
- * только приветствие. Ветка редкая, ломается молча, и обнаружилась бы тем, что человек
- * с выписанной ссылкой вместо учётки получил рекламу приложения (docs/infra.md → «Тесты»).
+ * Тестом покрыт не интерфейс бота, а разведение случаев одного и того же `/start`: ссылка
+ * привязки `emp_` привязывает Telegram к учётке, ссылка прежнего приглашения `inv_` — уже
+ * просто приветствие (issue #267). Ветка редкая, ломается молча, и обнаружилась бы тем, что
+ * сотрудник со ссылкой вместо привязки получил рекламу приложения (docs/infra.md → «Тесты»).
  *
  * Второе, что здесь проверяется, — молчания больше нет. Бот, не ответивший ничего, не виден
  * ни в чате, ни в журнале: ровно так эта задача и нашлась, прогоном руками (`#93`).
@@ -43,18 +45,6 @@ const ownContact = (telegramUserId: bigint, phoneE164: string): MessageContent =
   },
 });
 
-const insertInviteFor = async (invitedById: string): Promise<string> => {
-  const token = createInviteToken();
-
-  await insertEmployeeInvite({
-    role: 'admin',
-    tokenHash: hashInviteToken(token),
-    invitedById,
-    expiresAt: new Date(Date.now() + INVITE_LIFETIME_MS),
-  });
-
-  return token;
-};
 
 describe('ответ бота на входящее сообщение', () => {
   let miniAppUrlBefore: string | undefined;
@@ -97,56 +87,83 @@ describe('ответ бота на входящее сообщение', () => {
     expect(await findTestEmployeeByTelegram(telegramUserId)).toBeNull();
   });
 
-  it('контакт в потоке приглашения заводит учётку, и приветствие водителя не приходит', async () => {
+  it('ссылка прежнего приглашения `inv_` бот больше не принимает — отвечает приветствием', async () => {
     const bot = createBotDouble();
     const owner = await createTestEmployee({ role: 'owner' });
-    const token = await insertInviteFor(owner.employeeId);
+    const { token } = await insertTestInvite({ invitedById: owner.employeeId });
     const telegramUserId = nextTestTelegramUserId();
 
+    await bot.handleUpdate(privateMessageUpdate(telegramUserId, commandContent('/start', `inv_${token}`)));
+
+    expect(bot.sent.map((message) => message.text)).toEqual([text('start_greeting', 'ru')]);
+    expect(await findTestEmployeeByTelegram(telegramUserId)).toBeNull();
+  });
+
+  it('ссылка привязки `emp_` привязывает Telegram к учётке, второй раз — уже не действует', async () => {
+    const bot = createBotDouble();
+    const employee = await createTestEmployee({ role: 'admin', telegramUserId: null });
+    const token = await issueTestAccessLink(employee.employeeId, 'telegram', TELEGRAM_LINK_LIFETIME_MS);
+    const telegramUserId = nextTestTelegramUserId();
+
+    await bot.handleUpdate(privateMessageUpdate(telegramUserId, commandContent('/start', `emp_${token}`)));
+
+    expect((await readTestEmployee(employee.employeeId))?.telegramUserId).toBe(telegramUserId);
+
+    // Второй раз — с другого Telegram: ссылка одноразовая, и учётка остаётся за первым.
     await bot.handleUpdate(
-      privateMessageUpdate(telegramUserId, commandContent('/start', `inv_${token}`)),
+      privateMessageUpdate(nextTestTelegramUserId(), commandContent('/start', `emp_${token}`)),
     );
-    await bot.handleUpdate(
-      privateMessageUpdate(telegramUserId, ownContact(telegramUserId, nextTestPhone())),
-    );
-
-    const employee = await findTestEmployeeByTelegram(telegramUserId);
-
-    expect(employee?.role).toBe('admin');
-
-    const greeting = text('start_greeting', 'ru');
 
     expect(bot.sent.map((message) => message.text)).toEqual([
-      text('invite_ask_contact', 'ru'),
-      text('invite_accepted', 'ru', { name: 'Азиз Каримов' }),
+      text('employee_telegram_bound', 'ru'),
+      text('employee_telegram_used', 'ru'),
     ]);
-    expect(bot.sent.some((message) => message.text === greeting)).toBe(false);
+    expect((await readTestEmployee(employee.employeeId))?.telegramUserId).toBe(telegramUserId);
   });
 
-  it('контакт после принятого приглашения — уже просто сообщение, и отвечает приветствием сотрудника', async () => {
+  it('Telegram водителя по ссылке привязки не привязывается', async () => {
     const bot = createBotDouble();
-    const owner = await createTestEmployee({ role: 'owner' });
-    const token = await insertInviteFor(owner.employeeId);
-    const telegramUserId = nextTestTelegramUserId();
+    const employee = await createTestEmployee({ role: 'manager', telegramUserId: null });
+    const token = await issueTestAccessLink(employee.employeeId, 'telegram', TELEGRAM_LINK_LIFETIME_MS);
+    const driver = await createTestPerson({ inProgram: true });
+    const driverChatId = nextTestTelegramUserId();
 
-    await bot.handleUpdate(
-      privateMessageUpdate(telegramUserId, commandContent('/start', `inv_${token}`)),
-    );
-    await bot.handleUpdate(
-      privateMessageUpdate(telegramUserId, ownContact(telegramUserId, nextTestPhone())),
-    );
-    // Ссылка одноразовая, и токен после принятия забыт: второй контакт из того же чата
-    // разбирать приглашением уже нечем.
-    await bot.handleUpdate(
-      privateMessageUpdate(telegramUserId, ownContact(telegramUserId, nextTestPhone())),
-    );
+    // Перенесённая привязка — один `chat_id`, без отправителя: так выглядит почти весь парк.
+    await linkTestDriver(driver.personId, driverChatId);
 
-    // Учётка уже заведена, и приветствие — сотрудника: водительское звало бы его в экран,
-    // которого у него нет (T25).
-    expect(bot.sent.at(-1)?.text).toBe(text('employee_greeting', 'ru'));
+    await bot.handleUpdate(privateMessageUpdate(driverChatId, commandContent('/start', `emp_${token}`)));
+
+    expect(bot.sent.map((message) => message.text)).toEqual([text('employee_telegram_driver', 'ru')]);
+    expect((await readTestEmployee(employee.employeeId))?.telegramUserId).toBeNull();
   });
 
-  it('ссылка в демо разбирается своим обработчиком, а не приглашением сотрудника и не приветствием', async () => {
+  it('Telegram другой учётки и учётка с Telegram по ссылке привязки не привязываются', async () => {
+    const bot = createBotDouble();
+    const employee = await createTestEmployee({ role: 'manager', telegramUserId: null });
+    const other = await createTestEmployee({ role: 'manager' });
+    const token = await issueTestAccessLink(employee.employeeId, 'telegram', TELEGRAM_LINK_LIFETIME_MS);
+
+    if (other.telegramUserId === null) {
+      throw new Error('фикстура сотрудника завелась без Telegram');
+    }
+
+    await bot.handleUpdate(privateMessageUpdate(other.telegramUserId, commandContent('/start', `emp_${token}`)));
+
+    const bound = await createTestEmployee({ role: 'manager' });
+    const boundToken = await issueTestAccessLink(bound.employeeId, 'telegram', TELEGRAM_LINK_LIFETIME_MS);
+
+    await bot.handleUpdate(
+      privateMessageUpdate(nextTestTelegramUserId(), commandContent('/start', `emp_${boundToken}`)),
+    );
+
+    expect(bot.sent.map((message) => message.text)).toEqual([
+      text('employee_telegram_employee', 'ru'),
+      text('employee_telegram_already_bound', 'ru'),
+    ]);
+    expect((await readTestEmployee(employee.employeeId))?.telegramUserId).toBeNull();
+  });
+
+  it('ссылка в демо разбирается своим обработчиком, а не привязкой сотрудника и не приветствием', async () => {
     const bot = createBotDouble();
     const telegramUserId = nextTestTelegramUserId();
 

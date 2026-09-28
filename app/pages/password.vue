@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import { useAccessNotice, useCurrentEmployee } from '~/composables/useCurrentEmployee';
 import { failureText } from '~/utils/requestError';
+import { PASSWORD_MIN_LENGTH } from '#shared/employee';
 import type { EmployeePasswordResponse } from '#shared/types/employee';
 
 /**
@@ -9,7 +10,7 @@ import type { EmployeePasswordResponse } from '#shared/types/employee';
  *
  * Только своего: ручки «поставить пароль другому» не существует, и адреса под неё тоже
  * (`server/api/employees/me/password.post.ts`). Забывшему пароль его сбрасывают на экране
- * сотрудников, а новый он задаёт себе сам в Mini App (issue #132).
+ * сотрудников, и новый он задаёт себе сам по ссылке «задать пароль» (issue #267).
  *
  * Прежнего пароля не спрашиваем: сюда попадает только тот, кто уже доказал, что он это он,
  * — сессией веба или подписью Mini App.
@@ -21,7 +22,7 @@ import type { EmployeePasswordResponse } from '#shared/types/employee';
 
 useHead({ title: 'Смена пароля — Xalq Taxi Bonus' });
 
-const PASSWORD_HINT = 'Не короче десяти символов.';
+const PASSWORD_HINT = `Не короче ${PASSWORD_MIN_LENGTH} символов.`;
 
 const currentEmployee = useCurrentEmployee();
 const notice = useAccessNotice();

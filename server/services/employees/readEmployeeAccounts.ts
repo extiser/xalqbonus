@@ -1,4 +1,7 @@
+import { listLiveAccessLinks } from '#server/repositories/employeeAccessLinks';
 import { listEmployeeDirectory } from '#server/repositories/employees';
+import { buildSetPasswordLink } from '#server/services/employees/employeeLinks';
+import { buildLiveTelegramLink, canIssueTelegramLink } from '#server/services/employees/telegramLink';
 import {
   canManageEmployee,
   invitableRoles,
@@ -24,30 +27,71 @@ import { ANY_OFFICE_ROLES, canEditDemo } from '../../../shared/access';
  *
  * Демо-сотрудник помечен и правится только владельцем (issue #212): у остальных он
  * не `manageable`, хоть роль его и ниже. Ручки решают то же сами — `requireDemoEditor`.
+ *
+ * Живая ссылка «задать пароль» приезжает только к `manageable` учётке (issue #267): ссылкой
+ * задают пароль и входят под этой учёткой, и видеть её вправе тот, кто вправе её выпустить.
+ * Ссылка привязки Telegram — по тому же правилу, и ещё к своей строке: себе её выпускает каждый.
+ * Привязан ли Telegram, видят все, кто видит список: руководитель должен знать, дошло ли дело.
  */
 export type ReadEmployeeAccountsRequest = {
   actor: EmployeeActor;
+  /** Схема и хост приложения — из запроса: ссылка «задать пароль» ведёт туда же. */
+  appOrigin: string;
+  now?: Date;
 };
 
 export const readEmployeeAccounts = async (
   request: ReadEmployeeAccountsRequest,
 ): Promise<EmployeeAccountsResponse> => {
-  const rows = await listEmployeeDirectory();
+  const now = request.now ?? new Date();
+  const [rows, passwordLinks, telegramLinks] = await Promise.all([
+    listEmployeeDirectory(),
+    listLiveAccessLinks('password', now),
+    listLiveAccessLinks('telegram', now),
+  ]);
+  const passwordLinkByEmployee = new Map(passwordLinks.map((link) => [link.employeeId, link]));
+  const telegramLinkByEmployee = new Map(telegramLinks.map((link) => [link.employeeId, link]));
+
+  const accounts = rows.map(async (row) => {
+      const manageable =
+        canManageEmployee(request.actor.role, row.role) && canEditDemo(request.actor.role, row.isDemo);
+      const passwordLink = manageable ? passwordLinkByEmployee.get(row.id) : undefined;
+      // Демо-учётке ссылка не выпускается вовсе (`demo_account`), и кнопки у неё нет.
+      const telegramLinkIssuable =
+        !row.isDemo &&
+        canIssueTelegramLink(request.actor, { employeeId: row.id, role: row.role, isDemo: row.isDemo });
+      const telegramLink =
+        telegramLinkIssuable && !row.telegramBound ? telegramLinkByEmployee.get(row.id) : undefined;
+      const telegramUrl = telegramLink ? await buildLiveTelegramLink(telegramLink.token) : null;
+
+      return {
+        employeeId: row.id,
+        fullName: row.fullName,
+        role: row.role,
+        phoneE164: row.phoneE164,
+        disabled: row.disabledAt !== null,
+        passwordSet: row.passwordSet,
+        passwordLink: passwordLink
+          ? {
+              link: buildSetPasswordLink(request.appOrigin, passwordLink.token),
+              expiresAt: passwordLink.expiresAt.toISOString(),
+            }
+          : null,
+        telegramBound: row.telegramBound,
+        telegramLinkIssuable,
+        telegramLink:
+          telegramLink && telegramUrl !== null
+            ? { link: telegramUrl, expiresAt: telegramLink.expiresAt.toISOString() }
+            : null,
+        offices: row.offices,
+        anyOffice: ANY_OFFICE_ROLES.includes(row.role),
+        isDemo: row.isDemo,
+        manageable,
+      };
+    });
 
   return {
-    employees: rows.map((row) => ({
-      employeeId: row.id,
-      fullName: row.fullName,
-      role: row.role,
-      phoneE164: row.phoneE164,
-      disabled: row.disabledAt !== null,
-      passwordSet: row.passwordSet,
-      offices: row.offices,
-      anyOffice: ANY_OFFICE_ROLES.includes(row.role),
-      isDemo: row.isDemo,
-      manageable:
-        canManageEmployee(request.actor.role, row.role) && canEditDemo(request.actor.role, row.isDemo),
-    })),
+    employees: await Promise.all(accounts),
     invitableRoles: invitableRoles(request.actor.role),
   };
 };
