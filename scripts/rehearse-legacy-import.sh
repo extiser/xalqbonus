@@ -18,6 +18,11 @@
 #
 # Запуск из корня репозитория, при поднятом локальном стеке (`make up-d`):
 #   bash scripts/rehearse-legacy-import.sh <выгрузка реестра .jsonl>
+#
+# Остановка на столкновениях привязок — штатный исход, база при этом остаётся. Каждое
+# столкновение закрывается руками в базе репетиции, примером из шага 6 сценария, и репетиция
+# продолжается с проверки столкновений, без пересоздания базы:
+#   bash scripts/rehearse-legacy-import.sh <та же выгрузка .jsonl> --continue
 set -Eeuo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -33,6 +38,8 @@ PUBLIC_DUMP="_backup/legacy-public-2026-09-28.dump"
 # базы, заведённые после выгрузки, уйдут в несопоставленные, и эталон это учтёт: он снимается
 # по той же выгрузке.
 PROFILES="${1:-}"
+# `--continue` — продолжить на базе, где шаги 1–4 уже прошли: с проверки столкновений.
+MODE="${2:-}"
 REPORT="_reference/legacy/import-report-${DB_NAME}.md"
 
 COMPOSE_FILE="docker/compose.local.yml"
@@ -40,11 +47,19 @@ ENV_FILE=".env"
 
 case "$PROFILES" in
   -h | --help)
-    sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,26p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit 0
     ;;
   '')
     log_error старт "выгрузка реестра не названа: bash scripts/rehearse-legacy-import.sh <выгрузка .jsonl>"
+    exit 1
+    ;;
+esac
+
+case "$MODE" in
+  '' | --continue) ;;
+  *)
+    log_error старт "второй аргумент может быть только --continue, получено «${MODE}»"
     exit 1
     ;;
 esac
@@ -77,11 +92,22 @@ fi
 DB_EXISTS="$(compose exec -T postgres sh -c \
   'psql -X -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT 1 FROM pg_database WHERE datname = '"'"'$1'"'"'"' \
   sh "$DB_NAME" | tr -d '[:space:]')"
-if [ "$DB_EXISTS" = "1" ]; then
+if [ "$MODE" = --continue ]; then
+  if [ "$DB_EXISTS" != "1" ]; then
+    log_error старт "базы ${DB_NAME} нет — продолжать нечего, запустите репетицию без --continue"
+    exit 1
+  fi
+  log_info старт "продолжение на ${DB_NAME}: шаги 1–4 пропущены, с проверки столкновений"
+elif [ "$DB_EXISTS" = "1" ]; then
   log_error старт "база ${DB_NAME} уже есть — репетиция отменена, ничего не изменено"
+  echo "продолжить её после остановки на столкновениях: bash scripts/rehearse-legacy-import.sh ${PROFILES} --continue" >&2
   echo "удалить базу прошлой репетиции: docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} exec postgres sh -c 'dropdb -U \"\$POSTGRES_USER\" ${DB_NAME}'" >&2
   exit 1
 fi
+
+# Шаги 1–4 собирают базу и в режиме продолжения не повторяются: копия `xb` и заливка `public`
+# на уже собранной базе упали бы, а закрытые руками привязки откатились бы вместе с ней.
+if [ "$MODE" != --continue ]; then
 
 # --- 1. Отдельная база ------------------------------------------------------------------
 
@@ -108,12 +134,24 @@ compose exec -T app sh -c \
   sh "$DB_NAME"
 log_info миграция "применены к ${DB_NAME}"
 
+fi
+
 # --- 5. Столкновения привязок — тем же запросом, что на машине перед переносом ----------
 #
 # Непустой результат — остановка: перенос на такой базе упал бы посередине на уникальном
 # индексе привязок. Столкновения на копии прода решаются так же, как на машине, — руками.
-compose exec -T postgres sh -c 'psql -X -q -U "$POSTGRES_USER" -d "$1"' \
-  sh "$DB_NAME" < docker/scripts/legacy-link-collisions.sql
+if ! compose exec -T postgres sh -c 'psql -X -q -U "$POSTGRES_USER" -d "$1"' \
+     sh "$DB_NAME" < docker/scripts/legacy-link-collisions.sql; then
+  log_error привязки "столкновения — перенос не запущен, база ${DB_NAME} оставлена как есть"
+  cat >&2 <<HINT
+Каждую строку выше решает человек. Закрыть привязку — примером из сценария
+(docker/DEPLOY-MANUAL.md → «Перенос старой базы в день выката», шаг 6), в базе репетиции:
+  docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} exec postgres sh -c 'psql -U "\$POSTGRES_USER" -d ${DB_NAME}'
+Продолжить репетицию с проверки столкновений, без пересоздания базы:
+  bash scripts/rehearse-legacy-import.sh ${PROFILES} --continue
+HINT
+  exit 1
+fi
 log_info привязки "столкновений нет"
 
 # --- 6. Перенос — бандлом, который поедет на машину -------------------------------------
