@@ -39,6 +39,7 @@ export const EMPLOYEE_TELEGRAM_TEXT_KEYS: Readonly<Record<BindEmployeeTelegramOu
   expired: 'employee_telegram_expired',
   used: 'employee_telegram_used',
   revoked: 'employee_telegram_revoked',
+  telegram_demo: 'employee_telegram_demo',
   telegram_driver: 'employee_telegram_driver',
   telegram_employee: 'employee_telegram_employee',
   already_bound: 'employee_telegram_already_bound',

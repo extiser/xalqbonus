@@ -1,6 +1,7 @@
 import { consola } from 'consola';
 
 import { db } from '#server/db';
+import { lockDemoViewer } from '#server/repositories/demo';
 import { lockAccessLinkByTokenHash, markAccessLinkUsed } from '#server/repositories/employeeAccessLinks';
 import {
   findEmployeeByTelegramUserId,
@@ -23,8 +24,10 @@ import { describeDatabaseFailure, UNIQUE_VIOLATION } from '#server/utils/postgre
  * друг за другом, и второй видит её использованной.
  *
  * Здесь же правило одной роли: Telegram работающего водителя к учётке сотрудника не привязывается
- * (docs/decisions.md → «Учётка сотрудника и роли»). Отказ по роли ссылку не гасит: сотрудник
- * откроет её со своего Telegram.
+ * (docs/decisions.md → «Учётка сотрудника и роли»). Так же — Telegram действующего демо-зрителя:
+ * у него открыта привязка к демо-водителю, и без своей проверки он получил бы водительский
+ * отказ, хотя это демо-доступ. Отказы по роли ссылку не гасят: сотрудник откроет её со своего
+ * Telegram.
  */
 
 const log = consola.withTag('employees:telegram');
@@ -32,6 +35,8 @@ const log = consola.withTag('employees:telegram');
 export type BindEmployeeTelegramOutcome =
   | 'bound'
   | DeadAccessLinkOutcome
+  /** Этот Telegram — действующий демо-зритель (`demo_viewers` без `disabled_at`). */
+  | 'telegram_demo'
   /** Этот Telegram за активной водительской привязкой. */
   | 'telegram_driver'
   /** Этот Telegram уже привязан к другой учётке сотрудника. */
@@ -67,6 +72,17 @@ export const bindEmployeeTelegram = async (
 
       if (employee.telegramUserId !== null) {
         return 'already_bound';
+      }
+
+      // Зритель — до водительской привязки: его демо-водитель привязан к этому же Telegram,
+      // и проверка водителя ответила бы за него чужим текстом. Выключенный зритель не мешает:
+      // его обратное включение отбивает `addDemoViewerWithin` исходом `telegram_employee`.
+      const viewer = await lockDemoViewer(request.telegramUserId, transaction);
+
+      if (viewer && viewer.disabledAt === null) {
+        log.warn('Telegram не привязан: он у действующего демо-зрителя', { employeeId: employee.id });
+
+        return 'telegram_demo';
       }
 
       const driverLink = await findActiveLinkByTelegramOrPhone(request.telegramUserId, null, transaction);

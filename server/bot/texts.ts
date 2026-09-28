@@ -292,6 +292,7 @@ export type TextKey =
   | 'employee_telegram_expired'
   | 'employee_telegram_used'
   | 'employee_telegram_revoked'
+  | 'employee_telegram_demo'
   | 'employee_telegram_driver'
   | 'employee_telegram_employee'
   | 'employee_telegram_already_bound'
@@ -1682,6 +1683,10 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   employee_telegram_revoked: {
     ru: 'Эта ссылка уже не действует. Выпустите новую в вебе.',
     uz: "Bu havola endi amal qilmaydi. Veb-saytda yangisini oling.",
+  },
+  employee_telegram_demo: {
+    ru: 'Этот Telegram открыт как демо-доступ — привязать его к учётной записи сотрудника нельзя.',
+    uz: "Bu Telegram demo-kirish sifatida ochilgan — uni xodim hisobiga ulab bo'lmaydi.",
   },
   employee_telegram_driver: {
     ru: 'Этот Telegram участвует в программе как водитель — привязать его к учётной записи сотрудника нельзя.',
