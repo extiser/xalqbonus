@@ -1326,6 +1326,11 @@ model SyncSkip {
 model SyncState {
   kind      SyncKind  @id
   watermark DateTime? @db.Timestamptz(6)
+  /// Границы идущего или последнего прохода догона. Заполнены только у `orders_catchup`,
+  /// у него же `watermark` — позиция прохода: конец последнего пройденного куска.
+  /// Пусто — прохода не было (issue #286).
+  passFrom  DateTime? @map("pass_from") @db.Timestamptz(6)
+  passTo    DateTime? @map("pass_to") @db.Timestamptz(6)
   lastRunId String?   @map("last_run_id") @db.Uuid
   updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 

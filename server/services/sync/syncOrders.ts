@@ -33,9 +33,10 @@ import { COMPLETED_TRIP_STATUS } from '#server/utils/tripStatus';
  * Прогон синхронизации заказов: опрос Fleet API окном по времени завершения, запись
  * заказов и начисление баллов за завершённые.
  *
- * Один и тот же код обслуживает оба вида прогона — скользящий `orders` и догоняющий
- * `orders_catchup`. Отличаются они только окном и своей отметкой; запись и начисление
- * обязаны быть теми же, иначе однажды разойдутся.
+ * Один и тот же код — `runOrdersWindow` — обслуживает оба вида прогона: скользящий `orders`
+ * и каждый кусок догоняющего `orders_catchup` (`syncOrdersCatchup.ts`). Отличаются они
+ * только окном и своей отметкой; запись и начисление обязаны быть теми же, иначе однажды
+ * разойдутся.
  *
  * Что здесь принципиально:
  *
@@ -320,38 +321,40 @@ export type RunOrdersSyncOptions = {
   now?: Date;
 };
 
-export const runOrdersSync = async (
-  kind: OrdersSyncKind,
-  options: RunOrdersSyncOptions = {},
-): Promise<OrdersSyncSummary> => {
+/** Сводка прогона, который не заводился: окно оказалось пустым. */
+export const skippedOrdersSyncSummary = (kind: OrdersSyncKind): OrdersSyncSummary => ({
+  kind,
+  status: 'skipped',
+  runId: null,
+  window: null,
+  pages: 0,
+  requests: 0,
+  rateLimited: 0,
+  ordersSeen: 0,
+  ordersWritten: 0,
+  ordersInserted: 0,
+  ordersUpdated: 0,
+  malformed: 0,
+  malformedIds: [],
+  skippedUnknownProfile: 0,
+  unknownProfiles: 0,
+  unknownProfileIds: [],
+  unknownValues: [],
+  accrual: emptyAccrual(),
+});
+
+/** Скользящий прогон: окно от отметки, см. `buildOrdersWindow`. */
+export const runOrdersSync = async (options: RunOrdersSyncOptions = {}): Promise<OrdersSyncSummary> => {
+  const kind = 'orders';
   const config = readSyncConfig();
   const now = options.now ?? new Date();
   const state = await readSyncState(kind);
-  const window = buildOrdersWindow({ kind, watermark: state?.watermark ?? null, now, config });
+  const window = buildOrdersWindow({ watermark: state?.watermark ?? null, now, config });
 
   if (!window) {
     log.info('Окно пусто, прогон не заводится', { kind, watermark: state?.watermark ?? null });
 
-    return {
-      kind,
-      status: 'skipped',
-      runId: null,
-      window: null,
-      pages: 0,
-      requests: 0,
-      rateLimited: 0,
-      ordersSeen: 0,
-      ordersWritten: 0,
-      ordersInserted: 0,
-      ordersUpdated: 0,
-      malformed: 0,
-      malformedIds: [],
-      skippedUnknownProfile: 0,
-      unknownProfiles: 0,
-      unknownProfileIds: [],
-      unknownValues: [],
-      accrual: emptyAccrual(),
-    };
+    return skippedOrdersSyncSummary(kind);
   }
 
   if (!state?.watermark) {
@@ -362,6 +365,25 @@ export const runOrdersSync = async (
   }
 
   warnIfWatermarkStale(kind, state?.watermark ?? null, now, config);
+
+  return runOrdersWindow(kind, window, config, { client: options.client, now });
+};
+
+/**
+ * Прогон одного окна: строка `sync_runs`, опрос, запись, начисление и отметка по верхней
+ * границе окна после успеха.
+ *
+ * Общий для скользящего прогона и для каждого куска догона — второй реализации записи
+ * и начисления не существует. Отказ пробрасывается наверх после того, как строка прогона
+ * закрыта как `failed`, а отметка оставлена на месте.
+ */
+export const runOrdersWindow = async (
+  kind: OrdersSyncKind,
+  window: OrdersWindow,
+  config: SyncConfig,
+  options: { client?: FleetTransport; now: Date },
+): Promise<OrdersSyncSummary> => {
+  const { now } = options;
 
   // Клиент собирается до строки прогона: незаполненные реквизиты в окружении — это отказ
   // на старте, а не прогон, навсегда оставшийся в состоянии `running`.

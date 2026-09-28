@@ -8,6 +8,7 @@ import {
   type SyncConfig,
 } from '#server/services/sync/config';
 import { runOrdersSync } from '#server/services/sync/syncOrders';
+import { runOrdersCatchup } from '#server/services/sync/syncOrdersCatchup';
 import { runRegistrySync } from '#server/services/sync/syncRegistry';
 
 /**
@@ -20,7 +21,9 @@ import { runRegistrySync } from '#server/services/sync/syncRegistry';
  * «два прогона одного вида не идут одновременно».
  *
  * Расписание живёт планировщиками BullMQ: `orders` — скользящий прогон с интервалом
- * `SYNC_LIVE_INTERVAL_SEC`, `orders_catchup` — догоняющий раз в сутки, `registry` —
+ * `SYNC_LIVE_INTERVAL_SEC`, `orders_catchup` — догоняющий: запуск раз в
+ * `SYNC_CATCHUP_INTERVAL_SEC` продолжает проход кусками, а новый проход начинается раз
+ * в `SYNC_CATCHUP_PASS_EVERY_HOURS` (`syncOrdersCatchup.ts`), `registry` —
  * инкрементальная синхронизация профилей парка со своим выключателем и интервалом.
  * Выключатель снимает планировщик, а не просто перестаёт его заводить: иначе однажды
  * включённое расписание продолжало бы срабатывать после `SYNC_LIVE_ENABLED=false`.
@@ -50,7 +53,8 @@ export const createSyncQueue = (): Queue<SyncJobData> =>
     connection: getQueueConnection(),
     defaultJobOptions: {
       // Повтор упавшего прогона очередью не нужен: следующий по расписанию перечитает
-      // то же окно целиком — отметка при неуспехе не двигалась.
+      // то же окно целиком — отметка при неуспехе не двигалась. У догона — тот же кусок,
+      // с которого запуск упал: пройденные до него уже сдвинули позицию.
       attempts: 1,
       removeOnComplete: { count: 100 },
       removeOnFail: { count: 100 },
@@ -141,7 +145,12 @@ export const createSyncWorker = (): Worker<SyncJobData> =>
         return;
       }
 
-      await runOrdersSync(job.data.kind);
+      if (job.data.kind === 'orders_catchup') {
+        await runOrdersCatchup();
+        return;
+      }
+
+      await runOrdersSync();
     },
     {
       connection: getQueueConnection(),
