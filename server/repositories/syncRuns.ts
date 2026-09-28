@@ -153,6 +153,7 @@ export type SyncRunOrdersDetails = {
   withoutEndedAt: number;
   outsideProgram: number;
   unknownTrip: number;
+  awardedByLegacy: number;
 };
 
 export type SyncRunRegistryDetails = {
@@ -205,6 +206,7 @@ type SyncRunJoinedRow = {
   ordersWithoutEndedAt: number | null;
   ordersOutsideProgram: number | null;
   ordersUnknownTrip: number | null;
+  ordersAwardedByLegacy: number | null;
   registryPages: number | null;
   registryProfilesSeen: number | null;
   registryProfilesInserted: number | null;
@@ -248,6 +250,7 @@ const toOrdersDetails = (row: SyncRunJoinedRow): SyncRunOrdersDetails | null => 
     withoutEndedAt: row.ordersWithoutEndedAt ?? 0,
     outsideProgram: row.ordersOutsideProgram ?? 0,
     unknownTrip: row.ordersUnknownTrip ?? 0,
+    awardedByLegacy: row.ordersAwardedByLegacy ?? 0,
   };
 };
 
@@ -310,6 +313,7 @@ export const listSyncRuns = async (limit: number, offset: number): Promise<SyncR
            orders."without_ended_at"        AS "ordersWithoutEndedAt",
            orders."outside_program"         AS "ordersOutsideProgram",
            orders."unknown_trip"            AS "ordersUnknownTrip",
+           orders."awarded_by_legacy"       AS "ordersAwardedByLegacy",
            registry."pages"                   AS "registryPages",
            registry."profiles_seen"           AS "registryProfilesSeen",
            registry."profiles_inserted"       AS "registryProfilesInserted",

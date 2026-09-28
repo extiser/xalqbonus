@@ -19,6 +19,11 @@
  * Запуск: make import-legacy. На машине — собранным бандлом `.output/import-legacy.mjs`
  * (`npm run build:import-legacy`): в боевом образе нет ни исходников, ни tsx. Порядок дня
  * выката — docker/DEPLOY-MANUAL.md → «Перенос старой базы в день выката».
+ *
+ * Шаг засчитанных старым ботом заказов запускается и отдельно, тем же бандлом:
+ * `--only legacy-awarded-trips [отчёт]` — без выгрузки реестра и без остальных шагов.
+ * Нужен, если перенос на машине прошёл раньше, чем этот шаг появился: граница со старым
+ * ботом обязана лечь до первого догоняющего прогона (make import-legacy-awarded-trips).
  */
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
@@ -32,6 +37,7 @@ import {
   readLegacyDebts,
   readLegacyDriverMapCounts,
 } from '#server/repositories/legacyDriverMap';
+import { readLegacyAwardedTripsTotals } from '#server/repositories/legacyAwardedTrips';
 import { openLegacyReadSession } from '#server/repositories/legacyPublic';
 import { readBalanceTotals, readOpeningTotal } from '#server/repositories/points';
 import { countByConfirmedBy } from '#server/repositories/programMembership';
@@ -44,6 +50,10 @@ import {
   type ControlCheck,
 } from '#server/services/legacyImport/controlFigures';
 import { importBalances } from '#server/services/legacyImport/importBalances';
+import {
+  importLegacyAwardedTrips,
+  LEGACY_AWARDED_TRIPS_DAYS,
+} from '#server/services/legacyImport/importLegacyAwardedTrips';
 import { importProgramMembership } from '#server/services/legacyImport/importProgramMembership';
 import { importRegistry } from '#server/services/legacyImport/importRegistry';
 import { markRegistryWatermark } from '#server/services/legacyImport/markRegistryWatermark';
@@ -53,6 +63,10 @@ const log = consola.withTag('legacy-import');
 
 const DEFAULT_DUMP = '_reference/fleet-api/dumps/driver-profiles-2026-08-27.jsonl';
 const DEFAULT_REPORT = '_reference/legacy/import-report.md';
+const DEFAULT_AWARDED_TRIPS_REPORT = '_reference/legacy/import-report-awarded-trips.md';
+
+/** Имя шага для отдельного запуска: `--only legacy-awarded-trips`. */
+const AWARDED_TRIPS_STEP = 'legacy-awarded-trips';
 
 // Разряды разделяются пробелом. BigInt приводится к числу: `toLocaleString` группирует
 // его не во всех сборках Node, а суммы переноса — девять миллионов, до предела точности
@@ -64,15 +78,85 @@ const formatDate = (value: Date | null): string => (value ? value.toISOString() 
 
 const renderRow = (title: string, value: string): string => `| ${title} | ${value} |`;
 
-const main = async (): Promise<void> => {
-  const dumpPath = process.argv[2] ?? DEFAULT_DUMP;
-  const reportPath = process.argv[3] ?? DEFAULT_REPORT;
-
+const readDatabaseUrl = (): string => {
   const databaseUrl = process.env.DATABASE_URL;
 
   if (!databaseUrl) {
     throw new Error('DATABASE_URL не задана — переносу некуда и неоткуда ходить');
   }
+
+  return databaseUrl;
+};
+
+const writeReport = async (reportPath: string, report: string): Promise<void> => {
+  console.log(report);
+
+  await mkdir(dirname(reportPath), { recursive: true });
+  await writeFile(reportPath, report, 'utf8');
+
+  log.success(`отчёт записан в ${reportPath}`);
+};
+
+/**
+ * Шаг засчитанных старым ботом заказов — своим сеансом чтения `public`, тоже только
+ * на чтение. Сеанс сопоставления к этому моменту закрыт: держать соединение открытым
+ * всё время переноса балансов незачем.
+ */
+const runAwardedTripsStep = async (databaseUrl: string, startedAt: Date) => {
+  const legacy = await openLegacyReadSession(databaseUrl);
+
+  try {
+    const summary = await importLegacyAwardedTrips(legacy, startedAt);
+
+    return { summary, readOnlyMode: legacy.readOnlyMode };
+  } finally {
+    await legacy.close();
+  }
+};
+
+/**
+ * Отдельный запуск шага засчитанных заказов. Остальные шаги не повторяются: им это
+ * ничего бы не испортило — каждый идемпотентен, — но потребовало бы свежей выгрузки
+ * реестра, которой на машине после переноса может уже не быть.
+ */
+const runAwardedTripsOnly = async (reportPath: string): Promise<void> => {
+  const startedAt = new Date();
+  const { summary, readOnlyMode } = await runAwardedTripsStep(readDatabaseUrl(), startedAt);
+  const totals = await readLegacyAwardedTripsTotals();
+
+  const lines: string[] = [];
+
+  lines.push('# Отчёт шага переноса: засчитанные старым ботом заказы');
+  lines.push('');
+  lines.push(
+    `Прогон: ${formatDate(startedAt)} — ${formatDate(new Date())}. Отдельный запуск шага, остальные шаги переноса не выполнялись.`,
+  );
+  lines.push(
+    `Сеанс чтения старой схемы: \`default_transaction_read_only = ${readOnlyMode}\` — записать что-либо в \`public\` он не может физически.`,
+  );
+  lines.push('');
+  lines.push(...renderAwardedTripsSection(summary, totals));
+
+  await writeReport(reportPath, lines.join('\n'));
+};
+
+const main = async (): Promise<void> => {
+  if (process.argv[2] === '--only') {
+    const step = process.argv[3];
+
+    if (step !== AWARDED_TRIPS_STEP) {
+      throw new Error(`отдельно запускается только шаг ${AWARDED_TRIPS_STEP}, а не ${step ?? '(пусто)'}`);
+    }
+
+    await runAwardedTripsOnly(process.argv[4] ?? DEFAULT_AWARDED_TRIPS_REPORT);
+
+    return;
+  }
+
+  const dumpPath = process.argv[2] ?? DEFAULT_DUMP;
+  const reportPath = process.argv[3] ?? DEFAULT_REPORT;
+
+  const databaseUrl = readDatabaseUrl();
 
   const startedAt = new Date();
 
@@ -106,10 +190,14 @@ const main = async (): Promise<void> => {
   // Шаг 5. Балансы — одной операцией `opening` на человека, через сервис журнала.
   const balances = await importBalances(matches, startedAt);
 
-  // Шаг 6. Отметка синхронизации реестра.
+  // Шаг 6. Заказы, за которые балл уже дал старый бот: граница с нашим сборщиком. После
+  // балансов — это граница того, что в них уже лежит.
+  const { summary: awardedTrips } = await runAwardedTripsStep(databaseUrl, startedAt);
+
+  // Шаг 7. Отметка синхронизации реестра.
   const watermark = await markRegistryWatermark(dumpPath);
 
-  // Шаг 7. Отчёт. Счётчики читаются из базы, а не из переменных прогона: отчёт должен
+  // Шаг 8. Отчёт. Счётчики читаются из базы, а не из переменных прогона: отчёт должен
   // описывать состояние базы, а не намерения скрипта.
   const counts = await readRegistryCounts();
   const totals = await readBalanceTotals();
@@ -119,6 +207,7 @@ const main = async (): Promise<void> => {
   const telegramStatuses = await countByTelegramStatus();
   const matchMethods = await countByMatchMethod();
   const confirmedBy = await countByConfirmedBy();
+  const awardedTripsTotals = await readLegacyAwardedTripsTotals();
 
   // Склеенные пары старая схема запросом не выводит: двойники опознаются реестром парка.
   // Люди с несколькими профилями к ней отношения не имеют вовсе — это свойство выгрузки.
@@ -160,6 +249,8 @@ const main = async (): Promise<void> => {
     membership,
     balances,
     totals,
+    awardedTrips,
+    awardedTripsTotals,
     watermark,
     openingTotal,
     debts,
@@ -170,12 +261,7 @@ const main = async (): Promise<void> => {
     checks,
   });
 
-  console.log(report);
-
-  await mkdir(dirname(reportPath), { recursive: true });
-  await writeFile(reportPath, report, 'utf8');
-
-  log.success(`отчёт записан в ${reportPath}`);
+  await writeReport(reportPath, report);
 
   // Сверка последней: отчёт обязан лечь на диск и в этом случае тоже — разбираться
   // с расхождением проще, глядя на все цифры сразу, а не на одну строку исключения.
@@ -193,6 +279,8 @@ type ReportInput = {
   membership: Awaited<ReturnType<typeof importProgramMembership>>;
   balances: Awaited<ReturnType<typeof importBalances>>;
   totals: Awaited<ReturnType<typeof readBalanceTotals>>;
+  awardedTrips: Awaited<ReturnType<typeof importLegacyAwardedTrips>>;
+  awardedTripsTotals: Awaited<ReturnType<typeof readLegacyAwardedTripsTotals>>;
   watermark: Awaited<ReturnType<typeof markRegistryWatermark>>;
   openingTotal: number;
   debts: Awaited<ReturnType<typeof readLegacyDebts>>;
@@ -202,6 +290,33 @@ type ReportInput = {
   baseline: ControlBaseline;
   checks: readonly ControlCheck[];
 };
+
+/**
+ * Секция засчитанных старым ботом заказов. Общая у полного прогона и у отдельного запуска
+ * шага: число и период читаются из `xb`, а не из счётчиков прогона.
+ */
+const renderAwardedTripsSection = (
+  summary: Awaited<ReturnType<typeof importLegacyAwardedTrips>>,
+  totals: Awaited<ReturnType<typeof readLegacyAwardedTripsTotals>>,
+): string[] => [
+  '## Засчитанные старым ботом заказы',
+  '',
+  '| показатель | значение |',
+  '|---|---:|',
+  renderRow(
+    '**засчитанных старым ботом заказов**',
+    `**${formatNumber(totals.total)}, период с ${formatDate(totals.bookedFrom)} по ${formatDate(totals.bookedTo)}**`,
+  ),
+  renderRow(
+    `отбор этим прогоном: \`complete\`, бронирование за ${LEGACY_AWARDED_TRIPS_DAYS} дней — с`,
+    formatDate(summary.bookedSince),
+  ),
+  renderRow('различных заказов отдала старая схема', formatNumber(summary.read)),
+  renderRow('записано этим прогоном', formatNumber(summary.inserted)),
+  '',
+  'Эти заказы начисление за поездки пропускает — балл за них уже лежит в перенесённом балансе, в сводке прогона синхронизации они в `awarded_by_legacy`. Застывшие у старого бота в промежуточном статусе сюда не попадают и начисляются нашим сборщиком обычным порядком.',
+  '',
+];
 
 const renderReport = (input: ReportInput): string => {
   const lines: string[] = [];
@@ -398,6 +513,8 @@ const renderReport = (input: ReportInput): string => {
     }
     lines.push('');
   }
+
+  lines.push(...renderAwardedTripsSection(input.awardedTrips, input.awardedTripsTotals));
 
   lines.push('## Отметка синхронизации');
   lines.push('');

@@ -110,6 +110,11 @@ const hasDetails = computed(() => props.run.orders !== null || props.run.registr
         hint="повтор по ключу, баланс не тронут"
       />
       <MoleculesCounterTile
+        label="Засчитал старый бот"
+        :value="run.orders.awardedByLegacy"
+        hint="балл уже в перенесённом балансе"
+      />
+      <MoleculesCounterTile
         label="Вне программы"
         :value="run.orders.outsideProgram"
         hint="известен парку, но не в программе"

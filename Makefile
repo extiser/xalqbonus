@@ -7,7 +7,7 @@ COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
 .DEFAULT_GOAL := help
 
 .PHONY: help up up-d down restart logs ps shell psql sql migrate migrate-rolled-back migrate-create migrate-diff migrate-sql generate typecheck old-engine-guard test test-db \
-        db-restore db-schema invariants license-collisions legacy-vs-api import-legacy \
+        db-restore db-schema invariants license-collisions legacy-vs-api import-legacy import-legacy-awarded-trips \
         employee-owner prod-employee-owner \
         import-legacy-dump \
         sync-orders sync-registry sync-state \
@@ -153,6 +153,12 @@ legacy-vs-api: ## Сверка старой базы с Fleet API: потеря 
 # Скрипт идемпотентен — повторный прогон не меняет ни одной цифры отчёта.
 import-legacy: ## Перенести реестр парка и балансы из public в xb (идемпотентно)
 	$(COMPOSE) exec -T app npx tsx scripts/import-legacy.ts
+
+# Один шаг переноса отдельно: заказы, за которые балл уже дал старый бот (issue #274).
+# Для базы, где перенос прошёл раньше, чем шаг появился: граница со старым ботом обязана
+# лечь до первого догоняющего прогона. Выгрузка реестра не нужна, остальные шаги не идут.
+import-legacy-awarded-trips: ## Перенести только засчитанные старым ботом заказы (идемпотентно)
+	$(COMPOSE) exec -T app npx tsx scripts/import-legacy.ts --only legacy-awarded-trips
 
 # Проверочный прогон переноса на другом дампе старой базы — в отдельной базе рядом,
 # рабочая копия не трогается. Контрольные цифры больше не зашиты в код, и убедиться,

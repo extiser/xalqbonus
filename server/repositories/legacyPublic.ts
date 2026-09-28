@@ -71,10 +71,33 @@ type RawControlBaselineRow = {
   invalidChatIds: string;
 };
 
+/** Заказ, за который старый бот дал балл: строка `public."Trips"` со статусом `complete`. */
+export type LegacyAwardedTripRow = {
+  /** `Trips.trip_id` — id заказа Яндекса, тот же, что `xb.trips.order_id`. */
+  orderId: string;
+  /** `Trips.driver_id` — `public."Drivers".id`. */
+  legacyDriverId: number;
+  bookedAt: Date;
+};
+
+type RawLegacyAwardedTripRow = {
+  trip_id: string;
+  driver_id: number;
+  booked_at: Date;
+};
+
+/** Статус, при котором старый бот засчитывал поездку в баллы (`03-data-model.md` → `Trips`). */
+const LEGACY_COMPLETED_STATUS = 'complete';
+
 /** Соединение открыто, и режим только чтения подтверждён самой базой, а не нами. */
 export type LegacyReadSession = {
   readDrivers: () => Promise<LegacyDriverRow[]>;
   readControlBaseline: () => Promise<LegacyControlBaseline>;
+  /**
+   * Заказы, засчитанные старым ботом, забронированные не раньше `bookedSince`. Каждый
+   * `trip_id` — один раз: уникального индекса на нём в старой базе нет, и дубли есть.
+   */
+  readAwardedTrips: (bookedSince: Date) => Promise<LegacyAwardedTripRow[]>;
   /** Что ответила база на `SHOW default_transaction_read_only`. Уходит в отчёт прогона. */
   readOnlyMode: string;
   close: () => Promise<void>;
@@ -181,6 +204,27 @@ export const openLegacyReadSession = async (connectionString: string): Promise<L
         pointsTransferred: Number(row.pointsTransferred),
         invalidChatIds: Number(row.invalidChatIds),
       };
+    },
+    readAwardedTrips: async (bookedSince: Date) => {
+      // Дубли `trip_id` схлопываются здесь же, и детерминированно — берётся самая ранняя
+      // строка по `id`: повторный прогон на той же базе обязан отдать те же строки.
+      // Фильтр по `booked_at`, а не по `ended_at`: `ended_at` у старого бота заполнен
+      // не всегда, а бронирование есть у каждой строки (`allowNull: false`).
+      const result = await client.query<RawLegacyAwardedTripRow>(
+        `SELECT DISTINCT ON (trip."trip_id")
+                trip."trip_id", trip."driver_id", trip."booked_at"
+           FROM public."Trips" AS trip
+          WHERE trip."status" = $1
+            AND trip."booked_at" >= $2
+          ORDER BY trip."trip_id", trip."id"`,
+        [LEGACY_COMPLETED_STATUS, bookedSince],
+      );
+
+      return result.rows.map((row) => ({
+        orderId: row.trip_id,
+        legacyDriverId: row.driver_id,
+        bookedAt: row.booked_at,
+      }));
     },
     close: () => client.end(),
   };
