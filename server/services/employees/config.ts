@@ -43,10 +43,10 @@ export const INVITE_LIFETIME_MS = 48 * 60 * 60 * 1_000;
 export const PASSWORD_LINK_LIFETIME_MS = INVITE_LIFETIME_MS;
 
 /**
- * Сколько живёт ссылка привязки Telegram (issue #267) — сутки: сотрудник выпускает её себе
- * сам и открывает тут же, со своего телефона.
+ * Сколько живёт ссылка привязки Telegram (issue #267) — столько же, сколько приглашение:
+ * выпускает её руководитель, и идёт она через третьи руки — суток на это мало.
  */
-export const TELEGRAM_LINK_LIFETIME_MS = 24 * 60 * 60 * 1_000;
+export const TELEGRAM_LINK_LIFETIME_MS = INVITE_LIFETIME_MS;
 
 /**
  * Сколько живёт приглашение в демо (issue #252) — сутки: ссылку отправляют тому, кому

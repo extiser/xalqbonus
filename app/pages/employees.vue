@@ -11,11 +11,12 @@ import type {
   EmployeeInviteRevokeResponse,
   EmployeeInvitesResponse,
   EmployeePasswordResetResponse,
+  EmployeeTelegramLinkResponse,
 } from '#shared/types/employee';
 
 /**
- * Экран «Сотрудники»: учётки, висящие приглашения, выпуск приглашения, выключение
- * и сброс пароля (issue #132).
+ * Экран «Сотрудники»: учётки, висящие приглашения, выпуск приглашения, выключение, сброс пароля
+ * (issue #132) и ссылка привязки Telegram (issue #267).
  *
  * Привязка к офису сюда не переезжает — она правится на странице офиса, отсюда на неё
  * только ссылки.
@@ -80,7 +81,7 @@ const busyId = ref<string | null>(null);
 const actionError = ref<string | null>(null);
 
 /**
- * Все четыре действия устроены одинаково: погасить строку, позвать ручку, перечитать список.
+ * Все действия над строкой устроены одинаково: погасить строку, позвать ручку, перечитать список.
  * Одним путём — чтобы обработка отказа не разошлась между ними на первой правке.
  */
 const runAction = async (id: string, request: () => Promise<unknown>): Promise<void> => {
@@ -134,6 +135,14 @@ const resetPassword = (employeeId: string): Promise<void> | undefined => {
   );
 };
 
+// Без подтверждения: ссылка ничего не меняет, пока её не открыли, а новая лишь заменяет прежнюю.
+const issueTelegramLink = (employeeId: string): Promise<void> =>
+  runAction(employeeId, () =>
+    $fetch<EmployeeTelegramLinkResponse>(`/api/employees/${employeeId}/telegram-link`, {
+      method: 'POST',
+    }),
+  );
+
 const revoke = (inviteId: string): Promise<void> =>
   runAction(inviteId, () =>
     $fetch<EmployeeInviteRevokeResponse>(`/api/employee-invites/${inviteId}/revoke`, {
@@ -176,6 +185,7 @@ const revoke = (inviteId: string): Promise<void> =>
       @disable="disable"
       @enable="enable"
       @reset-password="resetPassword"
+      @issue-telegram-link="issueTelegramLink"
       @revoke="revoke"
     />
   </div>

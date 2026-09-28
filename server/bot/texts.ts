@@ -1662,27 +1662,27 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   },
 
   // Привязка Telegram к учётке сотрудника (issue #267): `/start emp_<токен>`. Отказы разведены
-  // по причинам: ссылку сотрудник выпустил себе сам, и понять, выпускать ли новую или открывать
-  // её с другого Telegram, он должен по ответу бота.
+  // по причинам: ссылку выпускает руководитель и пересылает человеку, и понять, просить ли новую
+  // или открывать эту с другого Telegram, человек должен по ответу бота.
   employee_telegram_bound: {
     ru: 'Telegram привязан. Откройте приложение — там ваша стойка.',
     uz: "Telegram ulandi. Ilovani oching — u yerda sizning ish joyingiz.",
   },
   employee_telegram_not_found: {
-    ru: 'Ссылка не работает. Выпустите новую в вебе.',
-    uz: "Havola ishlamayapti. Veb-saytda yangisini oling.",
+    ru: 'Ссылка не работает. Попросите новую.',
+    uz: "Havola ishlamayapti. Yangisini so'rang.",
   },
   employee_telegram_expired: {
-    ru: 'Ссылка устарела — она действует сутки. Выпустите новую в вебе.',
-    uz: "Havola eskirgan — u bir kun amal qiladi. Veb-saytda yangisini oling.",
+    ru: 'Ссылка устарела — она действует двое суток. Попросите новую.',
+    uz: "Havola eskirgan — u ikki kun amal qiladi. Yangisini so'rang.",
   },
   employee_telegram_used: {
-    ru: 'Эта ссылка уже не действует. Выпустите новую в вебе.',
-    uz: "Bu havola endi amal qilmaydi. Veb-saytda yangisini oling.",
+    ru: 'Эта ссылка уже не действует. Попросите новую.',
+    uz: "Bu havola endi amal qilmaydi. Yangisini so'rang.",
   },
   employee_telegram_revoked: {
-    ru: 'Эта ссылка уже не действует. Выпустите новую в вебе.',
-    uz: "Bu havola endi amal qilmaydi. Veb-saytda yangisini oling.",
+    ru: 'Эта ссылка уже не действует. Попросите новую.',
+    uz: "Bu havola endi amal qilmaydi. Yangisini so'rang.",
   },
   employee_telegram_demo: {
     ru: 'Этот Telegram открыт как демо-доступ — привязать его к учётной записи сотрудника нельзя.',

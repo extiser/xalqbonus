@@ -327,6 +327,8 @@ export type EmployeeDirectoryRow = EmployeeAccountRow & {
   phoneE164: string;
   /** Признак, а не хеш: хеш из репозитория в список не уходит ни в каком виде. */
   passwordSet: boolean;
+  /** Telegram привязан — признак, а не идентификатор: число в список не уходит. */
+  telegramBound: boolean;
   /** Офисы из `employee_offices`: работающие первыми, архивные последними. */
   offices: EmployeeDirectoryOfficeRow[];
 };
@@ -351,6 +353,7 @@ export const listEmployeeDirectory = async (
            employee."disabled_at"             AS "disabledAt",
            employee."phone_e164"              AS "phoneE164",
            employee."password_hash" IS NOT NULL AS "passwordSet",
+           employee."telegram_user_id" IS NOT NULL AS "telegramBound",
            employee."is_demo"                 AS "isDemo",
            COALESCE(
              (SELECT json_agg(

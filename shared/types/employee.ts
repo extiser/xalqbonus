@@ -102,11 +102,11 @@ export type EmployeeLiveLink = {
   expiresAt: string;
 };
 
-/** Привязка Telegram — странице `/password`. */
+/** Выпуск ссылки привязки Telegram — строке «Сотрудников» и шагу после принятия приглашения. */
 export type EmployeeTelegramLinkResponse = {
-  /** Telegram привязан: приложение сотрудника открывается в боте. */
+  /** Telegram уже привязан: ссылка не нужна. */
   bound: boolean;
-  /** Живая ссылка привязки. `null` — не выпускали, истекла или Telegram уже привязан. */
+  /** Выпущенная ссылка на бота. `null` — Telegram уже привязан. */
   link: EmployeeLiveLink | null;
 };
 
@@ -152,6 +152,15 @@ export type EmployeeAccount = {
    * учётке: ссылкой задают пароль и входят под этой учёткой.
    */
   passwordLink: EmployeeLiveLink | null;
+  /** Telegram привязан: приложение сотрудника открывается в боте. Видно всем, кто видит список. */
+  telegramBound: boolean;
+  /**
+   * Смотрящий вправе выпустить этой учётке ссылку привязки Telegram (issue #267): своей — всегда,
+   * чужой — если вправе сбросить ей пароль. У демо-учётки — нет.
+   */
+  telegramLinkIssuable: boolean;
+  /** Живая ссылка привязки Telegram — только тому, кто вправе её выпустить. */
+  telegramLink: EmployeeLiveLink | null;
   /** Закреплённые офисы из `employee_offices`. */
   offices: EmployeeAccountOffice[];
   /**

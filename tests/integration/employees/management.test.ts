@@ -112,6 +112,10 @@ describe('управление сотрудниками', () => {
       disabled: true,
       passwordSet: false,
       passwordLink: null,
+      telegramBound: true,
+      // Право выпуска ссылки привязки — то же, что `manageable`; Telegram у фикстуры уже есть.
+      telegramLinkIssuable: true,
+      telegramLink: null,
       // Работающий офис первым, архивный последним — порядок решает запрос.
       offices: [
         { officeId: activeOffice, name: 'Тестовый офис', archived: false },

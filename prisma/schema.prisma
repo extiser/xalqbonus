@@ -119,7 +119,7 @@ enum EmployeeRole {
 enum EmployeeAccessLinkKind {
   /// Задать пароль — выпускается сбросом пароля.
   password
-  /// Привязать Telegram — сотрудник выпускает себе сам, в вебе.
+  /// Привязать Telegram — выпускает руководитель из «Сотрудников» или сотрудник себе.
   telegram
 
   @@map("employee_access_link_kind")
@@ -934,7 +934,7 @@ model EmployeeAccessLink {
   expiresAt  DateTime               @map("expires_at") @db.Timestamptz(6)
   usedAt     DateTime?              @map("used_at") @db.Timestamptz(6)
   revokedAt  DateTime?              @map("revoked_at") @db.Timestamptz(6)
-  /// Кто выпустил: сбросивший пароль или сам сотрудник — у ссылки привязки Telegram.
+  /// Кто выпустил: сбросивший пароль, руководитель или сам сотрудник — у ссылки привязки Telegram.
   issuedById String                 @map("issued_by_id") @db.Uuid
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)

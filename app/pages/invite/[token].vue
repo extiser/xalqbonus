@@ -10,7 +10,9 @@ import { formatPhone } from '#shared/phone';
 import type {
   EmployeeInviteDeadOutcome,
   EmployeeInviteLookupResponse,
+  EmployeeLiveLink,
   EmployeeLoginResponse,
+  EmployeeTelegramLinkResponse,
 } from '#shared/types/employee';
 
 /**
@@ -21,6 +23,12 @@ import type {
  * задал приглашающий — здесь они только показываются. Мёртвая ссылка — одна строка по исходу,
  * та же, которой ответит ручка, если ссылка умрёт, пока человек набирает пароль
  * (`shared/employeeLinks.ts`).
+ *
+ * После принятия страница не уходит сразу, а предлагает ссылку на бота — шаг «Привяжите
+ * Telegram»: это самый удобный момент, и дальше руководитель к человеку не ходит. Ссылку
+ * вошедший выпускает себе той же ручкой, что руководитель из «Сотрудников»: cookie сессии
+ * уже стоит. Бот не настроен или выпуск не удался — шаг пропускается, привязку потом
+ * пришлёт руководитель.
  */
 
 definePageMeta({
@@ -73,6 +81,36 @@ const submitting = ref(false);
 const passwordError = ref<string | null>(null);
 const error = ref<string | null>(null);
 
+/** Ссылка на бота для шага после принятия. `null` — шага нет, форма или мёртвая ссылка. */
+const telegramLink = ref<EmployeeLiveLink | null>(null);
+
+/** Главная веба — после шага привязки или вместо него. */
+const goHome = async (): Promise<void> => {
+  await navigateTo('/');
+};
+
+/**
+ * Ссылка привязки себе. Любой отказ — бот не настроен (`503`), Telegram уже привязан — шаг
+ * пропускает: учётка заведена, вход открыт, и держать человека на странице незачем.
+ */
+const offerTelegram = async (employeeId: string): Promise<void> => {
+  try {
+    const response = await $fetch<EmployeeTelegramLinkResponse>(`/api/employees/${employeeId}/telegram-link`, {
+      method: 'POST',
+    });
+
+    if (response.link) {
+      telegramLink.value = response.link;
+
+      return;
+    }
+  } catch {
+    // Шаг необязательный: привязку потом выпустит руководитель.
+  }
+
+  await goHome();
+};
+
 const accept = async (password: string): Promise<void> => {
   if (submitting.value) {
     return;
@@ -90,7 +128,7 @@ const accept = async (password: string): Promise<void> => {
 
     currentEmployee.value = response.employee;
 
-    await navigateTo('/');
+    await offerTelegram(response.employee.employeeId);
   } catch (failure) {
     const code = failureCode(failure);
 
@@ -112,12 +150,25 @@ const accept = async (password: string): Promise<void> => {
     <div class="w-full max-w-sm space-y-6">
       <div>
         <h1 class="text-xl font-semibold text-slate-900">Приглашение в Xalq Taxi Bonus</h1>
-        <p v-if="!dead && data?.outcome === 'live'" class="mt-1 text-sm text-slate-500">
+        <p v-if="!telegramLink && !dead && data?.outcome === 'live'" class="mt-1 text-sm text-slate-500">
           Задайте пароль — по нему и телефону вы будете входить.
         </p>
       </div>
 
-      <MoleculesStateNotice v-if="status === 'pending'" state="loading" message="Читаем приглашение…" />
+      <div v-if="telegramLink" class="space-y-3">
+        <h2 class="text-base font-semibold text-slate-900">Привяжите Telegram</h2>
+        <p class="text-sm text-slate-700">
+          В Telegram откроется приложение сотрудника. Можно сделать сейчас или позже — ссылку
+          пришлёт руководитель.
+        </p>
+        <MoleculesCopyableLink :link="telegramLink.link">
+          <template #actions>
+            <AtomsActionLink label="Открыть в Telegram" :href="telegramLink.link" />
+            <AtomsActionButton label="Позже" @click="goHome" />
+          </template>
+        </MoleculesCopyableLink>
+      </div>
+      <MoleculesStateNotice v-else-if="status === 'pending'" state="loading" message="Читаем приглашение…" />
       <MoleculesStateNotice
         v-else-if="status === 'error'"
         state="error"
