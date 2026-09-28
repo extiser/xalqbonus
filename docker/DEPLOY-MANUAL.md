@@ -509,17 +509,17 @@ COMMIT;
 
 ### 7. Перенос и отчёт
 
-Перенос — бандлом из образа, одноразовым контейнером `app`. Каталог выгрузки монтируется
-внутрь, отчёт ложится туда же, на хост. Строка подключения — `DATABASE_URL` из `.env`:
-она уже смотрит в базу контейнера, где теперь лежат обе схемы.
+Перенос — бандлом из образа, одноразовым контейнером `app`, целью `prod-import-legacy`.
+Каталог выгрузки `/srv/xalqbonus-import` монтируется внутрь, отчёт ложится туда же, на хост;
+`profiles=` и `report=` — имена файлов в нём, без пути. Строка подключения — `DATABASE_URL`
+из `.env`: она уже смотрит в базу контейнера, где теперь лежат обе схемы.
 
 ```bash
-docker compose -f docker/compose.prod.yml --env-file .env run --rm -T \
-  -v /srv/xalqbonus-import:/import \
-  app node .output/import-legacy.mjs \
-    /import/driver-profiles-<дата>.jsonl /import/import-report.md
+make prod-import-legacy profiles=driver-profiles-<дата>.jsonl report=import-report.md
 echo "код: $?"
 ```
+
+Цель отказывает до запуска, если выгрузки или её `.meta.json` в каталоге нет.
 
 Код `0` — прогон прошёл и контрольные цифры сошлись. Не `0` — последние строки вывода
 называют причину; отчёт при расхождении контрольных цифр всё равно ложится на диск.
@@ -596,12 +596,12 @@ docker compose -f docker/compose.prod.yml --env-file .env exec -T postgres \
 и без остальных шагов. `public` к этому моменту уже лежит в базе контейнера (шаг 5):
 
 ```bash
-docker compose -f docker/compose.prod.yml --env-file .env run --rm -T \
-  -v /srv/xalqbonus-import:/import \
-  app node .output/import-legacy.mjs \
-    --only legacy-awarded-trips /import/import-report-awarded-trips.md
+make prod-import-legacy-awarded-trips report=import-report-awarded-trips.md
 echo "код: $?"
 ```
+
+Отчёт — `/srv/xalqbonus-import/import-report-awarded-trips.md`, строка «засчитанных старым
+ботом заказов: N, период с … по …».
 
 Отбор — 14 дней назад от момента запуска: после остановки старого бота его лучше не
 откладывать дольше недели. Повтор безопасен — строк не добавит.

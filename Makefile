@@ -12,6 +12,7 @@ COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
         import-legacy-dump \
         sync-orders sync-registry sync-state \
         prod-up prod-down prod-restart prod-logs prod-ps prod-shell prod-psql prod-invariants prod-migrate prod-migrate-rolled-back \
+        prod-import-legacy prod-import-legacy-awarded-trips \
         prod-deploy prod-rollback \
         proxy-up proxy-down proxy-ps proxy-logs proxy-validate proxy-reload
 
@@ -301,6 +302,29 @@ prod-psql: ## Войти в psql prod-БД
 # на самой машине, руками: CLI на серверы не ходит (CLAUDE.md → «Важные ограничения»).
 prod-invariants: ## Прогнать запросы инвариантов по prod-БД (ненулевой код при расхождении)
 	$(COMPOSE_PROD) exec -T postgres sh -c 'PGPASSWORD="$$POSTGRES_PASSWORD" psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -q' < scripts/invariants.sql
+
+# Перенос старой базы на боевой машине — бандлом из образа, одноразовым контейнером `app`
+# (docker/DEPLOY-MANUAL.md → «Перенос старой базы в день выката», шаги 7 и 10). Каталог
+# выгрузки и отчётов монтируется внутрь как `/import`, отчёт ложится туда же, на хост.
+# `profiles=` и `report=` — имена файлов в этом каталоге, без пути: всё, что перенос читает
+# и пишет на машине, лежит в одном месте. Запускается на самой машине, руками: CLI на серверы
+# не ходит (CLAUDE.md → «Важные ограничения»).
+PROD_IMPORT_DIR ?= /srv/xalqbonus-import
+
+prod-import-legacy: ## Перенос старой базы на проде. make prod-import-legacy profiles=driver-profiles-<дата>.jsonl [report=import-report.md]
+	@test -n "$(profiles)" || { echo "укажите выгрузку: make prod-import-legacy profiles=driver-profiles-<дата>.jsonl [report=import-report.md]"; exit 1; }
+	@case "$(profiles) $(report)" in */*) echo "profiles= и report= — имена файлов в $(PROD_IMPORT_DIR), без каталога"; exit 1;; esac
+	@test -f "$(PROD_IMPORT_DIR)/$(profiles)" || { echo "нет выгрузки: $(PROD_IMPORT_DIR)/$(profiles)"; exit 1; }
+	@test -f "$(PROD_IMPORT_DIR)/$(basename $(profiles)).meta.json" || { echo "рядом с выгрузкой нет $(basename $(profiles)).meta.json — по нему ставится отметка реестра"; exit 1; }
+	$(COMPOSE_PROD) run --rm -T -v "$(PROD_IMPORT_DIR):/import" \
+		app node .output/import-legacy.mjs "/import/$(profiles)" "/import/$(or $(report),import-report.md)"
+
+# Один шаг переноса отдельно — засчитанные старым ботом заказы (issue #274): для машины, где
+# перенос прошёл раньше, чем шаг появился. Выгрузка реестра не нужна.
+prod-import-legacy-awarded-trips: ## Перенести на проде только засчитанные старым ботом заказы. make prod-import-legacy-awarded-trips [report=import-report-awarded-trips.md]
+	@case "$(report)" in */*) echo "report= — имя файла в $(PROD_IMPORT_DIR), без каталога"; exit 1;; esac
+	$(COMPOSE_PROD) run --rm -T -v "$(PROD_IMPORT_DIR):/import" \
+		app node .output/import-legacy.mjs --only legacy-awarded-trips "/import/$(or $(report),import-report-awarded-trips.md)"
 
 # Обе прод-цели миграций идут одноразовым контейнером, а не `exec`: так же мигрирует сам выкат
 # (`docker/scripts/deploy-manual.sh`, шаг 4), и работающий `app` для них не нужен. Образ берётся
