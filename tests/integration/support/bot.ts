@@ -23,6 +23,10 @@ export type SentMessage = {
   chatId: string;
   text: string;
   messageId: number;
+  /** Клавиатура сообщения как ушла в Telegram; пусто — без неё. */
+  replyMarkup: unknown;
+  /** Ушло без звука и уведомления. */
+  disableNotification: boolean;
 };
 
 /** Удалённое ботом сообщение — прежний экран, который снимает `sendScreen`. */
@@ -38,6 +42,10 @@ export type BotDouble = {
   sent: SentMessage[];
   /** Всё удалённое, по порядку. */
   deleted: DeletedMessage[];
+  /** Идентификаторы нажатий, на которые бот ответил `answerCallbackQuery`, по порядку. */
+  answeredCallbackQueries: string[];
+  /** Все вызванные методы Bot API, по порядку, — чтобы проверять порядок разных вызовов. */
+  calls: string[];
 };
 
 const BOT_INFO: UserFromGetMe = {
@@ -74,11 +82,15 @@ const readNumber = (payload: Record<string, unknown>, field: string): number => 
 export const createBotDouble = (): BotDouble => {
   const sent: SentMessage[] = [];
   const deleted: DeletedMessage[] = [];
+  const answeredCallbackQueries: string[] = [];
+  const calls: string[] = [];
   // Идентификаторы отправленных сообщений — растущие, как у Telegram: `sendScreen` удаляет
   // прежний экран по тому, что запомнил от предыдущей отправки.
   let lastMessageId = 1_000;
 
   const respond = (method: string, payload: Record<string, unknown>): unknown => {
+    calls.push(method);
+
     if (method === 'sendMessage') {
       lastMessageId += 1;
 
@@ -86,6 +98,8 @@ export const createBotDouble = (): BotDouble => {
         chatId: readString(payload, 'chat_id'),
         text: readString(payload, 'text'),
         messageId: lastMessageId,
+        replyMarkup: payload.reply_markup,
+        disableNotification: payload.disable_notification === true,
       });
 
       return { message_id: lastMessageId, date: 0, chat: { id: 0, type: 'private', first_name: '' } };
@@ -96,6 +110,12 @@ export const createBotDouble = (): BotDouble => {
         chatId: readString(payload, 'chat_id'),
         messageId: readNumber(payload, 'message_id'),
       });
+
+      return true;
+    }
+
+    if (method === 'answerCallbackQuery') {
+      answeredCallbackQueries.push(readString(payload, 'callback_query_id'));
 
       return true;
     }
@@ -116,6 +136,8 @@ export const createBotDouble = (): BotDouble => {
     handleUpdate: (update: Update) => bot.handleUpdate(update),
     sent,
     deleted,
+    answeredCallbackQueries,
+    calls,
   };
 };
 
@@ -163,5 +185,59 @@ export const commandContent = (command: string, parameter = ''): MessageContent 
   return {
     text,
     entities: [{ type: 'bot_command', offset: 0, length: command.length }],
+  };
+};
+
+/**
+ * Нажатие inline-кнопки под сообщением бота в личном чате — так приходят нажатия кнопок
+ * старого бота после переключения.
+ */
+export const privateCallbackUpdate = (telegramUserId: bigint, data: string): Update => {
+  lastUpdateId += 1;
+
+  return {
+    update_id: lastUpdateId,
+    callback_query: {
+      id: `callback-${lastUpdateId}`,
+      from: {
+        id: Number(telegramUserId),
+        is_bot: false,
+        first_name: 'Азиз',
+        language_code: 'ru',
+      },
+      chat_instance: `chat-instance-${telegramUserId}`,
+      data,
+      message: {
+        message_id: lastUpdateId,
+        date: Math.floor(Date.now() / 1_000),
+        chat: { id: Number(telegramUserId), type: 'private', first_name: 'Азиз' },
+        from: BOT_INFO,
+        text: 'Сообщение старого бота с кнопками',
+      },
+    },
+  };
+};
+
+/**
+ * Нажатие кнопки под inline-сообщением: у апдейта нет ни сообщения, ни чата — только
+ * `inline_message_id`.
+ */
+export const inlineCallbackUpdate = (telegramUserId: bigint, data: string): Update => {
+  lastUpdateId += 1;
+
+  return {
+    update_id: lastUpdateId,
+    callback_query: {
+      id: `callback-${lastUpdateId}`,
+      from: {
+        id: Number(telegramUserId),
+        is_bot: false,
+        first_name: 'Азиз',
+        language_code: 'ru',
+      },
+      chat_instance: `chat-instance-${telegramUserId}`,
+      data,
+      inline_message_id: `inline-${lastUpdateId}`,
+    },
   };
 };
