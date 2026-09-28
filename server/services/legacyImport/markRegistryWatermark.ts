@@ -2,7 +2,7 @@ import { readRegistryDumpMeta } from '#server/adapters/fleet/registryDump';
 import { readSyncState, setSyncWatermark } from '#server/repositories/syncState';
 
 /**
- * Шаг 6 переноса: отметка синхронизации реестра.
+ * Шаг 7 переноса: отметка синхронизации реестра.
  *
  * Отметка равна **времени начала выгрузки**, из которой залит реестр, а не времени
  * прогона переноса, и берётся из сопроводительного файла выгрузки, а не из головы.
