@@ -12,7 +12,8 @@ COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
         import-legacy-dump \
         sync-orders sync-registry sync-state \
         prod-up prod-down prod-restart prod-logs prod-ps prod-shell prod-psql prod-invariants prod-migrate prod-migrate-rolled-back \
-        prod-import-legacy prod-import-legacy-awarded-trips \
+        prod-stop prod-start prod-sql prod-db-restore prod-uploads-restore \
+        prod-import-legacy prod-import-legacy-check prod-import-legacy-awarded-trips \
         prod-deploy prod-rollback \
         proxy-up proxy-down proxy-ps proxy-logs proxy-validate proxy-reload
 
@@ -286,8 +287,8 @@ prod-down: ## Остановить prod-стек
 prod-restart: ## Перезапустить prod-стек
 	$(COMPOSE_PROD) restart
 
-prod-logs: ## Следить за логами prod-стека
-	$(COMPOSE_PROD) logs -f
+prod-logs: ## Следить за логами prod-стека. Один сервис: make prod-logs services=worker
+	$(COMPOSE_PROD) logs -f $(services)
 
 prod-ps: ## Статус контейнеров prod-стека
 	$(COMPOSE_PROD) ps
@@ -302,6 +303,79 @@ prod-psql: ## Войти в psql prod-БД
 # на самой машине, руками: CLI на серверы не ходит (CLAUDE.md → «Важные ограничения»).
 prod-invariants: ## Прогнать запросы инвариантов по prod-БД (ненулевой код при расхождении)
 	$(COMPOSE_PROD) exec -T postgres sh -c 'PGPASSWORD="$$POSTGRES_PASSWORD" psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -q' < scripts/invariants.sql
+
+# То же, что `sql`, но по базе prod-стека: сводка синхронизации, столкновения привязок перед
+# переносом (docker/DEPLOY-MANUAL.md → «Перенос старой базы в день выката», шаги 6 и 9).
+# Флаги те же, что у локальной цели, и по той же причине: ошибка в запросе даёт ненулевой код.
+prod-sql: ## Прогнать SQL-файл по prod-БД одной сессией. Использование: make prod-sql file=scripts/sync-state.sql
+	@test -n "$(file)" || { echo "укажите файл: make prod-sql file=<путь>.sql"; exit 1; }
+	@test -f "$(file)" || { echo "файла нет: $(file)"; exit 1; }
+	$(COMPOSE_PROD) exec -T postgres sh -c 'PGPASSWORD="$$POSTGRES_PASSWORD" psql -X -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -q' < "$(file)"
+
+# Приложение и воркер по отдельности от базы и очереди: сценарии переноса и восстановления
+# гасят тех, кто пишет в базу, а база с очередью остаются поднятыми — запросы и заливка идут
+# в них. Поэтому цели принимают только `app` и `worker`: база и очередь гасятся и поднимаются
+# всем стеком, `prod-down` и `prod-up`.
+#
+# `prod-start` — это `up -d`, а не `start`: после правки выключателей в `.env` compose видит
+# изменённую конфигурацию и пересоздаёт контейнер, а `start` поднял бы прежний со старым
+# окружением (DEPLOY-MANUAL.md → шаги 9 и 10). Остановленный контейнер с прежней
+# конфигурацией `up -d` поднимает так же, как `start`. Образ не собирается — `--build` есть
+# только у `prod-up`.
+PROD_APP_SERVICES = app worker
+
+prod-stop: ## Остановить приложение и/или воркер prod-стека. make prod-stop services="app worker"
+	@test -n "$(services)" || { echo 'укажите сервисы: make prod-stop services="app worker"'; exit 1; }
+	@for service in $(services); do \
+		case " $(PROD_APP_SERVICES) " in *" $$service "*) ;; *) echo "сервис $$service целью не гасится — только $(PROD_APP_SERVICES); весь стек — make prod-down"; exit 1;; esac; \
+	done
+	$(COMPOSE_PROD) stop $(services)
+
+prod-start: ## Поднять приложение и/или воркер prod-стека с текущим .env. make prod-start services="app worker"
+	@test -n "$(services)" || { echo 'укажите сервисы: make prod-start services="app worker"'; exit 1; }
+	@for service in $(services); do \
+		case " $(PROD_APP_SERVICES) " in *" $$service "*) ;; *) echo "сервис $$service целью не поднимается — только $(PROD_APP_SERVICES); весь стек — make prod-up"; exit 1;; esac; \
+	done
+	$(COMPOSE_PROD) up -d $(services)
+
+# Возврат prod-БД из копии `pg-backup.sh` (DEPLOY-MANUAL.md → «Откат образа ≠ откат базы»
+# и «Перенос старой базы в день выката», шаг 11). Копия — простой SQL, снятый без `--clean`:
+# поверх существующих таблиц она не ложится — первый же `CREATE` падает. Поэтому цель сначала
+# считает таблицы в `xb` и `public` и отказывается работать, если они есть: схемы сносит
+# человек, до вызова. Под `ON_ERROR_STOP` заливка останавливается на первой ошибке, а не
+# доезжает до конца поверх сломанного начала.
+prod-db-restore: ## Залить копию pg-backup.sh в пустые xb и public prod-БД. make prod-db-restore dump=/srv/xalqbonus-backups/pre-migrate/xalqbonus_pre-migrate_20260928_101500.sql.gz
+	@test -n "$(dump)" || { echo "укажите копию: make prod-db-restore dump=/srv/xalqbonus-backups/pre-migrate/<файл>.sql.gz"; exit 1; }
+	@test -f "$(dump)" || { echo "файла нет: $(dump)"; exit 1; }
+	@case "$(dump)" in *.sql.gz) ;; *) echo "копия базы — файл .sql.gz от pg-backup.sh, а не $(dump)"; exit 1;; esac
+	@gzip -t "$(dump)" || { echo "копия не проходит проверку gzip: $(dump)"; exit 1; }
+	@tables=$$($(COMPOSE_PROD) exec -T postgres sh -c 'PGPASSWORD="$$POSTGRES_PASSWORD" psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -tAc "select count(*) from information_schema.tables where table_schema in ('"'"'public'"'"', '"'"'xb'"'"')"' 2>/dev/null | tr -d "\r"); \
+	case "$$tables" in \
+		0) ;; \
+		''|*[!0-9]*) echo "число таблиц prod-БД не получено, ответ '$$tables' — заливка отменена"; exit 1;; \
+		*) echo "в схемах xb и public уже $$tables таблиц — заливка отменена."; \
+		   echo "копия снята без --clean и поверх таблиц не ляжет: схемы сносятся до заливки,"; \
+		   echo "docker/DEPLOY-MANUAL.md → «Перенос старой базы в день выката», шаг 11."; exit 1;; \
+	esac
+	gunzip < "$(dump)" | $(COMPOSE_PROD) exec -T postgres sh -c 'PGPASSWORD="$$POSTGRES_PASSWORD" psql -X -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
+
+# Распаковка архива тома с фото — тем же способом, которым его снимает `pg-backup.sh daily`:
+# одноразовый контейнер, том смонтирован на запись, архив приезжает потоком в stdin. Образ
+# для `tar` — от контейнера базы, он заведомо есть на машине (DEPLOY-MANUAL.md → «Копия тома
+# с фото»). Тома нет — отказ: `docker run -v` молча завёл бы пустой том с этим именем,
+# и архив лёг бы мимо приложения.
+PROD_UPLOADS_VOLUME = xalqbonus-prod_uploads
+
+prod-uploads-restore: ## Распаковать архив тома с фото поверх тома prod-стека. make prod-uploads-restore archive=/srv/xalqbonus-backups/uploads_20260928_230000.tar.gz
+	@test -n "$(archive)" || { echo "укажите архив: make prod-uploads-restore archive=/srv/xalqbonus-backups/uploads_<отметка>.tar.gz"; exit 1; }
+	@test -f "$(archive)" || { echo "файла нет: $(archive)"; exit 1; }
+	@case "$(notdir $(archive))" in uploads_*.tar.gz) ;; *) echo "архив тома — файл uploads_<отметка>.tar.gz от pg-backup.sh, а не $(archive)"; exit 1;; esac
+	@gzip -t "$(archive)" || { echo "архив не проходит проверку gzip: $(archive)"; exit 1; }
+	@docker volume inspect $(PROD_UPLOADS_VOLUME) >/dev/null 2>&1 || { echo "тома $(PROD_UPLOADS_VOLUME) нет — архив не распакован, проверьте выкат compose.prod.yml"; exit 1; }
+	@image=$$($(COMPOSE_PROD) images -q postgres | head -n 1); \
+	test -n "$$image" || { echo "образ контейнера postgres не определён — архив не распакован"; exit 1; }; \
+	echo "gunzip < $(archive) | docker run --rm -i -v $(PROD_UPLOADS_VOLUME):/data $$image tar -xf - -C /data"; \
+	gunzip < "$(archive)" | docker run --rm -i -v $(PROD_UPLOADS_VOLUME):/data "$$image" tar -xf - -C /data
 
 # Перенос старой базы на боевой машине — бандлом из образа, одноразовым контейнером `app`
 # (docker/DEPLOY-MANUAL.md → «Перенос старой базы в день выката», шаги 7 и 10). Каталог
@@ -318,6 +392,11 @@ prod-import-legacy: ## Перенос старой базы на проде. mak
 	@test -f "$(PROD_IMPORT_DIR)/$(basename $(profiles)).meta.json" || { echo "рядом с выгрузкой нет $(basename $(profiles)).meta.json — по нему ставится отметка реестра"; exit 1; }
 	$(COMPOSE_PROD) run --rm -T -v "$(PROD_IMPORT_DIR):/import" \
 		app node .output/import-legacy.mjs "/import/$(profiles)" "/import/$(or $(report),import-report.md)"
+
+# Проверка до дня переноса: бандл переноса есть в образе, выкаченном на машину. Одноразовый
+# контейнер без зависимостей — ни база, ни очередь для `ls` не нужны.
+prod-import-legacy-check: ## Проверить, что в выкаченном образе есть бандл переноса
+	$(COMPOSE_PROD) run --rm --no-deps -T app ls -l .output/import-legacy.mjs
 
 # Один шаг переноса отдельно — засчитанные старым ботом заказы (issue #274): для машины, где
 # перенос прошёл раньше, чем шаг появился. Выгрузка реестра не нужна.

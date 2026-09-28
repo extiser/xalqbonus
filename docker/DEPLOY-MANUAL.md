@@ -375,7 +375,7 @@ curl -sS "https://api.telegram.org/bot$TG_BOT_TOKEN/getWebhookInfo"
 
   ```bash
   cd /srv/xalqbonus
-  docker compose -f docker/compose.prod.yml --env-file .env run --rm --no-deps -T app ls -l .output/import-legacy.mjs
+  make prod-import-legacy-check
   ```
 
 - Заведён каталог выгрузки и отчёта. Владелец — `1000:1000`: перенос идёт одноразовым
@@ -414,7 +414,7 @@ Telegram и участие в программе; водитель, проход
 База и очередь остаются поднятыми:
 
 ```bash
-docker compose -f docker/compose.prod.yml --env-file .env stop app worker
+make prod-stop services="app worker"
 ```
 
 ### 3. Дамп `public` старого бота
@@ -469,9 +469,7 @@ bash docker/scripts/restore-legacy-public.sh prod "$LEGACY_DUMP"
 из `public`, поэтому стоит после заливки, а не до неё:
 
 ```bash
-docker compose -f docker/compose.prod.yml --env-file .env exec -T postgres \
-  sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" psql -X -q -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
-  < docker/scripts/legacy-link-collisions.sql
+make prod-sql file=docker/scripts/legacy-link-collisions.sql
 echo "код: $?"          # 0 — столкновений нет, идти дальше
 ```
 
@@ -561,7 +559,7 @@ Compose видит изменённый `.env` и пересоздаёт оба 
 sed -i -e 's/^SYNC_LIVE_ENABLED=.*/SYNC_LIVE_ENABLED=true/' \
        -e 's/^SYNC_REGISTRY_ENABLED=.*/SYNC_REGISTRY_ENABLED=true/' .env
 grep -E '^SYNC_(LIVE|CATCHUP|REGISTRY)_ENABLED=' .env   # LIVE и REGISTRY — true, CATCHUP — false
-docker compose -f docker/compose.prod.yml --env-file .env up -d app worker
+make prod-start services="app worker"
 ```
 
 Расписание BullMQ с интервалом исполняет первую задачу сразу, не дожидаясь интервала.
@@ -574,9 +572,7 @@ docker compose -f docker/compose.prod.yml --env-file .env up -d app worker
 Проверка — сводка синхронизации тем же запросом, что `make sync-state` локально:
 
 ```bash
-docker compose -f docker/compose.prod.yml --env-file .env exec -T postgres \
-  sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" psql -X -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
-  < scripts/sync-state.sql
+make prod-sql file=scripts/sync-state.sql
 ```
 
 Отметки `orders` и `registry` появились и идут за временем, последние прогоны — со статусом
@@ -614,8 +610,8 @@ echo "код: $?"
 
 ```bash
 sed -i 's/^SYNC_CATCHUP_ENABLED=.*/SYNC_CATCHUP_ENABLED=true/' .env
-docker compose -f docker/compose.prod.yml --env-file .env up -d worker
-docker compose -f docker/compose.prod.yml --env-file .env logs -f worker   # до строки о конце прогона orders_catchup
+make prod-start services=worker
+make prod-logs services=worker   # до строки о конце прогона orders_catchup
 ```
 
 Проверка — та же сводка синхронизации, что на шаге 9: у прогона `orders_catchup` статус
@@ -649,10 +645,8 @@ make prod-psql
 #   DROP SCHEMA public CASCADE;
 #   CREATE SCHEMA public;
 #   \q
-gunzip < /srv/xalqbonus-backups/pre-migrate/<файл шага 1>.sql.gz | \
-  docker compose -f docker/compose.prod.yml --env-file .env \
-  exec -T postgres sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
-docker compose -f docker/compose.prod.yml --env-file .env up -d app worker
+make prod-db-restore dump=/srv/xalqbonus-backups/pre-migrate/<файл шага 1>.sql.gz
+make prod-start services="app worker"
 source ~/.nvm/nvm.sh && pm2 start xalqbonusbot    # старый бот обратно
 ```
 
@@ -791,12 +785,10 @@ cd /srv/xalqbonus
 ls -1 /srv/xalqbonus-backups/pre-migrate/
 
 # 2. Погасить приложение и воркер, чтобы никто не писал в базу во время восстановления
-docker compose -f docker/compose.prod.yml --env-file .env stop app worker
+make prod-stop services="app worker"
 
 # 3. Восстановить (ОСТОРОЖНО: перезапишет данные, появившиеся после дампа)
-gunzip < /srv/xalqbonus-backups/pre-migrate/<файл>.sql.gz | \
-  docker compose -f docker/compose.prod.yml --env-file .env \
-  exec -T postgres sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+make prod-db-restore dump=/srv/xalqbonus-backups/pre-migrate/<файл>.sql.gz
 
 # 4. Вернуть образ, на котором эта схема работала
 make prod-rollback sha=<sha до неудачного выката>
@@ -1088,17 +1080,14 @@ cd /srv/xalqbonus
 ls -1 /srv/xalqbonus-backups/uploads_*.tar.gz
 
 # 2. Погасить приложение: распаковка поверх живого тома — это подмена файлов под запросами
-docker compose -f docker/compose.prod.yml --env-file .env stop app
+make prod-stop services=app
 
 # 3. Распаковать в том — тем же способом, которым снимался архив: одноразовый контейнер,
 #    том смонтирован на запись, архив приезжает потоком в stdin
-gunzip < /srv/xalqbonus-backups/uploads_<отметка>.tar.gz | \
-  docker run --rm -i -v xalqbonus-prod_uploads:/data \
-  "$(docker compose -f docker/compose.prod.yml --env-file .env images -q postgres)" \
-  tar -xf - -C /data
+make prod-uploads-restore archive=/srv/xalqbonus-backups/uploads_<отметка>.tar.gz
 
 # 4. Поднять приложение обратно
-docker compose -f docker/compose.prod.yml --env-file .env start app
+make prod-start services=app
 ```
 
 Владелец файлов после распаковки — тот, что записан в архиве, то есть `node` из образа:
