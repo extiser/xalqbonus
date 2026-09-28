@@ -13,6 +13,12 @@ import type { LegacyMatch } from '#server/services/legacyImport/matchLegacyDrive
  * водительский счёт. Прямого `INSERT` в счета нет и быть не может: единственный способ
  * изменить баланс — запись в журнал (docs/points.md).
  *
+ * **Долг переносится долгом** (решение Руслана 28-09-2026, issue #276). Отрицательный итог —
+ * та же одна операция `opening` с тем же ключом, только в обратную сторону: водительский
+ * счёт → `emission`, на модуль суммы. Это единственное списание в журнале, которому разрешено
+ * увести счёт в минус (`allowNegative`); водитель отрабатывает долг поездками, а заказ
+ * и ручное списание углубить его не могут.
+ *
  * Пересчёта, доначислений и исправлений нет ни одного. 4 877 повторно засчитанных
  * поездок и ~146 000 недоначисленных баллов сидят внутри перенесённого итога и остаются
  * там: перенос копирует итог, а перепроверка — отдельный этап, и она сообщает, а не чинит.
@@ -31,6 +37,9 @@ export type BalancesSummary = {
   transfersAlreadyApplied: number;
   /** Людей с нулевым итогом: операция с нулевой суммой не пишется вовсе. */
   personsWithZeroBalance: number;
+  /** Людей с отрицательным итогом: перенесено долгом. */
+  personsWithDebt: number;
+  /** Сумма со знаком: долги входят в неё минусом. */
   pointsTransferred: number;
 };
 
@@ -63,6 +72,7 @@ export const importBalances = async (
     transfersApplied: 0,
     transfersAlreadyApplied: 0,
     personsWithZeroBalance: 0,
+    personsWithDebt: 0,
     pointsTransferred: 0,
   };
 
@@ -79,13 +89,16 @@ export const importBalances = async (
     }
 
     const legacyIds = legacyIdsByPerson.get(personId) ?? [];
+    // Знак итога склеенной пары решает сумма, а не знак какой-то из половин.
+    const debt = points < 0;
 
     const { applied } = await transferPoints({
       reason: 'opening',
       idempotencyKey: buildOpeningIdempotencyKey(personId),
-      amount: points,
-      fromAccountId: emission.id,
-      toAccountId: account.id,
+      amount: Math.abs(points),
+      fromAccountId: debt ? account.id : emission.id,
+      toAccountId: debt ? emission.id : account.id,
+      allowNegative: debt,
       occurredAt,
       context: {
         actor: ACTOR,
@@ -94,6 +107,10 @@ export const importBalances = async (
     });
 
     summary.pointsTransferred += points;
+
+    if (debt) {
+      summary.personsWithDebt += 1;
+    }
 
     if (applied) {
       summary.transfersApplied += 1;

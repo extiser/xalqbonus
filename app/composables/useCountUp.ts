@@ -18,7 +18,8 @@ import type { ComputedRef, Ref } from 'vue';
  * его выключает.
  *
  * Разряды разбиваются неразрывным пробелом здесь же — одинаково на сервере и в браузере,
- * без зависимости от того, какая локаль собрана в движке.
+ * без зависимости от того, какая локаль собрана в движке. Долг набирается вниз от нуля
+ * тем же набором, со знаком минус.
  */
 
 /** Длительность набора, мс — снята с эталона главного экрана. */
@@ -48,8 +49,15 @@ function stateOf(key: string): CountState {
   return state;
 }
 
+/**
+ * Баланс бывает отрицательным — долг из старой базы (issue #276). Минус типографский (U+2212),
+ * как во всех числах Mini App: дефис рядом с цифрами читается тире переноса.
+ */
 function formatPoints(value: number): string {
-  return String(Math.round(value)).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00A0');
+  const rounded = Math.round(value);
+  const digits = String(Math.abs(rounded)).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00A0');
+
+  return rounded < 0 ? `\u2212${digits}` : digits;
 }
 
 function stop(state: CountState): void {

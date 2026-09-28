@@ -1,19 +1,21 @@
 import type { Prisma } from '#server/generated/prisma/client';
 import type { PointReason } from '#server/generated/prisma/enums';
-import { writeTransfer, type TransferContext, type TransferRow } from '#server/repositories/points';
+import {
+  writeTransfer,
+  type TransferContext,
+  type TransferRow,
+  type WriteTransferResult,
+} from '#server/repositories/points';
 import {
   IdempotencyKeyConflictError,
   InsufficientPointsError,
   InvalidTransferAmountError,
+  NegativeBalanceNotAllowedError,
   SameAccountTransferError,
   UnknownAccountError,
 } from '#server/services/points/errors';
 import type { IdempotencyKey } from '#server/services/points/idempotencyKey';
-import {
-  CHECK_VIOLATION,
-  FOREIGN_KEY_VIOLATION,
-  isConstraintViolation,
-} from '#server/utils/postgresErrors';
+import { FOREIGN_KEY_VIOLATION, isConstraintViolation } from '#server/utils/postgresErrors';
 
 /**
  * Примитив перевода — единственная точка записи в журнал баллов.
@@ -48,7 +50,19 @@ export type TransferPointsInput = {
    * у `ensureDriverAccount`.
    */
   client?: Prisma.TransactionClient;
+  /**
+   * Списание не проверяет остаток и может увести водительский счёт в минус.
+   *
+   * Принимается **только** с причиной `opening`: так перенос кладёт долг из старого бота
+   * долгом (issue #276). С любой другой причиной — `NegativeBalanceNotAllowedError`, а не
+   * тихое игнорирование: общего «разрешить минус» у журнала нет, и заказ, ручное списание
+   * или возврат, попросившие его, — ошибка кода, которую надо увидеть.
+   */
+  allowNegative?: boolean;
 };
+
+/** Единственная причина, которой разрешено увести водительский счёт в минус. */
+const NEGATIVE_BALANCE_REASON: PointReason = 'opening';
 
 export type TransferPointsResult = {
   transfer: TransferRow;
@@ -97,10 +111,16 @@ export const transferPoints = async (
     throw new SameAccountTransferError(input.fromAccountId);
   }
 
-  let result: TransferPointsResult;
+  const allowNegative = input.allowNegative === true;
+
+  if (allowNegative && input.reason !== NEGATIVE_BALANCE_REASON) {
+    throw new NegativeBalanceNotAllowedError(input.reason);
+  }
+
+  let written: WriteTransferResult;
 
   try {
-    result = await writeTransfer({
+    written = await writeTransfer({
       reason: input.reason,
       idempotencyKey: input.idempotencyKey,
       amount: BigInt(input.amount),
@@ -109,12 +129,9 @@ export const transferPoints = async (
       occurredAt: input.occurredAt,
       context: input.context ?? {},
       client: input.client,
+      allowNegative,
     });
   } catch (error) {
-    if (isConstraintViolation(error, CHECK_VIOLATION, 'accounts_driver_balance_check')) {
-      throw new InsufficientPointsError(input.fromAccountId, BigInt(input.amount));
-    }
-
     if (isConstraintViolation(error, FOREIGN_KEY_VIOLATION)) {
       throw new UnknownAccountError(
         `перевод между ${input.fromAccountId} и ${input.toAccountId}`,
@@ -124,6 +141,11 @@ export const transferPoints = async (
     throw error;
   }
 
+  if (written.insufficient) {
+    throw new InsufficientPointsError(input.fromAccountId, BigInt(input.amount));
+  }
+
+  const result: TransferPointsResult = { transfer: written.transfer, applied: written.applied };
   const difference = describeDifference(result.transfer, input);
 
   if (difference) {

@@ -77,13 +77,24 @@ export type WriteTransferInput = {
    * Пусто — перевод сам себе операция и открывает транзакцию сам.
    */
   client?: Prisma.TransactionClient;
+  /**
+   * Списание с водительского счёта не проверяет остаток и может увести его в минус.
+   * Какой операции это разрешено, решает сервис журнала, а не репозиторий.
+   */
+  allowNegative: boolean;
 };
 
-export type WriteTransferResult = {
-  transfer: TransferRow;
-  /** `false` — перевод по этому ключу был записан раньше, ни один баланс не тронут. */
-  applied: boolean;
-};
+export type WriteTransferResult =
+  | {
+      transfer: TransferRow;
+      /** `false` — перевод по этому ключу был записан раньше, ни один баланс не тронут. */
+      applied: boolean;
+      insufficient: false;
+    }
+  | {
+      /** На водительском счёте не хватило баллов: ничего не записано. */
+      insufficient: true;
+    };
 
 // Суммы уходят в базу текстом с явным приведением к bigint: сериализация BigInt зависит
 // от драйвера, а текст с `::bigint` читается одинаково везде и не теряет разрядов.
@@ -205,13 +216,34 @@ export const writeTransfer = async (input: WriteTransferInput): Promise<WriteTra
     // источник: два встречных перевода между одной парой счетов иначе встают в дедлок.
     // `ORDER BY` здесь не косметика — узел блокировки стоит над сортировкой, и порядок
     // захвата равен порядку выдачи строк.
-    await transaction.$queryRaw`
-      SELECT "id"
+    const locked = await transaction.$queryRaw<{ id: string; type: AccountType; balance: bigint }[]>`
+      SELECT "id", "type", "balance"
         FROM xb.accounts
        WHERE "id" IN (${input.fromAccountId}::uuid, ${input.toAccountId}::uuid)
        ORDER BY "id"
          FOR UPDATE
     `;
+
+    // Остаток водительского счёта проверяется здесь, под блокировкой: проверки в базе нет
+    // с тех пор, как минус стал допустим долгом из переноса (issue #276), и между чтением
+    // и списанием без блокировки поместилось бы второе списание. Проверка идёт до любой
+    // записи — отказ не оставляет в транзакции вызывающего ни строки.
+    //
+    // Нехватка на повторе уже записанного перевода — не отказ: баланс с тех пор мог
+    // уменьшиться, а повтор по ключу обязан вернуть прежний перевод, как и без нехватки.
+    const source = locked.find((account) => account.id === input.fromAccountId);
+
+    if (
+      source?.type === 'driver' &&
+      !input.allowNegative &&
+      source.balance < input.amount
+    ) {
+      const existing = await selectTransferByIdempotencyKey(transaction, input.idempotencyKey);
+
+      return existing
+        ? { transfer: existing, applied: false, insufficient: false }
+        : { insufficient: true };
+    }
 
     // Идемпотентность держится уникальным ограничением, а не проверкой «уже есть такой
     // ключ?»: между проверкой и вставкой помещается второй воркер (docs/points.md).
@@ -256,7 +288,7 @@ export const writeTransfer = async (input: WriteTransferInput): Promise<WriteTra
         );
       }
 
-      return { transfer: existing, applied: false };
+      return { transfer: existing, applied: false, insufficient: false };
     }
 
     await transaction.$executeRaw`
@@ -284,7 +316,7 @@ export const writeTransfer = async (input: WriteTransferInput): Promise<WriteTra
       );
     }
 
-    return { transfer, applied: true };
+    return { transfer, applied: true, insufficient: false };
   };
 
   return input.client ? write(input.client) : db.$transaction(write);
@@ -353,6 +385,10 @@ export const readBalanceTotals = async (): Promise<BalanceTotals> => {
  * растут поездками с первого же прогона синхронизации, и общая сумма перестала бы
  * сходиться с перенесённой на следующий день после переноса — по совершенно законной
  * причине. Сверять перенос надо с тем, что записал перенос.
+ *
+ * Сумма со знаком: считаются записи на водительском счёте, а не суммы переводов, и долг,
+ * перенесённый операцией со счёта водителя в `emission`, входит в неё минусом — так же,
+ * как отрицательный `points` входит в эталон (issue #276).
  *
  * Без демо-водителей (issue #212): заведённые до появления `demo_grant` получили баллы
  * переводом `opening`, и переписывать их журнал нельзя — их отсекает признак человека.

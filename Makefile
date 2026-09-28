@@ -39,8 +39,11 @@ ps: ## Статус контейнеров local-стека
 shell: ## Shell внутри app-контейнера (local)
 	$(COMPOSE) exec app sh
 
-psql: ## Войти в psql локальной БД
-	$(COMPOSE) exec postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
+# Без `db=` — рабочая локальная база. С ним — другая база того же стека, например база
+# репетиции переноса (scripts/rehearse-legacy-import.sh): закрывать столкновения привязок
+# руками надо именно в ней, а не в рабочей.
+psql: ## Войти в psql локальной БД. Другая база стека: make psql db=xalqbonus_0928
+	$(COMPOSE) exec postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$(or $(db),$$POSTGRES_DB)"'
 
 # Прогон SQL-файла по локальной базе одной сессией: временные таблицы, созданные
 # в начале файла, видны запросам в конце — сверки строятся именно так. Файл уходит

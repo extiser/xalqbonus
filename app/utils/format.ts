@@ -65,7 +65,13 @@ export const DISPLAY_TIME_ZONE_LABEL = zoneOffset
   ? `${DISPLAY_TIME_ZONE} (${zoneOffset})`
   : DISPLAY_TIME_ZONE;
 
-export const formatNumber = (value: number): string => value.toLocaleString('ru-RU');
+/**
+ * Число с разрядами: «1 844». Отрицательное — с типографским минусом, «−1 844», как
+ * у `formatSignedNumber`: баланс водителя бывает долгом из старой базы (issue #276),
+ * а дефис движка у разных локалей разный и в колонке чисел разъезжается.
+ */
+export const formatNumber = (value: number): string =>
+  value < 0 ? `−${Math.abs(value).toLocaleString('ru-RU')}` : value.toLocaleString('ru-RU');
 
 /**
  * Доля от целого процентом, до десятой: `formatShare(8, 100)` — «8 %», `formatShare(1, 3)` —
@@ -194,7 +200,7 @@ export const formatCalendarDate = (value: string | null): string => {
  * ширина, и колонка чисел с ним разъезжается.
  */
 export const formatSignedNumber = (value: number): string =>
-  value < 0 ? `−${formatNumber(Math.abs(value))}` : `+${formatNumber(value)}`;
+  value < 0 ? formatNumber(value) : `+${formatNumber(value)}`;
 
 /**
  * Момент календарной датой: «29.08.2026».

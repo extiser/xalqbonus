@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
+import { importBalances } from '#server/services/legacyImport/importBalances';
+import type { LegacyMatch } from '#server/services/legacyImport/matchLegacyDrivers';
 import { adjustPointsManually } from '#server/services/points/adjustPointsManually';
 import { awardTripPoints } from '#server/services/points/awardTripPoints';
 import { ensureDriverAccount } from '#server/services/points/ensureDriverAccount';
@@ -29,6 +31,25 @@ import { disconnectQueues } from '../support/queues';
  * с оригиналом на первой же правке, и тест начал бы проверять не то, что команда.
  */
 const INVARIANTS_PATH = new URL('../../../scripts/invariants.sql', import.meta.url);
+
+/** Долг из старой базы — одна запись после сопоставления, как её отдаёт шаг сопоставления. */
+const legacyDebt = (personId: string, points: number): LegacyMatch => ({
+  row: {
+    legacyDriverId: -910_001,
+    profileId: `test-profile-${personId}`,
+    points,
+    chatId: null,
+    language: 'ru',
+    createdAt: new Date('2026-09-28T06:00:00.000Z'),
+  },
+  profileId: `test-profile-${personId}`,
+  personId,
+  matchMethod: 'profile_id',
+  mergedIntoLegacyDriverId: null,
+  telegramStatus: 'skipped',
+  chatId: null,
+  points,
+});
 
 const readInvariantQueries = (): string[] => {
   const source = readFileSync(INVARIANTS_PATH, 'utf8');
@@ -148,5 +169,53 @@ describe('инварианты журнала', () => {
     await expect(runRawQuery(secondInvariant!)).resolves.not.toEqual([]);
     // Остальные инварианты при этом сходятся: расхождение именно в кэше баланса.
     await expect(runRawQuery(firstInvariant!)).resolves.toEqual([]);
+  });
+
+  describe('минус на водительском счёте (issue #276)', () => {
+    it('долг из переноса проходит все четыре запроса, и отработанный поездкой тоже', async () => {
+      const person = await createTestPerson({ inProgram: true });
+      await importBalances([legacyDebt(person.personId, -1_844)], new Date('2026-09-28T06:00:00.000Z'));
+
+      for (const query of queries) {
+        await expect(runRawQuery(query)).resolves.toEqual([]);
+      }
+
+      const tripOrderId = `test-trip-${person.personId}-0`;
+      await createTestTrip({
+        profileId: person.profileId,
+        tripOrderId,
+        status: 'complete',
+        endedAt: new Date('2026-09-28T09:00:00.000Z'),
+      });
+      await awardTripPoints([tripOrderId]);
+
+      for (const query of queries) {
+        await expect(runRawQuery(query)).resolves.toEqual([]);
+      }
+    });
+
+    it('минус без долга из переноса ловится четвёртым', async () => {
+      const person = await createTestPerson({ inProgram: true });
+      await ensureDriverAccount(person.personId);
+      await breakBalanceCacheForTest(person.personId, -5);
+
+      const fourthInvariant = queries[3]!;
+
+      await expect(runRawQuery(fourthInvariant)).resolves.toEqual([
+        expect.objectContaining({ person_id: person.personId, balance: -5n, opening_debt: 0n }),
+      ]);
+    });
+
+    it('минус глубже долга из переноса ловится четвёртым', async () => {
+      const person = await createTestPerson({ inProgram: true });
+      await importBalances([legacyDebt(person.personId, -10)], new Date('2026-09-28T06:00:00.000Z'));
+      await breakBalanceCacheForTest(person.personId, -1);
+
+      const fourthInvariant = queries[3]!;
+
+      await expect(runRawQuery(fourthInvariant)).resolves.toEqual([
+        expect.objectContaining({ person_id: person.personId, balance: -11n }),
+      ]);
+    });
   });
 });

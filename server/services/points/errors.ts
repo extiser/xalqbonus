@@ -24,8 +24,9 @@ export class UnknownAccountError extends PointsError {
 }
 
 /**
- * Водительский счёт ушёл бы в минус. Отбивается `accounts_driver_balance_check` в базе,
- * сюда попадает уже переведённым в доменную ошибку, а не пятисоткой.
+ * На водительском счёте меньше баллов, чем списывается: счёт ушёл бы в минус или долг
+ * из переноса стал бы глубже. Проверяется под блокировкой счёта до записи
+ * (`writeTransfer`), и отказ не оставляет ни строки журнала, ни тронутого баланса.
  */
 export class InsufficientPointsError extends PointsError {
   constructor(
@@ -33,6 +34,17 @@ export class InsufficientPointsError extends PointsError {
     public readonly amount: bigint,
   ) {
     super(`на счёте ${accountId} недостаточно баллов для списания ${amount}`);
+  }
+}
+
+/**
+ * Признак «списание без проверки остатка» пришёл с причиной не `opening`. Минус допустим
+ * только долгом из переноса старой базы (issue #276); с другой причиной признак — ошибка
+ * кода, и молча его игнорировать нельзя: вызывающий считал бы, что минус ему разрешён.
+ */
+export class NegativeBalanceNotAllowedError extends PointsError {
+  constructor(public readonly reason: string) {
+    super(`списание в минус разрешено только операции opening, получено ${reason}`);
   }
 }
 
