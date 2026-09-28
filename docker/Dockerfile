@@ -35,6 +35,10 @@ RUN npm run build:worker
 # описанной выше: в `.output/server/node_modules` лежит огрызок `@prisma/client`, и поиск
 # внешних пакетов оттуда до полного дерева не поднимается.
 RUN npm run build:create-owner
+# Перенос старой базы — тем же бандлом и по той же причине. `make import-legacy` зовёт
+# `npx tsx scripts/...` через локальный стек, а на машине нет ни исходников, ни tsx.
+# Запуск на машине — docker/DEPLOY-MANUAL.md → «Перенос старой базы в день выката».
+RUN npm run build:import-legacy
 # Production-зависимости собираются отдельным деревом, а не вычищаются на месте: этот же этап
 # служит образом локального стека (compose.local.yml → target: build), а там нужны tsx, vitest
 # и prisma CLI. Дерево /prod едет в финальный образ, дерево /srv остаётся полным.
@@ -135,6 +139,21 @@ RUN out="$(DATABASE_URL='postgresql://smoke:smoke@127.0.0.1:1/smoke?schema=xb' \
       echo 'бандл владельца поднялся: граф модулей разрешился'; \
     else \
       echo 'бандл владельца не поднялся:'; \
+      echo "$out" | head -c 2000; \
+      exit 1; \
+    fi
+# Проверка бандла переноса — тем же способом. Исполняется он один раз, в день выката, при
+# остановленном старом боте: сломанный бандл, обнаруженный в этот момент, держит парк без бота.
+#
+# Подсказки по вызову у скрипта нет, поэтому признак другой: первая строка прогона называет
+# выгрузку реестра, и появиться она может, только если граф модулей разрешился и дело дошло
+# до нашего кода. Выгрузки по этому пути нет, и прогон падает на её чтении, до базы не доходя.
+RUN out="$(DATABASE_URL='postgresql://smoke:smoke@127.0.0.1:1/smoke?schema=xb' \
+           node .output/import-legacy.mjs /nonexistent/import-legacy-smoke.jsonl /tmp/import-legacy-smoke.md 2>&1 || true)"; \
+    if echo "$out" | grep -q 'выгрузка: /nonexistent/import-legacy-smoke.jsonl'; then \
+      echo 'бандл переноса поднялся: граф модулей разрешился'; \
+    else \
+      echo 'бандл переноса не поднялся:'; \
       echo "$out" | head -c 2000; \
       exit 1; \
     fi
