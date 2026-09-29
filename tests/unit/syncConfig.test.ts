@@ -116,13 +116,13 @@ describe('настройки догона из окружения', () => {
     }
   });
 
-  it('на чистом окружении — попытка раз в четверть часа, куски по 12 часов, проход раз в сутки', () => {
+  it('на чистом окружении — попытка раз в четверть часа, куски по 4 часа, проход раз в сутки', () => {
     setEnvironment({});
 
     const read = readSyncConfig();
 
     expect(read.catchupIntervalSec).toBe(900);
-    expect(read.catchupSliceHours).toBe(12);
+    expect(read.catchupSliceHours).toBe(4);
     expect(read.catchupPassEveryHours).toBe(24);
   });
 
