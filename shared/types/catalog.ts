@@ -67,8 +67,6 @@ export type OfficeEmployee = {
   employeeId: string;
   fullName: string;
   role: EmployeeRole;
-  /** Доступ закрыт: в составе остаётся с пометкой, пока не снимут (issue #257). */
-  disabled: boolean;
   /**
    * Смотрящий вправе снять его с офиса — роль строго ниже своей (issue #291). Решено
    * на сервере тем же правилом, что проверяет закрепление.

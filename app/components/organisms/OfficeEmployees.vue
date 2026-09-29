@@ -14,7 +14,8 @@ import type { SelectOption } from '~/types/selectOption';
  *
  * Экраном учёток это не является: здесь ни телефона, ни признаков входа, ни приглашений
  * (issue #120 → «Не делать»). Закрытую учётку закрепить нельзя (issue #257): в выборе её нет,
- * и сервер такую откажет. Уже закреплённая закрытая остаётся в списке с пометкой — её снимают.
+ * и сервер такую откажет. Закреплённых закрытых не бывает: выключение снимает учётку со всех
+ * офисов (issue #291).
  *
  * Кандидаты приходят с сервера уже отобранными — с открытым доступом, своей стороны офиса
  * и строго ниже смотрящего (issue #291); здесь от них отсекаются только уже закреплённые.
@@ -89,9 +90,6 @@ const remove = (employeeId: string): void => {
           <span class="text-sm text-slate-900">
             {{ employee.fullName }}
             <span class="text-slate-500">· {{ employeeRoleLabel(employee.role) }}</span>
-            <span v-if="employee.disabled" class="text-slate-500">
-              · доступ закрыт
-            </span>
           </span>
           <AtomsActionButton
             v-if="!readonly && employee.removable"

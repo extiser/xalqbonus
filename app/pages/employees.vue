@@ -109,9 +109,9 @@ const accountOf = (employeeId: string): EmployeeAccount | undefined =>
 const nameOf = (employeeId: string): string => accountOf(employeeId)?.fullName ?? 'сотрудник';
 
 // Подтверждение спрашивается у действий, которые человек за столом заметит сразу:
-// выключенный не войдёт, сброшенный выйдет из веба на всех устройствах.
+// выключенный не войдёт и снимется со всех офисов, сброшенный выйдет из веба на всех устройствах.
 const disable = (employeeId: string): Promise<void> | undefined => {
-  if (!window.confirm(`Выключить учётную запись «${nameOf(employeeId)}»? Войти не выйдет ни в веб, ни в приложение.`)) {
+  if (!window.confirm(`Выключить учётную запись «${nameOf(employeeId)}»? Войти не выйдет ни в веб, ни в приложение, и учётная запись снимется со всех офисов — после включения её закрепляют заново на странице офиса.`)) {
     return;
   }
 

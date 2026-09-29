@@ -1,6 +1,8 @@
 import { consola } from 'consola';
 
-import { findEmployeeById, updateEmployeeDisabled } from '#server/repositories/employees';
+import { db } from '#server/db';
+import { lockEmployeeById, updateEmployeeDisabled } from '#server/repositories/employees';
+import { detachEmployeeFromOffices, type DetachedOfficeRow } from '#server/repositories/offices';
 import { canManageEmployee, type EmployeeActor } from '#server/services/employees/roles';
 
 /**
@@ -14,6 +16,12 @@ import { canManageEmployee, type EmployeeActor } from '#server/services/employee
  * и выбрасывает человека немедленно (`authenticate.ts`). Сдвиг `sessions_valid_from`
  * был бы второй вещью, делающей то же самое, — и заодно ломал бы включение: включённый
  * человек выходил бы из веба, хотя его никто об этом не просил.
+ *
+ * Выключение снимает учётку со всех офисов той же транзакцией (решение Руслана 29-09-2026,
+ * issue #291): закрытый сотрудник за офисом — строка, которая ничего не значит, а в составе
+ * офиса она путала, кто в нём работает. Включение закреплений не возвращает — закрепляют
+ * заново на странице офиса. Выдачи, отмены и правки баллов выключенного остаются с его
+ * подписью: они ссылаются на учётку, а не на закрепление.
  */
 
 const log = consola.withTag('employees:disable');
@@ -35,22 +43,48 @@ export type SetEmployeeDisabledRequest = {
 export const setEmployeeDisabled = async (
   request: SetEmployeeDisabledRequest,
 ): Promise<SetEmployeeDisabledOutcome> => {
-  const employee = await findEmployeeById(request.employeeId);
+  const result = await db.$transaction(async (transaction) => {
+    // Под блокировкой строки: выключение и закрепление за офисом не должны разойтись
+    // так, что закрепление ляжет после снятия.
+    const employee = await lockEmployeeById(request.employeeId, transaction);
 
-  if (!employee) {
-    return 'not_found';
-  }
+    if (!employee) {
+      return { outcome: 'not_found' as const };
+    }
 
-  if (!canManageEmployee(request.actor.role, employee.role)) {
-    return 'forbidden';
-  }
+    if (!canManageEmployee(request.actor.role, employee.role)) {
+      return { outcome: 'forbidden' as const };
+    }
 
-  await updateEmployeeDisabled(employee.id, request.disabled ? (request.now ?? new Date()) : null);
+    await updateEmployeeDisabled(
+      employee.id,
+      request.disabled ? (request.now ?? new Date()) : null,
+      transaction,
+    );
 
-  log.info(request.disabled ? 'учётка выключена' : 'учётка включена', {
-    employeeId: employee.id,
-    actorEmployeeId: request.actor.employeeId,
+    const detached: DetachedOfficeRow[] = request.disabled
+      ? await detachEmployeeFromOffices(employee.id, transaction)
+      : [];
+
+    return { outcome: 'updated' as const, employeeId: employee.id, detached };
   });
+
+  if (result.outcome !== 'updated') {
+    return result.outcome;
+  }
+
+  if (request.disabled) {
+    log.info('учётка выключена', {
+      employeeId: result.employeeId,
+      actorEmployeeId: request.actor.employeeId,
+      detachedOffices: result.detached,
+    });
+  } else {
+    log.info('учётка включена', {
+      employeeId: result.employeeId,
+      actorEmployeeId: request.actor.employeeId,
+    });
+  }
 
   return 'updated';
 };

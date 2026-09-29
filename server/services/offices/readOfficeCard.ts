@@ -33,7 +33,6 @@ export const readOfficeCard = async (
       employeeId: employee.employeeId,
       fullName: employee.fullName,
       role: employee.role,
-      disabled: employee.disabled,
       removable: outranks(actor.role, employee.role),
     })),
   };

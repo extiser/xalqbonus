@@ -207,8 +207,6 @@ export type OfficeEmployeeRow = {
   employeeId: string;
   fullName: string;
   role: EmployeeRole;
-  /** Учётка выключена: закреплённая остаётся в составе с пометкой (issue #257). */
-  disabled: boolean;
 };
 
 export const listOfficeEmployees = async (
@@ -216,10 +214,9 @@ export const listOfficeEmployees = async (
   client: Executor = db,
 ): Promise<OfficeEmployeeRow[]> =>
   client.$queryRaw<OfficeEmployeeRow[]>`
-    SELECT employee."id"                      AS "employeeId",
-           employee."full_name"               AS "fullName",
-           employee."role",
-           employee."disabled_at" IS NOT NULL AS "disabled"
+    SELECT employee."id"        AS "employeeId",
+           employee."full_name" AS "fullName",
+           employee."role"
       FROM xb.employee_offices AS link
       JOIN xb.employees        AS employee ON employee."id" = link."employee_id"
      WHERE link."office_id" = ${officeId}::uuid
@@ -258,6 +255,32 @@ export const replaceOfficeEmployees = async (
     ON CONFLICT ("employee_id", "office_id") DO NOTHING
   `;
 };
+
+export type DetachedOfficeRow = {
+  officeId: string;
+  name: string;
+};
+
+/**
+ * Снимает учётку со всех офисов — выключение (issue #291). Отдаёт снятые офисы: они уходят
+ * в строку лога, другого следа у закрепления нет.
+ */
+export const detachEmployeeFromOffices = async (
+  employeeId: string,
+  client: Executor,
+): Promise<DetachedOfficeRow[]> =>
+  client.$queryRaw<DetachedOfficeRow[]>`
+    WITH removed AS (
+      DELETE FROM xb.employee_offices
+       WHERE "employee_id" = ${employeeId}::uuid
+      RETURNING "office_id"
+    )
+    SELECT office."id"   AS "officeId",
+           office."name"
+      FROM removed
+      JOIN xb.offices AS office ON office."id" = removed."office_id"
+     ORDER BY office."name"
+  `;
 
 /**
  * То же с другой стороны (issue #252): набор офисов сотрудника заменяется присланным.
