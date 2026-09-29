@@ -83,7 +83,9 @@ const deliver = async (delivery: Delivery, photo: NotificationPhoto | null): Pro
     openAppButton: delivery.openAppButton,
   });
 
-  uploadedPhotoFileIds.set(photo.path, sent.fileId);
+  if (sent.fileId !== null) {
+    uploadedPhotoFileIds.set(photo.path, sent.fileId);
+  }
 };
 
 export const sendNotification = async (

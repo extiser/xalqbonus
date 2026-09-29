@@ -5,7 +5,8 @@ import {
   OrderNotPendingError,
   UnknownOrderError,
 } from '#server/services/orders/errors';
-import { issueOrder } from '#server/services/orders/issueOrder';
+import { notifyIssued } from '#server/services/notifications/notifyIssued';
+import { issueOrder, type IssuedOrder } from '#server/services/orders/issueOrder';
 import { readOfficeOrder } from '#server/services/orders/officeOrderView';
 import type { OfficeOrder } from '#shared/types/orders';
 
@@ -39,8 +40,10 @@ export const issueOfficeOrder = async (
     throw new OrderNotPendingError(order.id, order.status);
   }
 
+  let issued: IssuedOrder;
+
   try {
-    await issueOrder({ orderId: order.id, employeeId: worker.employeeId });
+    issued = await issueOrder({ orderId: order.id, employeeId: worker.employeeId });
   } catch (error) {
     if (!(error instanceof OrderNotFoundError)) {
       throw error;
@@ -60,6 +63,15 @@ export const issueOfficeOrder = async (
   if (!result) {
     throw new Error(`выданный заказ ${orderId} не прочитался`);
   }
+
+  // После фиксации выдачи, не внутри неё: откат не должен оставить отправленное сообщение.
+  await notifyIssued({
+    kind: 'order',
+    personId: issued.personId,
+    officeName: result.officeName,
+    lines: result.lines,
+    pointsSpent: issued.totalPoints,
+  });
 
   return result;
 };

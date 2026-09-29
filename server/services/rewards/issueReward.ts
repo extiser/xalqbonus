@@ -28,7 +28,9 @@ export type IssueRewardInput = {
   employeeId: string;
 };
 
-export const issueReward = async (input: IssueRewardInput): Promise<{ issuedAt: Date }> =>
+export const issueReward = async (
+  input: IssueRewardInput,
+): Promise<{ issuedAt: Date; personId: string }> =>
   db.$transaction(async (transaction) => {
     const reward = await lockAwaitingRewardById(transaction, input.rewardId);
 
@@ -70,5 +72,5 @@ export const issueReward = async (input: IssueRewardInput): Promise<{ issuedAt: 
       officeId: reward.officeId,
     });
 
-    return { issuedAt };
+    return { issuedAt, personId: reward.personId };
   });

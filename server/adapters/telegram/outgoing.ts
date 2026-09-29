@@ -1,3 +1,4 @@
+import { consola } from 'consola';
 import { Api, GrammyError, HttpError, InlineKeyboard, InputFile } from 'grammy';
 
 /**
@@ -12,6 +13,71 @@ import { Api, GrammyError, HttpError, InlineKeyboard, InputFile } from 'grammy';
  * с отказом — решает сервис, а классификация отказа живёт здесь, потому что это знание
  * о Telegram, а не о нас.
  */
+
+const log = consola.withTag('telegram:outgoing');
+
+/**
+ * Список разрешённых получателей вне прода. Локальная база залита боевым дампом, и в ней
+ * настоящие `telegram_chat_id` водителей: попади в локальный `.env` боевой токен, воркер
+ * начал бы писать им всё, что делается в тестах. Защита стоит на единственном пути
+ * исходящих — здесь, а не у каждого отправителя по отдельности.
+ *
+ * Читается `process.env`, а не `runtimeConfig`, — по той же причине, что и остальное
+ * окружение бота (server/bot/config.ts): воркеру `useRuntimeConfig` недоступен.
+ */
+export type OutgoingRule = {
+  nodeEnv: string | undefined;
+  /** Telegram ID через запятую — как записан в `TG_OUTGOING_ALLOWLIST`. */
+  allowlist: string;
+};
+
+/**
+ * Можно ли слать этому получателю. В проде список не действует. Иначе получатель обязан быть
+ * в списке, и пустой список не разрешает никого.
+ */
+export const isOutgoingAllowed = (rule: OutgoingRule, telegramChatId: bigint): boolean => {
+  if (rule.nodeEnv === 'production') {
+    return true;
+  }
+
+  const allowed = rule.allowlist
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== '');
+
+  return allowed.includes(telegramChatId.toString());
+};
+
+const readOutgoingRule = (): OutgoingRule => ({
+  nodeEnv: process.env.NODE_ENV,
+  allowlist: process.env.TG_OUTGOING_ALLOWLIST ?? '',
+});
+
+/** Сколько первых слов текста попадает в строку лога о заглушённом сообщении. */
+const LOGGED_WORDS = 6;
+
+/**
+ * Идентификатор сообщения, которого не было: отправка заглушена защитой вне прода. Настоящий
+ * `message_id` Telegram начинается с единицы, поэтому ноль ни с каким не спутается.
+ */
+export const SKIPPED_MESSAGE_ID = 0;
+
+/**
+ * Заглушает отправку получателю вне списка: строка в лог и исход «выполнено» — ошибки
+ * очередь повторила бы. Возвращает `true`, если слать не нужно.
+ */
+const isMutedOutside = (telegramChatId: bigint, text: string): boolean => {
+  if (isOutgoingAllowed(readOutgoingRule(), telegramChatId)) {
+    return false;
+  }
+
+  log.info('исходящее не отправлено: получатель вне TG_OUTGOING_ALLOWLIST', {
+    recipient: telegramChatId.toString(),
+    text: text.split(/\s+/).slice(0, LOGGED_WORDS).join(' '),
+  });
+
+  return true;
+};
 
 /**
  * Вид отказа. Определяет, что делать дальше, и ничего кроме.
@@ -151,6 +217,10 @@ const withClassifiedFailure = async <Result>(call: () => Promise<Result>): Promi
  * текста, и разные режимы разметки на соседних сообщениях одного бота были бы ловушкой.
  */
 export const sendTelegramMessage = async (input: SendMessageInput): Promise<number> => {
+  if (isMutedOutside(input.telegramChatId, input.text)) {
+    return SKIPPED_MESSAGE_ID;
+  }
+
   const message = await withClassifiedFailure(() =>
     getApi(input.token).sendMessage(input.telegramChatId.toString(), input.text, {
       parse_mode: 'HTML',
@@ -209,15 +279,20 @@ export type SentPhoto = {
   messageId: number;
   /**
    * `file_id` картинки самого крупного размера, который Telegram нарезал: им следующие
-   * отправки ссылаются на неё.
+   * отправки ссылаются на неё. Пусто, если отправка заглушена защитой вне прода: Telegram
+   * картинку не видел, и ссылаться нечем.
    */
-  fileId: string;
+  fileId: string | null;
 };
 
 /**
  * Шлёт фото с подписью. Отказы разбираются так же, как у `sendTelegramMessage`.
  */
 export const sendTelegramPhoto = async (input: SendPhotoInput): Promise<SentPhoto> => {
+  if (isMutedOutside(input.telegramChatId, input.caption)) {
+    return { messageId: SKIPPED_MESSAGE_ID, fileId: null };
+  }
+
   const photo =
     input.photo.kind === 'file_id'
       ? input.photo.fileId

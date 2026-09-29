@@ -78,6 +78,14 @@ export type Notification =
     }
   | {
       /**
+       * Выдано в офисе (issue #295): заказ по коду, заказ за баллы у стойки или награда.
+       * Уходит сразу — водитель стоит у стойки, окна тишины нет.
+       */
+      template: 'issued_in_office';
+      params: IssuedInOfficeParams;
+    }
+  | {
+      /**
        * Подарок от Xalq Taxi ждёт в приложении (issue #219). Уходит в окне 09:00–21:00
        * по Ташкенту — правило очереди (`server/queues/notifications.ts`). С обложкой — фото
        * с подписью, без неё — текстом.
@@ -93,6 +101,18 @@ export type Notification =
       template: 'reward_received';
       params: RewardReceivedParams;
     };
+
+/**
+ * Параметры «выдано в офисе» (issue #295). Названия — как записаны у товара и награды: одна
+ * строка на оба языка, своего перевода у них нет.
+ */
+type IssuedInOfficeParams = {
+  officeName: string;
+  /** Что выдано. У награды — одна позиция. */
+  items: { name: string; quantity: number }[];
+  /** Списано и остаток после — только у заказа за баллы. У награды пусто: у неё баллов нет. */
+  points: { spent: number; balance: number } | null;
+};
 
 /**
  * Параметры подарка. Всё на обоих языках: в сообщение идёт один — на языке человека,
@@ -382,6 +402,24 @@ const renderRewardReceived = (params: RewardReceivedParams, language: Language):
     language,
   ).html;
 
+/** «Выдано в офисе»: заказ — со строкой о баллах, награда — без неё. */
+const renderIssuedInOffice = (params: IssuedInOfficeParams, language: Language): string => {
+  const items = params.items
+    .map((item) => (item.quantity > 1 ? `${item.name} × ${item.quantity}` : item.name))
+    .join(', ');
+
+  if (params.points === null) {
+    return text('notification_issued_reward', language, { office: params.officeName, items });
+  }
+
+  return text('notification_issued_order', language, {
+    office: params.officeName,
+    items,
+    spent: countedPlainText('reward_points', language, params.points.spent),
+    balance: countedPlainText('reward_points', language, params.points.balance),
+  });
+};
+
 /** Собирает текст уведомления на языке получателя. */
 export const renderNotification = (notification: Notification, language: Language): string => {
   switch (notification.template) {
@@ -395,6 +433,8 @@ export const renderNotification = (notification: Notification, language: Languag
       return renderChestsRevealed(notification.params, language);
     case 'app_relaunch':
       return text('start_greeting', language);
+    case 'issued_in_office':
+      return renderIssuedInOffice(notification.params, language);
     case 'gift_received':
       return renderGiftReceived(notification.params, language);
     case 'reward_received':
