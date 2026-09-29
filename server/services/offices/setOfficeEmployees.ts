@@ -6,8 +6,10 @@ import {
   listOfficeEmployees,
   replaceOfficeEmployees,
 } from '#server/repositories/offices';
+import { outranks, type EmployeeActor } from '#server/services/employees/roles';
 import {
   OfficeEmployeeDisabledError,
+  OfficeEmployeeRankError,
   OfficeSideMismatchError,
   UnknownOfficeEmployeeError,
   UnknownOfficeError,
@@ -31,12 +33,19 @@ import type { OfficeEmployeesResponse } from '#shared/types/catalog';
  * Закрытая учётная запись новой в состав не входит (issue #257, `OfficeEmployeeDisabledError`),
  * а уже закреплённая остаётся: снимают её отдельно, и сохранение соседней правки из-за неё
  * отказывать не должно.
+ *
+ * Добавить и снять можно только сотрудника строго ниже действующего (issue #291,
+ * `OfficeEmployeeRankError`): старший менеджер ставит в офисы менеджеров, но не админа
+ * и не владельца. Сравнивается присланный набор с нынешним, а не весь набор: закреплённый
+ * админ, оставшийся в наборе как был, сохранению не мешает — иначе старший менеджер
+ * не смог бы добавить менеджера в офис, где уже стоит админ.
  */
 const log = consola.withTag('offices:employees');
 
 export const setOfficeEmployees = async (
   officeId: string,
   employeeIds: string[],
+  actor: EmployeeActor,
 ): Promise<OfficeEmployeesResponse> => {
   const unique = [...new Set(employeeIds)];
 
@@ -64,9 +73,22 @@ export const setOfficeEmployees = async (
       );
     }
 
-    const attachedIds = new Set(
-      (await listOfficeEmployees(officeId, transaction)).map((employee) => employee.employeeId),
-    );
+    const attached = await listOfficeEmployees(officeId, transaction);
+    const attachedIds = new Set(attached.map((employee) => employee.employeeId));
+    const uniqueIds = new Set(unique);
+    const added = known.filter((employee) => !attachedIds.has(employee.id));
+    const removed = attached.filter((employee) => !uniqueIds.has(employee.employeeId));
+    const outOfRank = [
+      ...added.filter((employee) => !outranks(actor.role, employee.role)).map((employee) => employee.id),
+      ...removed
+        .filter((employee) => !outranks(actor.role, employee.role))
+        .map((employee) => employee.employeeId),
+    ];
+
+    if (outOfRank.length > 0) {
+      throw new OfficeEmployeeRankError(outOfRank);
+    }
+
     const newlyDisabled = known.filter(
       (employee) => employee.disabledAt !== null && !attachedIds.has(employee.id),
     );
@@ -80,7 +102,11 @@ export const setOfficeEmployees = async (
     return listOfficeEmployees(officeId, transaction);
   });
 
-  log.info('состав офиса записан', { officeId, employees: employees.length });
+  log.info('состав офиса записан', {
+    officeId,
+    employees: employees.length,
+    actorEmployeeId: actor.employeeId,
+  });
 
   return {
     employees: employees.map((employee) => ({
@@ -88,6 +114,7 @@ export const setOfficeEmployees = async (
       fullName: employee.fullName,
       role: employee.role,
       disabled: employee.disabled,
+      removable: outranks(actor.role, employee.role),
     })),
   };
 };

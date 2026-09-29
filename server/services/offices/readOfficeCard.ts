@@ -1,4 +1,5 @@
 import { findOffice, listOfficeEmployees } from '#server/repositories/offices';
+import { outranks, type EmployeeActor } from '#server/services/employees/roles';
 import { toOffice } from '#server/services/offices/fields';
 import type { OfficeCardResponse } from '#shared/types/catalog';
 
@@ -9,9 +10,15 @@ import type { OfficeCardResponse } from '#shared/types/catalog';
  * офиса, и грузить его отдельным состоянием загрузки незачем. Остатки и журнал движений
  * идут своими ручками — у них своя цена и своё листание.
  *
+ * `removable` у закреплённого решён здесь по смотрящему — «строго ниже своей» (issue #291):
+ * снять равного или старшего ручка закрепления откажет, и кнопки у такого нет.
+ *
  * `null` — офиса нет. Решение, что на это ответить, принимает ручка.
  */
-export const readOfficeCard = async (officeId: string): Promise<OfficeCardResponse | null> => {
+export const readOfficeCard = async (
+  officeId: string,
+  actor: EmployeeActor,
+): Promise<OfficeCardResponse | null> => {
   const office = await findOffice(officeId);
 
   if (!office) {
@@ -27,6 +34,7 @@ export const readOfficeCard = async (officeId: string): Promise<OfficeCardRespon
       fullName: employee.fullName,
       role: employee.role,
       disabled: employee.disabled,
+      removable: outranks(actor.role, employee.role),
     })),
   };
 };

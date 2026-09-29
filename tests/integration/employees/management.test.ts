@@ -14,6 +14,10 @@ import { readEmployeeAccounts } from '#server/services/employees/readEmployeeAcc
 import { readPendingInvites } from '#server/services/employees/readPendingInvites';
 import { resetEmployeePassword } from '#server/services/employees/resetEmployeePassword';
 import { setEmployeeDisabled } from '#server/services/employees/setEmployeeDisabled';
+import { OfficeEmployeeRankError } from '#server/services/offices/errors';
+import { readOfficeCandidates } from '#server/services/offices/readOfficeCandidates';
+import { readOfficeCard } from '#server/services/offices/readOfficeCard';
+import { setOfficeEmployees } from '#server/services/offices/setOfficeEmployees';
 import { signEmployeeSession } from '#server/utils/employeeSession';
 import {
   cleanupTestData,
@@ -420,6 +424,61 @@ describe('управление сотрудниками', () => {
 
     expect((await readTestEmployee(manager.employeeId))?.role).toBe('senior_manager');
     expect((await readTestEmployee(secondAdmin.employeeId))?.role).toBe('admin');
+  });
+
+  it('закрепление за офисом — только строго ниже своей: добавить и снять', async () => {
+    const officeId = await createTestOffice();
+    officeIds.push(officeId);
+
+    const senior = await createTestEmployee({ role: 'senior_manager' });
+    const admin = await createTestEmployee({ role: 'admin' });
+    const manager = await createTestEmployee({ role: 'manager' });
+    const secondManager = await createTestEmployee({ role: 'manager' });
+    const asSenior = { employeeId: senior.employeeId, role: 'senior_manager' as const };
+    const idsOf = (response: { employees: { employeeId: string }[] }) =>
+      response.employees.map((employee) => employee.employeeId).sort();
+
+    // Кандидаты старшему менеджеру — только менеджеры: ни админа, ни себя.
+    const candidates = new Set(
+      (await readOfficeCandidates(officeId, asSenior))?.candidates.map((candidate) => candidate.employeeId),
+    );
+
+    expect(candidates.has(manager.employeeId)).toBe(true);
+    expect(candidates.has(admin.employeeId)).toBe(false);
+    expect(candidates.has(senior.employeeId)).toBe(false);
+
+    // Добавить менеджера — да.
+    expect(idsOf(await setOfficeEmployees(officeId, [manager.employeeId], asSenior))).toEqual([manager.employeeId]);
+
+    // Добавить админа — отказ, состав не меняется.
+    await expect(
+      setOfficeEmployees(officeId, [manager.employeeId, admin.employeeId], asSenior),
+    ).rejects.toBeInstanceOf(OfficeEmployeeRankError);
+
+    // Админа закрепляет тот, кто выше него.
+    await replaceOfficeEmployees(officeId, [manager.employeeId, admin.employeeId], db);
+
+    // Снять админа — отказ; у него на карточке нет «Снять», у менеджера есть.
+    await expect(setOfficeEmployees(officeId, [manager.employeeId], asSenior)).rejects.toBeInstanceOf(
+      OfficeEmployeeRankError,
+    );
+
+    const card = await readOfficeCard(officeId, asSenior);
+    const removable = new Map(card?.employees.map((employee) => [employee.employeeId, employee.removable]));
+
+    expect(removable.get(admin.employeeId)).toBe(false);
+    expect(removable.get(manager.employeeId)).toBe(true);
+
+    // Админ остаётся в наборе как был, добавляется новый менеджер — проходит.
+    expect(
+      idsOf(
+        await setOfficeEmployees(
+          officeId,
+          [manager.employeeId, admin.employeeId, secondManager.employeeId],
+          asSenior,
+        ),
+      ),
+    ).toEqual([manager.employeeId, admin.employeeId, secondManager.employeeId].sort());
   });
 
   it('владелец не заводится на телефон с активной водительской привязкой', async () => {

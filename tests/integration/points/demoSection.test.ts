@@ -404,6 +404,8 @@ describe('раздел «Демо»', () => {
     const liveOfficeId = await createTestOffice();
     const demoOfficeId = await createTestOffice();
     const { employeeId: liveEmployeeId } = await createTestEmployee({ role: 'manager' });
+    const { employeeId: ownerId } = await createTestEmployee({ role: 'owner' });
+    const asOwner = { employeeId: ownerId, role: 'owner' as const };
     // Демо-сотрудник — вставкой: своего входа у него нет, а фикстура заводит учётку со входом.
     // Роль — админ: демо-менеджер один на роль, и в общей базе он может уже быть.
     const [demoEmployee] = await db.$queryRaw<{ id: string }[]>`
@@ -417,17 +419,21 @@ describe('раздел «Демо»', () => {
 
     await db.$executeRaw`UPDATE xb.offices SET "is_demo" = true WHERE "id" = ${demoOfficeId}::uuid`;
 
-    await expect(setOfficeEmployees(liveOfficeId, [demoEmployeeId])).rejects.toBeInstanceOf(OfficeSideMismatchError);
-    await expect(setOfficeEmployees(demoOfficeId, [liveEmployeeId])).rejects.toBeInstanceOf(OfficeSideMismatchError);
+    await expect(setOfficeEmployees(liveOfficeId, [demoEmployeeId], asOwner)).rejects.toBeInstanceOf(
+      OfficeSideMismatchError,
+    );
+    await expect(setOfficeEmployees(demoOfficeId, [liveEmployeeId], asOwner)).rejects.toBeInstanceOf(
+      OfficeSideMismatchError,
+    );
 
-    expect((await setOfficeEmployees(demoOfficeId, [demoEmployeeId])).employees.map((row) => row.employeeId)).toEqual([
+    expect((await setOfficeEmployees(demoOfficeId, [demoEmployeeId], asOwner)).employees.map((row) => row.employeeId)).toEqual([
       demoEmployeeId,
     ]);
 
     // Кандидаты в состав (issue #291) — той же стороны и с открытым доступом.
     const { employeeId: disabledEmployeeId } = await createTestEmployee({ role: 'manager', disabledAt: new Date() });
     const candidateIds = async (officeId: string) =>
-      new Set((await readOfficeCandidates(officeId))?.candidates.map((candidate) => candidate.employeeId));
+      new Set((await readOfficeCandidates(officeId, asOwner))?.candidates.map((candidate) => candidate.employeeId));
     const liveCandidates = await candidateIds(liveOfficeId);
     const demoCandidates = await candidateIds(demoOfficeId);
 
@@ -436,7 +442,7 @@ describe('раздел «Демо»', () => {
     expect(liveCandidates.has(disabledEmployeeId)).toBe(false);
     expect(demoCandidates.has(demoEmployeeId)).toBe(true);
     expect(demoCandidates.has(liveEmployeeId)).toBe(false);
-    expect(await readOfficeCandidates('00000000-0000-4000-8000-000000000000')).toBeNull();
+    expect(await readOfficeCandidates('00000000-0000-4000-8000-000000000000', asOwner)).toBeNull();
 
     await db.$executeRaw`DELETE FROM xb.employee_offices WHERE "office_id" = ${demoOfficeId}::uuid`;
   });

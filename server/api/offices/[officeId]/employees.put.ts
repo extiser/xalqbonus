@@ -1,6 +1,7 @@
 import {
   OFFICE_SIDE_MISMATCH_MESSAGE,
   OfficeEmployeeDisabledError,
+  OfficeEmployeeRankError,
   OfficeSideMismatchError,
   UnknownOfficeEmployeeError,
   UnknownOfficeError,
@@ -58,7 +59,10 @@ export default defineEventHandler(async (event): Promise<OfficeEmployeesResponse
   }
 
   try {
-    return await setOfficeEmployees(officeId, employeeIds);
+    return await setOfficeEmployees(officeId, employeeIds, {
+      employeeId: employee.employeeId,
+      role: employee.role,
+    });
   } catch (error) {
     if (error instanceof UnknownOfficeError) {
       throw createError({
@@ -83,6 +87,15 @@ export default defineEventHandler(async (event): Promise<OfficeEmployeesResponse
         statusCode: 400,
         statusMessage: 'Bad Request',
         message: OFFICE_SIDE_MISMATCH_MESSAGE,
+      });
+    }
+
+    // Отказ доменного правила, а не двери: текст при ручке, как у выключения учётки.
+    if (error instanceof OfficeEmployeeRankError) {
+      throw createError({
+        statusCode: 403,
+        statusMessage: 'Forbidden',
+        message: 'закреплять и снимать можно только сотрудника роли ниже своей',
       });
     }
 

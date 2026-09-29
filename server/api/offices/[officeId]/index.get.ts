@@ -7,10 +7,13 @@ import type { OfficeCardResponse } from '#shared/types/catalog';
 // Карточка офиса: сам офис и закреплённые сотрудники. Остатки и журнал движений идут своими
 // ручками — у них своя цена и своё листание.
 export default defineEventHandler(async (event): Promise<OfficeCardResponse> => {
-  await requireEmployeeRole(event, CATALOG_ROLES);
+  const employee = await requireEmployeeRole(event, CATALOG_ROLES);
 
   const officeId = requireUuidParam(event, 'officeId');
-  const card = await readOfficeCard(officeId);
+  const card = await readOfficeCard(officeId, {
+    employeeId: employee.employeeId,
+    role: employee.role,
+  });
 
   if (!card) {
     throw createError({
