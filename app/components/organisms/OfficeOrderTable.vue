@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { formatPhone } from '#shared/phone';
 import type { OfficeOrder, OfficeOrdersResponse } from '#shared/types/orders';
 import type { LoadState } from '~/types/loadState';
-import { formatDate } from '~/utils/format';
+import { DASH, formatDate } from '~/utils/format';
 import {
   orderChannelLabel,
   orderPaymentLabel,
@@ -11,8 +12,9 @@ import {
 import { formatOrderTotal } from '~/utils/orderAmount';
 
 /**
- * Заказы офиса страницей: номер, статус, водитель, способ оплаты, откуда заказ, сумма и когда
- * оформлен. Сумма — в валюте заказа: баллы или сумы (issue #294).
+ * Заказы офиса страницей: номер, статус, водитель с позывным и телефоном, способ оплаты, канал,
+ * сумма, когда оформлен и когда выдан. Сумма — в валюте заказа: баллы или сумы (issue #294).
+ * Раскрытая карточка показывает только то, чего в строке нет.
  *
  * Висящие стоят первыми — порядок задаёт сервер. Номер раскрывает карточку с действиями прямо
  * в таблице, строкой под нажатой на всю ширину; повторное нажатие сворачивает. Какая строка
@@ -37,7 +39,13 @@ const emit = defineEmits<{ toggle: [order: OfficeOrder]; page: [offset: number] 
 defineSlots<{ expanded(props: { order: OfficeOrder }): unknown }>();
 
 /** Колонок в строке — раскрытая карточка занимает их все. */
-const COLUMN_COUNT = 7;
+const COLUMN_COUNT = 8;
+
+/** «16895 · +998 93 527-43-00» — вторая строка водителя. Нет ни того, ни другого — пусто. */
+const driverContacts = (order: OfficeOrder): string =>
+  [order.callsign, order.phone ? formatPhone(order.phone).display : null]
+    .filter((part): part is string => part !== null && part !== '')
+    .join(' · ');
 </script>
 
 <template>
@@ -62,9 +70,10 @@ const COLUMN_COUNT = 7;
               <th class="py-2 pr-4 font-medium">Статус</th>
               <th class="py-2 pr-4 font-medium">Водитель</th>
               <th class="py-2 pr-4 font-medium">Оплата</th>
-              <th class="py-2 pr-4 font-medium">Оформил</th>
+              <th class="py-2 pr-4 font-medium">Канал</th>
               <th class="py-2 pr-4 text-right font-medium">Сумма</th>
-              <th class="py-2 font-medium">Оформлен</th>
+              <th class="py-2 pr-4 font-medium">Оформлен</th>
+              <th class="py-2 font-medium">Выдан</th>
             </tr>
           </thead>
           <tbody>
@@ -87,13 +96,16 @@ const COLUMN_COUNT = 7;
                   />
                 </td>
                 <td class="py-2 pr-4">
-                  {{ order.driverName ?? '—' }}
-                  <span v-if="order.callsign" class="text-slate-500"> · {{ order.callsign }}</span>
+                  <p>{{ order.driverName ?? DASH }}</p>
+                  <p v-if="driverContacts(order)" class="text-xs text-slate-500 tabular-nums">
+                    {{ driverContacts(order) }}
+                  </p>
                 </td>
                 <td class="py-2 pr-4">{{ orderPaymentLabel(order.payment) }}</td>
                 <td class="py-2 pr-4">{{ orderChannelLabel(order.channel) }}</td>
                 <td class="py-2 pr-4 text-right whitespace-nowrap tabular-nums">{{ formatOrderTotal(order) }}</td>
-                <td class="py-2 whitespace-nowrap tabular-nums">{{ formatDate(order.createdAt) }}</td>
+                <td class="py-2 pr-4 whitespace-nowrap tabular-nums">{{ formatDate(order.createdAt) }}</td>
+                <td class="py-2 whitespace-nowrap tabular-nums">{{ order.issuedAt ? formatDate(order.issuedAt) : '' }}</td>
               </tr>
               <tr v-if="expandedOrderId === order.orderId">
                 <td :colspan="COLUMN_COUNT" class="pb-4">

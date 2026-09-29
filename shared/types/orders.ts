@@ -10,6 +10,7 @@
  */
 
 import type {
+  EmployeeRole,
   OrderCancelReason,
   OrderChannel,
   OrderPayment,
@@ -55,6 +56,12 @@ export type OfficeOrderLine = {
   photoUpdatedAt: string;
 };
 
+/** Сотрудник, работавший с заказом: имя и роль (issue #294). */
+export type OrderEmployee = {
+  name: string;
+  role: EmployeeRole;
+};
+
 /**
  * Заказ, каким его видит сотрудник у стойки: кого, что, сколько и до какого срока.
  *
@@ -91,6 +98,12 @@ export type OfficeOrder = {
   issuedAt: string | null;
   cancelledAt: string | null;
   cancelReason: OrderCancelReason | null;
+  /** Оформил у стойки. Пусто у заказа из бота. */
+  createdBy: OrderEmployee | null;
+  /** Выдал. Пусто у невыданного. */
+  issuedBy: OrderEmployee | null;
+  /** Отменил — только у отмены сотрудником; водителя и просрочку называет `cancelReason`. */
+  cancelledBy: OrderEmployee | null;
 };
 
 /**

@@ -293,6 +293,7 @@ const changePage = (value: number): void => {
         <template #expanded="{ order }">
           <OrganismsOfficeOrderCard
             :order="order"
+            variant="row"
             :acting="rowDesk.acting.value"
             :error="rowDesk.actionError.value"
             @issue="actOnRow('issue')"

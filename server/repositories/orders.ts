@@ -1,6 +1,7 @@
 import { db } from '#server/db';
 import { Prisma } from '#server/generated/prisma/client';
 import type {
+  EmployeeRole,
   OrderCancelReason,
   OrderChannel,
   OrderPayment,
@@ -500,11 +501,19 @@ export type OfficeOrderRow = DeskDriverColumns & {
   issuedAt: Date | null;
   cancelledAt: Date | null;
   cancelReason: OrderCancelReason | null;
+  /** Сотрудники, работавшие с заказом, — именем и ролью на сейчас. Пусто — сотрудника не было. */
+  createdByName: string | null;
+  createdByRole: EmployeeRole | null;
+  issuedByName: string | null;
+  issuedByRole: EmployeeRole | null;
+  cancelledByName: string | null;
+  cancelledByRole: EmployeeRole | null;
 };
 
 /**
- * Заказ глазами сотрудника: сам заказ, офис и водитель с позывным и телефоном. Водитель —
- * общим куском `deskDriver.ts`, тем же, что у карточки награды.
+ * Заказ глазами сотрудника: сам заказ, офис, водитель с позывным и телефоном и сотрудники,
+ * которые его оформили, выдали или отменили (issue #294). Водитель — общим куском
+ * `deskDriver.ts`, тем же, что у карточки награды.
  */
 const OFFICE_ORDER_SELECT = Prisma.sql`
   SELECT "order"."id",
@@ -522,9 +531,18 @@ const OFFICE_ORDER_SELECT = Prisma.sql`
          "order"."issued_at"     AS "issuedAt",
          "order"."cancelled_at"  AS "cancelledAt",
          "order"."cancel_reason" AS "cancelReason",
+         creator."full_name"     AS "createdByName",
+         creator."role"          AS "createdByRole",
+         issuer."full_name"      AS "issuedByName",
+         issuer."role"           AS "issuedByRole",
+         canceller."full_name"   AS "cancelledByName",
+         canceller."role"        AS "cancelledByRole",
          ${DESK_DRIVER_COLUMNS}
     FROM xb.orders AS "order"
     JOIN xb.offices AS office ON office."id" = "order"."office_id"
+    LEFT JOIN xb.employees AS creator   ON creator."id" = "order"."created_by_employee_id"
+    LEFT JOIN xb.employees AS issuer    ON issuer."id" = "order"."issued_by_employee_id"
+    LEFT JOIN xb.employees AS canceller ON canceller."id" = "order"."cancelled_by_employee_id"
     ${deskDriverJoins(Prisma.sql`"order"."person_id"`)}
 `;
 
