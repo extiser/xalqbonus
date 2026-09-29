@@ -207,6 +207,8 @@ export type OfficeEmployeeRow = {
   employeeId: string;
   fullName: string;
   role: EmployeeRole;
+  /** Учётка выключена: закреплённая остаётся в составе с пометкой (issue #257). */
+  disabled: boolean;
 };
 
 export const listOfficeEmployees = async (
@@ -214,9 +216,10 @@ export const listOfficeEmployees = async (
   client: Executor = db,
 ): Promise<OfficeEmployeeRow[]> =>
   client.$queryRaw<OfficeEmployeeRow[]>`
-    SELECT employee."id"        AS "employeeId",
-           employee."full_name" AS "fullName",
-           employee."role"
+    SELECT employee."id"                      AS "employeeId",
+           employee."full_name"               AS "fullName",
+           employee."role",
+           employee."disabled_at" IS NOT NULL AS "disabled"
       FROM xb.employee_offices AS link
       JOIN xb.employees        AS employee ON employee."id" = link."employee_id"
      WHERE link."office_id" = ${officeId}::uuid

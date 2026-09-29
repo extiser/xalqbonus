@@ -393,6 +393,32 @@ export const listEmployeeDirectory = async (
      ORDER BY employee."full_name"
   `;
 
+export type OfficeCandidateRow = {
+  id: string;
+  fullName: string;
+  role: EmployeeRole;
+};
+
+/**
+ * Кого можно закрепить за офисом этой стороны (issue #291): учётки с открытым доступом, живые
+ * для живого офиса и демо для демо-офиса — то же правило, что проверяет закрепление
+ * (`setOfficeEmployees.ts`). Только имя и роль: телефоны и признаки входа коллег — материал
+ * экрана сотрудников, а не страницы офиса.
+ */
+export const listOfficeCandidates = async (
+  isDemo: boolean,
+  client: Executor = db,
+): Promise<OfficeCandidateRow[]> =>
+  client.$queryRaw<OfficeCandidateRow[]>`
+    SELECT "id",
+           "full_name" AS "fullName",
+           "role"
+      FROM xb.employees
+     WHERE "disabled_at" IS NULL
+       AND "is_demo" = ${isDemo}
+     ORDER BY "full_name"
+  `;
+
 /**
  * Учётки по списку идентификаторов. Нужна проверке состава офиса: закрепить можно
  * за существующей учёткой, и «столько же строк, сколько спросили» — единственное,

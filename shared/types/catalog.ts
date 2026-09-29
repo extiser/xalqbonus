@@ -67,6 +67,19 @@ export type OfficeEmployee = {
   employeeId: string;
   fullName: string;
   role: EmployeeRole;
+  /** Доступ закрыт: в составе остаётся с пометкой, пока не снимут (issue #257). */
+  disabled: boolean;
+};
+
+/** Кого можно закрепить за офисом (issue #291): учётка с открытым доступом той же стороны. */
+export type OfficeEmployeeCandidate = {
+  employeeId: string;
+  fullName: string;
+  role: EmployeeRole;
+};
+
+export type OfficeEmployeeCandidatesResponse = {
+  candidates: OfficeEmployeeCandidate[];
 };
 
 export type OfficeCardResponse = {

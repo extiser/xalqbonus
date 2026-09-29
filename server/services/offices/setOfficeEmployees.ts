@@ -87,6 +87,7 @@ export const setOfficeEmployees = async (
       employeeId: employee.employeeId,
       fullName: employee.fullName,
       role: employee.role,
+      disabled: employee.disabled,
     })),
   };
 };

@@ -6,6 +6,7 @@ import { failureText } from '~/utils/requestError';
 import { toLoadState } from '~/utils/loadState';
 import type {
   OfficeCardResponse,
+  OfficeEmployeeCandidatesResponse,
   OfficeEmployeesResponse,
   OfficeFeedResponse,
   OfficeRequestBody,
@@ -13,12 +14,14 @@ import type {
   OfficeStockResponse,
   StockOperationResponse,
 } from '#shared/types/catalog';
-import type { EmployeeAccountsResponse } from '#shared/types/employee';
 
 /**
  * Страница офиса: правка, архив, состав сотрудников, остатки и лента офиса.
  *
- * Запросов четыре, а не один: у блоков разная цена и разное листание, и валить их в одну
+ * Кандидатов в состав читает своя ручка, а не список экрана сотрудников: тот закрыт
+ * `STAFF_ROLES`, а страница офиса открыта и старшему менеджеру (issue #291).
+ *
+ * Запросов пять, а не один: у блоков разная цена и разное листание, и валить их в одну
  * ручку значило бы перечитывать состав офиса при каждом перелистывании ленты.
  *
  * Данные берутся здесь, а не в компонентах: компонент принимает готовое свойством и о ручках
@@ -47,15 +50,17 @@ const { data: feed, status: feedStatus, refresh: refreshFeed } =
   await useFetch<OfficeFeedResponse>(() => `/api/offices/${officeId.value}/feed`, {
     query: { limit: FEED_LIMIT, offset: feedOffset },
   });
-const { data: accounts, status: accountsStatus } =
-  await useFetch<EmployeeAccountsResponse>('/api/employees');
+const { data: candidates, status: candidatesStatus } =
+  await useFetch<OfficeEmployeeCandidatesResponse>(
+    () => `/api/offices/${officeId.value}/employee-candidates`,
+  );
 
 useHead({ title: () => `${card.value?.office.name ?? 'Офис'} — Xalq Taxi Bonus` });
 
 const cardState = computed(() => toLoadState(cardStatus.value));
 const stockState = computed(() => toLoadState(stockStatus.value));
 const feedState = computed(() => toLoadState(feedStatus.value));
-const accountsState = computed(() => toLoadState(accountsStatus.value));
+const candidatesState = computed(() => toLoadState(candidatesStatus.value));
 
 const archived = computed(() => card.value?.office.archivedAt !== null);
 
@@ -217,8 +222,8 @@ const adjust = (payload: { productId: string; onHand: number; note: string }): P
 
       <OrganismsOfficeEmployees
         :employees="card.employees"
-        :accounts="accounts?.employees ?? null"
-        :accounts-state="accountsState"
+        :candidates="candidates?.candidates ?? null"
+        :candidates-state="candidatesState"
         :saving="savingEmployees"
         :error="employeesError"
         :readonly="!editable"

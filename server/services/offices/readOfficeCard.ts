@@ -26,6 +26,7 @@ export const readOfficeCard = async (officeId: string): Promise<OfficeCardRespon
       employeeId: employee.employeeId,
       fullName: employee.fullName,
       role: employee.role,
+      disabled: employee.disabled,
     })),
   };
 };

@@ -16,6 +16,7 @@ import { setDemoManagerOffices } from '#server/services/demo/setDemoManagerOffic
 import { searchDrivers } from '#server/services/drivers/searchDrivers';
 import { requireOpenOffice, readEmployeeOffices } from '#server/services/offices/employeeOffices';
 import { OfficeNotOpenError, OfficeSideMismatchError } from '#server/services/offices/errors';
+import { readOfficeCandidates } from '#server/services/offices/readOfficeCandidates';
 import { setOfficeEmployees } from '#server/services/offices/setOfficeEmployees';
 import { buildDemoGrantIdempotencyKey } from '#server/services/points/idempotencyKey';
 import { previewSegmentConditions } from '#server/services/segments/previewSegment';
@@ -422,6 +423,20 @@ describe('раздел «Демо»', () => {
     expect((await setOfficeEmployees(demoOfficeId, [demoEmployeeId])).employees.map((row) => row.employeeId)).toEqual([
       demoEmployeeId,
     ]);
+
+    // Кандидаты в состав (issue #291) — той же стороны и с открытым доступом.
+    const { employeeId: disabledEmployeeId } = await createTestEmployee({ role: 'manager', disabledAt: new Date() });
+    const candidateIds = async (officeId: string) =>
+      new Set((await readOfficeCandidates(officeId))?.candidates.map((candidate) => candidate.employeeId));
+    const liveCandidates = await candidateIds(liveOfficeId);
+    const demoCandidates = await candidateIds(demoOfficeId);
+
+    expect(liveCandidates.has(liveEmployeeId)).toBe(true);
+    expect(liveCandidates.has(demoEmployeeId)).toBe(false);
+    expect(liveCandidates.has(disabledEmployeeId)).toBe(false);
+    expect(demoCandidates.has(demoEmployeeId)).toBe(true);
+    expect(demoCandidates.has(liveEmployeeId)).toBe(false);
+    expect(await readOfficeCandidates('00000000-0000-4000-8000-000000000000')).toBeNull();
 
     await db.$executeRaw`DELETE FROM xb.employee_offices WHERE "office_id" = ${demoOfficeId}::uuid`;
   });
