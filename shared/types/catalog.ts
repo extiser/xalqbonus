@@ -67,6 +67,25 @@ export type OfficeEmployee = {
   employeeId: string;
   fullName: string;
   role: EmployeeRole;
+  /**
+   * Смотрящий вправе снять его с офиса — роль строго ниже своей (issue #291). Решено
+   * на сервере тем же правилом, что проверяет закрепление.
+   */
+  removable: boolean;
+};
+
+/**
+ * Кого можно закрепить за офисом (issue #291): учётка с открытым доступом той же стороны,
+ * роль строго ниже смотрящего.
+ */
+export type OfficeEmployeeCandidate = {
+  employeeId: string;
+  fullName: string;
+  role: EmployeeRole;
+};
+
+export type OfficeEmployeeCandidatesResponse = {
+  candidates: OfficeEmployeeCandidate[];
 };
 
 export type OfficeCardResponse = {

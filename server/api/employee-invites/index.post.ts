@@ -29,7 +29,7 @@ export default defineEventHandler(async (event): Promise<EmployeeInviteResponse>
     throw createError({
       statusCode: 400,
       statusMessage: 'Bad Request',
-      message: 'роль приглашения должна быть owner, admin или manager',
+      message: 'роль приглашения должна быть owner, admin, senior_manager или manager',
     });
   }
 

@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { employeeRoleLabel } from '~/utils/labels';
-import type { OfficeEmployee } from '#shared/types/catalog';
-import type { EmployeeAccount } from '#shared/types/employee';
+import type { OfficeEmployee, OfficeEmployeeCandidate } from '#shared/types/catalog';
 import type { LoadState } from '~/types/loadState';
 import type { SelectOption } from '~/types/selectOption';
 
@@ -15,18 +14,23 @@ import type { SelectOption } from '~/types/selectOption';
  *
  * Экраном учёток это не является: здесь ни телефона, ни признаков входа, ни приглашений
  * (issue #120 → «Не делать»). Закрытую учётку закрепить нельзя (issue #257): в выборе её нет,
- * и сервер такую откажет. Уже закреплённая закрытая остаётся в списке с пометкой — её снимают.
+ * и сервер такую откажет. Закреплённых закрытых не бывает: выключение снимает учётку со всех
+ * офисов (issue #291).
+ *
+ * Кандидаты приходят с сервера уже отобранными — с открытым доступом, своей стороны офиса
+ * и строго ниже смотрящего (issue #291); здесь от них отсекаются только уже закреплённые.
+ * «Снять» — у тех, кого сервер пометил `removable`: равного и старшего ручка не снимет.
  */
 const props = defineProps<{
   employees: OfficeEmployee[];
   /** Учётки, из которых выбирают. `null` — список не приехал. */
-  accounts: EmployeeAccount[] | null;
-  accountsState: LoadState;
+  candidates: OfficeEmployeeCandidate[] | null;
+  candidatesState: LoadState;
   saving: boolean;
   error: string | null;
   /** Состав только на чтение: ДЕМО ОФИС у того, кто его не правит (issue #212). */
   readonly?: boolean;
-  /** Сторона офиса: демо-офису — только демо-сотрудники, живому — только живые (issue #252). */
+  /** Демо-офис: подсказка пустого выбора ведёт в раздел «Демо» (issue #252). */
   officeIsDemo: boolean;
 }>();
 
@@ -38,34 +42,15 @@ const chosen = ref('');
 const attachedIds = computed(() => new Set(props.employees.map((employee) => employee.employeeId)));
 
 /**
- * В выборе только незакреплённые — закреплённый второй раз не добавляется, — только своей
- * стороны: демо-сотрудника за живым офисом сервер не закрепит (issue #252), — и только
- * с открытым доступом: закрытую учётку он не закрепит тоже (issue #257).
+ * В выборе только незакреплённые: закреплённый второй раз не добавляется. Сторону демо
+ * (issue #252) и открытый доступ (issue #257) уже отобрал сервер.
  */
-const candidates = computed(() =>
-  (props.accounts ?? []).filter(
-    (account) =>
-      !attachedIds.value.has(account.employeeId) &&
-      account.isDemo === props.officeIsDemo &&
-      !account.disabled,
-  ),
-);
-
-/**
- * Закрытые из закреплённых — по списку учёток: состав офиса признака доступа не несёт,
- * а список учёток на странице читается всё равно. Не приехал список — пометок нет.
- */
-const disabledIds = computed(
-  () =>
-    new Set(
-      (props.accounts ?? [])
-        .filter((account) => account.disabled)
-        .map((account) => account.employeeId),
-    ),
+const freeCandidates = computed(() =>
+  (props.candidates ?? []).filter((candidate) => !attachedIds.value.has(candidate.employeeId)),
 );
 
 const candidateOptions = computed<SelectOption[]>(() =>
-  candidates.value.map((account) => ({
+  freeCandidates.value.map((account) => ({
     value: account.employeeId,
     label: `${account.fullName} · ${employeeRoleLabel(account.role)}`,
   })),
@@ -105,12 +90,9 @@ const remove = (employeeId: string): void => {
           <span class="text-sm text-slate-900">
             {{ employee.fullName }}
             <span class="text-slate-500">· {{ employeeRoleLabel(employee.role) }}</span>
-            <span v-if="disabledIds.has(employee.employeeId)" class="text-slate-500">
-              · доступ закрыт
-            </span>
           </span>
           <AtomsActionButton
-            v-if="!readonly"
+            v-if="!readonly && employee.removable"
             label="Снять"
             tone="danger"
             :disabled="saving"
@@ -121,22 +103,22 @@ const remove = (employeeId: string): void => {
 
       <div v-if="!readonly" class="border-t border-slate-200 pt-4">
         <MoleculesStateNotice
-          v-if="accountsState === 'loading'"
+          v-if="candidatesState === 'loading'"
           state="loading"
           message="Читаем список учёток…"
         />
         <MoleculesStateNotice
-          v-else-if="accountsState === 'error'"
+          v-else-if="candidatesState === 'error'"
           state="error"
           message="Список учёток не прочитался. Это отказ запроса, а не отсутствие сотрудников."
         />
         <MoleculesStateNotice
-          v-else-if="candidates.length === 0"
+          v-else-if="freeCandidates.length === 0"
           state="empty"
           :message="
             officeIsDemo
               ? 'Свободных демо-сотрудников нет: демо-менеджер заводится в разделе «Демо».'
-              : 'Свободных учёток нет: все сотрудники с открытым доступом уже закреплены.'
+              : 'Свободных учёток нет: все сотрудники ниже вашей роли с открытым доступом уже закреплены.'
           "
         />
         <div v-else class="flex flex-wrap items-end gap-3">

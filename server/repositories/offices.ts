@@ -256,6 +256,32 @@ export const replaceOfficeEmployees = async (
   `;
 };
 
+export type DetachedOfficeRow = {
+  officeId: string;
+  name: string;
+};
+
+/**
+ * Снимает учётку со всех офисов — выключение (issue #291). Отдаёт снятые офисы: они уходят
+ * в строку лога, другого следа у закрепления нет.
+ */
+export const detachEmployeeFromOffices = async (
+  employeeId: string,
+  client: Executor,
+): Promise<DetachedOfficeRow[]> =>
+  client.$queryRaw<DetachedOfficeRow[]>`
+    WITH removed AS (
+      DELETE FROM xb.employee_offices
+       WHERE "employee_id" = ${employeeId}::uuid
+      RETURNING "office_id"
+    )
+    SELECT office."id"   AS "officeId",
+           office."name"
+      FROM removed
+      JOIN xb.offices AS office ON office."id" = removed."office_id"
+     ORDER BY office."name"
+  `;
+
 /**
  * То же с другой стороны (issue #252): набор офисов сотрудника заменяется присланным.
  * Строки те же, `employee_offices`, и правила те же — лишние снимаются, новые вставляются,

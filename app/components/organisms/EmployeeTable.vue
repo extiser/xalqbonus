@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { formatDate, formatDateTime } from '~/utils/format';
 import { employeeRoleLabel } from '~/utils/labels';
 import { formatPhone } from '#shared/phone';
 import type { EmployeeAccount, EmployeePendingInvite } from '#shared/types/employee';
 import type { LoadState } from '~/types/loadState';
+import type { SelectOption } from '~/types/selectOption';
 
 /**
  * Сотрудники парка и висящие приглашения — одним списком: приглашение и есть будущая
@@ -24,6 +25,13 @@ import type { LoadState } from '~/types/loadState';
  * Привязан ли Telegram, видно в каждой строке: руководитель выпускает ссылку привязки сам
  * и по списку видит, дошло ли дело (issue #267). Кнопка «Ссылка для Telegram» — у непривязанной
  * учётки, которой смотрящий вправе её выпустить: чужой управляемой и своей.
+ *
+ * «Сменить роль» (issue #291) — у учётки, которую смотрящий вправе перевести: выбор из ролей,
+ * приехавших с сервера (`assignableRoles`), подтверждение — на экране, решение — у ручки.
+ *
+ * Выключенные учётки по умолчанию скрыты: список — о тех, кто работает. Галочка «Показать
+ * выключенных» их возвращает; её состояние не запоминается — открыл экран заново, видишь
+ * работающих (issue #291). Сервер отдаёт всех: фильтр только здесь.
  */
 
 /** Кнопка ссылки привязки: Telegram не привязан, право есть, живой ссылки нет. */
@@ -44,8 +52,43 @@ const emit = defineEmits<{
   enable: [employeeId: string];
   resetPassword: [employeeId: string];
   issueTelegramLink: [employeeId: string];
+  changeRole: [employeeId: string, role: EmployeeAccount['role']];
   revoke: [inviteId: string];
 }>();
+
+const showDisabled = ref(false);
+
+const disabledCount = computed(() => (props.accounts ?? []).filter((account) => account.disabled).length);
+
+const visibleAccounts = computed(() =>
+  (props.accounts ?? []).filter((account) => showDisabled.value || !account.disabled),
+);
+
+/** Учётка, у которой открыт выбор новой роли. Одна за раз: выбор — короткое действие. */
+const roleEditorFor = ref<string | null>(null);
+const chosenRole = ref('');
+
+const roleOptions = (account: EmployeeAccount): SelectOption[] =>
+  account.assignableRoles.map((role) => ({ value: role, label: employeeRoleLabel(role) }));
+
+const openRoleEditor = (employeeId: string): void => {
+  roleEditorFor.value = employeeId;
+  chosenRole.value = '';
+};
+
+const closeRoleEditor = (): void => {
+  roleEditorFor.value = null;
+  chosenRole.value = '';
+};
+
+const submitRole = (account: EmployeeAccount): void => {
+  const role = account.assignableRoles.find((entry) => entry === chosenRole.value);
+
+  if (role) {
+    emit('changeRole', account.employeeId, role);
+    closeRoleEditor();
+  }
+};
 
 /** Загрузка и отказ — по худшему из двух запросов: половина списка выдавала бы себя за весь. */
 const state = computed<LoadState>(() => {
@@ -76,6 +119,14 @@ const empty = computed(
     />
     <MoleculesStateNotice v-else-if="empty" state="empty" message="Сотрудников ещё не заводили." />
     <div v-else class="space-y-4">
+      <label v-if="disabledCount > 0" class="flex items-center gap-3">
+        <input
+          v-model="showDisabled"
+          type="checkbox"
+          class="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
+        />
+        <span class="text-sm text-slate-700">Показать выключенных ({{ disabledCount }})</span>
+      </label>
       <ul>
         <li
           v-for="invite in invites ?? []"
@@ -119,7 +170,7 @@ const empty = computed(
         </li>
 
         <li
-          v-for="account in accounts ?? []"
+          v-for="account in visibleAccounts"
           :key="account.employeeId"
           class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-slate-200 py-3 first:border-t-0"
         >
@@ -141,7 +192,9 @@ const empty = computed(
             <p class="mt-0.5 text-xs text-slate-500">{{ account.phoneE164 }}</p>
             <p class="mt-0.5 text-xs text-slate-500">
               <template v-if="account.anyOffice">Любой офис</template>
-              <template v-else-if="account.offices.length === 0">Не закреплён ни за одним офисом</template>
+              <span v-else-if="account.offices.length === 0" class="text-amber-700">
+                Не закреплён ни за одним офисом — без офиса не увидит ни одного заказа
+              </span>
               <template v-else>
                 <template v-for="(office, index) in account.offices" :key="office.officeId">
                   <span v-if="index > 0">, </span>
@@ -163,6 +216,12 @@ const empty = computed(
               label="Ссылка для Telegram"
               :disabled="busyId === account.employeeId"
               @click="emit('issueTelegramLink', account.employeeId)"
+            />
+            <AtomsActionButton
+              v-if="account.assignableRoles.length > 0 && roleEditorFor !== account.employeeId"
+              label="Сменить роль"
+              :disabled="busyId === account.employeeId"
+              @click="openRoleEditor(account.employeeId)"
             />
             <!-- У демо-учётки пароля не бывает. -->
             <AtomsActionButton
@@ -186,6 +245,22 @@ const empty = computed(
               @click="emit('disable', account.employeeId)"
             />
           </div>
+          <form
+            v-if="roleEditorFor === account.employeeId"
+            class="flex w-full flex-wrap items-end gap-3"
+            @submit.prevent="submitRole(account)"
+          >
+            <label class="block min-w-56 flex-1">
+              <span class="mb-1 block text-sm font-medium text-slate-700">
+                Новая роль вместо «{{ employeeRoleLabel(account.role) }}»
+              </span>
+              <AtomsSelectInput v-model="chosenRole" :options="roleOptions(account)" required>
+                <option value="">Выберите роль</option>
+              </AtomsSelectInput>
+            </label>
+            <AtomsSubmitButton label="Сменить" :disabled="busyId === account.employeeId" />
+            <AtomsActionButton label="Отмена" @click="closeRoleEditor" />
+          </form>
           <div v-if="account.passwordLink" class="w-full space-y-2">
             <p class="text-xs text-slate-500">
               Ссылка для пароля · до {{ formatDateTime(account.passwordLink.expiresAt) }}

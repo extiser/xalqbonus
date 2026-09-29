@@ -1,6 +1,9 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 import type { EmployeeRole } from '#server/generated/prisma/enums';
+// Относительным путём, а не через `#shared`: значение, а не тип, и модуль читают тесты,
+// у которых из псевдонимов настроен один `#server` — как в `offices/employeeOffices.ts`.
+import { ALL_EMPLOYEE_ROLES } from '../../shared/access';
 
 /**
  * Подписанный cookie сессии сотрудника.
@@ -58,10 +61,8 @@ type RawSession = {
   issuedAtSeconds?: unknown;
 };
 
-const ROLES: readonly EmployeeRole[] = ['owner', 'admin', 'manager'];
-
 const isRole = (value: unknown): value is EmployeeRole =>
-  typeof value === 'string' && ROLES.includes(value as EmployeeRole);
+  typeof value === 'string' && ALL_EMPLOYEE_ROLES.includes(value as EmployeeRole);
 
 /**
  * Сверка подписи за постоянное время — по той же причине, что у `initData`: посимвольное

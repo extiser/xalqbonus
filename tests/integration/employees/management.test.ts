@@ -4,6 +4,7 @@ import { db } from '#server/db';
 import { markEmployeeInviteAccepted, markEmployeeInviteRevoked } from '#server/repositories/employeeInvites';
 import { replaceOfficeEmployees } from '#server/repositories/offices';
 import { authenticateEmployee } from '#server/services/employees/authenticate';
+import { changeEmployeeRole } from '#server/services/employees/changeEmployeeRole';
 import { INVITE_LIFETIME_MS, PASSWORD_LINK_LIFETIME_MS } from '#server/services/employees/config';
 import { consumePasswordLink } from '#server/services/employees/consumePasswordLink';
 import { createOwner } from '#server/services/employees/createOwner';
@@ -13,6 +14,10 @@ import { readEmployeeAccounts } from '#server/services/employees/readEmployeeAcc
 import { readPendingInvites } from '#server/services/employees/readPendingInvites';
 import { resetEmployeePassword } from '#server/services/employees/resetEmployeePassword';
 import { setEmployeeDisabled } from '#server/services/employees/setEmployeeDisabled';
+import { OfficeEmployeeRankError } from '#server/services/offices/errors';
+import { readOfficeCandidates } from '#server/services/offices/readOfficeCandidates';
+import { readOfficeCard } from '#server/services/offices/readOfficeCard';
+import { setOfficeEmployees } from '#server/services/offices/setOfficeEmployees';
 import { signEmployeeSession } from '#server/utils/employeeSession';
 import {
   cleanupTestData,
@@ -102,7 +107,7 @@ describe('управление сотрудниками', () => {
     });
     const byId = new Map(asAdmin.employees.map((account) => [account.employeeId, account]));
 
-    expect(asAdmin.invitableRoles).toEqual(['manager']);
+    expect(asAdmin.invitableRoles).toEqual(['senior_manager', 'manager']);
 
     expect(byId.get(manager.employeeId)).toEqual({
       employeeId: manager.employeeId,
@@ -124,6 +129,8 @@ describe('управление сотрудниками', () => {
       anyOffice: false,
       isDemo: false,
       manageable: true,
+      // Роли строго ниже своей, кроме нынешней.
+      assignableRoles: ['senior_manager'],
     });
 
     // Равный ранг и старший — без права: себя и владельца админ не трогает.
@@ -132,6 +139,7 @@ describe('управление сотрудниками', () => {
       offices: [],
       anyOffice: true,
       manageable: false,
+      assignableRoles: [],
     });
     expect(byId.get(owner.employeeId)).toMatchObject({ anyOffice: true, manageable: false });
 
@@ -140,7 +148,7 @@ describe('управление сотрудниками', () => {
       appOrigin: APP_ORIGIN,
     });
 
-    expect(asOwner.invitableRoles).toEqual(['admin', 'manager']);
+    expect(asOwner.invitableRoles).toEqual(['admin', 'senior_manager', 'manager']);
     expect(
       asOwner.employees.find((account) => account.employeeId === admin.employeeId)?.manageable,
     ).toBe(true);
@@ -365,6 +373,112 @@ describe('управление сотрудниками', () => {
     expect(await outcomeOf({ employeeId: owner.employeeId, role: 'owner' }, owner.employeeId)).toBe('forbidden');
 
     expect((await readTestEmployee(secondAdmin.employeeId))?.passwordHash).toBe('x');
+  });
+
+  it('смена роли: действующий старше прежней и новой роли, новая действует тем же cookie', async () => {
+    const owner = await createTestEmployee({ role: 'owner' });
+    const admin = await createTestEmployee({ role: 'admin' });
+    const secondAdmin = await createTestEmployee({ role: 'admin' });
+    const manager = await createTestEmployee({ role: 'manager' });
+    const asOwner = { employeeId: owner.employeeId, role: 'owner' as const };
+    const asAdmin = { employeeId: admin.employeeId, role: 'admin' as const };
+    const cookieValue = sessionCookieFor(manager.employeeId, new Date(Date.now() - MINUTE_MS));
+
+    const outcomeOf = async (
+      actor: { employeeId: string; role: 'owner' | 'admin' | 'senior_manager' },
+      employeeId: string,
+      role: 'owner' | 'admin' | 'senior_manager' | 'manager',
+    ) => (await changeEmployeeRole({ actor, employeeId, role })).outcome;
+
+    expect(await outcomeOf(asOwner, manager.employeeId, 'senior_manager')).toBe('changed');
+
+    // Роль читается из базы, а не из cookie: тот же cookie с `manager` внутри — уже старший менеджер,
+    // и сессии смена роли не гасит.
+    const promoted = await authenticateEmployee({ cookieValue, initData: null });
+
+    expect(promoted.outcome === 'authenticated' ? promoted.employee.role : promoted.outcome).toBe('senior_manager');
+    expect((await readTestEmployee(manager.employeeId))?.sessionsValidFrom).toBeNull();
+
+    expect(await outcomeOf(asAdmin, manager.employeeId, 'manager')).toBe('changed');
+    expect(await outcomeOf(asAdmin, manager.employeeId, 'senior_manager')).toBe('changed');
+    // Повтор той же роли — тот же успех.
+    expect(await outcomeOf(asAdmin, manager.employeeId, 'senior_manager')).toBe('changed');
+
+    // Админ не делает никого админом и не трогает другого админа; себе роль не меняется;
+    // `owner` не назначается и не снимается.
+    expect(await outcomeOf(asAdmin, manager.employeeId, 'admin')).toBe('forbidden');
+    expect(await outcomeOf(asAdmin, secondAdmin.employeeId, 'manager')).toBe('forbidden');
+    expect(await outcomeOf(asAdmin, admin.employeeId, 'manager')).toBe('forbidden');
+    expect(await outcomeOf(asOwner, owner.employeeId, 'admin')).toBe('forbidden');
+    expect(await outcomeOf(asOwner, manager.employeeId, 'owner')).toBe('forbidden');
+
+    // Старший менеджер старше менеджера рангом, но власти над учётками у него нет.
+    const senior = { employeeId: manager.employeeId, role: 'senior_manager' as const };
+    const otherManager = await createTestEmployee({ role: 'manager' });
+
+    expect(await outcomeOf(senior, otherManager.employeeId, 'manager')).toBe('forbidden');
+
+    expect(
+      await outcomeOf(asOwner, '00000000-0000-4000-8000-000000000000', 'manager'),
+    ).toBe('not_found');
+
+    expect((await readTestEmployee(manager.employeeId))?.role).toBe('senior_manager');
+    expect((await readTestEmployee(secondAdmin.employeeId))?.role).toBe('admin');
+  });
+
+  it('закрепление за офисом — только строго ниже своей: добавить и снять', async () => {
+    const officeId = await createTestOffice();
+    officeIds.push(officeId);
+
+    const senior = await createTestEmployee({ role: 'senior_manager' });
+    const admin = await createTestEmployee({ role: 'admin' });
+    const manager = await createTestEmployee({ role: 'manager' });
+    const secondManager = await createTestEmployee({ role: 'manager' });
+    const asSenior = { employeeId: senior.employeeId, role: 'senior_manager' as const };
+    const idsOf = (response: { employees: { employeeId: string }[] }) =>
+      response.employees.map((employee) => employee.employeeId).sort();
+
+    // Кандидаты старшему менеджеру — только менеджеры: ни админа, ни себя.
+    const candidates = new Set(
+      (await readOfficeCandidates(officeId, asSenior))?.candidates.map((candidate) => candidate.employeeId),
+    );
+
+    expect(candidates.has(manager.employeeId)).toBe(true);
+    expect(candidates.has(admin.employeeId)).toBe(false);
+    expect(candidates.has(senior.employeeId)).toBe(false);
+
+    // Добавить менеджера — да.
+    expect(idsOf(await setOfficeEmployees(officeId, [manager.employeeId], asSenior))).toEqual([manager.employeeId]);
+
+    // Добавить админа — отказ, состав не меняется.
+    await expect(
+      setOfficeEmployees(officeId, [manager.employeeId, admin.employeeId], asSenior),
+    ).rejects.toBeInstanceOf(OfficeEmployeeRankError);
+
+    // Админа закрепляет тот, кто выше него.
+    await replaceOfficeEmployees(officeId, [manager.employeeId, admin.employeeId], db);
+
+    // Снять админа — отказ; у него на карточке нет «Снять», у менеджера есть.
+    await expect(setOfficeEmployees(officeId, [manager.employeeId], asSenior)).rejects.toBeInstanceOf(
+      OfficeEmployeeRankError,
+    );
+
+    const card = await readOfficeCard(officeId, asSenior);
+    const removable = new Map(card?.employees.map((employee) => [employee.employeeId, employee.removable]));
+
+    expect(removable.get(admin.employeeId)).toBe(false);
+    expect(removable.get(manager.employeeId)).toBe(true);
+
+    // Админ остаётся в наборе как был, добавляется новый менеджер — проходит.
+    expect(
+      idsOf(
+        await setOfficeEmployees(
+          officeId,
+          [manager.employeeId, admin.employeeId, secondManager.employeeId],
+          asSenior,
+        ),
+      ),
+    ).toEqual([manager.employeeId, admin.employeeId, secondManager.employeeId].sort());
   });
 
   it('владелец не заводится на телефон с активной водительской привязкой', async () => {

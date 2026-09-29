@@ -129,6 +129,26 @@ export const findDemoEmployee = async (
 };
 
 /**
+ * Демо-сотрудник этой роли под разделяемой блокировкой — для закрепления за офисами
+ * с пульта «Демо»: та же причина, что у `shareLockEmployeesByIds`, выключение не должно
+ * разойтись с закреплением (issue #291).
+ */
+export const shareLockDemoEmployee = async (
+  role: EmployeeRole,
+  client: Executor,
+): Promise<EmployeeRow | null> => {
+  const rows = await client.$queryRaw<EmployeeRow[]>`
+    SELECT ${EMPLOYEE_COLUMNS}
+      FROM xb.employees
+     WHERE "is_demo"
+       AND "role" = ${role}::xb.employee_role
+       FOR SHARE
+  `;
+
+  return rows[0] ?? null;
+};
+
+/**
  * Есть ли учётка на этот Telegram или на этот телефон — одним запросом.
  *
  * Именно так проверяется правило одной роли при привязке водителя: спрашивают оба признака
@@ -285,6 +305,26 @@ export const updateEmployeeDisabled = async (
 };
 
 /**
+ * Записывает учётке новую роль (issue #291).
+ *
+ * Отметку годности сессий не трогает: роль читается из базы на каждом запросе в обеих дверях
+ * (`authenticate.ts`), и новая действует со следующего запроса без повторного входа. Роль
+ * в cookie — подсказка для лога, а не основание для доступа.
+ */
+export const updateEmployeeRole = async (
+  employeeId: string,
+  role: EmployeeRole,
+  client: Executor = db,
+): Promise<void> => {
+  await client.$executeRaw`
+    UPDATE xb.employees
+       SET "role"       = ${role}::xb.employee_role,
+           "updated_at" = now()
+     WHERE "id" = ${employeeId}::uuid
+  `;
+};
+
+/**
  * Обнуляет пароль и гасит выданные cookie — одной записью, как и смена пароля.
  *
  * Только у учётки, у которой пароль есть: условие стоит в самом `UPDATE`, и нажатие
@@ -339,9 +379,8 @@ export type EmployeeDirectoryRow = EmployeeAccountRow & {
  * Офисы собираются в том же запросе, а не вторым на каждую учётку: сотрудников десяток,
  * но запрос на строку — это та цена, которая растёт незаметно.
  *
- * Выключенные учётки в ответе есть: сотрудник, которому закрыли доступ на время, за офисом
- * остаётся закреплённым, и прятать его из списка значило бы терять состав офиса при первом
- * же выключении.
+ * Выключенные учётки в ответе есть: экран сотрудников их включает обратно. Офисов у них
+ * нет — выключение снимает со всех (issue #291).
  */
 export const listEmployeeDirectory = async (
   client: Executor = db,
@@ -373,14 +412,46 @@ export const listEmployeeDirectory = async (
      ORDER BY employee."full_name"
   `;
 
+export type OfficeCandidateRow = {
+  id: string;
+  fullName: string;
+  role: EmployeeRole;
+};
+
 /**
- * Учётки по списку идентификаторов. Нужна проверке состава офиса: закрепить можно
- * за существующей учёткой, и «столько же строк, сколько спросили» — единственное,
- * что об этом говорит. Признак демо — для проверки стороны офиса (issue #252).
+ * Кого можно закрепить за офисом этой стороны (issue #291): учётки с открытым доступом, живые
+ * для живого офиса и демо для демо-офиса — то же правило, что проверяет закрепление
+ * (`setOfficeEmployees.ts`). Только имя и роль: телефоны и признаки входа коллег — материал
+ * экрана сотрудников, а не страницы офиса.
  */
-export const findEmployeesByIds = async (
-  employeeIds: string[],
+export const listOfficeCandidates = async (
+  isDemo: boolean,
   client: Executor = db,
+): Promise<OfficeCandidateRow[]> =>
+  client.$queryRaw<OfficeCandidateRow[]>`
+    SELECT "id",
+           "full_name" AS "fullName",
+           "role"
+      FROM xb.employees
+     WHERE "disabled_at" IS NULL
+       AND "is_demo" = ${isDemo}
+     ORDER BY "full_name"
+  `;
+
+/**
+ * Учётки по списку идентификаторов — под разделяемой блокировкой, для закрепления за офисом.
+ * Закрепить можно за существующей учёткой, и «столько же строк, сколько спросили» —
+ * единственное, что об этом говорит. Признак демо — для проверки стороны офиса (issue #252).
+ *
+ * `FOR SHARE` держит строки до конца транзакции закрепления: выключение берёт ту же строку
+ * `FOR UPDATE` (`setEmployeeDisabled.ts`) и ждёт, а закрепление, пришедшее после выключения,
+ * ждёт его и читает уже выключенную учётку. Без блокировки одновременные «выключить»
+ * и «закрепить» оставляли бы выключенного закреплённым (issue #291). Друг друга два
+ * закрепления не ждут: разделяемые блокировки совместимы.
+ */
+export const shareLockEmployeesByIds = async (
+  employeeIds: string[],
+  client: Executor,
 ): Promise<EmployeeAccountRow[]> =>
   client.$queryRaw<EmployeeAccountRow[]>`
     SELECT "id",
@@ -390,4 +461,6 @@ export const findEmployeesByIds = async (
            "is_demo"     AS "isDemo"
       FROM xb.employees
      WHERE "id" = ANY(${employeeIds}::uuid[])
+     ORDER BY "id"
+       FOR SHARE
   `;

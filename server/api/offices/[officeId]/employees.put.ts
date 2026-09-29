@@ -1,6 +1,8 @@
 import {
+  OFFICE_EMPLOYEE_DISABLED_MESSAGE,
   OFFICE_SIDE_MISMATCH_MESSAGE,
   OfficeEmployeeDisabledError,
+  OfficeEmployeeRankError,
   OfficeSideMismatchError,
   UnknownOfficeEmployeeError,
   UnknownOfficeError,
@@ -58,7 +60,10 @@ export default defineEventHandler(async (event): Promise<OfficeEmployeesResponse
   }
 
   try {
-    return await setOfficeEmployees(officeId, employeeIds);
+    return await setOfficeEmployees(officeId, employeeIds, {
+      employeeId: employee.employeeId,
+      role: employee.role,
+    });
   } catch (error) {
     if (error instanceof UnknownOfficeError) {
       throw createError({
@@ -86,11 +91,20 @@ export default defineEventHandler(async (event): Promise<OfficeEmployeesResponse
       });
     }
 
+    // Отказ доменного правила, а не двери: текст при ручке, как у выключения учётки.
+    if (error instanceof OfficeEmployeeRankError) {
+      throw createError({
+        statusCode: 403,
+        statusMessage: 'Forbidden',
+        message: 'закреплять и снимать можно только сотрудника роли ниже своей',
+      });
+    }
+
     if (error instanceof OfficeEmployeeDisabledError) {
       throw createError({
         statusCode: 400,
         statusMessage: 'Bad Request',
-        message: 'Учётная запись закрыта — закрепить её нельзя.',
+        message: OFFICE_EMPLOYEE_DISABLED_MESSAGE,
       });
     }
 

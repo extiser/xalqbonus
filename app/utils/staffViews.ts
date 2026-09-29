@@ -26,6 +26,7 @@ import { formatPoints, photoUrl } from '~/utils/memberViews';
 export const STAFF_ROLE_LABELS: Readonly<Record<MiniAppEmployeeScreen['role'], string>> = {
   owner: 'Владелец',
   admin: 'Админ',
+  senior_manager: 'Старший менеджер',
   manager: 'Менеджер',
 };
 

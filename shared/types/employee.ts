@@ -172,6 +172,11 @@ export type EmployeeAccount = {
   isDemo: boolean;
   /** Смотрящий вправе выключить, включить учётку и сбросить ей пароль. */
   manageable: boolean;
+  /**
+   * На какие роли смотрящий вправе перевести учётку (issue #291) — строго ниже своей, кроме
+   * нынешней. Пусто — сменить нельзя: учётка не ниже смотрящего или демо.
+   */
+  assignableRoles: EmployeeRole[];
 };
 
 export type EmployeeAccountsResponse = {
@@ -208,6 +213,16 @@ export type EmployeeInvitesResponse = {
 export type EmployeeDisabledResponse = {
   employeeId: string;
   disabled: boolean;
+};
+
+/** Смена роли учётки (issue #291). */
+export type EmployeeRoleChangeRequestBody = {
+  role: EmployeeRole;
+};
+
+export type EmployeeRoleChangeResponse = {
+  employeeId: string;
+  role: EmployeeRole;
 };
 
 /**
