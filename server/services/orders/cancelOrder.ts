@@ -81,6 +81,15 @@ export const cancelOrder = async (input: CancelOrderInput): Promise<CancelledOrd
       throw new OrderNotPendingError(order.id, order.status);
     }
 
+    // Висит только заказ бота за баллы (`orders_channel_fields_check`,
+    // `orders_payment_fields_check`): сумма в баллах у него есть. Пусто здесь означало бы
+    // сломанную проверку в базе — и возвращать тогда нечего.
+    const refundPoints = order.totalPoints;
+
+    if (refundPoints === null) {
+      throw new Error(`висящий заказ ${order.id} без суммы в баллах`);
+    }
+
     const items = await listOrderItems(transaction, order.id);
 
     // Порядок `product_id` — тот же, в котором строки берёт оформление.
@@ -111,7 +120,7 @@ export const cancelOrder = async (input: CancelOrderInput): Promise<CancelledOrd
     const { transfer } = await transferPoints({
       reason: 'order_refund',
       idempotencyKey: buildOrderRefundIdempotencyKey(order.id),
-      amount: order.totalPoints,
+      amount: refundPoints,
       fromAccountId: redemptionAccount.id,
       toAccountId: driverAccount.id,
       occurredAt: cancelledAt,
@@ -136,14 +145,14 @@ export const cancelOrder = async (input: CancelOrderInput): Promise<CancelledOrd
       orderId: order.id,
       number: order.number,
       reason: input.reason,
-      refundedPoints: order.totalPoints,
+      refundedPoints: refundPoints,
     });
 
     return {
       orderId: order.id,
       number: order.number,
       personId: order.personId,
-      refundedPoints: order.totalPoints,
+      refundedPoints: refundPoints,
       cancelledAt,
     };
   });

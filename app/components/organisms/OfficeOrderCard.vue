@@ -3,13 +3,21 @@ import { ref, watch } from 'vue';
 import type { OfficeOrder } from '#shared/types/orders';
 import { deskIssueQuestion } from '~/utils/deskQuestion';
 import { formatDate } from '~/utils/format';
-import { orderCancelReasonLabel, orderStatusLabel } from '~/utils/labels';
+import {
+  orderCancelReasonLabel,
+  orderChannelLabel,
+  orderPaymentLabel,
+  orderStatusLabel,
+} from '~/utils/labels';
+import { orderLinePrice, orderPaymentUnit, orderTotal } from '~/utils/orderAmount';
 
 /**
  * Карточка заказа в вебе: кто, что, сколько и когда — и два действия.
  *
  * Действия те же, что у стойки в Mini App, и тоже в два нажатия: выдачу не вернуть, а отмена
  * возвращает баллы водителю. Кнопки есть только у висящего заказа.
+ *
+ * Сумма — в валюте заказа: баллы у заказа за баллы, сумы у розничного (issue #294).
  */
 const props = defineProps<{
   order: OfficeOrder;
@@ -33,6 +41,8 @@ watch(
   <MoleculesSectionPanel :title="`Заказ № ${order.number}`" :note="order.officeName">
     <dl>
       <MoleculesFactRow label="Статус" :value="orderStatusLabel(order.status)" />
+      <MoleculesFactRow label="Оплата" :value="orderPaymentLabel(order.payment)" />
+      <MoleculesFactRow label="Оформил" :value="orderChannelLabel(order.channel)" />
       <MoleculesFactRow label="Водитель" :value="order.driverName" />
       <MoleculesFactRow label="Позывной" :value="order.callsign" mono />
       <MoleculesFactRow label="Телефон" :value="order.phone" mono />
@@ -54,10 +64,10 @@ watch(
 
     <div class="mt-4">
       <MoleculesOrderLineList
-        :lines="order.lines"
-        :total="order.totalPoints"
+        :lines="order.lines.map((line) => ({ ...line, unitPrice: orderLinePrice(line) }))"
+        :total="orderTotal(order)"
         total-label="Сумма"
-        points-unit="баллов"
+        :unit="orderPaymentUnit(order.payment)"
         pieces-unit="шт."
       />
     </div>

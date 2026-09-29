@@ -16,6 +16,9 @@ import {
  * `404` — заказа или награды нет или код не нашёлся, `409` — они есть, но уже не ждут:
  * выданы, отменены или сгорели раньше, чем дошло это нажатие. `403` — офис не открыт
  * этому сотруднику.
+ *
+ * Отказы оформления у стойки (issue #294): `404` — водителя нет, `409` — всё есть, но заказ
+ * не складывается: офис в архиве, водитель уволен или без счёта, товара или баллов не хватает.
  */
 
 type DenialStatus = 403 | 404 | 409;
@@ -29,6 +32,14 @@ const DENIAL_STATUS: Readonly<Record<OrderDenialCode, DenialStatus>> = {
   reward_already_issued: 409,
   reward_already_expired: 409,
   office_not_open: 403,
+  office_unavailable: 409,
+  driver_unavailable: 404,
+  driver_fired: 409,
+  driver_without_account: 409,
+  product_unavailable: 409,
+  product_not_for_retail: 409,
+  insufficient_stock: 409,
+  insufficient_points: 409,
 };
 
 const STATUS_MESSAGE: Readonly<Record<DenialStatus, string>> = {

@@ -82,6 +82,23 @@ const matchedBranches = (criteria: DriverSearchCriteria): Prisma.Sql => Prisma.s
      AND profile."callsign" ILIKE '%' || ${criteria.callsignTerm} || '%'
 `;
 
+/**
+ * Уволен ли человек: все его профили в парке `fired`. Одно выражение на поиск и на заказ
+ * стойки (issue #294): экран не даёт выбрать уволенного ровно по тому же правилу, по которому
+ * сервер ему откажет. Правило то же, что у регистрации в боте, — уволенный тот, у кого
+ * не осталось ни одного профиля не в `fired` (`registerDriverByContact.ts`).
+ *
+ * Без профилей — не уволен: человека в реестре без профиля не бывает, и назвать его
+ * уволенным значило бы придумать ему статус.
+ */
+const personFired = (personId: Prisma.Sql): Prisma.Sql => Prisma.sql`
+  coalesce((
+    SELECT bool_and(fired_profile."work_status" = 'fired')
+      FROM xb.park_profiles AS fired_profile
+     WHERE fired_profile."person_id" = ${personId}
+  ), false)
+`;
+
 /** Люди под запрос, кроме спрятанных демо-водителей (issue #252): у живого пусто всегда. */
 const matchedPersons = (criteria: DriverSearchCriteria): Prisma.Sql => Prisma.sql`
   SELECT found."personId"
@@ -101,6 +118,8 @@ export type DriverSearchListRow = {
   callsigns: string[];
   workStatuses: string[];
   profilesCount: number;
+  /** Все профили уволены (`personFired`). */
+  fired: boolean;
   isMember: boolean;
   /** Демо-водитель (issue #205). */
   isDemo: boolean;
@@ -132,6 +151,7 @@ export const listMatchedDrivers = async (
            profiles."callsigns",
            profiles."workStatuses",
            profiles."profilesCount",
+           ${personFired(Prisma.sql`person."id"`)} AS "fired",
            (settings."person_id" IS NOT NULL)   AS "isMember",
            person."is_demo"                     AS "isDemo",
            account."balance"
@@ -194,6 +214,39 @@ export const countMatchedDrivers = async (criteria: DriverSearchCriteria): Promi
   `;
 
   return rows[0]?.total ?? 0;
+};
+
+export type DeskCustomerRow = {
+  personId: string;
+  isDemo: boolean;
+  /** Спрятанный демо-водитель (issue #252): поиск его не показывает. */
+  hidden: boolean;
+  fired: boolean;
+  /** Счёт водителя. Пусто — счёта нет, и за баллы оформить нельзя. */
+  accountId: string | null;
+};
+
+/**
+ * Водитель, которому сотрудник оформляет заказ у стойки: то, по чему сервис решает, можно ли.
+ * `null` — такого человека нет.
+ */
+export const findDeskCustomer = async (
+  personId: string,
+  client: Prisma.TransactionClient = db,
+): Promise<DeskCustomerRow | null> => {
+  const rows = await client.$queryRaw<DeskCustomerRow[]>`
+    SELECT person."id"                          AS "personId",
+           person."is_demo"                     AS "isDemo",
+           (person."demo_hidden_at" IS NOT NULL) AS "hidden",
+           ${personFired(Prisma.sql`person."id"`)} AS "fired",
+           account."id"                         AS "accountId"
+      FROM xb.persons AS person
+      LEFT JOIN xb.accounts AS account
+             ON account."person_id" = person."id" AND account."type" = 'driver'
+     WHERE person."id" = ${personId}::uuid
+  `;
+
+  return rows[0] ?? null;
 };
 
 export type PersonRow = {

@@ -4,6 +4,7 @@ import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
 import { cancelOrder } from '#server/services/orders/cancelOrder';
 import { issueOrder } from '#server/services/orders/issueOrder';
+import { placeDeskOrder } from '#server/services/orders/placeDeskOrder';
 import { placeOrder } from '#server/services/orders/placeOrder';
 import { adjustStock } from '#server/services/stock/adjustStock';
 import { receiveStock } from '#server/services/stock/receiveStock';
@@ -98,6 +99,41 @@ describe('инварианты остатков', () => {
 
     await issueOrder({ orderId: issued.orderId, employeeId });
     await cancelOrder({ orderId: cancelled.orderId, reason: 'employee', employeeId });
+
+    for (const query of queries) {
+      await expect(runRawQuery(query)).resolves.toEqual([]);
+    }
+  });
+
+  it('заказы стойки — за баллы и за розницу рядом с висящим — держат все три запроса', async () => {
+    // Заказ стойки пишет те же два движения, что заказ бота от оформления до выдачи, только
+    // разом: резерв после него тот же, что до, и запросы остатков не меняются (issue #294).
+    const person = await createTestPerson({ inProgram: true });
+    const { employeeId } = await createTestEmployee({ role: 'admin' });
+    const worker = { employeeId, role: 'admin' as const, isDemo: false };
+    const officeId = await createTestOffice();
+    const productId = await createTestProduct({ pricePoints: 10 });
+
+    await grantPoints(person.personId, 100);
+    await receiveStock({ officeId, productId, quantity: 10, employeeId });
+
+    await placeOrder({
+      personId: person.personId,
+      officeId,
+      items: [{ productId, quantity: 2 }],
+      actor: 'mini_app',
+      driverIsDemo: false,
+    });
+
+    for (const payment of ['points', 'retail'] as const) {
+      await placeDeskOrder(worker, {
+        officeId,
+        personId: person.personId,
+        payment,
+        items: [{ productId, quantity: 3 }],
+        actor: 'web',
+      });
+    }
 
     for (const query of queries) {
       await expect(runRawQuery(query)).resolves.toEqual([]);

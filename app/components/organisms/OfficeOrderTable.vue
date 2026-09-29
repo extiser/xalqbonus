@@ -1,11 +1,18 @@
 <script setup lang="ts">
 import type { OfficeOrder, OfficeOrdersResponse } from '#shared/types/orders';
 import type { LoadState } from '~/types/loadState';
-import { formatDate, formatNumber } from '~/utils/format';
-import { orderStatusLabel, orderStatusTone } from '~/utils/labels';
+import { formatDate } from '~/utils/format';
+import {
+  orderChannelLabel,
+  orderPaymentLabel,
+  orderStatusLabel,
+  orderStatusTone,
+} from '~/utils/labels';
+import { formatOrderTotal } from '~/utils/orderAmount';
 
 /**
- * Заказы офиса страницей: номер, статус, водитель, сумма и когда оформлен.
+ * Заказы офиса страницей: номер, статус, водитель, способ оплаты, откуда заказ, сумма и когда
+ * оформлен. Сумма — в валюте заказа: баллы или сумы (issue #294).
  *
  * Висящие стоят первыми — порядок задаёт сервер. Номер открывает карточку с действиями.
  * Три состояния нарисованы, а не подразумеваются (docs/frontend.md → «Три состояния
@@ -44,6 +51,8 @@ const emit = defineEmits<{ open: [order: OfficeOrder]; page: [offset: number] }>
               <th class="py-2 pr-4 font-medium">Номер</th>
               <th class="py-2 pr-4 font-medium">Статус</th>
               <th class="py-2 pr-4 font-medium">Водитель</th>
+              <th class="py-2 pr-4 font-medium">Оплата</th>
+              <th class="py-2 pr-4 font-medium">Оформил</th>
               <th class="py-2 pr-4 text-right font-medium">Сумма</th>
               <th class="py-2 font-medium">Оформлен</th>
             </tr>
@@ -69,7 +78,9 @@ const emit = defineEmits<{ open: [order: OfficeOrder]; page: [offset: number] }>
                 {{ order.driverName ?? '—' }}
                 <span v-if="order.callsign" class="text-slate-500"> · {{ order.callsign }}</span>
               </td>
-              <td class="py-2 pr-4 text-right tabular-nums">{{ formatNumber(order.totalPoints) }}</td>
+              <td class="py-2 pr-4">{{ orderPaymentLabel(order.payment) }}</td>
+              <td class="py-2 pr-4">{{ orderChannelLabel(order.channel) }}</td>
+              <td class="py-2 pr-4 text-right whitespace-nowrap tabular-nums">{{ formatOrderTotal(order) }}</td>
               <td class="py-2 whitespace-nowrap tabular-nums">{{ formatDate(order.createdAt) }}</td>
             </tr>
           </tbody>

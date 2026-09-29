@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useDeskOrder } from '~/composables/useDeskOrder';
 import { useOfficeDesk } from '~/composables/useOfficeDesk';
 import { toLoadState } from '~/utils/loadState';
 import { failureCode, failureMessage } from '~/utils/requestError';
@@ -9,6 +10,9 @@ import type { OfficeOrdersResponse } from '#shared/types/orders';
 /**
  * Раздел «Заказы»: заказы офиса, выдача по коду и отмена — для всех ролей. Поле кода одно
  * на заказы и награды (issue #172): найденная награда открывается своей карточкой.
+ *
+ * Здесь же — оформление заказа у стойки за водителя, за баллы или за розницу (issue #294):
+ * в выбранном офисе, если он не в архиве. Оформленный заказ уже выдан и открывается карточкой.
  *
  * Те же ручки и те же действия, что у стойки в Mini App: здесь за столом, под cookie
  * (docs/decisions.md → «Доступ определяется ролью, а не дверью»). Менеджеру в выборе офиса
@@ -25,6 +29,7 @@ const selectedStatus = ref('');
 const offset = ref(0);
 
 const desk = useOfficeDesk(() => ({}));
+const deskOrder = useDeskOrder();
 const code = ref('');
 
 const {
@@ -57,8 +62,34 @@ const officeId = computed({
     selectedOfficeId.value = value;
     offset.value = 0;
     desk.reset();
+    // Товары и остатки у другого офиса другие: набранное в прежнем здесь не годится.
+    deskOrder.close();
   },
 });
+
+const selectedOffice = computed(() => data.value?.offices.find((office) => office.officeId === officeId.value) ?? null);
+
+/** Архивный офис заказов не принимает: оформлять в нём нечего. */
+const canPlaceOrder = computed(() => selectedOffice.value !== null && !selectedOffice.value.archived);
+
+const openDeskOrder = (): void => {
+  if (!canPlaceOrder.value) {
+    return;
+  }
+
+  desk.close();
+  deskOrder.open(officeId.value);
+};
+
+/** Оформленный заказ уже выдан — показываем его карточкой и перечитываем список. */
+const placeDeskOrder = async (): Promise<void> => {
+  const order = await deskOrder.submit();
+
+  if (order) {
+    desk.open({ kind: 'order', order });
+    await refresh();
+  }
+};
 
 const statusFilter = computed({
   get: () => selectedStatus.value,
@@ -115,8 +146,8 @@ const cancel = async (): Promise<void> => {
     <div>
       <h1 class="text-xl font-semibold text-slate-900">Заказы</h1>
       <p class="mt-1 text-sm text-slate-500">
-        Выдача и отмена заказов водителей. Баллы списаны при оформлении: выдача их не трогает,
-        отмена возвращает целиком.
+        Выдача и отмена заказов водителей и оформление у стойки — за баллы или за розницу. Баллы
+        списаны при оформлении: выдача их не трогает, отмена возвращает целиком.
       </p>
     </div>
 
@@ -136,7 +167,43 @@ const cancel = async (): Promise<void> => {
             <option value="">Все статусы</option>
           </AtomsSelectInput>
         </div>
+        <AtomsActionButton
+          v-if="canPlaceOrder && !deskOrder.isOpen.value"
+          label="Оформить заказ"
+          tone="primary"
+          @click="openDeskOrder"
+        />
       </div>
+
+      <OrganismsDeskOrderForm
+        v-if="deskOrder.isOpen.value && selectedOffice"
+        :office-name="selectedOffice.name"
+        :search-state="deskOrder.searchState.value"
+        :search-rows="deskOrder.searchRows.value"
+        :customer="deskOrder.customer.value"
+        :payment="deskOrder.payment.value"
+        :products-state="deskOrder.productsState.value"
+        :products="deskOrder.offered.value"
+        :quantities="deskOrder.quantities.value"
+        :lines="deskOrder.lines.value"
+        :total="deskOrder.total.value"
+        :over-stock="deskOrder.overStock.value"
+        :over-balance="deskOrder.overBalance.value"
+        :can-submit="deskOrder.canSubmit.value"
+        :confirming="deskOrder.confirming.value"
+        :submitting="deskOrder.submitting.value"
+        :error="deskOrder.error.value"
+        @search="deskOrder.search"
+        @pick="deskOrder.pick"
+        @clear-customer="deskOrder.clearCustomer"
+        @payment="deskOrder.choosePayment"
+        @quantity="deskOrder.setQuantity"
+        @confirm="deskOrder.confirming.value = true"
+        @unconfirm="deskOrder.confirming.value = false"
+        @submit="placeDeskOrder"
+        @retry-products="deskOrder.loadProducts"
+        @close="deskOrder.close"
+      />
 
       <MoleculesOrderCodeForm
         v-model="code"

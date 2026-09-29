@@ -249,6 +249,8 @@ export const createTestOffice = async ({ archived = false }: { archived?: boolea
 export type CreateTestProductInput = {
   /** Пусто — приз без цены в баллах: такой бывает только с `promo`. */
   pricePoints: number | null;
+  /** Розничная цена в сумах. Не задана — тысяча сумов за балл. Ноль — за розницу не продаётся. */
+  priceRetail?: number;
   archived?: boolean;
   promo?: boolean;
   hiddenInCatalog?: boolean;
@@ -260,6 +262,7 @@ export type CreateTestProductInput = {
  */
 export const createTestProduct = async ({
   pricePoints,
+  priceRetail,
   archived = false,
   promo = false,
   hiddenInCatalog = false,
@@ -272,7 +275,7 @@ export const createTestProduct = async ({
     VALUES (
       'Тестовый товар',
       ${pricePoints}::int,
-      ${(pricePoints ?? 5) * 1000},
+      ${priceRetail ?? (pricePoints ?? 5) * 1000},
       ${(pricePoints ?? 5) * 800},
       now(),
       ${archived ? new Date() : null}::timestamptz,
@@ -319,14 +322,19 @@ export type OrderSnapshot = {
   id: string;
   number: number;
   status: string;
-  code: string;
-  totalPoints: number;
+  payment: string;
+  channel: string;
+  code: string | null;
+  totalPoints: number | null;
+  totalRetail: number | null;
+  expiresAt: Date | null;
+  createdByEmployeeId: string | null;
   issuedAt: Date | null;
   issuedByEmployeeId: string | null;
   cancelledAt: Date | null;
   cancelReason: string | null;
   cancelledByEmployeeId: string | null;
-  spendTransferId: string;
+  spendTransferId: string | null;
   refundTransferId: string | null;
 };
 
@@ -335,8 +343,13 @@ export const readOrder = async (orderId: string): Promise<OrderSnapshot | null> 
     SELECT "id",
            "number",
            "status"::text                 AS "status",
+           "payment"::text                AS "payment",
+           "channel"::text                AS "channel",
            "code",
            "total_points"                 AS "totalPoints",
+           "total_retail"                 AS "totalRetail",
+           "expires_at"                   AS "expiresAt",
+           "created_by_employee_id"       AS "createdByEmployeeId",
            "issued_at"                    AS "issuedAt",
            "issued_by_employee_id"        AS "issuedByEmployeeId",
            "cancelled_at"                 AS "cancelledAt",
@@ -349,6 +362,35 @@ export const readOrder = async (orderId: string): Promise<OrderSnapshot | null> 
   `;
 
   return rows[0] ?? null;
+};
+
+export type OrderItemSnapshot = {
+  productId: string;
+  quantity: number;
+  unitPoints: number | null;
+  unitRetail: number | null;
+};
+
+/** Позиции заказа в порядке товаров. */
+export const listOrderItemSnapshots = async (orderId: string): Promise<OrderItemSnapshot[]> =>
+  db.$queryRaw<OrderItemSnapshot[]>`
+    SELECT "product_id"  AS "productId",
+           "quantity",
+           "unit_points" AS "unitPoints",
+           "unit_retail" AS "unitRetail"
+      FROM xb.order_items
+     WHERE "order_id" = ${orderId}::uuid
+     ORDER BY "product_id"
+  `;
+
+/**
+ * Увольняет человека в реестре: все его профили — `fired`. Так выглядит водитель, которого
+ * парк уволил, а синхронизация реестра принесла статус.
+ */
+export const fireTestPerson = async (personId: string): Promise<void> => {
+  await db.$executeRaw`
+    UPDATE xb.park_profiles SET "work_status" = 'fired' WHERE "person_id" = ${personId}::uuid
+  `;
 };
 
 /** Сколько заказов у человека. Ноль — то, что проверяют сценарии отката оформления. */

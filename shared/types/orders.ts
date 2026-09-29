@@ -9,7 +9,12 @@
  * клиент в зоне парка (`app/utils/format.ts`).
  */
 
-import type { OrderCancelReason, OrderStatus } from '../../server/generated/prisma/enums';
+import type {
+  OrderCancelReason,
+  OrderChannel,
+  OrderPayment,
+  OrderStatus,
+} from '../../server/generated/prisma/enums';
 
 /**
  * Офис, в котором сотрудник может выдавать заказы.
@@ -36,8 +41,12 @@ export type OfficeOrderLine = {
   productId: string;
   name: string;
   quantity: number;
-  /** Цена на момент заказа, а не текущая цена каталога. */
-  unitPoints: number;
+  /**
+   * Цена на момент заказа, а не текущая цена каталога, — в валюте способа оплаты заказа:
+   * в баллах у `points`, в сумах у `retail`. Вторая пуста.
+   */
+  unitPoints: number | null;
+  unitRetail: number | null;
   /**
    * Фото товара — текущее, из каталога: у позиции своего нет. Адрес собирает клиент правилом
    * `ProductPhoto`, отметка правки — его версия. Читает карточка стойки в Mini App (issue #250).
@@ -51,11 +60,17 @@ export type OfficeOrderLine = {
  *
  * Водитель назван именем из рабочего профиля парка и позывным — по ним его узнают в офисе.
  * Баланса водителя здесь нет: выдача его не трогает, а отмена возвращает ровно сумму заказа.
+ *
+ * Сумма — одна из двух, по способу оплаты: в баллах у `points`, в сумах у `retail`
+ * (issue #294). Розничный заказ виден только здесь, в админке: водителю он не показывается.
  */
 export type OfficeOrder = {
   orderId: string;
   number: number;
   status: OrderStatus;
+  payment: OrderPayment;
+  /** Откуда заказ: водитель в боте или сотрудник у стойки. */
+  channel: OrderChannel;
   /** Код — только у висящего: у выданного и отменённого он освобождён и может быть чужим. */
   code: string | null;
   officeId: string;
@@ -66,12 +81,49 @@ export type OfficeOrder = {
   /** Открытый номер профиля. `null` — телефона нет: у десятой части профилей его нет вовсе. */
   phone: string | null;
   lines: OfficeOrderLine[];
-  totalPoints: number;
+  /** Только у `points`. */
+  totalPoints: number | null;
+  /** Только у `retail`, в сумах. */
+  totalRetail: number | null;
   createdAt: string;
-  expiresAt: string;
+  /** Только у заказа бота: заказ стойки не висит. */
+  expiresAt: string | null;
   issuedAt: string | null;
   cancelledAt: string | null;
   cancelReason: OrderCancelReason | null;
+};
+
+/**
+ * Товар офиса для оформления у стойки (issue #294): свободный остаток и обе цены. Экран
+ * предлагает товар в том способе оплаты, у которого есть цена, — за баллы при `pricePoints`,
+ * за розницу при `priceRetail`.
+ */
+export type DeskProduct = {
+  productId: string;
+  name: string;
+  /** Пусто — за баллы не продаётся: приз без цены в баллах. */
+  pricePoints: number | null;
+  /** Пусто — за розницу не продаётся: розничной цены нет. */
+  priceRetail: number | null;
+  available: number;
+};
+
+export type DeskProductsResponse = {
+  products: DeskProduct[];
+};
+
+/** Способы оплаты заказа стойки. */
+export const ORDER_PAYMENTS: readonly OrderPayment[] = ['points', 'retail'];
+
+/**
+ * Оформление заказа у стойки (`POST /api/orders`, issue #294): офис, водитель, способ оплаты
+ * и позиции. Цены сюда не входят — их берёт сервер из каталога на момент оформления.
+ */
+export type DeskOrderRequestBody = {
+  officeId: string;
+  personId: string;
+  payment: OrderPayment;
+  items: { productId: string; quantity: number }[];
 };
 
 /** Статусы, по которым фильтруется список. Нет фильтра — все заказы офиса. */

@@ -4,7 +4,7 @@ import { consola } from 'consola';
 import { db } from '#server/db';
 import type { Prisma } from '#server/generated/prisma/client';
 import { findOffice } from '#server/repositories/offices';
-import { insertOrder, insertOrderItems, type OrderRow } from '#server/repositories/orders';
+import { insertOrder, insertOrderItems, type PendingOrderRow } from '#server/repositories/orders';
 import { findProductsByIds } from '#server/repositories/products';
 import { lockStockRows, writeStockMovement } from '#server/repositories/stock';
 import { ensureDriverAccount } from '#server/services/points/ensureDriverAccount';
@@ -12,15 +12,16 @@ import { getSystemAccount } from '#server/services/points/getSystemAccount';
 import { buildOrderSpendIdempotencyKey } from '#server/services/points/idempotencyKey';
 import { transferPoints } from '#server/services/points/transfer';
 import {
-  DuplicateOrderItemError,
-  EmptyOrderError,
-  InsufficientStockError,
-  InvalidOrderQuantityError,
   OfficeUnavailableError,
   OrderCodeCollisionError,
   ProductUnavailableError,
 } from '#server/services/orders/errors';
 import { generateOrderCode } from '#server/services/orders/orderCode';
+import {
+  requireOrderStock,
+  validateOrderItems,
+  type OrderItemRequest,
+} from '#server/services/orders/orderItems';
 
 /**
  * Оформление заказа за баллы — **одной транзакцией**.
@@ -53,10 +54,7 @@ const ORDER_EXPIRES_IN_HOURS = 24;
 /** Сколько кодов пробуем, прежде чем признать, что свободного не нашлось. */
 const CODE_ATTEMPTS = 3;
 
-export type PlaceOrderItem = {
-  productId: string;
-  quantity: number;
-};
+export type PlaceOrderItem = OrderItemRequest;
 
 export type PlaceOrderInput = {
   personId: string;
@@ -83,36 +81,6 @@ export type PlacedOrder = {
 };
 
 type PricedItem = PlaceOrderItem & { unitPoints: number };
-
-/**
- * Проверяет вход до похода в базу: пустой заказ, нецелое количество, один товар дважды.
- *
- * Позиции возвращаются отсортированными по `product_id` — в том порядке, в котором потом
- * берутся блокировки остатка. Сортировка здесь, а не перед блокировкой: порядок обязан
- * совпадать у оформления, выдачи и отмены, и заводить его в трёх местах значит однажды
- * развести их.
- */
-const validateItems = (items: PlaceOrderItem[]): PlaceOrderItem[] => {
-  if (items.length === 0) {
-    throw new EmptyOrderError();
-  }
-
-  const seen = new Set<string>();
-
-  for (const item of items) {
-    if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
-      throw new InvalidOrderQuantityError(item.productId, item.quantity);
-    }
-
-    if (seen.has(item.productId)) {
-      throw new DuplicateOrderItemError(item.productId);
-    }
-
-    seen.add(item.productId);
-  }
-
-  return [...items].sort((left, right) => left.productId.localeCompare(right.productId));
-};
 
 /** Цена берётся текущая, из каталога, и запоминается позицией заказа. */
 const priceItems = async (
@@ -155,27 +123,6 @@ const priceItems = async (
 };
 
 /**
- * Проверяет свободный остаток по уже заблокированным строкам.
- *
- * Строки, которой нет, означает ноль: товар в этот офис ни разу не приходил.
- */
-const requireStock = (
-  officeId: string,
-  items: PricedItem[],
-  stock: Awaited<ReturnType<typeof lockStockRows>>,
-): void => {
-  const onHandByProduct = new Map(stock.map((row) => [row.productId, row.onHand]));
-
-  for (const item of items) {
-    const available = onHandByProduct.get(item.productId) ?? 0;
-
-    if (available < item.quantity) {
-      throw new InsufficientStockError(officeId, item.productId, item.quantity, available);
-    }
-  }
-};
-
-/**
  * Вставляет заказ, подбирая свободный код.
  *
  * Конфликт частичного индекса гасится `ON CONFLICT … DO NOTHING` в репозитории и приходит
@@ -185,7 +132,7 @@ const requireStock = (
 const insertOrderWithFreshCode = async (
   transaction: Prisma.TransactionClient,
   input: { id: string; personId: string; officeId: string; totalPoints: number; spendTransferId: string },
-): Promise<OrderRow> => {
+): Promise<PendingOrderRow> => {
   for (let attempt = 1; attempt <= CODE_ATTEMPTS; attempt += 1) {
     const order = await insertOrder(transaction, {
       ...input,
@@ -204,7 +151,7 @@ const insertOrderWithFreshCode = async (
 };
 
 export const placeOrder = async (input: PlaceOrderInput): Promise<PlacedOrder> => {
-  const items = validateItems(input.items);
+  const items = validateOrderItems(input.items);
 
   // Счёт и системный счёт читаются до транзакции: ни тот, ни другой не зависят от заказа,
   // а держать на них блокировки всё время проверки каталога незачем.
@@ -234,7 +181,7 @@ export const placeOrder = async (input: PlaceOrderInput): Promise<PlacedOrder> =
       pricedItems.map((item) => item.productId),
     );
 
-    requireStock(input.officeId, pricedItems, stock);
+    requireOrderStock(input.officeId, pricedItems, stock);
 
     const totalPoints = pricedItems.reduce(
       (sum, item) => sum + item.unitPoints * item.quantity,
@@ -260,7 +207,11 @@ export const placeOrder = async (input: PlaceOrderInput): Promise<PlacedOrder> =
       spendTransferId: transfer.id,
     });
 
-    await insertOrderItems(transaction, orderId, pricedItems);
+    await insertOrderItems(
+      transaction,
+      orderId,
+      pricedItems.map((item) => ({ ...item, unitRetail: null })),
+    );
 
     for (const item of pricedItems) {
       await writeStockMovement(transaction, {

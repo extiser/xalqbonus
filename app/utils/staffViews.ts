@@ -11,8 +11,9 @@ import type {
   StaffOutcomeView,
   StaffRewardView,
 } from '~/types/staffView';
-import { DISPLAY_TIME_ZONE, formatDate, pluralize } from '~/utils/format';
+import { DISPLAY_TIME_ZONE, formatDate, formatNumber, pluralize } from '~/utils/format';
 import { formatPoints, photoUrl } from '~/utils/memberViews';
+import { orderLinePrice, orderTotal } from '~/utils/orderAmount';
 
 /**
  * Экраны сотрудника в Mini App (issue #250): ответы ручек стойки — в готовые строки компонентов.
@@ -79,7 +80,19 @@ const orderQuantity = (order: OfficeOrder): string => {
   return `${quantity} ${pluralize(quantity, 'товар', 'товара', 'товаров')}`;
 };
 
-const orderPoints = (order: OfficeOrder): string => `${formatPoints(order.totalPoints)} ${pointsWord(order.totalPoints)}`;
+/**
+ * Число в валюте заказа. У стойки Mini App висят только заказы бота за баллы, но контракт
+ * заказа один на оба экрана, и розничный обязан показаться сумами, а не баллами (issue #294).
+ */
+const orderMoney = (order: OfficeOrder, amount: number): string =>
+  order.payment === 'points' ? formatPoints(amount) : formatNumber(amount);
+
+/** Сумма со словом: «80 баллов», «120 000 сум». */
+const orderSum = (order: OfficeOrder): string => {
+  const total = orderTotal(order);
+
+  return order.payment === 'points' ? `${formatPoints(total)} ${pointsWord(total)}` : `${formatNumber(total)} сум`;
+};
 
 /** «Фамилия Имя · позывной». Нет ни того, ни другого — `undefined`. */
 const driverLine = (driverName: string | null, callsign: string | null): string | undefined => {
@@ -130,7 +143,7 @@ export const staffDeskRowView = (item: DeskItemResponse, now: Date): StaffDeskRo
       id: order.orderId,
       tone: 'order',
       label: `Заказ #${order.number}`,
-      title: `${orderQuantity(order)} · ${orderPoints(order)}`,
+      title: `${orderQuantity(order)} · ${orderSum(order)}`,
       driver: driverLine(order.driverName, order.callsign),
       when: formatDeskMoment(order.createdAt, now),
     };
@@ -178,9 +191,9 @@ export const staffOrderView = (order: OfficeOrder): StaffOrderView => {
   const lines: MemberLineView[] = order.lines.map((line) => ({
     id: line.productId,
     title: line.name,
-    caption: `${line.quantity} шт. × ${formatPoints(line.unitPoints)}`,
+    caption: `${line.quantity} шт. × ${orderMoney(order, orderLinePrice(line))}`,
     image: photoUrl(line.photoPath, line.photoUpdatedAt),
-    price: formatPoints(line.quantity * line.unitPoints),
+    price: orderMoney(order, line.quantity * orderLinePrice(line)),
   }));
   const driver = sheetDriverLine(order.driverName, order.callsign);
 
@@ -188,13 +201,13 @@ export const staffOrderView = (order: OfficeOrder): StaffOrderView => {
     title: `Заказ #${order.number}`,
     driver: staffDriverView(order.driverName, order.callsign, order.phone),
     lines,
-    total: formatPoints(order.totalPoints),
+    total: orderMoney(order, orderTotal(order)),
     dates: [
       { label: 'Оформлен', value: formatDate(order.createdAt) },
       { label: 'Забрать до', value: formatDate(order.expiresAt) },
     ],
     issueTitle: `Выдать заказ #${order.number}?`,
-    issueSubtitle: [driver, `${orderQuantity(order)} на сумму ${orderPoints(order)}`],
+    issueSubtitle: [driver, `${orderQuantity(order)} на сумму ${orderSum(order)}`],
     cancelTitle: `Отменить заказ #${order.number}?`,
     cancelSubtitle: [driver, 'Баллы вернутся водителю, товар — в остатки.'],
   };
