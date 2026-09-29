@@ -1,6 +1,7 @@
 import { findOfficeReward } from '#server/repositories/rewards';
 import { requireOpenOffice, type OfficeWorker } from '#server/services/offices/employeeOffices';
 import { RewardNotAwaitingError, UnknownRewardError } from '#server/services/rewards/errors';
+import { notifyIssued } from '#server/services/notifications/notifyIssued';
 import { issueReward } from '#server/services/rewards/issueReward';
 import { readOfficeReward } from '#server/services/rewards/officeRewardView';
 import type { OfficeReward } from '#shared/types/rewards';
@@ -30,8 +31,10 @@ export const issueOfficeReward = async (
     throw new RewardNotAwaitingError(reward.id, reward.status);
   }
 
+  let issued: Awaited<ReturnType<typeof issueReward>>;
+
   try {
-    await issueReward({ rewardId: reward.id, employeeId: worker.employeeId });
+    issued = await issueReward({ rewardId: reward.id, employeeId: worker.employeeId });
   } catch (error) {
     if (!(error instanceof RewardNotAwaitingError)) {
       throw error;
@@ -47,6 +50,14 @@ export const issueOfficeReward = async (
   if (!result) {
     throw new Error(`выданная награда ${rewardId} не прочиталась`);
   }
+
+  // После фиксации выдачи, не внутри неё: откат не должен оставить отправленное сообщение.
+  await notifyIssued({
+    kind: 'reward',
+    personId: issued.personId,
+    officeName: result.officeName,
+    title: result.title,
+  });
 
   return result;
 };

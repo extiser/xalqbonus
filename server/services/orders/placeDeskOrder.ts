@@ -23,6 +23,8 @@ import {
   validateOrderItems,
   type OrderItemRequest,
 } from '#server/services/orders/orderItems';
+import { notifyIssued } from '#server/services/notifications/notifyIssued';
+import { readOfficeOrder } from '#server/services/orders/officeOrderView';
 import { getSystemAccount } from '#server/services/points/getSystemAccount';
 import { buildOrderSpendIdempotencyKey } from '#server/services/points/idempotencyKey';
 import { transferPoints } from '#server/services/points/transfer';
@@ -173,7 +175,7 @@ export const placeDeskOrder = async (
   const orderId = randomUUID();
   const issuedAt = new Date();
 
-  return db.$transaction(async (transaction) => {
+  const placed = await db.$transaction(async (transaction) => {
     const office = await findOffice(input.officeId, transaction);
 
     // Офис перечитывается в транзакции: архивировать его могли между проверкой правила офисов
@@ -275,4 +277,22 @@ export const placeDeskOrder = async (
       totalRetail,
     };
   });
+
+  // Уведомление — после фиксации, не внутри транзакции: откат не должен оставить отправленное
+  // сообщение. Розничный заказ водителю не показывается вовсе — о нём он не узнаёт.
+  if (placed.payment === 'points' && placed.totalPoints !== null) {
+    const view = await readOfficeOrder(placed.orderId);
+
+    if (view) {
+      await notifyIssued({
+        kind: 'order',
+        personId: input.personId,
+        officeName: view.officeName,
+        lines: view.lines,
+        pointsSpent: placed.totalPoints,
+      });
+    }
+  }
+
+  return placed;
 };

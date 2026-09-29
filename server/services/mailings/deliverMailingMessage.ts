@@ -113,7 +113,9 @@ const send = async (token: string, telegramChatId: bigint, row: MailingDeliveryR
     openAppButton: button,
   });
 
-  uploadedPhotoFileIds.set(row.photoPath, sent.fileId);
+  if (sent.fileId !== null) {
+    uploadedPhotoFileIds.set(row.photoPath, sent.fileId);
+  }
 
   return sent.messageId;
 };

@@ -275,6 +275,8 @@ export type TextKey =
   | 'employee_account'
   | 'check_unavailable'
   | 'notification_welcome_bonus'
+  | 'notification_issued_order'
+  | 'notification_issued_reward'
   | 'notification_gift_received'
   | 'notification_gift_received_footer'
   | 'notification_reward_received'
@@ -1593,6 +1595,19 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   notification_welcome_bonus: {
     ru: '🎁 Вам начислено {points} баллов за первые 5 поездок! Обменять их на подарки можно в любом офисе Xalq Taxi.',
     uz: "🎁 Birinchi 5 ta safaringiz uchun sizga {points} ball hisoblandi! Ularni Xalq Taxi'ning istalgan ofisida sovg'alarga almashtirishingiz mumkin.",
+  },
+  /**
+   * Заказ выдан в офисе (issue #295). `{items}` — товары через запятую, `{spent}` и `{balance}` —
+   * «300 баллов» склонением по числу. Узбекский — черновой, вычитывает переводчик.
+   */
+  notification_issued_order: {
+    ru: 'Выдано в офисе {office}: {items}. Списано {spent}, остаток {balance}.',
+    uz: "{office} ofisida topshirildi: {items}. {spent} yechildi, qoldiq {balance}.",
+  },
+  /** Награда выдана в офисе (issue #295): о баллах ни слова — у наград в офисе их нет. Узбекский — черновой. */
+  notification_issued_reward: {
+    ru: 'Выдано в офисе {office}: {items}.',
+    uz: '{office} ofisida topshirildi: {items}.',
   },
   /**
    * Подарок ждёт в приложении (issue #219). `{points}` — «300 баллов» склонением по числу,
