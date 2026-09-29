@@ -1,6 +1,12 @@
 import { db } from '#server/db';
 import { Prisma } from '#server/generated/prisma/client';
-import type { OrderCancelReason, OrderStatus } from '#server/generated/prisma/enums';
+import type {
+  EmployeeRole,
+  OrderCancelReason,
+  OrderChannel,
+  OrderPayment,
+  OrderStatus,
+} from '#server/generated/prisma/enums';
 import {
   DESK_DRIVER_COLUMNS,
   deskDriverJoins,
@@ -9,7 +15,7 @@ import {
 import type { OfficeRow } from '#server/repositories/offices';
 
 /**
- * Заказы за баллы и их позиции.
+ * Заказы и их позиции — за баллы и за розницу, из бота и со стойки.
  *
  * Все операции над висящим заказом берут его строку `FOR UPDATE` и проверяют статус
  * под блокировкой. Это и есть защита от двойного тапа: две выдачи одного кода, пришедшие
@@ -29,12 +35,46 @@ export type OrderRow = {
   personId: string;
   officeId: string;
   status: OrderStatus;
+  payment: OrderPayment;
+  channel: OrderChannel;
+  /** Только у заказа бота. */
+  code: string | null;
+  /** Только у заказа за баллы. */
+  totalPoints: number | null;
+  /** Только у заказа бота. */
+  expiresAt: Date | null;
+  /** Только у заказа за баллы. */
+  spendTransferId: string | null;
+  refundTransferId: string | null;
+};
+
+/**
+ * Висящий заказ. Висит только заказ бота за баллы — заказ стойки выдан той же операцией,
+ * что оформлен (`orders_channel_fields_check`), а в боте платят баллами
+ * (`orders_payment_fields_check`), — поэтому код, срок, сумма и перевод списания у него есть
+ * всегда. Сужение держит условие `status = 'pending'` в запросе, а не приведение после него.
+ */
+export type PendingOrderRow = OrderRow & {
   code: string;
   totalPoints: number;
   expiresAt: Date;
   spendTransferId: string;
-  refundTransferId: string | null;
 };
+
+const ORDER_COLUMNS = Prisma.sql`
+  "id",
+  "number",
+  "person_id"          AS "personId",
+  "office_id"          AS "officeId",
+  "status",
+  "payment",
+  "channel",
+  "code",
+  "total_points"       AS "totalPoints",
+  "expires_at"         AS "expiresAt",
+  "spend_transfer_id"  AS "spendTransferId",
+  "refund_transfer_id" AS "refundTransferId"
+`;
 
 export type InsertOrderInput = {
   /**
@@ -56,7 +96,7 @@ export type InsertOrderInput = {
 };
 
 /**
- * Вставляет заказ в статусе `pending`.
+ * Вставляет заказ водителя из бота за баллы в статусе `pending`.
  *
  * `null` означает ровно одно: код уже занят другим висящим заказом. Отказ гасится
  * `ON CONFLICT … DO NOTHING` по частичному уникальному индексу, а не ловится исключением,
@@ -66,10 +106,10 @@ export type InsertOrderInput = {
 export const insertOrder = async (
   client: Prisma.TransactionClient,
   input: InsertOrderInput,
-): Promise<OrderRow | null> => {
-  const rows = await client.$queryRaw<OrderRow[]>`
+): Promise<PendingOrderRow | null> => {
+  const rows = await client.$queryRaw<PendingOrderRow[]>`
     INSERT INTO xb.orders (
-      "id", "person_id", "office_id", "status", "code",
+      "id", "person_id", "office_id", "status", "payment", "channel", "code",
       "total_points", "expires_at", "spend_transfer_id"
     )
     VALUES (
@@ -77,55 +117,113 @@ export const insertOrder = async (
       ${input.personId}::uuid,
       ${input.officeId}::uuid,
       'pending'::xb.order_status,
+      'points'::xb.order_payment,
+      'bot'::xb.order_channel,
       ${input.code},
       ${input.totalPoints},
       now() + make_interval(hours => ${input.expiresInHours}),
       ${input.spendTransferId}::uuid
     )
     ON CONFLICT ("code") WHERE "status" = 'pending' DO NOTHING
-    RETURNING "id",
-              "number",
-              "person_id"          AS "personId",
-              "office_id"          AS "officeId",
-              "status",
-              "code",
-              "total_points"       AS "totalPoints",
-              "expires_at"         AS "expiresAt",
-              "spend_transfer_id"  AS "spendTransferId",
-              "refund_transfer_id" AS "refundTransferId"
+    RETURNING ${ORDER_COLUMNS}
   `;
 
   return rows[0] ?? null;
 };
 
+export type InsertDeskOrderInput = {
+  /** Идентификатор выдаёт вызывающий — тем же доводом, что у `insertOrder`. */
+  id: string;
+  personId: string;
+  officeId: string;
+  payment: OrderPayment;
+  /** Только у `points`. */
+  totalPoints: number | null;
+  /** Только у `retail`. */
+  totalRetail: number | null;
+  /** Только у `points`. */
+  spendTransferId: string | null;
+  /** Кто оформил — он же выдал: заказ стойки выдан той же операцией. */
+  employeeId: string;
+  issuedAt: Date;
+};
+
+/**
+ * Вставляет заказ стойки — сразу `issued`, без кода и срока.
+ *
+ * Конфликта кода здесь нет: кода у заказа стойки нет вовсе. Что способ оплаты сходится
+ * с суммами и переводом, проверяет база (`orders_payment_fields_check`).
+ */
+export const insertDeskOrder = async (
+  client: Prisma.TransactionClient,
+  input: InsertDeskOrderInput,
+): Promise<OrderRow> => {
+  const rows = await client.$queryRaw<OrderRow[]>`
+    INSERT INTO xb.orders (
+      "id", "person_id", "office_id", "status", "payment", "channel",
+      "total_points", "total_retail", "spend_transfer_id",
+      "created_by_employee_id", "issued_at", "issued_by_employee_id"
+    )
+    VALUES (
+      ${input.id}::uuid,
+      ${input.personId}::uuid,
+      ${input.officeId}::uuid,
+      'issued'::xb.order_status,
+      ${input.payment}::xb.order_payment,
+      'desk'::xb.order_channel,
+      ${input.totalPoints}::int,
+      ${input.totalRetail}::int,
+      ${input.spendTransferId}::uuid,
+      ${input.employeeId}::uuid,
+      ${input.issuedAt},
+      ${input.employeeId}::uuid
+    )
+    RETURNING ${ORDER_COLUMNS}
+  `;
+
+  const order = rows[0];
+
+  if (!order) {
+    throw new Error(`заказ стойки ${input.id} не вставился`);
+  }
+
+  return order;
+};
+
 export type OrderItemInput = {
   productId: string;
   quantity: number;
-  /** Цена товара на момент заказа. Дальше она живёт своей жизнью от цены каталога. */
-  unitPoints: number;
+  /**
+   * Цена товара на момент заказа. Дальше она живёт своей жизнью от цены каталога. Заполнена
+   * ровно одна из двух — та, которой платит заказ (`order_items_price_check`).
+   */
+  unitPoints: number | null;
+  unitRetail: number | null;
 };
 
-/** Позиции заказа, одним запросом: `unnest` разворачивает три массива в строки. */
+/** Позиции заказа, одним запросом: `unnest` разворачивает массивы в строки. */
 export const insertOrderItems = async (
   client: Prisma.TransactionClient,
   orderId: string,
   items: OrderItemInput[],
 ): Promise<void> => {
   await client.$executeRaw`
-    INSERT INTO xb.order_items ("order_id", "product_id", "quantity", "unit_points")
-    SELECT ${orderId}::uuid, "productId", "quantity", "unitPoints"
+    INSERT INTO xb.order_items ("order_id", "product_id", "quantity", "unit_points", "unit_retail")
+    SELECT ${orderId}::uuid, "productId", "quantity", "unitPoints", "unitRetail"
       FROM unnest(
              ${items.map((item) => item.productId)}::uuid[],
              ${items.map((item) => item.quantity)}::int[],
-             ${items.map((item) => item.unitPoints)}::int[]
-           ) AS item("productId", "quantity", "unitPoints")
+             ${items.map((item) => item.unitPoints)}::int[],
+             ${items.map((item) => item.unitRetail)}::int[]
+           ) AS item("productId", "quantity", "unitPoints", "unitRetail")
   `;
 };
 
 export type OrderItemRow = {
   productId: string;
   quantity: number;
-  unitPoints: number;
+  unitPoints: number | null;
+  unitRetail: number | null;
 };
 
 /**
@@ -141,7 +239,8 @@ export const listOrderItems = async (
   client.$queryRaw<OrderItemRow[]>`
     SELECT "product_id"  AS "productId",
            "quantity",
-           "unit_points" AS "unitPoints"
+           "unit_points" AS "unitPoints",
+           "unit_retail" AS "unitRetail"
       FROM xb.order_items
      WHERE "order_id" = ${orderId}::uuid
      ORDER BY "product_id"
@@ -161,18 +260,9 @@ export const listOrderItems = async (
 export const lockPendingOrderById = async (
   client: Prisma.TransactionClient,
   orderId: string,
-): Promise<OrderRow | null> => {
-  const rows = await client.$queryRaw<OrderRow[]>`
-    SELECT "id",
-           "number",
-           "person_id"          AS "personId",
-           "office_id"          AS "officeId",
-           "status",
-           "code",
-           "total_points"       AS "totalPoints",
-           "expires_at"         AS "expiresAt",
-           "spend_transfer_id"  AS "spendTransferId",
-           "refund_transfer_id" AS "refundTransferId"
+): Promise<PendingOrderRow | null> => {
+  const rows = await client.$queryRaw<PendingOrderRow[]>`
+    SELECT ${ORDER_COLUMNS}
       FROM xb.orders
      WHERE "id" = ${orderId}::uuid
        AND "status" = 'pending'
@@ -188,16 +278,7 @@ export const lockOrderById = async (
   orderId: string,
 ): Promise<OrderRow | null> => {
   const rows = await client.$queryRaw<OrderRow[]>`
-    SELECT "id",
-           "number",
-           "person_id"          AS "personId",
-           "office_id"          AS "officeId",
-           "status",
-           "code",
-           "total_points"       AS "totalPoints",
-           "expires_at"         AS "expiresAt",
-           "spend_transfer_id"  AS "spendTransferId",
-           "refund_transfer_id" AS "refundTransferId"
+    SELECT ${ORDER_COLUMNS}
       FROM xb.orders
      WHERE "id" = ${orderId}::uuid
        FOR UPDATE
@@ -256,9 +337,12 @@ export type PersonOrderRow = {
   id: string;
   number: number;
   status: OrderStatus;
-  code: string;
+  /** Только у заказа бота: заказ, оформленный у стойки, кода не несёт. */
+  code: string | null;
+  /** Есть всегда: водителю читаются только заказы за баллы. */
   totalPoints: number;
-  expiresAt: Date;
+  /** Только у заказа бота. */
+  expiresAt: Date | null;
   issuedAt: Date | null;
   cancelledAt: Date | null;
   cancelReason: OrderCancelReason | null;
@@ -291,7 +375,12 @@ export type ListPersonOrdersInput = {
 };
 
 /**
- * Заказы человека: висящие первыми, дальше свежие вперёд.
+ * Заказы человека за баллы: висящие первыми, дальше свежие вперёд.
+ *
+ * Розничных здесь нет — условием запроса, а не отбором после: это продажа парка, а не операция
+ * программы, и водителю она не показывается нигде (docs/decisions.md → «Заказ оформляет
+ * сотрудник у стойки: за баллы или за розницу»). Заказ за баллы, оформленный у стойки,
+ * здесь есть: баллы с водителя списаны, и он обязан видеть за что.
  *
  * Человек входит в условие всегда, в том числе при поиске одного заказа: чужой заказ
  * отсюда не читается ни при каком идентификаторе, и «свой ли это заказ» отвечает сам
@@ -324,6 +413,7 @@ export const listPersonOrders = async (
       FROM xb.orders AS "order"
       JOIN xb.offices AS office ON office."id" = "order"."office_id"
      WHERE "order"."person_id" = ${input.personId}::uuid
+       AND "order"."payment" = 'points'
        AND (${input.orderId}::uuid IS NULL OR "order"."id" = ${input.orderId}::uuid)
      ORDER BY ("order"."status" <> 'pending'), "order"."created_at" DESC
      LIMIT ${input.limit}
@@ -365,7 +455,10 @@ export type OrderLineRow = {
   productId: string;
   name: string;
   quantity: number;
-  unitPoints: number;
+  /** Цена позиции заказа за баллы. */
+  unitPoints: number | null;
+  /** Цена позиции розничного заказа. */
+  unitRetail: number | null;
   /** Фото товара — текущее, из каталога: у позиции своего нет. */
   photoPath: string | null;
   /** Время правки товара — версия адреса фото (`ProductPhoto`). */
@@ -383,6 +476,7 @@ export const listOrderLines = async (
            product."name",
            item."quantity",
            item."unit_points" AS "unitPoints",
+           item."unit_retail" AS "unitRetail",
            product."photo_path" AS "photoPath",
            product."updated_at" AS "photoUpdatedAt"
       FROM xb.order_items AS item
@@ -395,37 +489,60 @@ export type OfficeOrderRow = DeskDriverColumns & {
   id: string;
   number: number;
   status: OrderStatus;
-  code: string;
+  payment: OrderPayment;
+  channel: OrderChannel;
+  code: string | null;
   officeId: string;
   officeName: string;
-  totalPoints: number;
+  totalPoints: number | null;
+  totalRetail: number | null;
   createdAt: Date;
-  expiresAt: Date;
+  expiresAt: Date | null;
   issuedAt: Date | null;
   cancelledAt: Date | null;
   cancelReason: OrderCancelReason | null;
+  /** Сотрудники, работавшие с заказом, — именем и ролью на сейчас. Пусто — сотрудника не было. */
+  createdByName: string | null;
+  createdByRole: EmployeeRole | null;
+  issuedByName: string | null;
+  issuedByRole: EmployeeRole | null;
+  cancelledByName: string | null;
+  cancelledByRole: EmployeeRole | null;
 };
 
 /**
- * Заказ глазами сотрудника: сам заказ, офис и водитель с позывным и телефоном. Водитель —
- * общим куском `deskDriver.ts`, тем же, что у карточки награды.
+ * Заказ глазами сотрудника: сам заказ, офис, водитель с позывным и телефоном и сотрудники,
+ * которые его оформили, выдали или отменили (issue #294). Водитель — общим куском
+ * `deskDriver.ts`, тем же, что у карточки награды.
  */
 const OFFICE_ORDER_SELECT = Prisma.sql`
   SELECT "order"."id",
          "order"."number",
          "order"."status",
+         "order"."payment",
+         "order"."channel",
          "order"."code",
          "order"."office_id"     AS "officeId",
          office."name"           AS "officeName",
          "order"."total_points"  AS "totalPoints",
+         "order"."total_retail"  AS "totalRetail",
          "order"."created_at"    AS "createdAt",
          "order"."expires_at"    AS "expiresAt",
          "order"."issued_at"     AS "issuedAt",
          "order"."cancelled_at"  AS "cancelledAt",
          "order"."cancel_reason" AS "cancelReason",
+         creator."full_name"     AS "createdByName",
+         creator."role"          AS "createdByRole",
+         issuer."full_name"      AS "issuedByName",
+         issuer."role"           AS "issuedByRole",
+         canceller."full_name"   AS "cancelledByName",
+         canceller."role"        AS "cancelledByRole",
          ${DESK_DRIVER_COLUMNS}
     FROM xb.orders AS "order"
     JOIN xb.offices AS office ON office."id" = "order"."office_id"
+    LEFT JOIN xb.employees AS creator   ON creator."id" = "order"."created_by_employee_id"
+    LEFT JOIN xb.employees AS issuer    ON issuer."id" = "order"."issued_by_employee_id"
+    LEFT JOIN xb.employees AS canceller ON canceller."id" = "order"."cancelled_by_employee_id"
     ${deskDriverJoins(Prisma.sql`"order"."person_id"`)}
 `;
 

@@ -8,7 +8,12 @@
  *
  * Поле крупное и с курсором внутри при открытии: с него начинается каждый второй разговор
  * в офисе, и лишнее нажатие перед первым словом здесь платится на каждом водителе.
+ *
+ * Кроме страницы, где поле не главное: на «Заказах» оно стоит в карточке оформления под полем
+ * кода и забирало бы фокус и прокрутку на себя при каждом открытии страницы (issue #294).
  */
+withDefaults(defineProps<{ autofocus?: boolean }>(), { autofocus: true });
+
 const model = defineModel<string>({ required: true });
 
 const emit = defineEmits<{ submit: [] }>();
@@ -21,7 +26,7 @@ const emit = defineEmits<{ submit: [] }>();
         v-model="model"
         type="search"
         size="large"
-        autofocus
+        :autofocus="autofocus"
         aria-label="Номер удостоверения, телефон или имя"
         placeholder="Номер удостоверения, телефон или имя"
       />

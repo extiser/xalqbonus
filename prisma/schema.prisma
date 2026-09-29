@@ -275,6 +275,30 @@ enum OrderStatus {
   @@schema("xb")
 }
 
+/// Чем оплачен заказ. Способы не смешиваются: доплатить деньгами к баллам и поделить заказ
+/// нельзя (docs/decisions.md → «Заказ оформляет сотрудник у стойки: за баллы или за розницу»).
+enum OrderPayment {
+  /// Баллами по цене в баллах — переводом со счёта водителя в `redemption`.
+  points
+  /// В сумах по розничной цене. Деньги система не принимает, а записывает: касса вне её.
+  retail
+
+  @@map("order_payment")
+  @@schema("xb")
+}
+
+/// Откуда заказ: без этого признака отчёты не различат, сколько программа продаёт сама,
+/// а сколько проходит через стойку.
+enum OrderChannel {
+  /// Водитель оформил в боте: код, резерв на сутки, выдача по коду.
+  bot
+  /// Сотрудник оформил у стойки за водителя: выдан той же операцией, кода и срока нет.
+  desk
+
+  @@map("order_channel")
+  @@schema("xb")
+}
+
 /// Кто отменил заказ. Отмена водителем и сотрудником — один сервис с разной причиной,
 /// просрочку ставит воркер.
 enum OrderCancelReason {
@@ -864,6 +888,7 @@ model Employee {
   pointTransfers  PointTransfer[]
   telegramLinks   TelegramLink[]
   offices         EmployeeOffice[]
+  ordersCreated   Order[]          @relation("order_created_by")
   ordersIssued    Order[]          @relation("order_issued_by")
   ordersCancelled Order[]          @relation("order_cancelled_by")
   stockMovements  StockMovement[]
@@ -1584,16 +1609,23 @@ model StockMovement {
   @@schema("xb")
 }
 
-/// Заказ товара за баллы.
+/// Заказ товара — за баллы или за розницу.
 ///
 /// Заказ — это касса: баллы списываются в момент оформления, а не выдачи, одной
 /// транзакцией вместе с резервом остатка. Выдача переводов не делает вовсе, отмена
 /// возвращает баллы целиком (docs/decisions.md → «Каталог: заказ — это касса, остаток
 /// живёт по офисам»).
 ///
+/// Оформляет его водитель в боте или сотрудник у стойки за водителя. Заказ стойки выдан
+/// той же операцией: кода, срока и резерва на сутки у него нет. За розницу — только у стойки,
+/// и водителю такой заказ не показывается: это продажа парка, а не операция программы
+/// (docs/decisions.md → «Заказ оформляет сотрудник у стойки: за баллы или за розницу»).
+///
 /// Согласованность статуса с полями держится проверками в миграции: у `issued` заполнены
 /// время и сотрудник выдачи, у `cancelled` — время, причина и перевод возврата, автор
-/// отмены есть только у причины `employee`.
+/// отмены есть только у причины `employee`. Так же — способа оплаты и канала с полями:
+/// сумма в баллах и перевод списания ровно у `points`, сумма в сумах ровно у `retail`,
+/// код и срок ровно у `bot`, автор ровно у `desk`.
 model Order {
   id       String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   /// Сквозной номер для людей: «№ 1042» в истории водителя и на стойке. Для ключей
@@ -1605,16 +1637,25 @@ model Order {
   /// до витрины.
   officeId String @map("office_id") @db.Uuid
 
-  status OrderStatus
+  status  OrderStatus
+  payment OrderPayment
+  channel OrderChannel
   /// Пять цифр, которые водитель называет на стойке. Уникальны среди `pending`
-  /// частичным индексом: выданные и отменённые коды освобождаются.
-  code   String
+  /// частичным индексом: выданные и отменённые коды освобождаются. Пусто у заказа стойки:
+  /// водитель стоит перед сотрудником, называть нечего.
+  code    String?
 
-  /// Сумма заказа на момент оформления. Ровно столько списано и ровно столько
-  /// возвращается при отмене.
-  totalPoints Int      @map("total_points")
-  /// Когда заказ перестаёт висеть. Автоотмена — сутки (docs/decisions.md).
-  expiresAt   DateTime @map("expires_at") @db.Timestamptz(6)
+  /// Сумма в баллах на момент оформления. Ровно столько списано и ровно столько
+  /// возвращается при отмене. Только у `points`.
+  totalPoints Int?      @map("total_points")
+  /// Сумма в сумах по розничным ценам на момент оформления. Только у `retail`.
+  totalRetail Int?      @map("total_retail")
+  /// Когда заказ перестаёт висеть. Автоотмена — сутки (docs/decisions.md). Только у `bot`:
+  /// заказ стойки не висит ни минуты.
+  expiresAt   DateTime? @map("expires_at") @db.Timestamptz(6)
+
+  /// Сотрудник, оформивший заказ у стойки. Пуст у заказа водителя.
+  createdByEmployeeId String? @map("created_by_employee_id") @db.Uuid
 
   issuedAt           DateTime? @map("issued_at") @db.Timestamptz(6)
   issuedByEmployeeId String?   @map("issued_by_employee_id") @db.Uuid
@@ -1625,8 +1666,8 @@ model Order {
   /// не было.
   cancelledByEmployeeId String?            @map("cancelled_by_employee_id") @db.Uuid
 
-  /// Перевод списания. Заполнен всегда: заказа без погашения баллов не бывает.
-  spendTransferId  String  @unique @map("spend_transfer_id") @db.Uuid
+  /// Перевод списания. Заполнен ровно у `points`: у розничного заказа баллы не трогаются.
+  spendTransferId  String? @unique @map("spend_transfer_id") @db.Uuid
   /// Перевод возврата. Появляется вместе со статусом `cancelled`.
   refundTransferId String? @unique @map("refund_transfer_id") @db.Uuid
 
@@ -1635,9 +1676,10 @@ model Order {
 
   person              Person         @relation(fields: [personId], references: [id])
   office              Office         @relation(fields: [officeId], references: [id])
+  createdByEmployee   Employee?      @relation("order_created_by", fields: [createdByEmployeeId], references: [id])
   issuedByEmployee    Employee?      @relation("order_issued_by", fields: [issuedByEmployeeId], references: [id])
   cancelledByEmployee Employee?      @relation("order_cancelled_by", fields: [cancelledByEmployeeId], references: [id])
-  spendTransfer       PointTransfer  @relation("order_spend_transfer", fields: [spendTransferId], references: [id])
+  spendTransfer       PointTransfer? @relation("order_spend_transfer", fields: [spendTransferId], references: [id], onDelete: Restrict)
   refundTransfer      PointTransfer? @relation("order_refund_transfer", fields: [refundTransferId], references: [id])
 
   items     OrderItem[]
@@ -1654,13 +1696,20 @@ model Order {
 
 /// Позиция заказа. Помнит цену на момент оформления: цена товара меняется, а заказ
 /// обязан помнить, за сколько был оформлен (docs/decisions.md).
+///
+/// Цена одна из двух — в баллах или в сумах, проверкой в миграции. Какая именно, решает способ
+/// оплаты заказа, а это другая таблица, и проверкой строки его не достать: согласие держит
+/// единственный путь вставки — сервисы оформления — и тесты ядра.
 model OrderItem {
   /// Журнальная таблица, на которую никто не ссылается, — bigint identity вместо uuid.
   id         BigInt @id @default(autoincrement())
   orderId    String @map("order_id") @db.Uuid
   productId  String @map("product_id") @db.Uuid
   quantity   Int
-  unitPoints Int    @map("unit_points")
+  /// Цена в баллах. Только у позиции заказа `points`.
+  unitPoints Int?   @map("unit_points")
+  /// Розничная цена в сумах. Только у позиции заказа `retail`.
+  unitRetail Int?   @map("unit_retail")
 
   order   Order   @relation(fields: [orderId], references: [id])
   product Product @relation(fields: [productId], references: [id])

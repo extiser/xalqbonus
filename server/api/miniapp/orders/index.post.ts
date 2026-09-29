@@ -4,10 +4,11 @@ import {
   InvalidOrderQuantityError,
 } from '#server/services/orders/errors';
 import { explainOrderFailure } from '#server/services/orders/explainOrderFailure';
-import { placeOrder, type PlaceOrderItem } from '#server/services/orders/placeOrder';
+import { placeOrder } from '#server/services/orders/placeOrder';
 import { readMemberOrder } from '#server/services/orders/readMemberOrder';
 import { denyMemberOrder } from '#server/utils/memberOrderDenial';
 import { requireMember } from '#server/utils/miniAppMember';
+import { readOrderItemsBody } from '#server/utils/orderItemsBody';
 import { readUuid } from '#server/utils/query';
 import type { MiniAppOrderResponse, MiniAppPlaceOrderRequestBody } from '#shared/types/miniapp';
 
@@ -24,33 +25,11 @@ import type { MiniAppOrderResponse, MiniAppPlaceOrderRequestBody } from '#shared
 const badRequest = (message: string) =>
   createError({ statusCode: 400, statusMessage: 'Bad Request', message });
 
-/** Позиции из тела. Форму проверяем здесь, смысл — количество, дубли, пустоту — ядро. */
-const readItems = (value: unknown): PlaceOrderItem[] | null => {
-  if (!Array.isArray(value)) {
-    return null;
-  }
-
-  const items: PlaceOrderItem[] = [];
-
-  for (const entry of value as unknown[]) {
-    const record = typeof entry === 'object' && entry !== null ? (entry as Record<string, unknown>) : {};
-    const productId = readUuid(record.productId);
-
-    if (!productId || typeof record.quantity !== 'number') {
-      return null;
-    }
-
-    items.push({ productId, quantity: record.quantity });
-  }
-
-  return items;
-};
-
 export default defineEventHandler(async (event): Promise<MiniAppOrderResponse> => {
   const driver = await requireMember(event);
   const body = await readBody<Partial<MiniAppPlaceOrderRequestBody> | null>(event);
   const officeId = readUuid(body?.officeId);
-  const items = readItems(body?.items);
+  const items = readOrderItemsBody(body?.items);
 
   if (!officeId || !items) {
     throw badRequest('нужны officeId и позиции { productId, quantity }');

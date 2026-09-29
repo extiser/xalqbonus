@@ -5,7 +5,8 @@ import {
   type OfficeOrderRow,
   type OrderLineRow,
 } from '#server/repositories/orders';
-import type { OfficeOrder } from '#shared/types/orders';
+import type { EmployeeRole } from '#server/generated/prisma/enums';
+import type { OfficeOrder, OrderEmployee } from '#shared/types/orders';
 
 /**
  * Во что превращается заказ на экране сотрудника.
@@ -15,10 +16,16 @@ import type { OfficeOrder } from '#shared/types/orders';
  * и отмена.
  */
 
+/** Сотрудник из пары колонок. Пусто — сотрудника у этого шага не было. */
+const orderEmployee = (name: string | null, role: EmployeeRole | null): OrderEmployee | null =>
+  name !== null && role !== null ? { name, role } : null;
+
 export const describeOfficeOrder = (row: OfficeOrderRow, lines: OrderLineRow[]): OfficeOrder => ({
   orderId: row.id,
   number: row.number,
   status: row.status,
+  payment: row.payment,
+  channel: row.channel,
   // Код выданного и отменённого освобождён частичным индексом и может уже принадлежать
   // чужому висящему заказу — показывать его незачем.
   code: row.status === 'pending' ? row.code : null,
@@ -32,15 +39,20 @@ export const describeOfficeOrder = (row: OfficeOrderRow, lines: OrderLineRow[]):
     name: line.name,
     quantity: line.quantity,
     unitPoints: line.unitPoints,
+    unitRetail: line.unitRetail,
     photoPath: line.photoPath,
     photoUpdatedAt: line.photoUpdatedAt.toISOString(),
   })),
   totalPoints: row.totalPoints,
+  totalRetail: row.totalRetail,
   createdAt: row.createdAt.toISOString(),
-  expiresAt: row.expiresAt.toISOString(),
+  expiresAt: row.expiresAt?.toISOString() ?? null,
   issuedAt: row.issuedAt?.toISOString() ?? null,
   cancelledAt: row.cancelledAt?.toISOString() ?? null,
   cancelReason: row.cancelReason,
+  createdBy: orderEmployee(row.createdByName, row.createdByRole),
+  issuedBy: orderEmployee(row.issuedByName, row.issuedByRole),
+  cancelledBy: orderEmployee(row.cancelledByName, row.cancelledByRole),
 });
 
 /** Один заказ целиком, с позициями. `null` — такого заказа нет. */

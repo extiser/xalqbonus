@@ -255,6 +255,49 @@ export const listOfficeShowcase = async (
      ORDER BY product."name"
   `;
 
+export type DeskProductRow = {
+  productId: string;
+  name: string;
+  /** Пусто у приза без цены в баллах: за баллы его не продать. */
+  pricePoints: number | null;
+  /** Заполнена у любого опубликованного; ноль — за розницу не продаётся. */
+  priceRetail: number;
+  /** Свободный остаток офиса. */
+  available: number;
+};
+
+/**
+ * Товары офиса, которые сотрудник может продать у стойки (issue #294): лежат на полке и живые.
+ *
+ * Условия — те же, что проверяет `placeDeskOrder`: опубликованный, не архивный, своей стороны
+ * демо, со свободным остатком. Скрытые с витрины здесь есть — признак прячет товар от водителя
+ * в Mini App, а на полке офиса он лежит, как любой другой. Цена по способу оплаты отбирается
+ * сервисом: список один на оба способа, экран показывает нужную.
+ *
+ * `officeIsDemo` — сторона офиса: живому офису демо-товары не продаются, демо-офису живые —
+ * продаются, как демо-водителю на витрине (issue #212).
+ */
+export const listDeskProducts = async (
+  officeId: string,
+  officeIsDemo: boolean,
+  client: Prisma.TransactionClient = db,
+): Promise<DeskProductRow[]> =>
+  client.$queryRaw<DeskProductRow[]>`
+    SELECT product."id"           AS "productId",
+           product."name",
+           product."price_points" AS "pricePoints",
+           product."price_retail" AS "priceRetail",
+           stock."on_hand"        AS "available"
+      FROM xb.office_stock AS stock
+      JOIN xb.products AS product ON product."id" = stock."product_id"
+     WHERE stock."office_id" = ${officeId}::uuid
+       AND stock."on_hand" > 0
+       AND product."published_at" IS NOT NULL
+       AND product."archived_at" IS NULL
+       AND (${officeIsDemo}::boolean OR NOT product."is_demo")
+     ORDER BY product."name"
+  `;
+
 export type CatalogProductRow = {
   productId: string;
   name: string;

@@ -261,6 +261,22 @@ const ORDER_STATUS_TONES: Record<OfficeOrder['status'], 'ok' | 'warn' | 'muted'>
 export const orderStatusTone = (status: OfficeOrder['status']): 'ok' | 'warn' | 'muted' =>
   ORDER_STATUS_TONES[status];
 
+const ORDER_PAYMENT_LABELS: Record<OfficeOrder['payment'], string> = {
+  points: 'за баллы',
+  retail: 'розница',
+};
+
+export const orderPaymentLabel = (payment: OfficeOrder['payment']): string =>
+  ORDER_PAYMENT_LABELS[payment];
+
+const ORDER_CHANNEL_LABELS: Record<OfficeOrder['channel'], string> = {
+  bot: 'водитель в боте',
+  desk: 'у стойки',
+};
+
+export const orderChannelLabel = (channel: OfficeOrder['channel']): string =>
+  ORDER_CHANNEL_LABELS[channel];
+
 const ORDER_CANCEL_REASON_LABELS: Record<NonNullable<OfficeOrder['cancelReason']>, string> = {
   driver: 'отменил водитель',
   employee: 'отменил сотрудник',

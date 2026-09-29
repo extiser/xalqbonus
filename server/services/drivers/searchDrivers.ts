@@ -69,6 +69,7 @@ export const searchDrivers = async (
         callsigns: row.callsigns,
         workStatuses: row.workStatuses,
         profilesCount: row.profilesCount,
+        fired: row.fired,
         isMember: row.isMember,
         isDemo: row.isDemo,
         // Пусто, а не ноль: «счёта нет» и «на счету ноль» — разные вещи, и подменять

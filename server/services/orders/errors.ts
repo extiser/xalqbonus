@@ -139,3 +139,42 @@ export class OrderNotPendingError extends OrdersError {
     super(`заказ ${orderId} уже не висит: ${status}`);
   }
 }
+
+/**
+ * Водителя для заказа стойки нет: такого человека нет в реестре, он спрятан или он чужой
+ * стороны демо. Одним отказом, как офис чужой стороны: у стойки объяснять нечего (issue #212).
+ */
+export class DriverUnavailableError extends OrdersError {
+  constructor(public readonly personId: string) {
+    super(`водителю ${personId} нельзя оформить заказ`);
+  }
+}
+
+/**
+ * Водитель уволен — все его профили в парке `fired`. У стойки он виден со статусом «Уволен»,
+ * чтобы было видно, с кем разговор, но заказ ему не оформляется (docs/decisions.md → «Заказ
+ * оформляет сотрудник у стойки: за баллы или за розницу»).
+ */
+export class DriverFiredError extends OrdersError {
+  constructor(public readonly personId: string) {
+    super(`водитель ${personId} уволен`);
+  }
+}
+
+/** За баллы — только тому, у кого есть счёт водителя: списывать больше не с чего. */
+export class DriverWithoutAccountError extends OrdersError {
+  constructor(public readonly personId: string) {
+    super(`у водителя ${personId} нет счёта — за баллы оформить нельзя`);
+  }
+}
+
+/**
+ * Товар не продаётся за розницу: розничной цены у него нет. У опубликованного товара колонка
+ * заполнена всегда (`products_published_complete_check`), поэтому «нет» здесь — ноль: продажа
+ * за ноль сумов — не продажа.
+ */
+export class ProductNotForRetailError extends OrdersError {
+  constructor(public readonly productId: string) {
+    super(`товар ${productId} не продаётся за розницу`);
+  }
+}

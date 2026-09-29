@@ -45,12 +45,28 @@ const formatMoment = (moment: Date): string => `${formatCalendarDate(moment)}, $
 const stateHint = (row: PersonOrderRow, language: Language): string => {
   switch (row.status) {
     case 'pending':
-      return plainText('order_expires_short', language, { moment: formatShortMoment(row.expiresAt) });
+      // Срок есть у любого висящего: висит только заказ бота (`orders_channel_fields_check`).
+      return row.expiresAt
+        ? plainText('order_expires_short', language, { moment: formatShortMoment(row.expiresAt) })
+        : '';
     case 'issued':
       return row.issuedAt ? formatMoment(row.issuedAt) : '';
     case 'cancelled':
       return row.cancelledAt ? formatMoment(row.cancelledAt) : '';
   }
+};
+
+/**
+ * Цена позиции в баллах. Водителю читаются только заказы за баллы, и у их позиций она есть —
+ * её пишет оформление. Пусто здесь означало бы розничную позицию в заказе за баллы: показать
+ * вместо неё ноль значило бы соврать водителю о цене.
+ */
+const linePoints = (line: OrderLineRow): number => {
+  if (line.unitPoints === null) {
+    throw new Error(`позиция заказа ${line.orderId} за баллы без цены в баллах`);
+  }
+
+  return line.unitPoints;
 };
 
 export const describeMemberOrder = (
@@ -71,7 +87,7 @@ export const describeMemberOrder = (
       productId: line.productId,
       name: line.name,
       quantity: line.quantity,
-      unitPoints: line.unitPoints,
+      unitPoints: linePoints(line),
       photoPath: line.photoPath,
       photoUpdatedAt: line.photoUpdatedAt.toISOString(),
     })),
