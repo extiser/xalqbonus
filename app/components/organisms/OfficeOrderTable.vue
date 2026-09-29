@@ -14,7 +14,10 @@ import { formatOrderTotal } from '~/utils/orderAmount';
  * Заказы офиса страницей: номер, статус, водитель, способ оплаты, откуда заказ, сумма и когда
  * оформлен. Сумма — в валюте заказа: баллы или сумы (issue #294).
  *
- * Висящие стоят первыми — порядок задаёт сервер. Номер открывает карточку с действиями.
+ * Висящие стоят первыми — порядок задаёт сервер. Номер раскрывает карточку с действиями прямо
+ * в таблице, строкой под нажатой на всю ширину; повторное нажатие сворачивает. Какая строка
+ * раскрыта, решает вызывающий (`expandedOrderId`), что в ней — тоже, слотом `expanded`: таблица
+ * не знает ни о выдаче, ни об отмене.
  * Три состояния нарисованы, а не подразумеваются (docs/frontend.md → «Три состояния
  * обязательны»).
  *
@@ -25,9 +28,16 @@ defineProps<{
   state: LoadState;
   data: OfficeOrdersResponse | null;
   errorText?: string;
+  /** Раскрытая строка. Пусто — все свёрнуты. */
+  expandedOrderId?: string | null;
 }>();
 
-const emit = defineEmits<{ open: [order: OfficeOrder]; page: [offset: number] }>();
+const emit = defineEmits<{ toggle: [order: OfficeOrder]; page: [offset: number] }>();
+
+defineSlots<{ expanded(props: { order: OfficeOrder }): unknown }>();
+
+/** Колонок в строке — раскрытая карточка занимает их все. */
+const COLUMN_COUNT = 7;
 </script>
 
 <template>
@@ -58,31 +68,39 @@ const emit = defineEmits<{ open: [order: OfficeOrder]; page: [offset: number] }>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="order in data.orders" :key="order.orderId" class="border-t border-slate-200">
-              <td class="py-2 pr-4">
-                <button
-                  type="button"
-                  class="font-semibold text-slate-900 tabular-nums underline underline-offset-2 hover:text-slate-600"
-                  @click="emit('open', order)"
-                >
-                  № {{ order.number }}
-                </button>
-              </td>
-              <td class="py-2 pr-4">
-                <AtomsStatusBadge
-                  :tone="orderStatusTone(order.status)"
-                  :label="orderStatusLabel(order.status)"
-                />
-              </td>
-              <td class="py-2 pr-4">
-                {{ order.driverName ?? '—' }}
-                <span v-if="order.callsign" class="text-slate-500"> · {{ order.callsign }}</span>
-              </td>
-              <td class="py-2 pr-4">{{ orderPaymentLabel(order.payment) }}</td>
-              <td class="py-2 pr-4">{{ orderChannelLabel(order.channel) }}</td>
-              <td class="py-2 pr-4 text-right whitespace-nowrap tabular-nums">{{ formatOrderTotal(order) }}</td>
-              <td class="py-2 whitespace-nowrap tabular-nums">{{ formatDate(order.createdAt) }}</td>
-            </tr>
+            <template v-for="order in data.orders" :key="order.orderId">
+              <tr class="border-t border-slate-200">
+                <td class="py-2 pr-4">
+                  <button
+                    type="button"
+                    class="font-semibold text-slate-900 tabular-nums underline underline-offset-2 hover:text-slate-600"
+                    :aria-expanded="expandedOrderId === order.orderId"
+                    @click="emit('toggle', order)"
+                  >
+                    № {{ order.number }}
+                  </button>
+                </td>
+                <td class="py-2 pr-4">
+                  <AtomsStatusBadge
+                    :tone="orderStatusTone(order.status)"
+                    :label="orderStatusLabel(order.status)"
+                  />
+                </td>
+                <td class="py-2 pr-4">
+                  {{ order.driverName ?? '—' }}
+                  <span v-if="order.callsign" class="text-slate-500"> · {{ order.callsign }}</span>
+                </td>
+                <td class="py-2 pr-4">{{ orderPaymentLabel(order.payment) }}</td>
+                <td class="py-2 pr-4">{{ orderChannelLabel(order.channel) }}</td>
+                <td class="py-2 pr-4 text-right whitespace-nowrap tabular-nums">{{ formatOrderTotal(order) }}</td>
+                <td class="py-2 whitespace-nowrap tabular-nums">{{ formatDate(order.createdAt) }}</td>
+              </tr>
+              <tr v-if="expandedOrderId === order.orderId">
+                <td :colspan="COLUMN_COUNT" class="pb-4">
+                  <slot name="expanded" :order="order" />
+                </td>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>

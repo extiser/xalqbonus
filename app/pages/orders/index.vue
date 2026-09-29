@@ -5,11 +5,14 @@ import { useOfficeDesk } from '~/composables/useOfficeDesk';
 import { toLoadState } from '~/utils/loadState';
 import { failureCode, failureMessage } from '~/utils/requestError';
 import type { SelectOption } from '~/types/selectOption';
-import type { OfficeOrdersResponse } from '#shared/types/orders';
+import type { OfficeOrder, OfficeOrdersResponse } from '#shared/types/orders';
 
 /**
  * Раздел «Заказы»: заказы офиса, выдача по коду и отмена — для всех ролей. Поле кода одно
  * на заказы и награды (issue #172): найденная награда открывается своей карточкой.
+ *
+ * Номер в списке раскрывает карточку заказа прямо в таблице, строкой под нажатой; место под
+ * «Выдать по коду» — только для найденного по коду.
  *
  * Здесь же — оформление заказа у стойки за водителя, за баллы или за розницу (issue #294):
  * карточкой между «Выдать по коду» и списком, в выбранном офисе, если он не в архиве.
@@ -31,6 +34,40 @@ const offset = ref(0);
 
 const desk = useOfficeDesk(() => ({}));
 const deskOrder = useDeskOrder();
+
+/**
+ * Стойка раскрытой строки списка — своя, отдельно от поиска по коду: у найденного по коду
+ * и у раскрытого в таблице свои места, ошибки и нажатия. Что раскрыто, держит страница
+ * идентификатором, а сам заказ берёт из списка: после выдачи или отмены список перечитывается,
+ * и раскрытая строка показывает новый статус.
+ */
+const rowDesk = useOfficeDesk(() => ({}));
+const expandedOrderId = ref<string | null>(null);
+
+const expandedOrder = computed(
+  () => data.value?.orders.find((order) => order.orderId === expandedOrderId.value) ?? null,
+);
+
+const collapseOrder = (): void => {
+  expandedOrderId.value = null;
+  rowDesk.close();
+};
+
+/** Нажатие на номер: тот же — свернуть, другой — раскрыть его вместо прежнего. */
+const toggleOrder = (order: OfficeOrder): void => {
+  if (rowDesk.acting.value) {
+    return;
+  }
+
+  if (expandedOrderId.value === order.orderId) {
+    collapseOrder();
+
+    return;
+  }
+
+  rowDesk.close();
+  expandedOrderId.value = order.orderId;
+};
 const code = ref('');
 
 const {
@@ -63,6 +100,7 @@ const officeId = computed({
     selectedOfficeId.value = value;
     offset.value = 0;
     desk.reset();
+    collapseOrder();
   },
 });
 
@@ -90,6 +128,7 @@ const statusFilter = computed({
   set: (value: string) => {
     selectedStatus.value = value;
     offset.value = 0;
+    collapseOrder();
   },
 });
 
@@ -132,6 +171,28 @@ const cancel = async (): Promise<void> => {
   }
 
   await refresh();
+};
+
+/**
+ * Выдача и отмена из раскрытой строки. Строка остаётся раскрытой: после перечитывания списка
+ * карточка показывает новый статус. Перечитывается и при отказе — строка могла устареть.
+ */
+const actOnRow = async (action: 'issue' | 'cancel'): Promise<void> => {
+  const order = expandedOrder.value;
+
+  if (!order || rowDesk.acting.value) {
+    return;
+  }
+
+  rowDesk.open({ kind: 'order', order });
+  await (action === 'issue' ? rowDesk.issue() : rowDesk.cancel());
+  await refresh();
+};
+
+/** Другая страница списка — раскрытой строки на ней нет. */
+const changePage = (value: number): void => {
+  offset.value = value;
+  collapseOrder();
 };
 </script>
 
@@ -225,9 +286,21 @@ const cancel = async (): Promise<void> => {
         :state="state"
         :data="data ?? null"
         :error-text="listErrorText"
-        @open="desk.open({ kind: 'order', order: $event })"
-        @page="offset = $event"
-      />
+        :expanded-order-id="expandedOrderId"
+        @toggle="toggleOrder"
+        @page="changePage"
+      >
+        <template #expanded="{ order }">
+          <OrganismsOfficeOrderCard
+            :order="order"
+            :acting="rowDesk.acting.value"
+            :error="rowDesk.actionError.value"
+            @issue="actOnRow('issue')"
+            @cancel="actOnRow('cancel')"
+            @close="collapseOrder"
+          />
+        </template>
+      </OrganismsOfficeOrderTable>
     </template>
   </div>
 </template>
