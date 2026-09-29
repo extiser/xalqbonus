@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useDeskOrder } from '~/composables/useDeskOrder';
 import { useOfficeDesk } from '~/composables/useOfficeDesk';
 import { toLoadState } from '~/utils/loadState';
@@ -12,7 +12,8 @@ import type { OfficeOrdersResponse } from '#shared/types/orders';
  * на заказы и награды (issue #172): найденная награда открывается своей карточкой.
  *
  * Здесь же — оформление заказа у стойки за водителя, за баллы или за розницу (issue #294):
- * в выбранном офисе, если он не в архиве. Оформленный заказ уже выдан и открывается карточкой.
+ * карточкой между «Выдать по коду» и списком, в выбранном офисе, если он не в архиве.
+ * Оформленный заказ уже выдан: карточка возвращается к пустому поиску, список перечитывается.
  *
  * Те же ручки и те же действия, что у стойки в Mini App: здесь за столом, под cookie
  * (docs/decisions.md → «Доступ определяется ролью, а не дверью»). Менеджеру в выборе офиса
@@ -62,31 +63,24 @@ const officeId = computed({
     selectedOfficeId.value = value;
     offset.value = 0;
     desk.reset();
-    // Товары и остатки у другого офиса другие: набранное в прежнем здесь не годится.
-    deskOrder.close();
   },
 });
 
 const selectedOffice = computed(() => data.value?.offices.find((office) => office.officeId === officeId.value) ?? null);
 
-/** Архивный офис заказов не принимает: оформлять в нём нечего. */
+/**
+ * Оформление открыто тем же, кому открыта страница, — `ORDER_ROLES`, — в офисах из выбора.
+ * Архивный офис заказов не принимает: карточки в нём нет.
+ */
 const canPlaceOrder = computed(() => selectedOffice.value !== null && !selectedOffice.value.archived);
 
-const openDeskOrder = (): void => {
-  if (!canPlaceOrder.value) {
-    return;
-  }
+// Товары и остатки у другого офиса другие: при смене офиса карточка — к пустому поиску.
+// Сразу при открытии тоже: офис, выбранный сервером, узнаётся только из ответа списка.
+watch(officeId, (value) => deskOrder.reset(value), { immediate: true });
 
-  desk.close();
-  deskOrder.open(officeId.value);
-};
-
-/** Оформленный заказ уже выдан — показываем его карточкой и перечитываем список. */
+/** Оформленный заказ уже выдан: карточка сама к пустому поиску, список перечитывается. */
 const placeDeskOrder = async (): Promise<void> => {
-  const order = await deskOrder.submit();
-
-  if (order) {
-    desk.open({ kind: 'order', order });
+  if (await deskOrder.submit()) {
     await refresh();
   }
 };
@@ -167,43 +161,7 @@ const cancel = async (): Promise<void> => {
             <option value="">Все статусы</option>
           </AtomsSelectInput>
         </div>
-        <AtomsActionButton
-          v-if="canPlaceOrder && !deskOrder.isOpen.value"
-          label="Оформить заказ"
-          tone="primary"
-          @click="openDeskOrder"
-        />
       </div>
-
-      <OrganismsDeskOrderForm
-        v-if="deskOrder.isOpen.value && selectedOffice"
-        :office-name="selectedOffice.name"
-        :search-state="deskOrder.searchState.value"
-        :search-rows="deskOrder.searchRows.value"
-        :customer="deskOrder.customer.value"
-        :payment="deskOrder.payment.value"
-        :products-state="deskOrder.productsState.value"
-        :products="deskOrder.offered.value"
-        :quantities="deskOrder.quantities.value"
-        :lines="deskOrder.lines.value"
-        :total="deskOrder.total.value"
-        :over-stock="deskOrder.overStock.value"
-        :over-balance="deskOrder.overBalance.value"
-        :can-submit="deskOrder.canSubmit.value"
-        :confirming="deskOrder.confirming.value"
-        :submitting="deskOrder.submitting.value"
-        :error="deskOrder.error.value"
-        @search="deskOrder.search"
-        @pick="deskOrder.pick"
-        @clear-customer="deskOrder.clearCustomer"
-        @payment="deskOrder.choosePayment"
-        @quantity="deskOrder.setQuantity"
-        @confirm="deskOrder.confirming.value = true"
-        @unconfirm="deskOrder.confirming.value = false"
-        @submit="placeDeskOrder"
-        @retry-products="deskOrder.loadProducts"
-        @close="deskOrder.close"
-      />
 
       <MoleculesOrderCodeForm
         v-model="code"
@@ -230,6 +188,37 @@ const cancel = async (): Promise<void> => {
         :error="desk.actionError.value"
         @issue="issue"
         @close="desk.close()"
+      />
+
+      <OrganismsDeskOrderForm
+        v-if="canPlaceOrder && selectedOffice"
+        :office-name="selectedOffice.name"
+        v-model:query="deskOrder.query.value"
+        :search-state="deskOrder.searchState.value"
+        :search-rows="deskOrder.searchRows.value"
+        :customer="deskOrder.customer.value"
+        :payment="deskOrder.payment.value"
+        :products-state="deskOrder.productsState.value"
+        :products="deskOrder.offered.value"
+        :quantities="deskOrder.quantities.value"
+        :lines="deskOrder.lines.value"
+        :total="deskOrder.total.value"
+        :over-stock="deskOrder.overStock.value"
+        :over-balance="deskOrder.overBalance.value"
+        :can-submit="deskOrder.canSubmit.value"
+        :confirming="deskOrder.confirming.value"
+        :submitting="deskOrder.submitting.value"
+        :error="deskOrder.error.value"
+        :notice="deskOrder.notice.value"
+        @search="deskOrder.search"
+        @pick="deskOrder.pick"
+        @reset="deskOrder.reset()"
+        @payment="deskOrder.choosePayment"
+        @quantity="deskOrder.setQuantity"
+        @confirm="deskOrder.confirming.value = true"
+        @unconfirm="deskOrder.confirming.value = false"
+        @submit="placeDeskOrder"
+        @retry-products="deskOrder.loadProducts"
       />
 
       <OrganismsOfficeOrderTable

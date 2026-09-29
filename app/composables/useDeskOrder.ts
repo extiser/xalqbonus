@@ -20,6 +20,11 @@ import type {
  * не ходит (docs/frontend.md → «Данные в компоненты не ходят»), а страница «Заказы» и так
  * держит список, стойку по коду и выбор офиса.
  *
+ * Карточка на странице видна всегда, как «Выдать по коду», и закрывать её некуда. Вместо
+ * закрытия — сброс к пустому поиску: кнопкой «Сбросить», сменой офиса и сам после удачного
+ * оформления, со строкой итога над поиском. Товары офиса читаются, когда выбран водитель: без
+ * него они не нужны, а офис до этого может смениться не раз.
+ *
  * Что можно, решает сервер: уволенный, водитель без счёта за баллы, товар без розничной цены —
  * всё это он отказывает своим кодом. Экран по тем же признакам не даёт выбрать недопустимое,
  * чтобы у стойки не нажимали кнопку ради отказа.
@@ -42,9 +47,9 @@ const priceFor = (product: DeskProduct, payment: DeskPayment): number | null =>
   payment === 'points' ? product.pricePoints : product.priceRetail;
 
 export const useDeskOrder = () => {
-  const isOpen = ref(false);
   const officeId = ref('');
 
+  const query = ref('');
   const searchState = ref<LoadState | null>(null);
   const searchRows = ref<DriverSearchRow[]>([]);
 
@@ -59,6 +64,8 @@ export const useDeskOrder = () => {
   const confirming = ref(false);
   const submitting = ref(false);
   const error = ref<string | null>(null);
+  /** Строка итога прошлого оформления: «Заказ № N оформлен и выдан». */
+  const notice = ref<string | null>(null);
 
   const loadProducts = async (): Promise<void> => {
     productsState.value = 'loading';
@@ -76,37 +83,46 @@ export const useDeskOrder = () => {
     }
   };
 
-  const open = (forOfficeId: string): void => {
-    officeId.value = forOfficeId;
+  /** Пустой поиск: ни водителя, ни способа, ни набранного. Строка итога — отдельно. */
+  const clear = (): void => {
+    query.value = '';
     searchState.value = null;
     searchRows.value = [];
     customer.value = null;
     payment.value = null;
+    products.value = [];
+    productsState.value = 'loading';
     quantities.value = {};
     confirming.value = false;
     error.value = null;
-    isOpen.value = true;
-    void loadProducts();
   };
 
-  const close = (): void => {
+  /**
+   * Карточка к пустому поиску — кнопкой «Сбросить» или сменой офиса: товары и остатки у другого
+   * офиса другие, и набранное в прежнем там не годится. Во время запроса не сбрасывается:
+   * ответ пришёл бы в карточку, которая уже про другое.
+   */
+  const reset = (forOfficeId: string = officeId.value): void => {
     if (submitting.value) {
       return;
     }
 
-    isOpen.value = false;
+    officeId.value = forOfficeId;
+    notice.value = null;
+    clear();
   };
 
-  const search = async (query: string): Promise<void> => {
-    if (query.trim() === '') {
+  const search = async (): Promise<void> => {
+    if (query.value.trim() === '') {
       return;
     }
 
+    notice.value = null;
     searchState.value = 'loading';
 
     try {
       const result = await $fetch<DriverSearchResponse>('/api/drivers', {
-        query: { query, limit: SEARCH_LIMIT, offset: 0 },
+        query: { query: query.value, limit: SEARCH_LIMIT, offset: 0 },
       });
 
       searchRows.value = result.rows;
@@ -138,14 +154,7 @@ export const useDeskOrder = () => {
     quantities.value = {};
     confirming.value = false;
     error.value = null;
-  };
-
-  const clearCustomer = (): void => {
-    customer.value = null;
-    payment.value = null;
-    quantities.value = {};
-    confirming.value = false;
-    error.value = null;
+    void loadProducts();
   };
 
   const choosePayment = (value: DeskPayment): void => {
@@ -214,7 +223,8 @@ export const useDeskOrder = () => {
 
   /**
    * Оформляет. Повторное нажатие во время запроса ничего не шлёт: второй заказ здесь неотличим
-   * от ошибки кода. Возвращает оформленный заказ; `null` — отказ, текст уже на экране.
+   * от ошибки кода. Удачно — карточка сама к пустому поиску, над ним строка итога: следующий
+   * водитель уже у стойки. Возвращает оформленный заказ; `null` — отказ, текст уже на экране.
    */
   const submit = async (): Promise<OfficeOrder | null> => {
     if (submitting.value || !canSubmit.value || customer.value === null || payment.value === null) {
@@ -233,7 +243,8 @@ export const useDeskOrder = () => {
       };
       const response = await $fetch<OfficeOrderResponse>('/api/orders', { method: 'POST', body });
 
-      isOpen.value = false;
+      clear();
+      notice.value = `Заказ № ${response.order.number} оформлен и выдан`;
 
       return response.order;
     } catch (failure) {
@@ -251,7 +262,7 @@ export const useDeskOrder = () => {
   };
 
   return {
-    isOpen,
+    query,
     searchState,
     searchRows,
     customer,
@@ -267,11 +278,10 @@ export const useDeskOrder = () => {
     confirming,
     submitting,
     error,
-    open,
-    close,
+    notice,
+    reset,
     search,
     pick,
-    clearCustomer,
     choosePayment,
     setQuantity,
     loadProducts,

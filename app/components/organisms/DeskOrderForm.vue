@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 import type { DeskCustomer, DeskOfferedProduct } from '~/types/deskOrder';
 import type { LoadState } from '~/types/loadState';
 import type { OrderLineListItem } from '~/types/orderLineList';
@@ -13,6 +13,10 @@ import type { DeskOrderRequestBody } from '#shared/types/orders';
  *
  * Заказ выдаётся той же операцией, что оформлен: кода и срока у него нет, товар уходит
  * с полки сразу. Поэтому подтверждение — отдельным нажатием, как у выдачи по коду.
+ *
+ * Карточка на странице всегда, как «Выдать по коду», и закрывать её некуда: после выбора
+ * водителя есть «Сбросить» — назад к пустому поиску. Туда же карточка возвращается сама после
+ * удачного оформления, и над поиском — строка итога (`notice`).
  *
  * Недопустимое экран не даёт выбрать, но решает сервер: уволенный виден со статусом «Уволен»
  * и без кнопки выбора, у водителя без счёта оплата баллами погашена, товар без цены способа
@@ -38,22 +42,24 @@ const props = defineProps<{
   confirming: boolean;
   submitting: boolean;
   error: string | null;
+  /** Итог прошлого оформления: «Заказ № N оформлен и выдан». */
+  notice: string | null;
 }>();
 
+/** Строка поиска водителя — у вызывающего: сброс обязан её очищать. */
+const query = defineModel<string>('query', { required: true });
+
 const emit = defineEmits<{
-  search: [query: string];
+  search: [];
   pick: [row: DriverSearchRow];
-  clearCustomer: [];
+  reset: [];
   payment: [payment: Payment];
   quantity: [productId: string, value: string];
   confirm: [];
   unconfirm: [];
   submit: [];
   retryProducts: [];
-  close: [];
 }>();
-
-const query = ref('');
 
 const rowName = (row: DriverSearchRow): string =>
   [row.lastName, row.firstName, row.middleName].filter((part): part is string => Boolean(part)).join(' ') ||
@@ -74,9 +80,11 @@ const summary = computed(() => `${formatNumber(props.total)} ${unit.value}`);
 <template>
   <MoleculesSectionPanel
     title="Оформить заказ"
-    :note="`${officeName}. Заказ выдаётся сразу: кода нет, товар уходит с полки этой же операцией.`"
+    :note="`Офис «${officeName}». Водитель у стойки: найдите его, выберите оплату и товары — заказ выдаётся сразу, без кода.`"
   >
     <div class="space-y-6">
+      <p v-if="notice" class="text-sm font-medium text-emerald-700">{{ notice }}</p>
+
       <!-- Шаг 1. Водитель -->
       <div class="space-y-2">
         <h3 class="text-sm font-semibold text-slate-900">Водитель</h3>
@@ -92,11 +100,10 @@ const summary = computed(() => `${formatNumber(props.total)} ${unit.value}`);
           <span class="text-sm text-slate-500 tabular-nums">
             {{ customer.balance === null ? 'счёта нет' : `${formatNumber(customer.balance)} баллов` }}
           </span>
-          <AtomsActionButton label="Другой водитель" :disabled="submitting" @click="emit('clearCustomer')" />
         </div>
 
         <div v-else class="space-y-2">
-          <MoleculesDriverSearchForm v-model="query" @submit="emit('search', query)" />
+          <MoleculesDriverSearchForm v-model="query" :autofocus="false" @submit="emit('search')" />
           <MoleculesStateNotice v-if="searchState === 'loading'" state="loading" message="Ищем…" />
           <MoleculesStateNotice
             v-else-if="searchState === 'error'"
@@ -211,7 +218,7 @@ const summary = computed(() => `${formatNumber(props.total)} ${unit.value}`);
 
       <p v-if="error" class="text-sm text-red-700">{{ error }}</p>
 
-      <div class="flex flex-wrap items-center gap-2">
+      <div v-if="customer" class="flex flex-wrap items-center gap-2">
         <template v-if="!confirming">
           <AtomsActionButton
             v-if="lines.length > 0"
@@ -220,6 +227,7 @@ const summary = computed(() => `${formatNumber(props.total)} ${unit.value}`);
             :disabled="!canSubmit || submitting"
             @click="emit('confirm')"
           />
+          <AtomsActionButton label="Сбросить" :disabled="submitting" @click="emit('reset')" />
         </template>
         <template v-else>
           <span class="text-sm">
@@ -233,7 +241,6 @@ const summary = computed(() => `${formatNumber(props.total)} ${unit.value}`);
           />
           <AtomsActionButton label="Не оформлять" :disabled="submitting" @click="emit('unconfirm')" />
         </template>
-        <AtomsActionButton v-if="!confirming" label="Закрыть" :disabled="submitting" @click="emit('close')" />
       </div>
     </div>
   </MoleculesSectionPanel>
