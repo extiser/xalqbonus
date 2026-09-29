@@ -285,6 +285,26 @@ export const updateEmployeeDisabled = async (
 };
 
 /**
+ * Записывает учётке новую роль (issue #291).
+ *
+ * Отметку годности сессий не трогает: роль читается из базы на каждом запросе в обеих дверях
+ * (`authenticate.ts`), и новая действует со следующего запроса без повторного входа. Роль
+ * в cookie — подсказка для лога, а не основание для доступа.
+ */
+export const updateEmployeeRole = async (
+  employeeId: string,
+  role: EmployeeRole,
+  client: Executor = db,
+): Promise<void> => {
+  await client.$executeRaw`
+    UPDATE xb.employees
+       SET "role"       = ${role}::xb.employee_role,
+           "updated_at" = now()
+     WHERE "id" = ${employeeId}::uuid
+  `;
+};
+
+/**
  * Обнуляет пароль и гасит выданные cookie — одной записью, как и смена пароля.
  *
  * Только у учётки, у которой пароль есть: условие стоит в самом `UPDATE`, и нажатие

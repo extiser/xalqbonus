@@ -3,6 +3,7 @@ import { listEmployeeDirectory } from '#server/repositories/employees';
 import { buildSetPasswordLink } from '#server/services/employees/employeeLinks';
 import { buildLiveTelegramLink, canIssueTelegramLink } from '#server/services/employees/telegramLink';
 import {
+  canChangeRole,
   canManageEmployee,
   invitableRoles,
   type EmployeeActor,
@@ -28,6 +29,9 @@ import { ANY_OFFICE_ROLES, canEditDemo } from '../../../shared/access';
  * Демо-сотрудник помечен и правится только владельцем (issue #212): у остальных он
  * не `manageable`, хоть роль его и ниже. Ручки решают то же сами — `requireDemoEditor`.
  *
+ * На какие роли можно перевести учётку, приезжает списком `assignableRoles` (issue #291) — тем же
+ * правилом, что решает ручка смены роли. У демо-учётки он пуст: её роль не меняется.
+ *
  * Живая ссылка «задать пароль» приезжает только к `manageable` учётке (issue #267): ссылкой
  * задают пароль и входят под этой учёткой, и видеть её вправе тот, кто вправе её выпустить.
  * Ссылка привязки Telegram — по тому же правилу, и ещё к своей строке: себе её выпускает каждый.
@@ -51,6 +55,8 @@ export const readEmployeeAccounts = async (
   ]);
   const passwordLinkByEmployee = new Map(passwordLinks.map((link) => [link.employeeId, link]));
   const telegramLinkByEmployee = new Map(telegramLinks.map((link) => [link.employeeId, link]));
+
+  const actorInvitableRoles = invitableRoles(request.actor.role);
 
   const accounts = rows.map(async (row) => {
       const manageable =
@@ -87,11 +93,17 @@ export const readEmployeeAccounts = async (
         anyOffice: ANY_OFFICE_ROLES.includes(row.role),
         isDemo: row.isDemo,
         manageable,
+        assignableRoles:
+          manageable && !row.isDemo
+            ? actorInvitableRoles.filter(
+                (role) => role !== row.role && canChangeRole(request.actor.role, row.role, role),
+              )
+            : [],
       };
     });
 
   return {
     employees: await Promise.all(accounts),
-    invitableRoles: invitableRoles(request.actor.role),
+    invitableRoles: actorInvitableRoles,
   };
 };

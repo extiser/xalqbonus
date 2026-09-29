@@ -76,6 +76,12 @@ describe('приглашения сотрудников', () => {
     expect(canInviteRole('admin', 'admin')).toBe(false);
     expect(canInviteRole('admin', 'owner')).toBe(false);
     expect(canInviteRole('manager', 'manager')).toBe(false);
+    expect(canInviteRole('owner', 'senior_manager')).toBe(true);
+    expect(canInviteRole('admin', 'senior_manager')).toBe(true);
+    // Старший менеджер старше менеджера рангом, но не приглашает никого: экран сотрудников
+    // ему закрыт, и ручка приглашения, открытая любой роли, его тоже не пускает (issue #291).
+    expect(canInviteRole('senior_manager', 'manager')).toBe(false);
+    expect(canInviteRole('senior_manager', 'senior_manager')).toBe(false);
     expect(canInviteRole('owner', 'owner')).toBe(false);
 
     const admin = await createTestEmployee({ role: 'admin' });

@@ -1,11 +1,22 @@
 import type { EmployeeRole } from '#server/generated/prisma/enums';
+// Относительным путём, а не через `#shared`: значение, а не тип, и модуль читают тесты,
+// у которых из псевдонимов настроен один `#server` — как в `offices/employeeOffices.ts`.
+import { STAFF_ROLES } from '../../../shared/access';
 
 /**
  * Порядок ролей и единственное правило власти над чужой учёткой — «строго ниже своей».
  *
  * Правило одно на все действия с чужой учёткой: приглашение, отзыв приглашения, выключение
- * и включение, сброс пароля. `owner` — над `admin` и `manager`, `admin` — над `manager`,
- * `manager` — ни над кем (docs/decisions.md → «Учётка сотрудника и роли», issue #132).
+ * и включение, сброс пароля, смена роли. `owner` — над `admin`, `senior_manager` и `manager`,
+ * `admin` — над `senior_manager` и `manager`, `senior_manager` и `manager` — ни над кем
+ * (docs/decisions.md → «Учётка сотрудника и роли», «Старший менеджер; правка баллов и выдача
+ * наград руками — не менеджеру», issue #132, #291).
+ *
+ * Ранг `senior_manager` выше `manager`, но власти над учётками не даёт: власть — у ролей
+ * экрана сотрудников (`STAFF_ROLES`), и только над рангом строго ниже. Без этой оговорки
+ * старший менеджер приглашал бы менеджеров ручкой, открытой любой роли, хотя экран
+ * сотрудников ему закрыт. Оговорка стоит здесь, а не у каждой ручки: ручка, забывшая её,
+ * тихо расширила бы права.
  *
  * Записано одним предикатом, а через него — каждое действие: три места, сравнивающие ранги
  * самостоятельно, разойдутся на первой новой роли.
@@ -28,8 +39,9 @@ export type EmployeeActor = {
 };
 
 const ROLE_RANK: Readonly<Record<EmployeeRole, number>> = {
-  owner: 3,
-  admin: 2,
+  owner: 4,
+  admin: 3,
+  senior_manager: 2,
   manager: 1,
 };
 
@@ -37,13 +49,28 @@ const ROLE_RANK: Readonly<Record<EmployeeRole, number>> = {
 export const outranks = (actorRole: EmployeeRole, otherRole: EmployeeRole): boolean =>
   ROLE_RANK[actorRole] > ROLE_RANK[otherRole];
 
+/** Власть над чужой учёткой: роль экрана сотрудников и ранг строго ниже. */
+const governs = (actorRole: EmployeeRole, otherRole: EmployeeRole): boolean =>
+  STAFF_ROLES.includes(actorRole) && outranks(actorRole, otherRole);
+
 /** Можно ли выпустить или отозвать приглашение на эту роль. */
 export const canInviteRole = (actorRole: EmployeeRole, invitedRole: EmployeeRole): boolean =>
-  outranks(actorRole, invitedRole);
+  governs(actorRole, invitedRole);
 
-/** Можно ли выключить, включить учётку или сбросить ей пароль. */
+/** Можно ли выключить, включить учётку, сбросить ей пароль или сменить роль. */
 export const canManageEmployee = (actorRole: EmployeeRole, employeeRole: EmployeeRole): boolean =>
-  outranks(actorRole, employeeRole);
+  governs(actorRole, employeeRole);
+
+/**
+ * Можно ли перевести учётку с роли `fromRole` на `toRole`: действующий старше и прежней,
+ * и новой. Отсюда без отдельных проверок: себе роль не сменить, `owner` не назначить и не снять,
+ * а админ не делает никого админом и не трогает другого админа.
+ */
+export const canChangeRole = (
+  actorRole: EmployeeRole,
+  fromRole: EmployeeRole,
+  toRole: EmployeeRole,
+): boolean => governs(actorRole, fromRole) && governs(actorRole, toRole);
 
 /** Кого эта роль может пригласить. Для ответа ручки и для подсказки в интерфейсе. */
 export const invitableRoles = (actorRole: EmployeeRole): EmployeeRole[] =>

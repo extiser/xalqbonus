@@ -299,6 +299,7 @@ export const mailingStatusTone = (status: Mailing['status']): 'ok' | 'warn' | 'm
 const EMPLOYEE_ROLE_LABELS: Record<EmployeeAccount['role'], string> = {
   owner: 'владелец',
   admin: 'админ',
+  senior_manager: 'старший менеджер',
   manager: 'менеджер',
 };
 

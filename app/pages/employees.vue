@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { employeeRoleLabel } from '~/utils/labels';
 import { failureField, failureText } from '~/utils/requestError';
 import { toLoadState } from '~/utils/loadState';
+import { ANY_OFFICE_ROLES } from '#shared/access';
 import type { InviteIssueField } from '#shared/employeeLinks';
 import type {
+  EmployeeAccount,
   EmployeeAccountsResponse,
   EmployeeDisabledResponse,
   EmployeeInviteRequestBody,
@@ -11,12 +14,14 @@ import type {
   EmployeeInviteRevokeResponse,
   EmployeeInvitesResponse,
   EmployeePasswordResetResponse,
+  EmployeeRoleChangeRequestBody,
+  EmployeeRoleChangeResponse,
   EmployeeTelegramLinkResponse,
 } from '#shared/types/employee';
 
 /**
  * Экран «Сотрудники»: учётки, висящие приглашения, выпуск приглашения, выключение, сброс пароля
- * (issue #132) и ссылка привязки Telegram (issue #267).
+ * (issue #132), ссылка привязки Telegram (issue #267) и смена роли (issue #291).
  *
  * Привязка к офису сюда не переезжает — она правится на странице офиса, отсюда на неё
  * только ссылки.
@@ -98,9 +103,10 @@ const runAction = async (id: string, request: () => Promise<unknown>): Promise<v
   }
 };
 
-const nameOf = (employeeId: string): string =>
-  accounts.value?.employees.find((account) => account.employeeId === employeeId)?.fullName ??
-  'сотрудник';
+const accountOf = (employeeId: string): EmployeeAccount | undefined =>
+  accounts.value?.employees.find((account) => account.employeeId === employeeId);
+
+const nameOf = (employeeId: string): string => accountOf(employeeId)?.fullName ?? 'сотрудник';
 
 // Подтверждение спрашивается у действий, которые человек за столом заметит сразу:
 // выключенный не войдёт, сброшенный выйдет из веба на всех устройствах.
@@ -132,6 +138,37 @@ const resetPassword = (employeeId: string): Promise<void> | undefined => {
     $fetch<EmployeePasswordResetResponse>(`/api/employees/${employeeId}/password-reset`, {
       method: 'POST',
     }),
+  );
+};
+
+/**
+ * Смена роли — с подтверждением: доступ человека меняется со следующего его запроса. Если новая
+ * роль работает только в своих офисах, а офисов за учёткой нет, подтверждение говорит, что заказов
+ * она не увидит, — закрепление правится на странице офиса.
+ */
+const changeRole = (
+  employeeId: string,
+  role: EmployeeRoleChangeRequestBody['role'],
+): Promise<void> | undefined => {
+  const account = accountOf(employeeId);
+  const from = account ? `«${employeeRoleLabel(account.role)}»` : 'прежней';
+  const withoutOffice =
+    !ANY_OFFICE_ROLES.includes(role) && (account?.offices.length ?? 0) === 0
+      ? ' Офисов за учётной записью нет — без офиса она не увидит ни одного заказа; закрепить можно на странице офиса.'
+      : '';
+
+  if (
+    !window.confirm(
+      `Сменить роль «${nameOf(employeeId)}» с ${from} на «${employeeRoleLabel(role)}»? Доступ изменится со следующего действия сотрудника, входить заново не нужно.${withoutOffice}`,
+    )
+  ) {
+    return;
+  }
+
+  const body: EmployeeRoleChangeRequestBody = { role };
+
+  return runAction(employeeId, () =>
+    $fetch<EmployeeRoleChangeResponse>(`/api/employees/${employeeId}/role`, { method: 'POST', body }),
   );
 };
 
@@ -186,6 +223,7 @@ const revoke = (inviteId: string): Promise<void> =>
       @enable="enable"
       @reset-password="resetPassword"
       @issue-telegram-link="issueTelegramLink"
+      @change-role="changeRole"
       @revoke="revoke"
     />
   </div>
