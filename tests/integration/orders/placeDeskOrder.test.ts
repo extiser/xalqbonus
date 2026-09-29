@@ -171,9 +171,15 @@ describe('заказ у стойки', () => {
     });
     expect(stored?.issuedAt).not.toBeNull();
 
-    // Перевод тот же, что у заказа из бота: списание с ключом `order_spend:<orders.id>`.
+    // Перевод тот же, что у заказа из бота: списание с ключом `order_spend:<orders.id>`, —
+    // но подписан сотрудником: списал он, а не водитель.
     const transfer = await readTransfer(stored?.spendTransferId as string);
-    expect(transfer).toMatchObject({ reason: 'order_spend', amount: 80n, orderId: placed.orderId });
+    expect(transfer).toMatchObject({
+      reason: 'order_spend',
+      amount: 80n,
+      orderId: placed.orderId,
+      actorEmployeeId: scenario.manager.employeeId,
+    });
     expect(await countTransfersByKey(buildOrderSpendIdempotencyKey(placed.orderId))).toBe(1);
 
     expect(await listOrderItemSnapshots(placed.orderId)).toEqual([

@@ -103,6 +103,7 @@ const priceDeskItems = async (
   return items.map((item) => {
     const product = products.get(item.productId);
 
+    // Скрытый с витрины здесь не отсекается намеренно — решение Руслана по ревью #298.
     if (
       !product ||
       product.publishedAt === null ||
@@ -206,7 +207,10 @@ export const placeDeskOrder = async (
         fromAccountId: spendAccounts.driverAccountId,
         toAccountId: spendAccounts.redemptionAccountId,
         occurredAt: issuedAt,
-        context: { orderId, actor: input.actor },
+        // Списал сотрудник, а не водитель: без ссылки на него в истории баллов списание
+        // стойки неотличимо от заказа, который водитель оформил сам (docs/decisions.md →
+        // «След сотрудника в журналах — ссылка, а не строка»).
+        context: { orderId, actor: input.actor, actorEmployeeId: worker.employeeId },
         client: transaction,
       });
 

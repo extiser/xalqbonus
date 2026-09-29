@@ -486,9 +486,19 @@ export const countTransfersByReason = async (
 /** Перевод с его контекстом: заказ, причина, сумма. */
 export const readTransfer = async (
   transferId: string,
-): Promise<{ reason: string; amount: bigint; orderId: string | null } | null> => {
-  const rows = await db.$queryRaw<{ reason: string; amount: bigint; orderId: string | null }[]>`
-    SELECT "reason"::text AS "reason", "amount", "order_id" AS "orderId"
+): Promise<{
+  reason: string;
+  amount: bigint;
+  orderId: string | null;
+  actorEmployeeId: string | null;
+} | null> => {
+  const rows = await db.$queryRaw<
+    { reason: string; amount: bigint; orderId: string | null; actorEmployeeId: string | null }[]
+  >`
+    SELECT "reason"::text         AS "reason",
+           "amount",
+           "order_id"             AS "orderId",
+           "actor_employee_id"    AS "actorEmployeeId"
       FROM xb.point_transfers
      WHERE "id" = ${transferId}::uuid
   `;
