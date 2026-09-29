@@ -148,7 +148,7 @@ export const readSyncConfig = (): SyncConfig => {
     catchupEnabled: readFlag('SYNC_CATCHUP_ENABLED', false),
     catchupIntervalSec: readInteger('SYNC_CATCHUP_INTERVAL_SEC', 900),
     catchupDays: readInteger('SYNC_CATCHUP_DAYS', 7),
-    catchupSliceHours: readInteger('SYNC_CATCHUP_SLICE_HOURS', 12),
+    catchupSliceHours: readInteger('SYNC_CATCHUP_SLICE_HOURS', 4),
     catchupPassEveryHours: readInteger('SYNC_CATCHUP_PASS_EVERY_HOURS', 24),
     registryEnabled: readFlag('SYNC_REGISTRY_ENABLED', false),
     registryIntervalSec: readInteger('SYNC_REGISTRY_INTERVAL_SEC', 3_600),
