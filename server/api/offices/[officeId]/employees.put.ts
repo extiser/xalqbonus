@@ -1,4 +1,5 @@
 import {
+  OFFICE_EMPLOYEE_DISABLED_MESSAGE,
   OFFICE_SIDE_MISMATCH_MESSAGE,
   OfficeEmployeeDisabledError,
   OfficeEmployeeRankError,
@@ -103,7 +104,7 @@ export default defineEventHandler(async (event): Promise<OfficeEmployeesResponse
       throw createError({
         statusCode: 400,
         statusMessage: 'Bad Request',
-        message: 'Учётная запись закрыта — закрепить её нельзя.',
+        message: OFFICE_EMPLOYEE_DISABLED_MESSAGE,
       });
     }
 

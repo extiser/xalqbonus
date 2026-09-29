@@ -45,7 +45,9 @@ export const setEmployeeDisabled = async (
 ): Promise<SetEmployeeDisabledOutcome> => {
   const result = await db.$transaction(async (transaction) => {
     // Под блокировкой строки: выключение и закрепление за офисом не должны разойтись
-    // так, что закрепление ляжет после снятия.
+    // так, что закрепление ляжет после снятия. Вторая сторона — закрепление читает ту же
+    // строку `FOR SHARE` (`shareLockEmployeesByIds`, `shareLockDemoEmployee`) и ждёт этой
+    // транзакции, а после неё видит учётку уже выключенной.
     const employee = await lockEmployeeById(request.employeeId, transaction);
 
     if (!employee) {

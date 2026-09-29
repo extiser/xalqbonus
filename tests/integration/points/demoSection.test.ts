@@ -15,7 +15,11 @@ import { revokeDemoInvite } from '#server/services/demo/revokeDemoInvite';
 import { setDemoManagerOffices } from '#server/services/demo/setDemoManagerOffices';
 import { searchDrivers } from '#server/services/drivers/searchDrivers';
 import { requireOpenOffice, readEmployeeOffices } from '#server/services/offices/employeeOffices';
-import { OfficeNotOpenError, OfficeSideMismatchError } from '#server/services/offices/errors';
+import {
+  OfficeEmployeeDisabledError,
+  OfficeNotOpenError,
+  OfficeSideMismatchError,
+} from '#server/services/offices/errors';
 import { readOfficeCandidates } from '#server/services/offices/readOfficeCandidates';
 import { setOfficeEmployees } from '#server/services/offices/setOfficeEmployees';
 import { buildDemoGrantIdempotencyKey } from '#server/services/points/idempotencyKey';
@@ -512,6 +516,13 @@ describe('раздел «Демо»', () => {
     expect((await readEmployeeOffices(manager)).map((office) => office.officeId)).toEqual([demoOfficeId]);
     await expect(requireOpenOffice(manager, liveOfficeId)).rejects.toBeInstanceOf(OfficeNotOpenError);
     await expect(requireOpenOffice(manager, otherDemoOfficeId)).rejects.toBeInstanceOf(OfficeNotOpenError);
+
+    // Выключенного демо-менеджера не закрепляют (issue #291); пустой набор ему законен.
+    await db.$executeRaw`DELETE FROM xb.employee_offices WHERE "employee_id" = ${employeeId}::uuid`;
+    await db.$executeRaw`UPDATE xb.employees SET "disabled_at" = now() WHERE "id" = ${employeeId}::uuid`;
+
+    await expect(setDemoManagerOffices([demoOfficeId])).rejects.toBeInstanceOf(OfficeEmployeeDisabledError);
+    expect(await setDemoManagerOffices([])).toEqual({ officeIds: [] });
 
     await db.$executeRaw`DELETE FROM xb.employee_offices WHERE "employee_id" = ${employeeId}::uuid`;
   });

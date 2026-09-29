@@ -1,6 +1,6 @@
 import { consola } from 'consola';
 import { db } from '#server/db';
-import { findEmployeesByIds } from '#server/repositories/employees';
+import { shareLockEmployeesByIds } from '#server/repositories/employees';
 import {
   findOffice,
   listOfficeEmployees,
@@ -56,7 +56,10 @@ export const setOfficeEmployees = async (
       throw new UnknownOfficeError(officeId);
     }
 
-    const known = await findEmployeesByIds(unique, transaction);
+    // Под разделяемой блокировкой весь присланный набор, а не только добавляемые: чтобы
+    // узнать, кто добавляется, набор всё равно читается целиком, а блокировка оставшегося
+    // лишь задержит его выключение до конца этой транзакции.
+    const known = await shareLockEmployeesByIds(unique, transaction);
 
     if (known.length !== unique.length) {
       const knownIds = new Set(known.map((employee) => employee.id));

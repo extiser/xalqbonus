@@ -129,6 +129,26 @@ export const findDemoEmployee = async (
 };
 
 /**
+ * Демо-сотрудник этой роли под разделяемой блокировкой — для закрепления за офисами
+ * с пульта «Демо»: та же причина, что у `shareLockEmployeesByIds`, выключение не должно
+ * разойтись с закреплением (issue #291).
+ */
+export const shareLockDemoEmployee = async (
+  role: EmployeeRole,
+  client: Executor,
+): Promise<EmployeeRow | null> => {
+  const rows = await client.$queryRaw<EmployeeRow[]>`
+    SELECT ${EMPLOYEE_COLUMNS}
+      FROM xb.employees
+     WHERE "is_demo"
+       AND "role" = ${role}::xb.employee_role
+       FOR SHARE
+  `;
+
+  return rows[0] ?? null;
+};
+
+/**
  * Есть ли учётка на этот Telegram или на этот телефон — одним запросом.
  *
  * Именно так проверяется правило одной роли при привязке водителя: спрашивают оба признака
@@ -419,13 +439,19 @@ export const listOfficeCandidates = async (
   `;
 
 /**
- * Учётки по списку идентификаторов. Нужна проверке состава офиса: закрепить можно
- * за существующей учёткой, и «столько же строк, сколько спросили» — единственное,
- * что об этом говорит. Признак демо — для проверки стороны офиса (issue #252).
+ * Учётки по списку идентификаторов — под разделяемой блокировкой, для закрепления за офисом.
+ * Закрепить можно за существующей учёткой, и «столько же строк, сколько спросили» —
+ * единственное, что об этом говорит. Признак демо — для проверки стороны офиса (issue #252).
+ *
+ * `FOR SHARE` держит строки до конца транзакции закрепления: выключение берёт ту же строку
+ * `FOR UPDATE` (`setEmployeeDisabled.ts`) и ждёт, а закрепление, пришедшее после выключения,
+ * ждёт его и читает уже выключенную учётку. Без блокировки одновременные «выключить»
+ * и «закрепить» оставляли бы выключенного закреплённым (issue #291). Друг друга два
+ * закрепления не ждут: разделяемые блокировки совместимы.
  */
-export const findEmployeesByIds = async (
+export const shareLockEmployeesByIds = async (
   employeeIds: string[],
-  client: Executor = db,
+  client: Executor,
 ): Promise<EmployeeAccountRow[]> =>
   client.$queryRaw<EmployeeAccountRow[]>`
     SELECT "id",
@@ -435,4 +461,6 @@ export const findEmployeesByIds = async (
            "is_demo"     AS "isDemo"
       FROM xb.employees
      WHERE "id" = ANY(${employeeIds}::uuid[])
+     ORDER BY "id"
+       FOR SHARE
   `;

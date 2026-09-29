@@ -67,7 +67,8 @@ export class OfficeSideMismatchError extends OfficeError {
  *
  * Сотрудник с закрытым доступом за офисом — строка, которая ничего не значит: в систему он
  * не войдёт, и стойка офиса ему не откроется. Закреплённых закрытых не бывает: выключение
- * снимает учётку со всех офисов (issue #291).
+ * снимает учётку со всех офисов (issue #291), и правило без исключений — демо-менеджера
+ * с пульта «Демо» оно касается так же (`setDemoManagerOffices.ts`).
  */
 export class OfficeEmployeeDisabledError extends OfficeError {
   constructor(public readonly employeeIds: string[]) {
@@ -88,6 +89,9 @@ export class OfficeEmployeeRankError extends OfficeError {
     super(`сотрудники ${employeeIds.join(', ')} не ниже действующего`);
   }
 }
+
+/** Текст отказа — один на обе двери закрепления: со страницы офиса и с пульта «Демо». */
+export const OFFICE_EMPLOYEE_DISABLED_MESSAGE = 'Учётная запись закрыта — закрепить её нельзя.';
 
 /** Текст отказа — один на обе двери закрепления: со стороны офиса и со стороны демо-менеджера. */
 export const OFFICE_SIDE_MISMATCH_MESSAGE =
