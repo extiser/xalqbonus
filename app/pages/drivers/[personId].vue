@@ -203,6 +203,17 @@ const canGrant = computed(
     <template v-else>
       <OrganismsDriverIdentity :card="card" />
       <OrganismsDriverBalance :card="card" />
+      <OrganismsDriverMembership
+        v-model:telegram-id="telegramLinkId"
+        :card="card"
+        :busy="telegramLinkBusy"
+        :denial="telegramLinkDenial"
+        :candidate="telegramLinkCandidate"
+        @check="telegramLink.check"
+        @confirm-link="telegramLink.confirmLink"
+        @unlink="telegramLink.unlink"
+        @cancel="telegramLink.cancel"
+      />
       <OrganismsDriverPointsAdjustment
         v-if="canAdjust"
         :saving="adjusting"
@@ -218,17 +229,6 @@ const canGrant = computed(
         />
       </div>
       <OrganismsDriverRewards :state="rewardsState" :data="rewards ?? null" />
-      <OrganismsDriverMembership
-        v-model:telegram-id="telegramLinkId"
-        :card="card"
-        :busy="telegramLinkBusy"
-        :denial="telegramLinkDenial"
-        :candidate="telegramLinkCandidate"
-        @check="telegramLink.check"
-        @confirm-link="telegramLink.confirmLink"
-        @unlink="telegramLink.unlink"
-        @cancel="telegramLink.cancel"
-      />
       <OrganismsDriverParkProfiles :card="card" />
       <OrganismsDriverDevices :state="devicesState" :data="devices ?? null" />
       <OrganismsDriverOperations
