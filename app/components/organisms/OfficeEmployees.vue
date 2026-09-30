@@ -30,6 +30,8 @@ const props = defineProps<{
   error: string | null;
   /** Состав только на чтение: ДЕМО ОФИС у того, кто его не правит (issue #212). */
   readonly?: boolean;
+  /** Пояснение под заголовком блока: у архивного офиса — почему состав не правится (issue #303). */
+  note?: string;
   /** Демо-офис: подсказка пустого выбора ведёт в раздел «Демо» (issue #252). */
   officeIsDemo: boolean;
 }>();
@@ -76,6 +78,7 @@ const remove = (employeeId: string): void => {
     note="Закрепление за офисом — не доступ в систему: доступ решает роль, а это то, где человек стоит."
   >
     <div class="space-y-4">
+      <p v-if="note" class="text-sm text-slate-500">{{ note }}</p>
       <MoleculesStateNotice
         v-if="employees.length === 0"
         state="empty"

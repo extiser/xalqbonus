@@ -62,6 +62,9 @@ const stockState = computed(() => toLoadState(stockStatus.value));
 const feedState = computed(() => toLoadState(feedStatus.value));
 const candidatesState = computed(() => toLoadState(candidatesStatus.value));
 
+const ARCHIVED_EMPLOYEES_NOTE =
+  'Офис в архиве — закрепить сотрудников можно после возврата из архива.';
+
 const archived = computed(() => card.value?.office.archivedAt !== null);
 
 const { canEdit } = useDemoEditor();
@@ -82,6 +85,35 @@ const save = async (body: OfficeRequestBody): Promise<void> => {
   } finally {
     savingOffice.value = false;
   }
+};
+
+const archiveConfirmationOpen = ref(false);
+
+/** Кого архивация снимет с офиса, в том порядке, в каком они пришли. */
+const archiveMessage = computed(() => {
+  const names = (card.value?.employees ?? []).map((employee) => employee.fullName);
+
+  if (names.length === 0) {
+    return 'Офис перестанет принимать заказы.';
+  }
+
+  return `Офис перестанет принимать заказы. Закреплённые сотрудники будут сняты с офиса: ${names.join(', ')}. После возврата из архива их нужно закрепить заново.`;
+});
+
+/** Уход в архив требует подтверждения — он снимает закреплённых; возврат из архива — нет. */
+const onArchiveClick = async (): Promise<void> => {
+  if (archived.value) {
+    await toggleArchive();
+
+    return;
+  }
+
+  archiveConfirmationOpen.value = true;
+};
+
+const confirmArchive = async (): Promise<void> => {
+  archiveConfirmationOpen.value = false;
+  await toggleArchive();
 };
 
 /** Закрытие и возврат — одна кнопка на два адреса: состояние офиса решает, какой из них. */
@@ -186,6 +218,17 @@ const adjust = (payload: { productId: string; onHand: number; note: string }): P
       </p>
     </div>
 
+    <MoleculesConfirmDialog
+      :open="archiveConfirmationOpen"
+      title="Убрать офис в архив?"
+      :message="archiveMessage"
+      confirm-label="Убрать в архив"
+      cancel-label="Отмена"
+      tone="danger"
+      @confirm="confirmArchive"
+      @cancel="archiveConfirmationOpen = false"
+    />
+
     <MoleculesStateNotice
       v-if="cardState === 'loading'"
       state="loading"
@@ -216,7 +259,7 @@ const adjust = (payload: { productId: string; onHand: number; note: string }): P
           :label="archived ? 'Вернуть из архива' : 'Убрать в архив'"
           :tone="archived ? 'primary' : 'danger'"
           :disabled="savingOffice"
-          @click="toggleArchive"
+          @click="onArchiveClick"
         />
       </MoleculesSectionPanel>
 
@@ -226,7 +269,8 @@ const adjust = (payload: { productId: string; onHand: number; note: string }): P
         :candidates-state="candidatesState"
         :saving="savingEmployees"
         :error="employeesError"
-        :readonly="!editable"
+        :readonly="!editable || archived"
+        :note="archived ? ARCHIVED_EMPLOYEES_NOTE : undefined"
         :office-is-demo="card.office.isDemo"
         @save="saveEmployees"
       />
