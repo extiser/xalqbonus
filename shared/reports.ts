@@ -6,14 +6,38 @@
  * выгрузка: и экран, и Excel рисуют любой `ReportResult` одинаково.
  */
 
-export type ReportKey = 'sales' | 'stock' | 'turnover' | 'adjustments';
+export type ReportKey =
+  | 'sales'
+  | 'stock'
+  | 'turnover'
+  | 'adjustments'
+  | 'rewards'
+  | 'order_outcomes'
+  | 'staff'
+  | 'points_economy';
 
 export const REPORT_TITLES: Record<ReportKey, string> = {
   sales: 'Продажи за период',
   stock: 'Остатки на дату',
   turnover: 'Движение товара',
   adjustments: 'Корректировки остатков',
+  rewards: 'Награды и подарки',
+  order_outcomes: 'Судьба заказов',
+  staff: 'Работа сотрудников',
+  points_economy: 'Экономика балла',
 };
+
+/**
+ * Путь ручки отчёта: `/api/reports/{путь}` и `…/export`. Ключ с подчёркиванием в адресе пишется
+ * через дефис (issue #310) — `order_outcomes` → `order-outcomes`.
+ */
+export const reportPath = (key: ReportKey): string => key.replaceAll('_', '-');
+
+/**
+ * Отчёты по всему парку: офиса у них нет (issue #310). Баллы офису не принадлежат — поле
+ * `Офис` на экране погашено, а ручка офис не принимает.
+ */
+export const PARK_WIDE_REPORTS: readonly ReportKey[] = ['points_economy'];
 
 /**
  * День перехода на новую систему. Продаж старого бота в нашей базе нет: период, начатый

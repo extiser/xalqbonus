@@ -54,9 +54,15 @@ const props = withDefaults(
 
 const model = defineModel<string>({ required: true });
 
+/**
+ * Высота задана явно и та же, что у `AtomsSelectInput` того же размера (issue #310): высоту
+ * выпадающего списка браузер считает от шрифта, а не от строки, и без явной высоты список
+ * в одном ряду с полем выходит ниже его на четыре пикселя. Значения — те, что поле ввода
+ * набирает само: строка, отступы и рамка.
+ */
 const SIZE_CLASSES: Record<InputSize, string> = {
-  medium: 'px-3 py-1.5 text-sm',
-  large: 'px-4 py-2.5 text-base',
+  medium: 'h-8.5 px-3 py-1.5 text-sm',
+  large: 'h-11.5 px-4 py-2.5 text-base',
 };
 
 /**
