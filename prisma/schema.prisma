@@ -675,9 +675,14 @@ model TelegramLink {
   /// Кто из сотрудников подтвердил, если подтверждал человек. Ссылка, а не строка:
   /// в разборе «кто перепривязал аккаунт» через полгода нужна учётка, а не текст.
   operatorEmployeeId String?          @map("operator_employee_id") @db.Uuid
+  /// Кто из сотрудников закрыл строку. Пусто у закрытых автоматикой, склейкой, отказом Telegram
+  /// и у закрытых до #305.
+  closedByEmployeeId String?          @map("closed_by_employee_id") @db.Uuid
 
   person           Person    @relation(fields: [personId], references: [id])
-  operatorEmployee Employee? @relation(fields: [operatorEmployeeId], references: [id])
+  // Две связи с `Employee` — обе именованы: без имени Prisma не различит, какая чья.
+  operatorEmployee Employee? @relation("TelegramLinkOperator", fields: [operatorEmployeeId], references: [id])
+  closedByEmployee Employee? @relation("TelegramLinkClosedBy", fields: [closedByEmployeeId], references: [id])
 
   // Одна активная привязка на человека и один активный Telegram — частичными
   // уникальными индексами в миграции.
@@ -886,7 +891,8 @@ model Employee {
   demoInvitesIssued DemoInvite[]
   acceptedInvite  EmployeeInvite?  @relation("invite_employee")
   pointTransfers  PointTransfer[]
-  telegramLinks   TelegramLink[]
+  telegramLinks   TelegramLink[]   @relation("TelegramLinkOperator")
+  telegramLinksClosed TelegramLink[] @relation("TelegramLinkClosedBy")
   offices         EmployeeOffice[]
   ordersCreated   Order[]          @relation("order_created_by")
   ordersIssued    Order[]          @relation("order_issued_by")

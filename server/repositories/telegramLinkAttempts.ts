@@ -1,4 +1,5 @@
 import { db } from '#server/db';
+import type { Prisma } from '#server/generated/prisma/client';
 import type { LinkAttemptOutcome } from '#server/generated/prisma/enums';
 
 /**
@@ -56,4 +57,60 @@ export const insertTelegramLinkAttempt = async (
       ${attempt.personId}::uuid
     )
   `;
+};
+
+/**
+ * Исходы, при которых человек определён однозначно по подтверждённому телефону (issue #305).
+ *
+ * `several_profiles` и `profile_fired` сюда не входят: у первого в `person_id` пишется первый
+ * из найденных профилей, у второго — уволенный.
+ */
+const RELINK_OUTCOMES: readonly LinkAttemptOutcome[] = [
+  'person_already_linked',
+  'telegram_already_linked',
+  'link_closed_in_history',
+];
+
+/** Сколько дней попытка годится для привязки из карточки. */
+const RELINK_ATTEMPT_DAYS = 30;
+
+export type RelinkAttemptRow = {
+  telegramChatId: bigint;
+  telegramUserId: bigint;
+  phoneE164: string | null;
+  phoneRaw: string | null;
+  createdAt: Date;
+};
+
+/**
+ * Попытка, на которую опирается привязка Telegram из карточки водителя (issue #305).
+ *
+ * Самая свежая за последние 30 дней, где этот человек делился номером с этого Telegram
+ * и номер сошёлся с его номером в парке. Вбитый сотрудником ID лишь выбирает такую строку:
+ * чат и отправитель новой привязки берутся отсюда, а не из ввода, поэтому подтверждённый
+ * телефоном канал не подменить ни опечаткой, ни чужим ID.
+ *
+ * По `telegram_user_id`: экран отказа показывает водителю именно его.
+ */
+export const findRelinkAttempt = async (
+  personId: string,
+  telegramUserId: bigint,
+  client: Prisma.TransactionClient = db,
+): Promise<RelinkAttemptRow | null> => {
+  const rows = await client.$queryRaw<RelinkAttemptRow[]>`
+    SELECT "telegram_chat_id" AS "telegramChatId",
+           "telegram_user_id" AS "telegramUserId",
+           "phone_e164"       AS "phoneE164",
+           "phone_raw"        AS "phoneRaw",
+           "created_at"       AS "createdAt"
+      FROM xb.telegram_link_attempts
+     WHERE "person_id" = ${personId}::uuid
+       AND "telegram_user_id" = ${telegramUserId.toString()}::text::bigint
+       AND "outcome" = ANY(${RELINK_OUTCOMES}::text[]::xb.link_attempt_outcome[])
+       AND "created_at" >= now() - make_interval(days => ${RELINK_ATTEMPT_DAYS}::int)
+     ORDER BY "created_at" DESC, "id" DESC
+     LIMIT 1
+  `;
+
+  return rows[0] ?? null;
 };

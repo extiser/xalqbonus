@@ -13,6 +13,13 @@
  */
 type InputType = 'search' | 'text' | 'tel' | 'password' | 'url' | 'date' | 'datetime-local';
 
+/**
+ * Клавиатура на телефоне, когда тип поля её не задаёт: `numeric` — цифры без знаков, как
+ * у Telegram ID (issue #305). Тип `number` для этого не годится — он отдаёт число, а длинное
+ * число теряет точность.
+ */
+type InputMode = 'numeric' | 'decimal' | 'text';
+
 /** Крупное поле — там, где ввод и есть работа экрана. */
 type InputSize = 'medium' | 'large';
 
@@ -32,6 +39,7 @@ const props = withDefaults(
      * вторым текстом, а запрос всё равно ушёл бы зря.
      */
     required?: boolean;
+    inputmode?: InputMode;
   }>(),
   {
     size: 'medium',
@@ -40,6 +48,7 @@ const props = withDefaults(
     autocomplete: undefined,
     autofocus: false,
     required: false,
+    inputmode: undefined,
   },
 );
 
@@ -74,6 +83,7 @@ onMounted(() => {
     :autocomplete="autocomplete"
     :autofocus="autofocus"
     :required="required"
+    :inputmode="inputmode"
     class="w-full rounded-md border border-slate-300 bg-white text-slate-900 transition-colors placeholder:text-slate-400 focus-visible:border-slate-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
     :class="SIZE_CLASSES[size]"
   />

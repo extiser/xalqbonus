@@ -277,6 +277,9 @@ export type TextKey =
   | 'notification_welcome_bonus'
   | 'notification_issued_order'
   | 'notification_issued_reward'
+  | 'notification_telegram_moved'
+  | 'notification_telegram_unlinked'
+  | 'notification_telegram_linked'
   | 'notification_gift_received'
   | 'notification_gift_received_footer'
   | 'notification_reward_received'
@@ -1608,6 +1611,27 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   notification_issued_reward: {
     ru: 'Выдано в офисе {office}: {items}.',
     uz: '{office} ofisida topshirildi: {items}.',
+  },
+  /**
+   * Аккаунт переведён на другой Telegram в офисе (issue #305) — в прежний чат. Узбекский —
+   * черновой, вычитывает переводчик.
+   */
+  notification_telegram_moved: {
+    ru: 'Ваш аккаунт Xalq Taxi Bonus переведён на другой Telegram в офисе Xalq Taxi. Баллы остались на вашем счёте. Если это были не вы — обратитесь в офис.',
+    uz: "Xalq Taxi Bonus hisobingiz Xalq Taxi ofisida boshqa Telegram'ga o'tkazildi. Ballaringiz hisobingizda qoldi. Agar bu siz bo'lmasangiz — ofisga murojaat qiling.",
+  },
+  /** Аккаунт отвязан от Telegram в офисе (issue #305) — в отвязанный чат. Узбекский — черновой. */
+  notification_telegram_unlinked: {
+    ru: 'Ваш аккаунт Xalq Taxi Bonus отвязан от этого Telegram в офисе Xalq Taxi. Баллы остались на вашем счёте. Если это были не вы — обратитесь в офис.',
+    uz: "Xalq Taxi Bonus hisobingiz Xalq Taxi ofisida ushbu Telegram'dan uzildi. Ballaringiz hisobingizda qoldi. Agar bu siz bo'lmasangiz — ofisga murojaat qiling.",
+  },
+  /**
+   * Telegram привязан в офисе (issue #305) — в новый чат. `{points}` — «300 баллов» склонением
+   * по числу. Узбекский — черновой.
+   */
+  notification_telegram_linked: {
+    ru: 'Telegram привязан к Xalq Taxi Bonus. На счёте {points}.',
+    uz: "Telegram Xalq Taxi Bonus'ga ulandi. Hisobingizda {points}.",
   },
   /**
    * Подарок ждёт в приложении (issue #219). `{points}` — «300 баллов» склонением по числу,

@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { useCurrentEmployee } from '~/composables/useCurrentEmployee';
+import { useDriverTelegramLink } from '~/composables/useDriverTelegramLink';
 import { DISPLAY_TIME_ZONE_LABEL } from '~/utils/format';
 import { toLoadState } from '~/utils/loadState';
 import { failureField, failureText } from '~/utils/requestError';
@@ -130,6 +131,21 @@ const adjustPoints = async (body: ManualPointsRequestBody): Promise<void> => {
 };
 
 /**
+ * Привязка и отвязка Telegram в блоке «Участие в программе» (issue #305): запросы — здесь,
+ * через composable, организм только показывает. После успеха карточка перечитывается —
+ * в ней новая строка привязки и закрытая прежняя.
+ */
+const telegramLink = useDriverTelegramLink(personId, async () => {
+  await refreshCard();
+});
+const {
+  telegramId: telegramLinkId,
+  busy: telegramLinkBusy,
+  denial: telegramLinkDenial,
+  candidate: telegramLinkCandidate,
+} = telegramLink;
+
+/**
  * Вход в раздел «Награды» с этим водителем видят роли из `REWARD_GRANT_ROLES` — и только
  * у водителя в программе: человеку вне её вручить некуда (issue #219). Форма выдачи живёт
  * в разделе: там же подарок баллами, товар и своя награда. Решает ручка, проверка здесь
@@ -187,6 +203,17 @@ const canGrant = computed(
     <template v-else>
       <OrganismsDriverIdentity :card="card" />
       <OrganismsDriverBalance :card="card" />
+      <OrganismsDriverMembership
+        v-model:telegram-id="telegramLinkId"
+        :card="card"
+        :busy="telegramLinkBusy"
+        :denial="telegramLinkDenial"
+        :candidate="telegramLinkCandidate"
+        @check="telegramLink.check"
+        @confirm-link="telegramLink.confirmLink"
+        @unlink="telegramLink.unlink"
+        @cancel="telegramLink.cancel"
+      />
       <OrganismsDriverPointsAdjustment
         v-if="canAdjust"
         :saving="adjusting"
@@ -202,7 +229,6 @@ const canGrant = computed(
         />
       </div>
       <OrganismsDriverRewards :state="rewardsState" :data="rewards ?? null" />
-      <OrganismsDriverMembership :card="card" />
       <OrganismsDriverParkProfiles :card="card" />
       <OrganismsDriverDevices :state="devicesState" :data="devices ?? null" />
       <OrganismsDriverOperations

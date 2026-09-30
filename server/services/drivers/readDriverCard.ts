@@ -137,6 +137,7 @@ export const readDriverCard = async (personId: string): Promise<DriverCardRespon
       closeReason: link.closeReason,
       confirmedBy: link.confirmedBy,
       operatorName: link.operatorName,
+      closedByName: link.closedByName,
     })),
     membership: settings
       ? {
