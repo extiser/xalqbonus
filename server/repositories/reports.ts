@@ -1,6 +1,11 @@
 import { db } from '#server/db';
 import { Prisma } from '#server/generated/prisma/client';
-import type { OrderPayment } from '#server/generated/prisma/enums';
+import type {
+  EmployeeRole,
+  OrderPayment,
+  PointReason,
+  RewardSource,
+} from '#server/generated/prisma/enums';
 import { parkDaySql, parkDayStartSql } from '#server/utils/parkDaySql';
 
 /**
@@ -329,3 +334,304 @@ export const listAdjustments = async (
        AND (${input.officeId}::uuid IS NULL OR movement."office_id" = ${input.officeId}::uuid)
      ORDER BY movement."created_at" DESC, movement."id" DESC
   `;
+
+/**
+ * Награды, занимающие товар или выдаваемые в офисе, за период (issue #310): выданные —
+ * по `issued_at`, сгоревшие — по `expired_at`. Строка — статус × офис × награда × источник.
+ *
+ * Награда-товар называется товаром, произвольная — своим заголовком: заголовок и группирует
+ * произвольные, товар — свой идентификатор. Баллы-награды сюда не входят: офиса у них нет,
+ * и они — перевод, который считает «Экономика балла».
+ */
+export type RewardLineRow = {
+  status: 'issued' | 'expired';
+  officeId: string;
+  officeName: string;
+  officeArchived: boolean;
+  kind: 'product' | 'custom';
+  productName: string | null;
+  productArchived: boolean;
+  /** Заголовок произвольной награды. Пусто у товара. */
+  customTitle: string | null;
+  source: RewardSource;
+  quantity: bigint;
+  /** Текущая себестоимость товара. Пусто у произвольной и у товара без неё. */
+  priceCost: number | null;
+};
+
+export const listRewardLines = async (
+  input: { from: string; to: string; officeId: string | null },
+  client: Executor = db,
+): Promise<RewardLineRow[]> =>
+  client.$queryRaw<RewardLineRow[]>`
+    SELECT reward."status",
+           office."id"                       AS "officeId",
+           office."name"                     AS "officeName",
+           office."archived_at" IS NOT NULL  AS "officeArchived",
+           reward."kind",
+           product."name"                    AS "productName",
+           COALESCE(product."archived_at" IS NOT NULL, false) AS "productArchived",
+           CASE WHEN reward."kind" = 'custom' THEN reward."title" END AS "customTitle",
+           reward."source",
+           COUNT(*)::bigint                  AS "quantity",
+           product."price_cost"              AS "priceCost"
+      FROM xb.rewards AS reward
+      JOIN xb.offices AS office  ON office."id" = reward."office_id"
+      JOIN xb.persons AS person  ON person."id" = reward."person_id"
+      LEFT JOIN xb.products AS product ON product."id" = reward."product_id"
+     WHERE reward."kind" IN ('product', 'custom')
+       AND (
+             (reward."status" = 'issued'
+              AND ${parkDaySql(Prisma.sql`reward."issued_at"`)} BETWEEN ${input.from}::date AND ${input.to}::date)
+          OR (reward."status" = 'expired'
+              AND ${parkDaySql(Prisma.sql`reward."expired_at"`)} BETWEEN ${input.from}::date AND ${input.to}::date)
+           )
+       AND NOT office."is_demo"
+       AND NOT person."is_demo"
+       AND NOT COALESCE(product."is_demo", false)
+       AND (${input.officeId}::uuid IS NULL OR reward."office_id" = ${input.officeId}::uuid)
+     GROUP BY reward."status", office."id", reward."kind", product."id",
+              CASE WHEN reward."kind" = 'custom' THEN reward."title" END, reward."source"
+     ORDER BY office."name", office."id",
+              COALESCE(product."name", CASE WHEN reward."kind" = 'custom' THEN reward."title" END),
+              product."id", reward."source"
+  `;
+
+/**
+ * Судьба заказов из бота по офисам (issue #310): заказы, оформленные водителем за период
+ * (`created_at`), и что с ними сейчас. Заказ у стойки выдаётся сразу — здесь его нет.
+ */
+export type OrderOutcomeOfficeRow = {
+  officeId: string;
+  officeName: string;
+  officeArchived: boolean;
+  created: bigint;
+  issued: bigint;
+  cancelledByDriver: bigint;
+  cancelledByEmployee: bigint;
+  expired: bigint;
+  pending: bigint;
+};
+
+export const listOrderOutcomesByOffice = async (
+  input: { from: string; to: string; officeId: string | null },
+  client: Executor = db,
+): Promise<OrderOutcomeOfficeRow[]> =>
+  client.$queryRaw<OrderOutcomeOfficeRow[]>`
+    SELECT office."id"                      AS "officeId",
+           office."name"                    AS "officeName",
+           office."archived_at" IS NOT NULL AS "officeArchived",
+           COUNT(*)::bigint                                                      AS "created",
+           COUNT(*) FILTER (WHERE "order"."status" = 'issued')::bigint           AS "issued",
+           COUNT(*) FILTER (WHERE "order"."cancel_reason" = 'driver')::bigint    AS "cancelledByDriver",
+           COUNT(*) FILTER (WHERE "order"."cancel_reason" = 'employee')::bigint  AS "cancelledByEmployee",
+           COUNT(*) FILTER (WHERE "order"."cancel_reason" = 'expired')::bigint   AS "expired",
+           COUNT(*) FILTER (WHERE "order"."status" = 'pending')::bigint          AS "pending"
+      FROM xb.orders AS "order"
+      JOIN xb.offices AS office ON office."id" = "order"."office_id"
+      JOIN xb.persons AS person ON person."id" = "order"."person_id"
+     WHERE "order"."channel" = 'bot'
+       AND ${parkDaySql(Prisma.sql`"order"."created_at"`)} BETWEEN ${input.from}::date AND ${input.to}::date
+       AND NOT office."is_demo"
+       AND NOT person."is_demo"
+       AND (${input.officeId}::uuid IS NULL OR "order"."office_id" = ${input.officeId}::uuid)
+     GROUP BY office."id"
+     ORDER BY office."name", office."id"
+  `;
+
+/**
+ * Судьба заказов из бота по товарам (issue #310): штуки позиций тех же заказов. Первыми —
+ * товары, которые чаще всего заказывают и не забирают.
+ */
+export type OrderOutcomeProductRow = {
+  productName: string | null;
+  productArchived: boolean;
+  ordered: bigint;
+  issued: bigint;
+  expired: bigint;
+  cancelled: bigint;
+};
+
+export const listOrderOutcomesByProduct = async (
+  input: { from: string; to: string; officeId: string | null },
+  client: Executor = db,
+): Promise<OrderOutcomeProductRow[]> =>
+  client.$queryRaw<OrderOutcomeProductRow[]>`
+    SELECT product."name"                    AS "productName",
+           product."archived_at" IS NOT NULL AS "productArchived",
+           SUM(item."quantity")::bigint                                                   AS "ordered",
+           COALESCE(SUM(item."quantity") FILTER (WHERE "order"."status" = 'issued'), 0)::bigint AS "issued",
+           COALESCE(SUM(item."quantity") FILTER (WHERE "order"."cancel_reason" = 'expired'), 0)::bigint AS "expired",
+           COALESCE(SUM(item."quantity")
+             FILTER (WHERE "order"."cancel_reason" IN ('driver', 'employee')), 0)::bigint AS "cancelled"
+      FROM xb.orders AS "order"
+      JOIN xb.order_items AS item    ON item."order_id" = "order"."id"
+      JOIN xb.products    AS product ON product."id" = item."product_id"
+      JOIN xb.offices     AS office  ON office."id" = "order"."office_id"
+      JOIN xb.persons     AS person  ON person."id" = "order"."person_id"
+     WHERE "order"."channel" = 'bot'
+       AND ${parkDaySql(Prisma.sql`"order"."created_at"`)} BETWEEN ${input.from}::date AND ${input.to}::date
+       AND NOT office."is_demo"
+       AND NOT person."is_demo"
+       AND NOT product."is_demo"
+       AND (${input.officeId}::uuid IS NULL OR "order"."office_id" = ${input.officeId}::uuid)
+     GROUP BY product."id"
+     ORDER BY "expired" DESC, product."name", product."id"
+  `;
+
+/**
+ * Работа сотрудника в офисе за период (issue #310): каждое действие — событием со своим
+ * моментом и офисом, строка — сотрудник × офис. Офис строки — офис заказа, награды
+ * или движения, а не закрепление сотрудника: работу в чужом офисе видно там, где она была.
+ */
+export type StaffLineRow = {
+  employeeId: string;
+  employeeName: string;
+  role: EmployeeRole;
+  officeId: string;
+  officeName: string;
+  officeArchived: boolean;
+  issuedByCode: bigint;
+  deskPoints: bigint;
+  deskRetail: bigint;
+  deskRetailSum: bigint;
+  rewardsIssued: bigint;
+  ordersCancelled: bigint;
+  adjustments: bigint;
+};
+
+export const listStaffLines = async (
+  input: { from: string; to: string; officeId: string | null },
+  client: Executor = db,
+): Promise<StaffLineRow[]> =>
+  client.$queryRaw<StaffLineRow[]>`
+    WITH events AS (
+      SELECT "order"."issued_by_employee_id" AS "employee_id",
+             "order"."office_id",
+             'issued_by_code'                AS "action",
+             0                               AS "retail"
+        FROM xb.orders AS "order"
+        JOIN xb.persons AS person ON person."id" = "order"."person_id"
+       WHERE "order"."channel" = 'bot'
+         AND "order"."issued_by_employee_id" IS NOT NULL
+         AND ${parkDaySql(Prisma.sql`"order"."issued_at"`)} BETWEEN ${input.from}::date AND ${input.to}::date
+         AND NOT person."is_demo"
+      UNION ALL
+      SELECT "order"."created_by_employee_id",
+             "order"."office_id",
+             CASE "order"."payment" WHEN 'points' THEN 'desk_points' ELSE 'desk_retail' END,
+             COALESCE("order"."total_retail", 0)
+        FROM xb.orders AS "order"
+        JOIN xb.persons AS person ON person."id" = "order"."person_id"
+       WHERE "order"."channel" = 'desk'
+         AND "order"."created_by_employee_id" IS NOT NULL
+         AND ${parkDaySql(Prisma.sql`"order"."issued_at"`)} BETWEEN ${input.from}::date AND ${input.to}::date
+         AND NOT person."is_demo"
+      UNION ALL
+      SELECT reward."issued_by_employee_id",
+             reward."office_id",
+             'reward_issued',
+             0
+        FROM xb.rewards AS reward
+        JOIN xb.persons AS person ON person."id" = reward."person_id"
+       WHERE reward."issued_by_employee_id" IS NOT NULL
+         AND reward."office_id" IS NOT NULL
+         AND ${parkDaySql(Prisma.sql`reward."issued_at"`)} BETWEEN ${input.from}::date AND ${input.to}::date
+         AND NOT person."is_demo"
+      UNION ALL
+      SELECT "order"."cancelled_by_employee_id",
+             "order"."office_id",
+             'order_cancelled',
+             0
+        FROM xb.orders AS "order"
+        JOIN xb.persons AS person ON person."id" = "order"."person_id"
+       WHERE "order"."cancelled_by_employee_id" IS NOT NULL
+         AND ${parkDaySql(Prisma.sql`"order"."cancelled_at"`)} BETWEEN ${input.from}::date AND ${input.to}::date
+         AND NOT person."is_demo"
+      UNION ALL
+      SELECT movement."employee_id",
+             movement."office_id",
+             'adjustment',
+             0
+        FROM xb.stock_movements AS movement
+        JOIN xb.products AS product ON product."id" = movement."product_id"
+       WHERE movement."kind" = 'adjustment'
+         AND movement."employee_id" IS NOT NULL
+         AND ${parkDaySql(Prisma.sql`movement."created_at"`)} BETWEEN ${input.from}::date AND ${input.to}::date
+         AND NOT product."is_demo"
+    )
+    SELECT employee."id"                     AS "employeeId",
+           employee."full_name"              AS "employeeName",
+           employee."role",
+           office."id"                       AS "officeId",
+           office."name"                     AS "officeName",
+           office."archived_at" IS NOT NULL  AS "officeArchived",
+           COUNT(*) FILTER (WHERE event."action" = 'issued_by_code')::bigint  AS "issuedByCode",
+           COUNT(*) FILTER (WHERE event."action" = 'desk_points')::bigint     AS "deskPoints",
+           COUNT(*) FILTER (WHERE event."action" = 'desk_retail')::bigint     AS "deskRetail",
+           COALESCE(SUM(event."retail") FILTER (WHERE event."action" = 'desk_retail'), 0)::bigint AS "deskRetailSum",
+           COUNT(*) FILTER (WHERE event."action" = 'reward_issued')::bigint   AS "rewardsIssued",
+           COUNT(*) FILTER (WHERE event."action" = 'order_cancelled')::bigint AS "ordersCancelled",
+           COUNT(*) FILTER (WHERE event."action" = 'adjustment')::bigint      AS "adjustments"
+      FROM events AS event
+      JOIN xb.employees AS employee ON employee."id" = event."employee_id"
+      JOIN xb.offices   AS office   ON office."id" = event."office_id"
+     WHERE NOT employee."is_demo"
+       AND NOT office."is_demo"
+       AND (${input.officeId}::uuid IS NULL OR event."office_id" = ${input.officeId}::uuid)
+     GROUP BY employee."id", office."id"
+     ORDER BY employee."full_name", employee."id", office."name", office."id"
+  `;
+
+/**
+ * Баллы водителей за период по причине перевода (issue #310). Сторона водителя — счёт `driver`
+ * не демо-человека: пришедшее на него и ушедшее с него считаются порознь.
+ *
+ * Перенос из старой базы, баллы демо-водителю и объединение двойников сюда не входят: первое —
+ * не событие периода, остальные — переводы внутри водителей или к демо.
+ *
+ * Период — моментами начала суток, а не выражением суток над каждой строкой: переводов
+ * за год — сотни тысяч, и граница по `occurred_at` берёт индекс `(reason, occurred_at)`.
+ */
+export type PointReasonLineRow = {
+  reason: PointReason;
+  received: bigint;
+  spent: bigint;
+};
+
+export const listPointReasonLines = async (
+  input: { from: string; to: string },
+  client: Executor = db,
+): Promise<PointReasonLineRow[]> =>
+  client.$queryRaw<PointReasonLineRow[]>`
+    SELECT transfer."reason",
+           COALESCE(SUM(transfer."amount")
+             FILTER (WHERE target."type" = 'driver' AND NOT target_person."is_demo"), 0)::bigint AS "received",
+           COALESCE(SUM(transfer."amount")
+             FILTER (WHERE source."type" = 'driver' AND NOT source_person."is_demo"), 0)::bigint AS "spent"
+      FROM xb.point_transfers AS transfer
+      JOIN xb.accounts AS source ON source."id" = transfer."from_account_id"
+      JOIN xb.accounts AS target ON target."id" = transfer."to_account_id"
+      LEFT JOIN xb.persons AS source_person ON source_person."id" = source."person_id"
+      LEFT JOIN xb.persons AS target_person ON target_person."id" = target."person_id"
+     WHERE transfer."reason" NOT IN ('opening', 'demo_grant', 'merge')
+       AND transfer."occurred_at" >= ${parkDayStartSql(Prisma.sql`${input.from}::date`)}
+       AND transfer."occurred_at" <  ${parkDayStartSql(Prisma.sql`${input.to}::date + 1`)}
+     GROUP BY transfer."reason"
+    HAVING COUNT(*) FILTER (WHERE (source."type" = 'driver' AND NOT source_person."is_demo")
+                               OR (target."type" = 'driver' AND NOT target_person."is_demo")) > 0
+     ORDER BY transfer."reason"
+  `;
+
+/** Баллы на руках у водителей сейчас — сумма кэша водительских счетов не демо-людей (issue #310). */
+export const readDriverBalancesTotal = async (client: Executor = db): Promise<bigint> => {
+  const rows = await client.$queryRaw<{ total: bigint }[]>`
+    SELECT COALESCE(SUM(account."balance"), 0)::bigint AS "total"
+      FROM xb.accounts AS account
+      JOIN xb.persons  AS person ON person."id" = account."person_id"
+     WHERE account."type" = 'driver'
+       AND NOT person."is_demo"
+  `;
+
+  return rows[0]?.total ?? 0n;
+};

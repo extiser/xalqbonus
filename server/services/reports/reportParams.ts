@@ -32,6 +32,12 @@ export type PeriodReportParams = {
   office: ReportOfficeFilter | null;
 };
 
+/** Отчёт за период по всему парку — «Экономика балла» (issue #310): офиса у него нет. */
+export type ParkPeriodReportParams = {
+  from: string;
+  to: string;
+};
+
 export type StockReportParams = {
   date: string;
   office: ReportOfficeFilter | null;
@@ -81,7 +87,8 @@ const readOffice = async (value: unknown): Promise<ReportOfficeFilter | null> =>
   return { officeId: office.id, name: office.name, archived: office.archivedAt !== null };
 };
 
-export const readPeriodParams = async (query: Query): Promise<PeriodReportParams> => {
+/** Период `from`–`to`: оба дня есть в календаре, начало не позже конца, не длиннее года. */
+const readPeriod = (query: Query): ParkPeriodReportParams => {
   const from = readDay(query.from);
   const to = readDay(query.to);
 
@@ -95,7 +102,24 @@ export const readPeriodParams = async (query: Query): Promise<PeriodReportParams
     throw new ReportParamsError('Период — не длиннее года.');
   }
 
-  return { from, to, office: await readOffice(query.officeId) };
+  return { from, to };
+};
+
+export const readPeriodParams = async (query: Query): Promise<PeriodReportParams> => ({
+  ...readPeriod(query),
+  office: await readOffice(query.officeId),
+});
+
+/**
+ * Период отчёта по всему парку. Офис отказом, а не молчанием: отчёт, посчитанный по парку
+ * под выбранным офисом, читался бы цифрами этого офиса.
+ */
+export const readParkPeriodParams = (query: Query): ParkPeriodReportParams => {
+  if (query.officeId !== undefined && query.officeId !== '') {
+    throw new ReportParamsError('Этот отчёт считается по всему парку.');
+  }
+
+  return readPeriod(query);
 };
 
 export const readStockParams = async (query: Query): Promise<StockReportParams> => ({

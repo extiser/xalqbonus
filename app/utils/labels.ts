@@ -16,6 +16,8 @@ import type { Mailing } from '#shared/types/mailing';
 import type { OfficeOrder } from '#shared/types/orders';
 import type { OfficeReward } from '#shared/types/rewards';
 import type { SyncRunRow, SyncSkipRow } from '#shared/types/sync';
+import { EMPLOYEE_ROLE_LABELS } from '#shared/employeeRoles';
+import { POINT_REASON_LABELS } from '#shared/pointReasons';
 
 /**
  * Подписи словарей на экране.
@@ -64,21 +66,7 @@ export const skipReasonLabel = (reason: SyncSkipRow['reason']): string =>
  * на экране (docs/decisions.md).
  */
 
-const POINT_REASON_LABELS: Record<DriverOperation['reason'], string> = {
-  opening: 'перенос баланса',
-  trip: 'поездка',
-  welcome: 'приветственный бонус',
-  order_spend: 'заказ товара',
-  order_refund: 'возврат за отменённый заказ',
-  manual: 'ручная правка',
-  recon: 'доначисление по перепроверке',
-  expire: 'сгорание',
-  merge: 'объединение двойников',
-  raffle: 'выплата приза',
-  campaign: 'акция',
-  demo_grant: 'баллы демо-водителю',
-};
-
+/** Словарь — в `shared/pointReasons.ts`: им же подписывает строки отчёт «Экономика балла». */
 export const pointReasonLabel = (reason: DriverOperation['reason']): string =>
   POINT_REASON_LABELS[reason];
 
@@ -312,13 +300,7 @@ const MAILING_STATUS_TONES: Record<Mailing['status'], 'ok' | 'warn' | 'muted'> =
 export const mailingStatusTone = (status: Mailing['status']): 'ok' | 'warn' | 'muted' =>
   MAILING_STATUS_TONES[status];
 
-const EMPLOYEE_ROLE_LABELS: Record<EmployeeAccount['role'], string> = {
-  owner: 'владелец',
-  admin: 'админ',
-  senior_manager: 'старший менеджер',
-  manager: 'менеджер',
-};
-
+/** Словарь — в `shared/employeeRoles.ts`: им же подписывает роль отчёт «Работа сотрудников». */
 export const employeeRoleLabel = (role: EmployeeAccount['role']): string =>
   EMPLOYEE_ROLE_LABELS[role];
 

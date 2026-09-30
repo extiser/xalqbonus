@@ -1,7 +1,7 @@
 import { onMounted, ref } from 'vue';
 import { failureText } from '~/utils/requestError';
 import type { LoadState } from '~/types/loadState';
-import type { ReportKey } from '#shared/reports';
+import { reportPath, type ReportKey } from '#shared/reports';
 import type { ReportOffice, ReportOptionsResponse, ReportResult } from '#shared/types/reports';
 
 /**
@@ -54,7 +54,7 @@ export const useReports = () => {
     error.value = null;
 
     try {
-      const response = await $fetch<ReportResult>(`/api/reports/${report}`, { query });
+      const response = await $fetch<ReportResult>(`/api/reports/${reportPath(report)}`, { query });
 
       if (current !== sequence) {
         return;
@@ -62,7 +62,7 @@ export const useReports = () => {
 
       result.value = response;
       state.value = 'ready';
-      exportUrl.value = `/api/reports/${report}/export?${new URLSearchParams(query).toString()}`;
+      exportUrl.value = `/api/reports/${reportPath(report)}/export?${new URLSearchParams(query).toString()}`;
     } catch (failure) {
       if (current !== sequence) {
         return;
