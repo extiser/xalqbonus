@@ -6,11 +6,13 @@
  * выгрузка: и экран, и Excel рисуют любой `ReportResult` одинаково.
  */
 
-export type ReportKey = 'sales' | 'stock';
+export type ReportKey = 'sales' | 'stock' | 'turnover' | 'adjustments';
 
 export const REPORT_TITLES: Record<ReportKey, string> = {
   sales: 'Продажи за период',
   stock: 'Остатки на дату',
+  turnover: 'Движение товара',
+  adjustments: 'Корректировки остатков',
 };
 
 /**

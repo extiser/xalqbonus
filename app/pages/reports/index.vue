@@ -8,8 +8,8 @@ import { REPORT_TITLES, reportDayKey, type ReportKey } from '#shared/reports';
  * Раздел «Отчёты» (issue #308): клиент сам выбирает и выгружает отчёт по товару, без просьб
  * к нам и без SQL.
  *
- * Панель фильтров одна на все отчёты, разнятся только поля дат: у продаж — период, у остатков —
- * день. «Скачать Excel» выгружает показанный отчёт, а не набранное в фильтрах после показа:
+ * Панель фильтров одна на все отчёты, разнятся только поля дат: у остатков — день, у остальных —
+ * период. «Скачать Excel» выгружает показанный отчёт, а не набранное в фильтрах после показа:
  * файл и экран сходятся цифрами только так.
  */
 
@@ -29,6 +29,8 @@ const REPORT_OPTIONS: SelectOption[] = (Object.keys(REPORT_TITLES) as ReportKey[
 const EMPTY_MESSAGES: Record<ReportKey, string> = {
   sales: 'За период продаж нет.',
   stock: 'На эту дату остатков нет.',
+  turnover: 'За период движения нет.',
+  adjustments: 'За период корректировок нет.',
 };
 
 /** Сегодня — сутки парка: до 05:00 по Ташкенту это ещё вчера. */
@@ -39,6 +41,9 @@ const from = ref(`${today.slice(0, 8)}01`);
 const to = ref(today);
 const date = ref(today);
 const officeId = ref('');
+
+/** Отчёт на один день; остальные — за период `С`–`По`. */
+const isDayReport = computed(() => report.value === 'stock');
 
 /** Выбор отчёта строкой — так его отдаёт поле. Чужого значения в списке нет. */
 const reportValue = computed({
@@ -56,7 +61,7 @@ const officeOptions = computed<SelectOption[]>(() =>
 );
 
 const query = (): ReportQuery => {
-  const dates: ReportQuery = report.value === 'sales' ? { from: from.value, to: to.value } : { date: date.value };
+  const dates: ReportQuery = isDayReport.value ? { date: date.value } : { from: from.value, to: to.value };
 
   return officeId.value === '' ? dates : { ...dates, officeId: officeId.value };
 };
@@ -69,8 +74,8 @@ const show = (): Promise<void> => reports.show(report.value, query());
     <div>
       <h1 class="text-xl font-semibold text-slate-900">Отчёты</h1>
       <p class="mt-1 text-sm text-slate-500">
-        Продажи и остатки по офисам и товарам — на экран и в Excel. Сутки — с 05:00 по Ташкенту, демо
-        в отчёты не входит.
+        Продажи, остатки, движение товара и корректировки по офисам — на экран и в Excel. Сутки —
+        с 05:00 по Ташкенту, демо в отчёты не входит.
       </p>
     </div>
 
@@ -81,7 +86,10 @@ const show = (): Promise<void> => reports.show(report.value, query());
           <AtomsSelectInput v-model="reportValue" :options="REPORT_OPTIONS" />
         </label>
 
-        <template v-if="report === 'sales'">
+        <div v-if="isDayReport" class="w-44">
+          <MoleculesFormField v-model="date" label="На дату" type="date" required />
+        </div>
+        <template v-else>
           <div class="w-44">
             <MoleculesFormField v-model="from" label="С" type="date" required />
           </div>
@@ -89,9 +97,6 @@ const show = (): Promise<void> => reports.show(report.value, query());
             <MoleculesFormField v-model="to" label="По" type="date" required />
           </div>
         </template>
-        <div v-else class="w-44">
-          <MoleculesFormField v-model="date" label="На дату" type="date" required />
-        </div>
 
         <label class="block w-64">
           <span class="mb-1 block text-sm font-medium text-slate-700">Офис</span>

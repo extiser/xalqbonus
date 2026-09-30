@@ -1,4 +1,7 @@
-import type { ReportOfficeFilter } from '#server/services/reports/reportParams';
+import type { ReportPeriodMoments } from '#server/repositories/reports';
+import type { PeriodReportParams, ReportOfficeFilter } from '#server/services/reports/reportParams';
+import { formatCalendarDate, formatClockTime } from '#server/utils/parkTime';
+import { REPORTS_HISTORY_START } from '#shared/reports';
 import type { ReportCell, ReportColumn, ReportRow } from '#shared/types/reports';
 
 /**
@@ -28,6 +31,29 @@ export const formatReportDay = (day: string): string => {
 
   return `${date}.${month}.${year}`;
 };
+
+/**
+ * Подпись отчёта по движению товара за период (issue #309): период, офис, сутки. Конец,
+ * обрезанный текущим моментом, говорит об этом, как подпись остатков: «На конец» тогда —
+ * сейчас, а не 05:00 суток после последних.
+ */
+export const periodSubtitle = (
+  params: PeriodReportParams,
+  moments: ReportPeriodMoments,
+  historyNote: string,
+): string => {
+  const period = `${formatReportDay(params.from)}–${formatReportDay(params.to)}`;
+  const cut =
+    moments.end.getTime() < moments.periodEnd.getTime()
+      ? ` · на конец — сейчас, ${formatClockTime(moments.end)} ${formatCalendarDate(moments.end)}`
+      : '';
+  const subtitle = `${period}${cut} · ${officeSubtitle(params.office)} · сутки с 05:00 по Ташкенту`;
+
+  return params.from < REPORTS_HISTORY_START ? `${subtitle}. ${historyNote}` : subtitle;
+};
+
+/** Период, начатый до перехода: движений остатков старого бота в нашем журнале нет. */
+export const STOCK_HISTORY_NOTE = `Данные — с ${formatReportDay(REPORTS_HISTORY_START)}: движения остатков старого бота в системе нет.`;
 
 /** Строка отчёта до итогов: офис для группировки и ячейки. */
 export type ReportLine = {
