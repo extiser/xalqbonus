@@ -29,7 +29,7 @@ up-d: ## Поднять local-стек в фоне (detached) — не зани�
 down: ## Остановить local-стек
 	$(COMPOSE) down
 
-restart: ## Перезапустить local-стек
+restart: ## Перезапустить процессы local-стека — .env не перечитывает, после правки .env: make up-d
 	$(COMPOSE) restart
 
 logs: ## Следить за логами local-стека
@@ -284,7 +284,7 @@ prod-up: ## Поднять prod-стек в фоне (detached)
 prod-down: ## Остановить prod-стек
 	$(COMPOSE_PROD) down
 
-prod-restart: ## Перезапустить prod-стек
+prod-restart: ## Перезапустить процессы prod-стека — .env не перечитывает, после правки .env: make prod-start services="app worker"
 	$(COMPOSE_PROD) restart
 
 prod-logs: ## Следить за логами prod-стека. Один сервис: make prod-logs services=worker

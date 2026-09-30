@@ -250,8 +250,8 @@ nginx делается тем же выкатом, что и код, — пос�
 
 ```bash
 cd /srv/xalqbonus
-# 1. поменять TG_WEBHOOK_SECRET в .env, затем поднять стек с новым значением
-make prod-restart
+# 1. поменять TG_WEBHOOK_SECRET в .env, затем пересоздать приложение и воркер с новым значением
+make prod-start services="app worker"
 
 # 2. переставить webhook вручную — тем же адресом и новым секретом
 set -a; . /srv/xalqbonus/.env; set +a
@@ -262,6 +262,8 @@ curl -sS -X POST "https://api.telegram.org/bot$TG_BOT_TOKEN/setWebhook" \
 # 3. убедиться, что Telegram доволен: last_error_message пуст, pending_update_count не растёт
 curl -sS "https://api.telegram.org/bot$TG_BOT_TOKEN/getWebhookInfo"
 ```
+
+`prod-restart` здесь не годится — он не перечитывает `.env`, и приложение продолжило бы сверять апдейты со старым секретом (`docs/infra.md` → «Окружение применяется пересозданием, а не перезапуском»).
 
 Секреты берутся из `.env`, а не набираются руками: набранный с опечаткой токен уходит
 в историю команд, а набранный с опечаткой секрет ломает доставку молча.
