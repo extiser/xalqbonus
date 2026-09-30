@@ -13,6 +13,7 @@ import {
   resolveRelinkCandidate,
 } from '#server/services/drivers/readTelegramCandidate';
 import {
+  PersonLinkChangedError,
   TelegramAlreadyActiveError,
   TelegramLinkedToOtherError,
 } from '#server/services/drivers/telegramLinkErrors';
@@ -46,6 +47,15 @@ export type RelinkTelegramRequest = {
  * Проверки выше стоят под блокировкой человека, но автопривязка из бота человека не блокирует:
  * между чтением и вставкой она успевает занять чат или открыть человеку привязку. Отбитая
  * база — отказ сотруднику, а не пятисотка.
+ *
+ * Индекс на человека — это водителю привязали другой Telegram, не этот: отказ говорит обновить
+ * карточку. Индекс на чат — чат занят, и отказ называет того, чья привязка на нём. Любое другое
+ * ограничение отказом не является и уходит наверх как есть.
+ *
+ * Индекс на человека — защита на будущее, а не ожидаемый исход: вставка привязки проверяет
+ * внешний ключ и берёт на строку `persons` блокировку `FOR KEY SHARE`, несовместимую с нашей
+ * `FOR UPDATE`. Автопривязка того же водителя поэтому ждёт нас или мы ждём её — и тогда видим
+ * её привязку действующей и закрываем штатно. Проверено на локальной базе 30-09-2026.
  */
 const failureForConstraint = async (
   error: unknown,
@@ -62,8 +72,12 @@ const failureForConstraint = async (
     constraint: failure.constraintName,
   });
 
+  if (failure.constraintName === 'telegram_links_active_person_key') {
+    return new PersonLinkChangedError(request.personId);
+  }
+
   if (failure.constraintName !== 'telegram_links_active_chat_key') {
-    return new TelegramAlreadyActiveError(request.personId);
+    return null;
   }
 
   // Чат заняли: кто именно — читается уже после отката, по той же попытке.

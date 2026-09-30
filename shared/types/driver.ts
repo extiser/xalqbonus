@@ -123,6 +123,7 @@ export type DriverTelegramDenialCode =
   | 'employee_account'
   | 'linked_to_other'
   | 'already_active'
+  | 'person_link_changed'
   | 'no_active_link';
 
 /** Водитель, к которому уже привязан Telegram, — у отказа `linked_to_other`. */

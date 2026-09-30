@@ -93,6 +93,19 @@ export class TelegramAlreadyActiveError extends TelegramLinkError {
   }
 }
 
+/**
+ * Пока шла привязка, водителю привязали другой Telegram: вставку отбил индекс одной активной
+ * привязки на человека. Так бывает, когда бот в ту же секунду сам привязал водителя
+ * по телефону, — карточка у сотрудника устарела.
+ */
+export class PersonLinkChangedError extends TelegramLinkError {
+  readonly code = 'person_link_changed';
+
+  constructor(public readonly personId: string) {
+    super(`у человека ${personId} во время привязки появилась другая действующая привязка`);
+  }
+}
+
 /** Отвязка, а действующей привязки нет. */
 export class NoActiveTelegramLinkError extends TelegramLinkError {
   readonly code = 'no_active_link';

@@ -28,6 +28,7 @@ const MESSAGES: Readonly<Record<Exclude<TelegramLinkErrorCode, 'linked_to_other'
     'С этого Telegram водитель не делился номером. Попросите его открыть бота с нового телефона и нажать «Поделиться номером», затем повторите.',
   employee_account: 'Этот Telegram принадлежит сотруднику парка — привязать его водителю нельзя.',
   already_active: 'Этот Telegram уже привязан к водителю.',
+  person_link_changed: 'Водителю только что привязали другой Telegram — обновите карточку.',
   no_active_link: 'Действующей привязки нет — отвязывать нечего.',
 };
 
