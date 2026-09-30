@@ -25,7 +25,8 @@ export type ReportOfficeFilter = {
   archived: boolean;
 };
 
-export type SalesReportParams = {
+/** Отчёт за период: продажи, движение товара, корректировки (issue #309). */
+export type PeriodReportParams = {
   from: string;
   to: string;
   office: ReportOfficeFilter | null;
@@ -36,7 +37,7 @@ export type StockReportParams = {
   office: ReportOfficeFilter | null;
 };
 
-/** Самый длинный период продаж, в сутках включительно: год, високосный тоже. */
+/** Самый длинный период отчёта, в сутках включительно: год, високосный тоже. */
 const MAX_PERIOD_DAYS = 366;
 
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -80,7 +81,7 @@ const readOffice = async (value: unknown): Promise<ReportOfficeFilter | null> =>
   return { officeId: office.id, name: office.name, archived: office.archivedAt !== null };
 };
 
-export const readSalesParams = async (query: Query): Promise<SalesReportParams> => {
+export const readPeriodParams = async (query: Query): Promise<PeriodReportParams> => {
   const from = readDay(query.from);
   const to = readDay(query.to);
 

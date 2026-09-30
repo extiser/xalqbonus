@@ -168,3 +168,164 @@ export const listStockLines = async (
     HAVING SUM(movement."delta_on_hand") <> 0 OR SUM(movement."delta_reserved") <> 0
      ORDER BY office."name", office."id", product."name", product."id"
   `;
+
+/**
+ * Границы периода `from`–`to` включительно (issue #309): начало — 05:00 первых суток
+ * по Ташкенту, конец — 05:00 суток после последних, но не позже текущего момента. `periodEnd`
+ * отдаётся рядом, чтобы подпись отчёта сказала, обрезан ли конец текущим.
+ */
+export type ReportPeriodMoments = {
+  start: Date;
+  end: Date;
+  periodEnd: Date;
+};
+
+export const readPeriodMoments = async (
+  input: { from: string; to: string },
+  client: Executor = db,
+): Promise<ReportPeriodMoments> => {
+  const rows = await client.$queryRaw<ReportPeriodMoments[]>`
+    SELECT ${parkDayStartSql(Prisma.sql`${input.from}::date`)}                AS "start",
+           LEAST(${parkDayStartSql(Prisma.sql`${input.to}::date + 1`)}, now()) AS "end",
+           ${parkDayStartSql(Prisma.sql`${input.to}::date + 1`)}              AS "periodEnd"
+  `;
+  const row = rows[0];
+
+  if (!row) {
+    throw new Error('границы периода не вычислились');
+  }
+
+  return row;
+};
+
+/**
+ * Строка оборотной ведомости — офис × товар за период (issue #309).
+ *
+ * «Всего в офисе» — свободный остаток плюс резерв: резерв и его снятие товар из офиса
+ * не выносят, и на начало и конец они не влияют. Начало и конец считаются суммой журнала
+ * сами по себе, а не из движения за период: сходимость проверяет сервис, и посчитанный
+ * из движения конец сошёлся бы по построению, ничего не проверив.
+ *
+ * Выдачи заказов делятся по способу оплаты заказа; движение `order_issue` несёт заказ всегда
+ * (`stock_movements_kind_signs_check`).
+ */
+export type TurnoverLineRow = {
+  officeId: string;
+  officeName: string;
+  officeArchived: boolean;
+  productId: string;
+  productName: string | null;
+  productArchived: boolean;
+  opening: bigint;
+  incoming: bigint;
+  adjustmentPlus: bigint;
+  adjustmentMinus: bigint;
+  issuedPoints: bigint;
+  issuedRetail: bigint;
+  issuedRewards: bigint;
+  closing: bigint;
+  closingReserved: bigint;
+  priceCost: number | null;
+};
+
+/**
+ * Строки — пары, у которых за период было хоть одно движение или «всего в офисе» на начало
+ * либо конец не ноль. Порядок — по имени офиса, затем товара, как в остатках.
+ */
+export const listTurnoverLines = async (
+  input: { start: Date; end: Date; officeId: string | null },
+  client: Executor = db,
+): Promise<TurnoverLineRow[]> =>
+  client.$queryRaw<TurnoverLineRow[]>`
+    SELECT office."id"                       AS "officeId",
+           office."name"                     AS "officeName",
+           office."archived_at" IS NOT NULL  AS "officeArchived",
+           product."id"                      AS "productId",
+           product."name"                    AS "productName",
+           product."archived_at" IS NOT NULL AS "productArchived",
+           COALESCE(SUM(movement."delta_on_hand" + movement."delta_reserved")
+             FILTER (WHERE movement."created_at" < ${input.start}::timestamptz), 0)::bigint AS "opening",
+           COALESCE(SUM(movement."delta_on_hand")
+             FILTER (WHERE movement."created_at" >= ${input.start}::timestamptz
+                       AND movement."kind" = 'incoming'), 0)::bigint AS "incoming",
+           COALESCE(SUM(movement."delta_on_hand")
+             FILTER (WHERE movement."created_at" >= ${input.start}::timestamptz
+                       AND movement."kind" = 'adjustment'
+                       AND movement."delta_on_hand" > 0), 0)::bigint AS "adjustmentPlus",
+           COALESCE(-SUM(movement."delta_on_hand")
+             FILTER (WHERE movement."created_at" >= ${input.start}::timestamptz
+                       AND movement."kind" = 'adjustment'
+                       AND movement."delta_on_hand" < 0), 0)::bigint AS "adjustmentMinus",
+           COALESCE(-SUM(movement."delta_reserved")
+             FILTER (WHERE movement."created_at" >= ${input.start}::timestamptz
+                       AND movement."kind" = 'order_issue'
+                       AND "order"."payment" = 'points'), 0)::bigint AS "issuedPoints",
+           COALESCE(-SUM(movement."delta_reserved")
+             FILTER (WHERE movement."created_at" >= ${input.start}::timestamptz
+                       AND movement."kind" = 'order_issue'
+                       AND "order"."payment" = 'retail'), 0)::bigint AS "issuedRetail",
+           COALESCE(-SUM(movement."delta_reserved")
+             FILTER (WHERE movement."created_at" >= ${input.start}::timestamptz
+                       AND movement."kind" = 'reward_issue'), 0)::bigint AS "issuedRewards",
+           SUM(movement."delta_on_hand" + movement."delta_reserved")::bigint AS "closing",
+           SUM(movement."delta_reserved")::bigint                            AS "closingReserved",
+           product."price_cost"              AS "priceCost"
+      FROM xb.stock_movements AS movement
+      JOIN xb.offices  AS office  ON office."id" = movement."office_id"
+      JOIN xb.products AS product ON product."id" = movement."product_id"
+      LEFT JOIN xb.orders AS "order" ON "order"."id" = movement."order_id"
+     WHERE movement."created_at" < ${input.end}::timestamptz
+       AND NOT office."is_demo"
+       AND NOT product."is_demo"
+       AND (${input.officeId}::uuid IS NULL OR movement."office_id" = ${input.officeId}::uuid)
+     GROUP BY office."id", product."id"
+    HAVING COUNT(*) FILTER (WHERE movement."created_at" >= ${input.start}::timestamptz) > 0
+        OR SUM(movement."delta_on_hand" + movement."delta_reserved")
+             FILTER (WHERE movement."created_at" < ${input.start}::timestamptz) <> 0
+        OR SUM(movement."delta_on_hand" + movement."delta_reserved") <> 0
+     ORDER BY office."name", office."id", product."name", product."id"
+  `;
+
+/** Ручная правка остатка за период (issue #309): движение `adjustment` с автором и заметкой. */
+export type AdjustmentRow = {
+  createdAt: Date;
+  officeId: string;
+  officeName: string;
+  officeArchived: boolean;
+  productName: string | null;
+  productArchived: boolean;
+  delta: number;
+  priceCost: number | null;
+  /** Пусто только у правки без автора — такой база не допускает, но выборка её не теряет. */
+  employeeName: string | null;
+  note: string | null;
+};
+
+/** Правки за период, новые первыми; идентификатор держит порядок правок одной секунды. */
+export const listAdjustments = async (
+  input: { start: Date; end: Date; officeId: string | null },
+  client: Executor = db,
+): Promise<AdjustmentRow[]> =>
+  client.$queryRaw<AdjustmentRow[]>`
+    SELECT movement."created_at"             AS "createdAt",
+           office."id"                       AS "officeId",
+           office."name"                     AS "officeName",
+           office."archived_at" IS NOT NULL  AS "officeArchived",
+           product."name"                    AS "productName",
+           product."archived_at" IS NOT NULL AS "productArchived",
+           movement."delta_on_hand"          AS "delta",
+           product."price_cost"              AS "priceCost",
+           employee."full_name"              AS "employeeName",
+           movement."note"
+      FROM xb.stock_movements AS movement
+      JOIN xb.offices  AS office  ON office."id" = movement."office_id"
+      JOIN xb.products AS product ON product."id" = movement."product_id"
+      LEFT JOIN xb.employees AS employee ON employee."id" = movement."employee_id"
+     WHERE movement."kind" = 'adjustment'
+       AND movement."created_at" >= ${input.start}::timestamptz
+       AND movement."created_at" <  ${input.end}::timestamptz
+       AND NOT office."is_demo"
+       AND NOT product."is_demo"
+       AND (${input.officeId}::uuid IS NULL OR movement."office_id" = ${input.officeId}::uuid)
+     ORDER BY movement."created_at" DESC, movement."id" DESC
+  `;

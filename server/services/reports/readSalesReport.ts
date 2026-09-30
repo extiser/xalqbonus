@@ -1,5 +1,5 @@
 import { listSalesLines, type SalesLineRow } from '#server/repositories/reports';
-import type { SalesReportParams } from '#server/services/reports/reportParams';
+import type { PeriodReportParams } from '#server/services/reports/reportParams';
 import {
   archivedLabel,
   countMissing,
@@ -121,7 +121,7 @@ const section = (
   };
 };
 
-export const readSalesReport = async (params: SalesReportParams): Promise<ReportResult> => {
+export const readSalesReport = async (params: PeriodReportParams): Promise<ReportResult> => {
   const rows = await listSalesLines({
     from: params.from,
     to: params.to,
@@ -158,7 +158,7 @@ export const readSalesReport = async (params: SalesReportParams): Promise<Report
 };
 
 /** Имя файла выгрузки: `Продажи 01.09.2026–30.09.2026.xlsx`, с офисом через пробел. */
-export const salesReportFileName = (params: SalesReportParams): string =>
+export const salesReportFileName = (params: PeriodReportParams): string =>
   [
     'Продажи',
     `${formatReportDay(params.from)}–${formatReportDay(params.to)}`,
