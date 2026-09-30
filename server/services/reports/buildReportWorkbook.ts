@@ -51,6 +51,16 @@ const HEADER_FILL: ExcelJS.Fill = {
   fgColor: { argb: 'FFE2E8F0' },
 };
 
+/**
+ * Заливка строки `Итого: {офис}` — светлее шапки и другим тоном: офис в листе отделяется так же,
+ * как на экране, но без пустых строк — они ломали бы автофильтр и выделение столбца.
+ */
+const SUBTOTAL_FILL: ExcelJS.Fill = {
+  type: 'pattern',
+  pattern: 'solid',
+  fgColor: { argb: 'FFF1F5F9' },
+};
+
 const THIN: Partial<ExcelJS.Border> = { style: 'thin' };
 
 const sheetName = (title: string, index: number): string => {
@@ -135,6 +145,11 @@ const addSectionSheet = (
 
       if (row.kind !== 'row') {
         cell.font = { bold: true };
+      }
+
+      if (row.kind === 'subtotal') {
+        cell.fill = SUBTOTAL_FILL;
+        cell.border = { bottom: THIN };
       }
 
       if (row.kind === 'total') {

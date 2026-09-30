@@ -10,6 +10,10 @@ import type { ReportCell, ReportColumn, ReportRow, ReportResult } from '#shared/
  * (docs/frontend.md → «Данные в компоненты не ходят»).
  *
  * Широкая таблица прокручивается внутри своего блока, а не раздвигает страницу.
+ *
+ * Группы офисов не сливаются (Руслан, 30-09-2026, по прогону): под `Итого: {офис}` — линия той же
+ * толщины, что над `Итого`, и перед строками следующего офиса — пустая полоса в половину строки.
+ * Перед `Итого` полосы нет: там уже есть линия.
  */
 defineProps<{
   result: ReportResult;
@@ -28,8 +32,26 @@ const cellText = (column: ReportColumn, value: ReportCell | undefined): string =
 
 const ROW_CLASSES: Record<ReportRow['kind'], string> = {
   row: 'border-t border-slate-100',
-  subtotal: 'border-t border-slate-100 font-semibold',
+  subtotal: 'border-t border-b-2 border-t-slate-100 border-b-slate-400 font-semibold',
   total: 'border-t-2 border-slate-400 font-semibold',
+};
+
+/** После этой строки начинается следующий офис: она — `Итого: {офис}`, и за ней не `Итого`. */
+const opensGap = (rows: ReportRow[], index: number): boolean =>
+  rows[index]?.kind === 'subtotal' && rows[index + 1]?.kind === 'row';
+
+/**
+ * Первая строка офиса после полосы — без верхней линии: полоса отделяет офис сама, и линия
+ * на её нижнем краю читалась бы как граница пустой строки.
+ */
+const rowClass = (rows: ReportRow[], index: number): string => {
+  const row = rows[index];
+
+  if (!row) {
+    return '';
+  }
+
+  return row.kind === 'row' && opensGap(rows, index - 1) ? '' : ROW_CLASSES[row.kind];
 };
 </script>
 
@@ -57,16 +79,22 @@ const ROW_CLASSES: Record<ReportRow['kind'], string> = {
             </tr>
           </thead>
           <tbody class="text-slate-900">
-            <tr v-for="(row, rowIndex) in section.rows" :key="rowIndex" :class="ROW_CLASSES[row.kind]">
-              <td
-                v-for="column in section.columns"
-                :key="column.key"
-                class="py-2 pr-4 last:pr-0"
-                :class="isNumeric(column) ? 'text-right whitespace-nowrap tabular-nums' : ''"
-              >
-                {{ cellText(column, row.cells[column.key]) }}
-              </td>
-            </tr>
+            <template v-for="(row, rowIndex) in section.rows" :key="rowIndex">
+              <tr :class="rowClass(section.rows, rowIndex)">
+                <td
+                  v-for="column in section.columns"
+                  :key="column.key"
+                  class="py-2 pr-4 last:pr-0"
+                  :class="isNumeric(column) ? 'text-right whitespace-nowrap tabular-nums' : ''"
+                >
+                  {{ cellText(column, row.cells[column.key]) }}
+                </td>
+              </tr>
+              <!-- Полоса в половину строки (36 px): отступ между офисами, без линий. -->
+              <tr v-if="opensGap(section.rows, rowIndex)" aria-hidden="true">
+                <td :colspan="section.columns.length" class="h-4.5 p-0" />
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>
