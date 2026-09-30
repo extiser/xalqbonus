@@ -2,9 +2,14 @@ import { consola } from 'consola';
 
 import { db } from '#server/db';
 import { shareLockDemoEmployee } from '#server/repositories/employees';
-import { findOfficesByIds, listEmployeeOffices, replaceEmployeeOffices } from '#server/repositories/offices';
+import {
+  listEmployeeOffices,
+  replaceEmployeeOffices,
+  shareLockOfficesByIds,
+} from '#server/repositories/offices';
 import { DemoManagerMissingError } from '#server/services/demo/errors';
 import {
+  OfficeArchivedError,
   OfficeEmployeeDisabledError,
   OfficeSideMismatchError,
   UnknownOfficeError,
@@ -22,6 +27,10 @@ import {
  * как со страницы офиса: выключенный ни за чем не закреплён, без исключений (решение Руслана
  * 29-09-2026, issue #291). Пустой набор ему законен: закреплять в нём нечего. Строка учётки
  * читается под разделяемой блокировкой, чтобы одновременное выключение не разошлось с записью.
+ *
+ * Архивный офис в набор не входит — `OfficeArchivedError` (issue #303): архивация снимает
+ * закреплённых, и закрепление за архивным вернуло бы их. Строки офисов читаются под
+ * разделяемой блокировкой, чтобы идущая архивация не разошлась с записью.
  */
 const log = consola.withTag('demo:manager');
 
@@ -39,12 +48,18 @@ export const setDemoManagerOffices = async (officeIds: string[]): Promise<{ offi
       throw new OfficeEmployeeDisabledError([manager.id]);
     }
 
-    const offices = await findOfficesByIds(unique, transaction);
+    const offices = await shareLockOfficesByIds(unique, transaction);
     const knownIds = new Set(offices.map((office) => office.id));
     const unknown = unique.find((officeId) => !knownIds.has(officeId));
 
     if (unknown !== undefined) {
       throw new UnknownOfficeError(unknown);
+    }
+
+    const archived = offices.filter((office) => office.archivedAt !== null);
+
+    if (archived.length > 0) {
+      throw new OfficeArchivedError(archived.map((office) => office.id));
     }
 
     const live = offices.filter((office) => !office.isDemo);

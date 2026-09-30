@@ -15,7 +15,7 @@ export default defineEventHandler(async (event): Promise<OfficeResponse> => {
   await requireDemoEditor(employee, { kind: 'office', id: officeId });
 
   try {
-    return { office: await setOfficeArchived(officeId, false) };
+    return { office: await setOfficeArchived(officeId, false, employee.employeeId) };
   } catch (error) {
     if (error instanceof UnknownOfficeError) {
       throw createError({

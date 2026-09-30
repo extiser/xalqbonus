@@ -1,8 +1,10 @@
 import { DemoManagerMissingError } from '#server/services/demo/errors';
 import { setDemoManagerOffices } from '#server/services/demo/setDemoManagerOffices';
 import {
+  OFFICE_ARCHIVED_MESSAGE,
   OFFICE_EMPLOYEE_DISABLED_MESSAGE,
   OFFICE_SIDE_MISMATCH_MESSAGE,
+  OfficeArchivedError,
   OfficeEmployeeDisabledError,
   OfficeSideMismatchError,
   UnknownOfficeError,
@@ -63,6 +65,10 @@ export default defineEventHandler(async (event): Promise<DemoManagerOfficesRespo
 
     if (error instanceof OfficeEmployeeDisabledError) {
       throw badRequest(OFFICE_EMPLOYEE_DISABLED_MESSAGE);
+    }
+
+    if (error instanceof OfficeArchivedError) {
+      throw badRequest(OFFICE_ARCHIVED_MESSAGE);
     }
 
     throw error;

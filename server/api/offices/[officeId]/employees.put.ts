@@ -1,6 +1,8 @@
 import {
+  OFFICE_ARCHIVED_MESSAGE,
   OFFICE_EMPLOYEE_DISABLED_MESSAGE,
   OFFICE_SIDE_MISMATCH_MESSAGE,
+  OfficeArchivedError,
   OfficeEmployeeDisabledError,
   OfficeEmployeeRankError,
   OfficeSideMismatchError,
@@ -105,6 +107,14 @@ export default defineEventHandler(async (event): Promise<OfficeEmployeesResponse
         statusCode: 400,
         statusMessage: 'Bad Request',
         message: OFFICE_EMPLOYEE_DISABLED_MESSAGE,
+      });
+    }
+
+    if (error instanceof OfficeArchivedError) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Bad Request',
+        message: OFFICE_ARCHIVED_MESSAGE,
       });
     }
 

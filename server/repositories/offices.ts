@@ -112,6 +112,26 @@ export const findOffice = async (
   return rows[0] ?? null;
 };
 
+/**
+ * То же, что `findOffice`, под разделяемой блокировкой строки (issue #303): закрепление
+ * читает офис так, чтобы дождаться архивации, идущей параллельно, — `UPDATE` в
+ * `updateOfficeArchived` держит строку до конца своей транзакции, и после неё закрепление
+ * видит офис уже архивным.
+ */
+export const shareLockOffice = async (
+  officeId: string,
+  client: Executor,
+): Promise<OfficeRow | null> => {
+  const rows = await client.$queryRaw<OfficeRow[]>`
+    SELECT ${OFFICE_COLUMNS}
+      FROM xb.offices
+     WHERE "id" = ${officeId}::uuid
+       FOR SHARE
+  `;
+
+  return rows[0] ?? null;
+};
+
 export type OfficeInput = {
   name: string;
   address: string;
@@ -282,6 +302,32 @@ export const detachEmployeeFromOffices = async (
      ORDER BY office."name"
   `;
 
+export type DetachedEmployeeRow = {
+  employeeId: string;
+  fullName: string;
+};
+
+/**
+ * Снимает со всего офиса закреплённых — архивация (issue #303). Зеркало
+ * `detachEmployeeFromOffices`: отдаёт снятых сотрудников, они уходят в строку лога.
+ */
+export const detachOfficeEmployees = async (
+  officeId: string,
+  client: Executor,
+): Promise<DetachedEmployeeRow[]> =>
+  client.$queryRaw<DetachedEmployeeRow[]>`
+    WITH removed AS (
+      DELETE FROM xb.employee_offices
+       WHERE "office_id" = ${officeId}::uuid
+      RETURNING "employee_id"
+    )
+    SELECT employee."id"        AS "employeeId",
+           employee."full_name" AS "fullName"
+      FROM removed
+      JOIN xb.employees AS employee ON employee."id" = removed."employee_id"
+     ORDER BY employee."full_name"
+  `;
+
 /**
  * То же с другой стороны (issue #252): набор офисов сотрудника заменяется присланным.
  * Строки те же, `employee_offices`, и правила те же — лишние снимаются, новые вставляются,
@@ -319,6 +365,18 @@ export const findOfficesByIds = async (
     SELECT ${OFFICE_COLUMNS}
       FROM xb.offices
      WHERE "id" = ANY(${officeIds}::uuid[])
+  `;
+
+/** То же, что `findOfficesByIds`, под разделяемой блокировкой строк (issue #303). */
+export const shareLockOfficesByIds = async (
+  officeIds: string[],
+  client: Executor,
+): Promise<OfficeRow[]> =>
+  client.$queryRaw<OfficeRow[]>`
+    SELECT ${OFFICE_COLUMNS}
+      FROM xb.offices
+     WHERE "id" = ANY(${officeIds}::uuid[])
+       FOR SHARE
   `;
 
 export type DeskAwaitingCountRow = {

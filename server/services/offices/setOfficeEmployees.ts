@@ -2,12 +2,13 @@ import { consola } from 'consola';
 import { db } from '#server/db';
 import { shareLockEmployeesByIds } from '#server/repositories/employees';
 import {
-  findOffice,
   listOfficeEmployees,
   replaceOfficeEmployees,
+  shareLockOffice,
 } from '#server/repositories/offices';
 import { outranks, type EmployeeActor } from '#server/services/employees/roles';
 import {
+  OfficeArchivedError,
   OfficeEmployeeDisabledError,
   OfficeEmployeeRankError,
   OfficeSideMismatchError,
@@ -39,6 +40,12 @@ import type { OfficeEmployeesResponse } from '#shared/types/catalog';
  * и не владельца. Сравнивается присланный набор с нынешним, а не весь набор: закреплённый
  * админ, оставшийся в наборе как был, сохранению не мешает — иначе старший менеджер
  * не смог бы добавить менеджера в офис, где уже стоит админ.
+ *
+ * За архивным офисом закрепить нельзя (issue #303, `OfficeArchivedError`): архивация снимает
+ * закреплённых, и без запрета снятие жило бы до первого сохранения состава. Пустой набор
+ * архивному офису законен — он сохраняет то же пустое состояние. Строка офиса читается
+ * под разделяемой блокировкой (`shareLockOffice`): закрепление ждёт идущую архивацию
+ * и после неё видит офис архивным, а не ложится поверх снятия.
  */
 const log = consola.withTag('offices:employees');
 
@@ -50,10 +57,14 @@ export const setOfficeEmployees = async (
   const unique = [...new Set(employeeIds)];
 
   const employees = await db.$transaction(async (transaction) => {
-    const office = await findOffice(officeId, transaction);
+    const office = await shareLockOffice(officeId, transaction);
 
     if (!office) {
       throw new UnknownOfficeError(officeId);
+    }
+
+    if (office.archivedAt !== null && unique.length > 0) {
+      throw new OfficeArchivedError([officeId]);
     }
 
     // Под разделяемой блокировкой весь присланный набор, а не только добавляемые: чтобы
