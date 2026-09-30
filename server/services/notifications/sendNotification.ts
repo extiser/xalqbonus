@@ -13,7 +13,11 @@ import {
   type NotificationPhoto,
 } from '#server/bot/notifications';
 import { readBotToken } from '#server/bot/config';
-import { closeTelegramLink, findNotificationRecipient } from '#server/repositories/programMembership';
+import {
+  closeTelegramLink,
+  findNotificationRecipient,
+  findNotificationRecipientByLink,
+} from '#server/repositories/programMembership';
 
 /**
  * Отправка одного уведомления одному человеку.
@@ -26,6 +30,12 @@ import { closeTelegramLink, findNotificationRecipient } from '#server/repositori
  * Отказ Telegram сюда доезжает уже разобранным (server/adapters/telegram/outgoing.ts).
  * Умерший канал закрывается здесь, потому что это решение про нашу базу; что делать
  * с лимитом и сбоем — решает очередь, и такие отказы уходят наверх как есть.
+ *
+ * Адрес по привязке (`linkId`, issue #305) нужен ровно для одного: сообщения в прежний чат
+ * после перепривязки и отвязки из карточки водителя (docs/drivers.md → «Уведомление
+ * о перепривязке уходит после записи»). Та привязка уже закрыта, поэтому получатель читается
+ * по строке, а не по действующей привязке человека, и на отказ Telegram `invalid_chat`
+ * закрывать нечего.
  */
 
 const log = consola.withTag('notifications');
@@ -34,7 +44,7 @@ const log = consola.withTag('notifications');
  * Чем кончилось задание. Все исходы штатные: ни один из них не отказ.
  *
  * - `sent` — сообщение ушло
- * - `no_recipient` — активной привязки нет, писать некуда
+ * - `no_recipient` — активной привязки нет, писать некуда; с `linkId` — строки нет или она чужая
  * - `notifications_disabled` — человек уведомления выключил
  * - `chat_closed` — Telegram сказал, что канал умер, и привязка закрыта
  * - `bot_disabled` — на машине нет токена, бота нет вовсе, и уведомление потеряно
@@ -46,7 +56,7 @@ export type NotificationOutcome =
   | 'chat_closed'
   | 'bot_disabled';
 
-export type SendNotificationInput = { personId: string } & Notification;
+export type SendNotificationInput = { personId: string; linkId?: string } & Notification;
 
 /**
  * `file_id` уже выгруженных фото, по пути на томе — как у рассылки
@@ -91,7 +101,7 @@ const deliver = async (delivery: Delivery, photo: NotificationPhoto | null): Pro
 export const sendNotification = async (
   input: SendNotificationInput,
 ): Promise<NotificationOutcome> => {
-  const { personId, template } = input;
+  const { personId, template, linkId } = input;
   const token = readBotToken();
 
   // Пустой токен — рабочее состояние машины, на которую задача выкатывается раньше, чем
@@ -112,7 +122,10 @@ export const sendNotification = async (
     return 'bot_disabled';
   }
 
-  const recipient = await findNotificationRecipient(personId);
+  const recipient =
+    linkId === undefined
+      ? await findNotificationRecipient(personId)
+      : await findNotificationRecipientByLink(linkId, personId);
 
   // Человек вне программы: привязки нет или её закрыли. Это не отказ — писать ему некуда,
   // и задание на этом кончается.
@@ -145,7 +158,11 @@ export const sendNotification = async (
     // об этом не сообщит, и до следующего `/start` привязка иначе осталась бы активной,
     // а каждое уведомление — уходить в пустоту.
     if (error instanceof TelegramSendError && error.kind === 'invalid_chat') {
-      const closed = await closeTelegramLink(recipient.linkId, 'invalid_chat', new Date());
+      // По адресу привязки строка уже закрыта перепривязкой или отвязкой — закрывать нечего.
+      const closed =
+        linkId === undefined
+          ? await closeTelegramLink(recipient.linkId, 'invalid_chat', new Date())
+          : false;
 
       log.warn('канал связи умер, привязка закрыта', {
         template,

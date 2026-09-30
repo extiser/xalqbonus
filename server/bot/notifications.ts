@@ -86,6 +86,28 @@ export type Notification =
     }
   | {
       /**
+       * Аккаунт переведён на другой Telegram из карточки водителя (issue #305). Уходит в прежний,
+       * уже закрытый чат — адресом по привязке (`linkId` задания). Уходит сразу: водитель стоит
+       * у стойки.
+       */
+      template: 'telegram_moved';
+      params: Record<string, never>;
+    }
+  | {
+      /** Аккаунт отвязан от Telegram из карточки водителя (issue #305) — в отвязанный чат. */
+      template: 'telegram_unlinked';
+      params: Record<string, never>;
+    }
+  | {
+      /** Telegram привязан из карточки водителя (issue #305) — в новую действующую привязку. */
+      template: 'telegram_linked';
+      params: {
+        /** Баланс счёта на момент привязки. */
+        points: number;
+      };
+    }
+  | {
+      /**
        * Подарок от Xalq Taxi ждёт в приложении (issue #219). Уходит в окне 09:00–21:00
        * по Ташкенту — правило очереди (`server/queues/notifications.ts`). С обложкой — фото
        * с подписью, без неё — текстом.
@@ -435,6 +457,14 @@ export const renderNotification = (notification: Notification, language: Languag
       return text('start_greeting', language);
     case 'issued_in_office':
       return renderIssuedInOffice(notification.params, language);
+    case 'telegram_moved':
+      return text('notification_telegram_moved', language);
+    case 'telegram_unlinked':
+      return text('notification_telegram_unlinked', language);
+    case 'telegram_linked':
+      return text('notification_telegram_linked', language, {
+        points: countedPlainText('reward_points', language, notification.params.points),
+      });
     case 'gift_received':
       return renderGiftReceived(notification.params, language);
     case 'reward_received':
@@ -444,13 +474,15 @@ export const renderNotification = (notification: Notification, language: Languag
 
 /**
  * Кнопка под уведомлением. Есть у тех, что зовут в приложение, — та же, что под приветствием
- * бота: у `app_relaunch`, у подарка, который забирают в приложении, и у ручной награды, код
- * которой там же. Остальные уведомления сообщают, а не зовут.
+ * бота: у `app_relaunch`, у подарка, который забирают в приложении, у ручной награды, код
+ * которой там же, и у привязки из карточки (issue #305) — водитель открывает приложение
+ * с нового Telegram. Остальные уведомления сообщают, а не зовут.
  */
 export const notificationButton = (notification: Notification, language: Language): OpenAppButton | undefined =>
   notification.template === 'app_relaunch' ||
   notification.template === 'gift_received' ||
-  notification.template === 'reward_received'
+  notification.template === 'reward_received' ||
+  notification.template === 'telegram_linked'
     ? launchButton(language)
     : undefined;
 

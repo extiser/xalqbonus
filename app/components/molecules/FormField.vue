@@ -21,6 +21,8 @@ withDefaults(
     error?: string | null;
     /** Подсказка под полем: правило ввода, а не отказ. */
     hint?: string | null;
+    /** Клавиатура на телефоне: `numeric` — только цифры (issue #305). */
+    inputmode?: 'numeric' | 'decimal' | 'text';
   }>(),
   {
     placeholder: undefined,
@@ -29,6 +31,7 @@ withDefaults(
     required: false,
     error: null,
     hint: null,
+    inputmode: undefined,
   },
 );
 
@@ -46,6 +49,7 @@ const model = defineModel<string>({ required: true });
       :autocomplete="autocomplete"
       :autofocus="autofocus"
       :required="required"
+      :inputmode="inputmode"
     />
     <span v-if="error" class="mt-1 block text-sm text-red-700">{{ error }}</span>
     <span v-else-if="hint" class="mt-1 block text-sm text-slate-500">{{ hint }}</span>

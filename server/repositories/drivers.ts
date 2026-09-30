@@ -402,6 +402,80 @@ export const listPersonPhones = async (personId: string): Promise<ProfilePhoneRo
      ORDER BY phone."closed_at" ASC NULLS FIRST, phone."observed_at" DESC
   `;
 
+export type PersonTelegramStateRow = {
+  isDemo: boolean;
+  /** Есть строка `person_settings`: человек в программе. */
+  isMember: boolean;
+};
+
+/**
+ * Человек под привязкой Telegram из карточки (issue #305): демо ли он и в программе ли.
+ * Пусто — такого нет.
+ *
+ * С `lock` строка `xb.persons` берётся `FOR UPDATE`: две привязки одного водителя с двух
+ * экранов идут друг за другом, а не мимо друг друга. Участие — подзапросом, а не левым
+ * соединением: блокировку на необязательную сторону соединения Postgres не ставит.
+ */
+export const findPersonTelegramState = async (
+  personId: string,
+  client: Prisma.TransactionClient = db,
+  lock = false,
+): Promise<PersonTelegramStateRow | null> => {
+  const rows = await client.$queryRaw<PersonTelegramStateRow[]>`
+    SELECT person."is_demo" AS "isDemo",
+           EXISTS (
+             SELECT 1 FROM xb.person_settings AS settings WHERE settings."person_id" = person."id"
+           )                AS "isMember"
+      FROM xb.persons AS person
+     WHERE person."id" = ${personId}::uuid
+     ${lock ? Prisma.sql`FOR UPDATE` : Prisma.empty}
+  `;
+
+  return rows[0] ?? null;
+};
+
+export type DriverListNameRow = {
+  lastName: string | null;
+  firstName: string | null;
+  middleName: string | null;
+  callsigns: string[];
+};
+
+/**
+ * Имя и позывные человека так, как их показывает строка списка водителей: имя — из профиля
+ * для показа, позывные — всех учёток. Правило то же, что у `listMatchedDrivers`: отказ
+ * «привязан к другому водителю» (issue #305) называет того, кого сотрудник найдёт поиском.
+ */
+export const findDriverListName = async (
+  personId: string,
+  client: Prisma.TransactionClient = db,
+): Promise<DriverListNameRow> => {
+  const rows = await client.$queryRaw<DriverListNameRow[]>`
+    SELECT profile."lastName",
+           profile."firstName",
+           profile."middleName",
+           coalesce(
+             (SELECT array_agg(DISTINCT candidate."callsign")
+                       FILTER (WHERE candidate."callsign" IS NOT NULL)
+                FROM xb.park_profiles AS candidate
+               WHERE candidate."person_id" = ${personId}::uuid),
+             ARRAY[]::text[]
+           ) AS "callsigns"
+      FROM (SELECT 1) AS anchor
+      LEFT JOIN LATERAL (
+        SELECT candidate."last_name"   AS "lastName",
+               candidate."first_name"  AS "firstName",
+               candidate."middle_name" AS "middleName"
+          FROM xb.park_profiles AS candidate
+         WHERE candidate."person_id" = ${personId}::uuid
+         ORDER BY (candidate."work_status" = 'working') DESC, candidate."api_updated_at" DESC
+         LIMIT 1
+      ) AS profile ON TRUE
+  `;
+
+  return rows[0] ?? { lastName: null, firstName: null, middleName: null, callsigns: [] };
+};
+
 export type TelegramLinkRow = {
   telegramChatId: string;
   telegramUserId: string | null;
@@ -410,6 +484,8 @@ export type TelegramLinkRow = {
   closeReason: LinkCloseReason | null;
   confirmedBy: LinkConfirmedBy;
   operatorName: string | null;
+  /** Сотрудник, закрывший строку (issue #305). Пусто у закрытых не человеком и до #305. */
+  closedByName: string | null;
 };
 
 /**
@@ -433,9 +509,11 @@ export const listPersonTelegramLinks = async (personId: string): Promise<Telegra
            link."closed_at"    AS "closedAt",
            link."close_reason" AS "closeReason",
            link."confirmed_by" AS "confirmedBy",
-           operator."full_name" AS "operatorName"
+           operator."full_name" AS "operatorName",
+           closer."full_name"   AS "closedByName"
       FROM xb.telegram_links AS link
       LEFT JOIN xb.employees AS operator ON operator."id" = link."operator_employee_id"
+      LEFT JOIN xb.employees AS closer ON closer."id" = link."closed_by_employee_id"
      WHERE link."person_id" = ${personId}::uuid
      ORDER BY link."closed_at" ASC NULLS FIRST, link."linked_at" DESC
   `;

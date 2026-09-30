@@ -94,6 +94,43 @@ export type DriverTelegramLink = {
   confirmedBy: LinkConfirmedBy;
   /** Имя сотрудника, подтвердившего привязку. Пусто, если подтверждал не человек. */
   operatorName: string | null;
+  /**
+   * Имя сотрудника, закрывшего привязку (issue #305). Пусто у действующей, у закрытых
+   * автоматикой, склейкой, отказом Telegram и у закрытых до #305.
+   */
+  closedByName: string | null;
+};
+
+/**
+ * Проверка Telegram перед привязкой из карточки: `GET /api/drivers/:personId/telegram-candidate`
+ * (issue #305). Всё — из попытки, на которую опирается привязка, а не из ввода.
+ */
+export type DriverTelegramCandidateResponse = {
+  telegramUserId: string;
+  /** Номер из попытки: `phone_e164`, а без него — как пришёл. */
+  phone: string | null;
+  /** Когда водитель делился номером с этого Telegram. */
+  sharedAt: string;
+  /** Действующая привязка, которую закроет привязка. Пусто — закрывать нечего. */
+  currentTelegramChatId: string | null;
+};
+
+/** Коды отказов привязки и отвязки Telegram из карточки (issue #305). */
+export type DriverTelegramDenialCode =
+  | 'driver_demo'
+  | 'not_member'
+  | 'no_attempt'
+  | 'employee_account'
+  | 'linked_to_other'
+  | 'already_active'
+  | 'no_active_link';
+
+/** Водитель, к которому уже привязан Telegram, — у отказа `linked_to_other`. */
+export type DriverTelegramOtherDriver = {
+  personId: string;
+  fullName: string;
+  /** Позывные через запятую. Пусто — позывного нет. */
+  callsign: string | null;
 };
 
 /**

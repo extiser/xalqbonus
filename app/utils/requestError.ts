@@ -43,6 +43,13 @@ export const failureCode = (error: unknown): string | null => {
 };
 
 /**
+ * Подробности отказа из `data` — для доменных отказов, которые несут больше кода: у «Telegram
+ * привязан к другому водителю» это тот водитель (issue #305). `null` — ответа не было.
+ */
+export const failureDetails = (error: unknown): Record<string, unknown> | null =>
+  asRecord(failureBody(error)?.data);
+
+/**
  * Поле формы, к которому ручка отнесла отказ. `null` — отказ не про поле или ответа не было.
  *
  * Строкой без проверки по списку: какие поля у формы, знает форма, и значение, которого

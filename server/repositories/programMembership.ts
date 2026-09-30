@@ -162,7 +162,46 @@ export const insertTelegramLinks = async (
   return written;
 };
 
+export type OperatorTelegramLinkInput = {
+  personId: string;
+  telegramChatId: bigint;
+  telegramUserId: bigint;
+  /** Сотрудник, открывший привязку из карточки водителя. */
+  operatorEmployeeId: string;
+};
+
+/**
+ * Открывает привязку от имени сотрудника (issue #305) и отдаёт её идентификатор.
+ *
+ * Прямой `INSERT`, без условия «этой пары ещё нет», как у `insertTelegramLinks`: пара
+ * человек+чат, закрытая в истории, открывается новой строкой рядом с закрытой — вернуть
+ * водителя на прежний Telegram и есть одна из причин прийти в офис. Уникальности на пару
+ * нет, есть только на активные строки, и они же отбивают параллельную автопривязку.
+ */
+export const insertOperatorTelegramLink = async (
+  input: OperatorTelegramLinkInput,
+  client: Executor,
+): Promise<string> => {
+  const rows = await client.$queryRaw<{ id: string }[]>`
+    INSERT INTO xb.telegram_links (
+      "person_id", "telegram_chat_id", "telegram_user_id", "confirmed_by", "operator_employee_id"
+    )
+    VALUES (
+      ${input.personId}::uuid,
+      ${input.telegramChatId.toString()}::text::bigint,
+      ${input.telegramUserId.toString()}::text::bigint,
+      'operator'::xb.link_confirmed_by,
+      ${input.operatorEmployeeId}::uuid
+    )
+    RETURNING "id"
+  `;
+
+  return (rows[0] as { id: string }).id;
+};
+
 export type ActiveTelegramLinkRow = {
+  /** Сама строка: закрывает её перепривязка и отвязка из карточки (issue #305). */
+  linkId: string;
   personId: string;
   telegramChatId: bigint;
 };
@@ -175,9 +214,11 @@ export type ActiveTelegramLinkRow = {
  */
 export const findActiveLinkByChat = async (
   telegramChatId: bigint,
+  client: Executor = db,
 ): Promise<ActiveTelegramLinkRow | null> => {
-  const rows = await db.$queryRaw<ActiveTelegramLinkRow[]>`
-    SELECT "person_id"        AS "personId",
+  const rows = await client.$queryRaw<ActiveTelegramLinkRow[]>`
+    SELECT "id"               AS "linkId",
+           "person_id"        AS "personId",
            "telegram_chat_id" AS "telegramChatId"
       FROM xb.telegram_links
      WHERE "closed_at" IS NULL
@@ -197,9 +238,11 @@ export const findActiveLinkByChat = async (
  */
 export const findActiveLinkByPerson = async (
   personId: string,
+  client: Executor = db,
 ): Promise<ActiveTelegramLinkRow | null> => {
-  const rows = await db.$queryRaw<ActiveTelegramLinkRow[]>`
-    SELECT "person_id"        AS "personId",
+  const rows = await client.$queryRaw<ActiveTelegramLinkRow[]>`
+    SELECT "id"               AS "linkId",
+           "person_id"        AS "personId",
            "telegram_chat_id" AS "telegramChatId"
       FROM xb.telegram_links
      WHERE "closed_at" IS NULL
@@ -230,7 +273,8 @@ export const findActiveLinkByTelegramOrPhone = async (
   client: Executor = db,
 ): Promise<ActiveTelegramLinkRow | null> => {
   const rows = await client.$queryRaw<ActiveTelegramLinkRow[]>`
-    SELECT link."person_id"        AS "personId",
+    SELECT link."id"               AS "linkId",
+           link."person_id"        AS "personId",
            link."telegram_chat_id" AS "telegramChatId"
       FROM xb.telegram_links AS link
      WHERE link."closed_at" IS NULL
@@ -318,6 +362,32 @@ export const findNotificationRecipient = async (
 };
 
 /**
+ * Куда и на каком языке писать в чат этой привязки — даже закрытой (issue #305).
+ *
+ * Та же выборка, что `findNotificationRecipient`, но по строке, а не по активной привязке
+ * человека: после перепривязки и отвязки сообщение уходит в прежний чат, и активной
+ * он уже не является. Строка чужого человека не находится — задание несёт и человека,
+ * и привязку, и расходиться им негде.
+ */
+export const findNotificationRecipientByLink = async (
+  linkId: string,
+  personId: string,
+): Promise<NotificationRecipientRow | null> => {
+  const rows = await db.$queryRaw<NotificationRecipientRow[]>`
+    SELECT link."id"               AS "linkId",
+           link."telegram_chat_id" AS "telegramChatId",
+           settings."language",
+           settings."notifications_enabled" AS "notificationsEnabled"
+      FROM xb.telegram_links AS link
+      JOIN xb.person_settings AS settings ON settings."person_id" = link."person_id"
+     WHERE link."id" = ${linkId}::uuid
+       AND link."person_id" = ${personId}::uuid
+  `;
+
+  return rows[0] ?? null;
+};
+
+/**
  * Закрывает привязку. Возвращает `false`, если закрывать было нечего: пока задание лежало
  * в очереди, привязку мог закрыть оператор или перепривязка.
  *
@@ -334,6 +404,30 @@ export const closeTelegramLink = async (
     UPDATE xb.telegram_links
        SET "closed_at"    = ${closedAt.toISOString()}::text::timestamptz,
            "close_reason" = ${closeReason}::text::xb.link_close_reason
+     WHERE "id" = ${linkId}::uuid
+       AND "closed_at" IS NULL
+  `;
+
+  return updated > 0;
+};
+
+/**
+ * Закрывает привязку от имени сотрудника (issue #305): причина `operator` и тот, кто закрыл.
+ *
+ * Отдельно от `closeTelegramLink`: та закрывает по отказу Telegram и имени не несёт, а здесь
+ * имя и есть смысл записи — «кто снял этот аккаунт с Telegram». Возвращает `false`, если
+ * строка уже закрыта.
+ */
+export const closeTelegramLinkByOperator = async (
+  linkId: string,
+  employeeId: string,
+  client: Executor,
+): Promise<boolean> => {
+  const updated = await client.$executeRaw`
+    UPDATE xb.telegram_links
+       SET "closed_at"             = now(),
+           "close_reason"          = 'operator'::xb.link_close_reason,
+           "closed_by_employee_id" = ${employeeId}::uuid
      WHERE "id" = ${linkId}::uuid
        AND "closed_at" IS NULL
   `;
