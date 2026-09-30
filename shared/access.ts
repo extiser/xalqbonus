@@ -35,6 +35,15 @@ export const SYNC_ROLES: readonly EmployeeRole[] = ['owner', 'admin'];
 export const CATALOG_ROLES: readonly EmployeeRole[] = ['owner', 'admin', 'senior_manager'];
 
 /**
+ * Отчёты — экран и выгрузка в Excel — владельцу, админу и старшему менеджеру (issue #308).
+ *
+ * Отчёты — это деньги и все офисы сразу, менеджеру у стойки они не нужны (решение Руслана
+ * 30-09-2026). Своим списком, а не `CATALOG_ROLES`: состав сегодня совпадает, но это разные
+ * права, и расходиться им позволено каждому по своей причине.
+ */
+export const REPORT_ROLES: readonly EmployeeRole[] = ['owner', 'admin', 'senior_manager'];
+
+/**
  * Заказы офиса — выдача по коду и отмена — всем ролям: это и есть работа менеджера у стойки
  * (issue #122). Выдача наград на той же стойке открыта тем же списком (issue #172).
  *
