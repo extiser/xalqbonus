@@ -9,7 +9,10 @@
  * заводится, только если её ещё нет, с `finished_at = null`; существующая не перезаписывается.
  * Итоги и `finished_at` пишутся в конце успешного обхода. При обрыве закрытая строка
  * остаётся как была — оборванный повтор не «раскрывает» уже пройденные сутки, — а незакрытая
- * получает частичные итоги, и следующий issue продолжит полный прогон с этого места.
+ * получает частичные итоги, и следующий запуск прогона диапазона начнёт эти сутки заново.
+ *
+ * Темп, охрана живой синхронизации и бюджет живут не здесь, а в транспорте, который сюда
+ * передают: прогон диапазона оборачивает им клиент (`collectHistoryRange.ts`, issue #317).
  */
 import type { FleetTransport } from '#server/adapters/fleet/client';
 import { readOrdersByEndedAt, type FleetOrder } from '#server/adapters/fleet/orders';
@@ -42,14 +45,31 @@ export type HistoryDaySummary = {
   finishedAt: Date;
 };
 
-/** Обход суток остановлен по правилу пробы, а не поломкой: журнал суток остался незакрытым. */
+/**
+ * Обход суток остановлен: журнал суток остался незакрытым.
+ *
+ * Исходная причина лежит в `cause`: прогон диапазона решает по ней, что делать дальше, —
+ * переждать лимит, закончить по бюджету или упасть (issue #317). `written` — сколько заказов
+ * обход успел записать до обрыва: они в таблице, и итог запуска обязан их считать.
+ */
 export class HistoryDayStoppedError extends Error {
   constructor(
     public readonly parkDay: string,
-    reason: string,
+    cause: unknown,
+    public readonly written: number,
   ) {
-    super(`обход суток ${parkDay} остановлен: ${reason}`);
+    super(`обход суток ${parkDay} остановлен: ${cause instanceof Error ? cause.message : 'неизвестный отказ'}`, {
+      cause,
+    });
     this.name = 'HistoryDayStoppedError';
+  }
+}
+
+/** Два отказа по лимиту подряд на одном запросе: ключ сейчас не отпускает. */
+export class RepeatedRateLimitError extends Error {
+  constructor(description: string, attempt: number) {
+    super(`${attempt} отказа по лимиту подряд на «${description}»`);
+    this.name = 'RepeatedRateLimitError';
   }
 }
 
@@ -59,7 +79,7 @@ export class HistoryDayStoppedError extends Error {
  */
 export const stopOnRepeatedRateLimit = (description: string, attempt: number): void => {
   if (attempt >= RATE_LIMITED_IN_A_ROW_TO_STOP) {
-    throw new Error(`${attempt} отказа по лимиту подряд на «${description}»`);
+    throw new RepeatedRateLimitError(description, attempt);
   }
 };
 
@@ -140,10 +160,7 @@ export const collectHistoryDay = async (
       await saveDay(null);
     }
 
-    throw new HistoryDayStoppedError(
-      parkDayText,
-      error instanceof Error ? error.message : 'неизвестный отказ',
-    );
+    throw new HistoryDayStoppedError(parkDayText, error, totals.written);
   }
 
   const finishedAt = new Date();
