@@ -2210,3 +2210,50 @@ model GiftGrant {
   @@map("gift_grants")
   @@schema("xb")
 }
+
+/// История заказов парка — для анализа оттока, а не для начисления (issue #315).
+///
+/// Отдельно от `trips` намеренно: запись в `trips` через `syncOrders` начисляет баллы
+/// (`trip:<order_id>`), и прогон за год начислил бы баллы за год. Здесь начислений,
+/// отметок синхронизации и `sync_skips` нет.
+///
+/// Внешнего ключа на `park_profiles` нет: в истории лежат заказы профилей, которых нет
+/// в нашем реестре, — они-то и нужны больше всего.
+model FleetOrderHistory {
+  orderId       String    @id @map("order_id")
+  profileId     String    @map("profile_id")
+  status        String
+  category      String
+  paymentMethod String    @map("payment_method")
+  workRuleId    String?   @map("work_rule_id")
+  bookedAt      DateTime  @map("booked_at") @db.Timestamptz(6)
+  endedAt       DateTime? @map("ended_at") @db.Timestamptz(6)
+  price         Decimal   @db.Decimal(12, 2)
+  carCallsign   String?   @map("car_callsign")
+  fetchedAt     DateTime  @default(now()) @map("fetched_at") @db.Timestamptz(6)
+
+  @@index([profileId, endedAt])
+  @@index([endedAt])
+  @@map("fleet_order_history")
+  @@schema("xb")
+}
+
+/// Журнал сборщика истории: строка на обойдённые парковые сутки.
+///
+/// По нему полный прогон продолжается с места остановки. `finished_at = null` —
+/// обход суток прервался.
+model FleetOrderHistoryDay {
+  /// Парковые сутки `D`: `ended_at` с `D 00:00:00Z` по `D+1 00:00:00Z`, то есть 05:00–05:00
+  /// по Ташкенту.
+  parkDay     DateTime  @id @map("park_day") @db.Date
+  orders      Int
+  complete    Int
+  malformed   Int
+  pages       Int
+  rateLimited Int       @map("rate_limited")
+  startedAt   DateTime  @map("started_at") @db.Timestamptz(6)
+  finishedAt  DateTime? @map("finished_at") @db.Timestamptz(6)
+
+  @@map("fleet_order_history_days")
+  @@schema("xb")
+}

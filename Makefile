@@ -10,7 +10,7 @@ COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
         db-restore db-drop db-schema invariants license-collisions legacy-vs-api import-legacy import-legacy-awarded-trips \
         employee-owner prod-employee-owner \
         import-legacy-dump \
-        sync-orders sync-registry sync-state \
+        sync-orders sync-registry sync-state fleet-history \
         prod-up prod-down prod-restart prod-logs prod-ps prod-shell prod-psql prod-invariants prod-migrate prod-migrate-rolled-back \
         prod-stop prod-start prod-sql prod-db-restore prod-uploads-restore \
         prod-import-legacy prod-import-legacy-check prod-import-legacy-awarded-trips \
@@ -201,6 +201,12 @@ import-legacy-dump: ## Прогон переноса на другом дамп�
 # расписание, а не запрещает синхронизацию.
 sync-orders: ## Разовый прогон синхронизации заказов. Использование: make sync-orders [kind=orders_catchup]
 	$(COMPOSE) exec -T app npx tsx scripts/sync-orders.ts $(or $(kind),orders)
+
+# История заказов всего парка (issue #315): сутки за сутками по списку дат, в свою таблицу
+# `xb.fleet_order_history`, без начислений и мимо `trips`. Ходит в Fleet API на ключе из `.env`,
+# поэтому бюджет запросов жёсткий: по умолчанию 60 за запуск.
+fleet-history: ## История заказов парка по датам. Использование: make fleet-history dates=2026-09-24,2026-07-01 [budget=60]
+	$(COMPOSE) exec -T app npx tsx scripts/fleet-history.ts "$(dates)" $(budget)
 
 # Разовый прогон синхронизации профилей парка мимо очереди — тем же кодом, каким ходит
 # воркер. Полный обход запускается только отсюда: по расписанию он не ходит никогда,
