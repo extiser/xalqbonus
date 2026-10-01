@@ -395,3 +395,34 @@ export const findLastSuccessfulRunFinishedAt = async (kind: SyncKind): Promise<D
 
   return rows[0]?.finishedAt ?? null;
 };
+
+/**
+ * Насколько сейчас занят ключ парка живой синхронизацией — для сборщика истории (issue #317).
+ *
+ * `catchupStartedAt` — начало идущего догоняющего прогона, `null` — такого нет. Возраст
+ * строки не фильтруется: оборванный прогон закрывает воркер при старте (`failAbandonedRuns`),
+ * а время начала уходит в лог ожидания, и вечно бегущая строка там видна.
+ *
+ * Упавшие `orders` считаются по началу прогона, а не по окончанию: под начало стоит индекс
+ * `(kind, started_at DESC)`, а спрашивают перед каждой страницей истории. Прогон `orders`
+ * идёт секунды, и разница между началом и отказом в пятнадцатиминутном окне не видна.
+ */
+export type LiveSyncPressure = {
+  catchupStartedAt: Date | null;
+  ordersFailedRecently: number;
+};
+
+export const readLiveSyncPressure = async (failedSince: Date): Promise<LiveSyncPressure> => {
+  const [catchup, ordersFailedRecently] = await Promise.all([
+    db.syncRun.findFirst({
+      where: { kind: 'orders_catchup', status: 'running' },
+      orderBy: { startedAt: 'desc' },
+      select: { startedAt: true },
+    }),
+    db.syncRun.count({
+      where: { kind: 'orders', status: 'failed', startedAt: { gte: failedSince } },
+    }),
+  ]);
+
+  return { catchupStartedAt: catchup?.startedAt ?? null, ordersFailedRecently };
+};

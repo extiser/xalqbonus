@@ -10,10 +10,11 @@ COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
         db-restore db-drop db-schema invariants license-collisions legacy-vs-api import-legacy import-legacy-awarded-trips \
         employee-owner prod-employee-owner \
         import-legacy-dump \
-        sync-orders sync-registry sync-state fleet-history \
+        sync-orders sync-registry sync-state fleet-history fleet-history-status \
         prod-up prod-down prod-restart prod-logs prod-ps prod-shell prod-psql prod-invariants prod-migrate prod-migrate-rolled-back \
         prod-stop prod-start prod-sql prod-db-restore prod-uploads-restore \
         prod-import-legacy prod-import-legacy-check prod-import-legacy-awarded-trips \
+        prod-fleet-history prod-fleet-history-logs prod-fleet-history-stop prod-fleet-history-status \
         prod-deploy prod-rollback \
         proxy-up proxy-down proxy-ps proxy-logs proxy-validate proxy-reload
 
@@ -202,11 +203,24 @@ import-legacy-dump: ## Прогон переноса на другом дамп�
 sync-orders: ## Разовый прогон синхронизации заказов. Использование: make sync-orders [kind=orders_catchup]
 	$(COMPOSE) exec -T app npx tsx scripts/sync-orders.ts $(or $(kind),orders)
 
-# История заказов всего парка (issue #315): сутки за сутками по списку дат, в свою таблицу
-# `xb.fleet_order_history`, без начислений и мимо `trips`. Ходит в Fleet API на ключе из `.env`,
-# поэтому бюджет запросов жёсткий: по умолчанию 60 за запуск.
-fleet-history: ## История заказов парка по датам. Использование: make fleet-history dates=2026-09-24,2026-07-01 [budget=60]
-	$(COMPOSE) exec -T app npx tsx scripts/fleet-history.ts "$(dates)" $(budget)
+# История заказов всего парка (issues #315, #317), в свою таблицу `xb.fleet_order_history`,
+# без начислений и мимо `trips`. Два режима: список дат (`dates=`) — проба глубины, ноль заказов
+# останавливает список; диапазон (`from= to= budget=`) — полный прогон от старых суток к новым,
+# с паузой `pause=` секунд между страницами, охраной живой синхронизации и паузой `cooldown=`
+# минут после отказов по лимиту. Закрытые сутки пропускаются, повтор команды добирает остальное.
+# Ходит в Fleet API на ключе из `.env`, поэтому бюджет запросов жёсткий: у списка по умолчанию 60,
+# у диапазона обязателен.
+fleet-history: ## История заказов парка. make fleet-history dates=2026-09-24,2026-07-01 [budget=60] | from=2025-08-01 to=2026-09-30 budget=N [pause=5] [cooldown=10]
+	$(COMPOSE) exec -T app npx tsx scripts/fleet-history.ts \
+		dates="$(dates)" from="$(from)" to="$(to)" budget="$(budget)" pause="$(pause)" cooldown="$(cooldown)"
+
+# Диапазон сводки по умолчанию — тот, что прогоняется целиком (issue #317).
+FLEET_HISTORY_FROM = 2025-08-01
+FLEET_HISTORY_TO = 2026-09-30
+
+fleet-history-status: ## Сводка прогона истории по журналу суток. make fleet-history-status [from=2025-08-01] [to=2026-09-30]
+	$(COMPOSE) exec -T postgres sh -c 'psql -X -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -q -v from="$$1" -v to="$$2"' \
+		sh "$(or $(from),$(FLEET_HISTORY_FROM))" "$(or $(to),$(FLEET_HISTORY_TO))" < scripts/fleet-history-status.sql
 
 # Разовый прогон синхронизации профилей парка мимо очереди — тем же кодом, каким ходит
 # воркер. Полный обход запускается только отсюда: по расписанию он не ходит никогда,
@@ -415,6 +429,41 @@ prod-import-legacy-awarded-trips: ## Перенести на проде толь
 	@case "$(report)" in */*) echo "report= — имя файла в $(PROD_IMPORT_DIR), без каталога"; exit 1;; esac
 	$(COMPOSE_PROD) run --rm -T -v "$(PROD_IMPORT_DIR):/import" \
 		app node .output/import-legacy.mjs --only legacy-awarded-trips "/import/$(or $(report),import-report-awarded-trips.md)"
+
+# Полный прогон истории заказов парка на боевой машине (issue #317) — бандлом из образа,
+# одноразовым контейнером `app` в фоне: прогон идёт часами и обязан пережить обрыв ssh.
+# Имя контейнера постоянное — по нему цели ниже смотрят лог, останавливают и не дают поднять
+# второй прогон рядом с идущим. `--rm` нет намеренно: остановленный контейнер держит лог
+# с итогом запуска, и `prod-fleet-history-logs` показывает его и после конца прогона. Прежний
+# остановленный контейнер удаляется при следующем запуске. `--no-deps` — база уже поднята,
+# а пересоздавать её ради разового прогона нельзя. Запускается на самой машине, руками:
+# CLI на серверы не ходит (CLAUDE.md → «Важные ограничения»). Порядок —
+# docker/DEPLOY-MANUAL.md → «Прогон истории заказов парка».
+PROD_FLEET_HISTORY_CONTAINER = xalqbonus-fleet-history
+
+prod-fleet-history: ## Прогон истории заказов в фоне (prod). make prod-fleet-history from=2025-08-01 to=2026-09-30 budget=500 [pause=5] [cooldown=10]
+	@test -n "$(from)" && test -n "$(to)" && test -n "$(budget)" || { echo "укажите диапазон и бюджет: make prod-fleet-history from=2025-08-01 to=2026-09-30 budget=500 [pause=5] [cooldown=10]"; exit 1; }
+	@state=$$(docker inspect -f '{{.State.Status}}' $(PROD_FLEET_HISTORY_CONTAINER) 2>/dev/null || true); \
+	case "$$state" in \
+		'') ;; \
+		running|restarting|paused) echo "прогон истории уже идёт (контейнер $(PROD_FLEET_HISTORY_CONTAINER), $$state): make prod-fleet-history-logs, остановить — make prod-fleet-history-stop"; exit 1;; \
+		*) echo "удаляется прежний контейнер $(PROD_FLEET_HISTORY_CONTAINER) ($$state) вместе с логом прошлого запуска"; docker rm $(PROD_FLEET_HISTORY_CONTAINER) >/dev/null || exit 1;; \
+	esac
+	$(COMPOSE_PROD) run -d --no-deps --name $(PROD_FLEET_HISTORY_CONTAINER) \
+		app node .output/fleet-history.mjs from="$(from)" to="$(to)" budget="$(budget)" pause="$(pause)" cooldown="$(cooldown)"
+	@echo "прогон запущен: make prod-fleet-history-logs, сводка — make prod-fleet-history-status"
+
+prod-fleet-history-logs: ## Хвост лога прогона истории (prod), и идущего, и закончившегося. make prod-fleet-history-logs [lines=200]
+	docker logs -f --tail $(or $(lines),200) $(PROD_FLEET_HISTORY_CONTAINER)
+
+# Ждём до минуты: прогон по сигналу дожидается ушедшего запроса, сохраняет частичные итоги
+# суток и печатает итог запуска. Незакрытые сутки доберёт следующий запуск.
+prod-fleet-history-stop: ## Остановить прогон истории (prod) — штатно, с итогом в логе
+	docker stop -t 60 $(PROD_FLEET_HISTORY_CONTAINER)
+
+prod-fleet-history-status: ## Сводка прогона истории по журналу суток (prod). make prod-fleet-history-status [from=2025-08-01] [to=2026-09-30]
+	$(COMPOSE_PROD) exec -T postgres sh -c 'PGPASSWORD="$$POSTGRES_PASSWORD" psql -X -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -q -v from="$$1" -v to="$$2"' \
+		sh "$(or $(from),$(FLEET_HISTORY_FROM))" "$(or $(to),$(FLEET_HISTORY_TO))" < scripts/fleet-history-status.sql
 
 # Обе прод-цели миграций идут одноразовым контейнером, а не `exec`: так же мигрирует сам выкат
 # (`docker/scripts/deploy-manual.sh`, шаг 4), и работающий `app` для них не нужен. Образ берётся

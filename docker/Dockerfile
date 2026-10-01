@@ -39,6 +39,9 @@ RUN npm run build:create-owner
 # `npx tsx scripts/...` через локальный стек, а на машине нет ни исходников, ни tsx.
 # Запуск на машине — docker/DEPLOY-MANUAL.md → «Перенос старой базы в день выката».
 RUN npm run build:import-legacy
+# Прогон истории заказов парка (issue #317) — тем же бандлом и по той же причине: на машине
+# нет ни исходников, ни tsx. Запуск — docker/DEPLOY-MANUAL.md → «Прогон истории заказов парка».
+RUN npm run build:fleet-history
 # Production-зависимости собираются отдельным деревом, а не вычищаются на месте: этот же этап
 # служит образом локального стека (compose.local.yml → target: build), а там нужны tsx, vitest
 # и prisma CLI. Дерево /prod едет в финальный образ, дерево /srv остаётся полным.
@@ -154,6 +157,18 @@ RUN out="$(DATABASE_URL='postgresql://smoke:smoke@127.0.0.1:1/smoke?schema=xb' \
       echo 'бандл переноса поднялся: граф модулей разрешился'; \
     else \
       echo 'бандл переноса не поднялся:'; \
+      echo "$out" | head -c 2000; \
+      exit 1; \
+    fi
+# Проверка бандла истории заказов — тем же способом. Запуск без аргументов: скрипт печатает
+# подсказку по вызову и выходит с единицей, не доходя ни до базы, ни до Fleet API. Подсказка
+# появляется, только если граф модулей разрешился и дело дошло до нашего кода.
+RUN out="$(DATABASE_URL='postgresql://smoke:smoke@127.0.0.1:1/smoke?schema=xb' \
+           node .output/fleet-history.mjs 2>&1 || true)"; \
+    if echo "$out" | grep -q 'fleet-history: укажите'; then \
+      echo 'бандл истории заказов поднялся: граф модулей разрешился'; \
+    else \
+      echo 'бандл истории заказов не поднялся:'; \
       echo "$out" | head -c 2000; \
       exit 1; \
     fi
