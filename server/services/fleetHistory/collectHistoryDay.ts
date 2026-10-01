@@ -5,13 +5,17 @@
  * а историю за год начислять нельзя. Баллы не начисляются, `syncOrders` и его репозитории
  * не вызываются, отметок синхронизации и `sync_skips` нет.
  *
- * Строка суток в `fleet_order_history_days` — журнал сборщика: пишется в начале с
- * `finished_at = null` и закрывается итогами в конце. Оборванный обход оставляет её
- * незакрытой, и следующий issue продолжит полный прогон с этого места.
+ * Строка суток в `fleet_order_history_days` — журнал сборщика. В начале обхода она
+ * заводится, только если её ещё нет, с `finished_at = null`; существующая не перезаписывается.
+ * Итоги и `finished_at` пишутся в конце успешного обхода. При обрыве закрытая строка
+ * остаётся как была — оборванный повтор не «раскрывает» уже пройденные сутки, — а незакрытая
+ * получает частичные итоги, и следующий issue продолжит полный прогон с этого места.
  */
 import type { FleetTransport } from '#server/adapters/fleet/client';
 import { readOrdersByEndedAt, type FleetOrder } from '#server/adapters/fleet/orders';
 import {
+  createFleetOrderHistoryDayIfAbsent,
+  readFleetOrderHistoryDayClosed,
   upsertFleetOrderHistory,
   upsertFleetOrderHistoryDay,
   type FleetOrderHistoryInput,
@@ -96,6 +100,8 @@ export const collectHistoryDay = async (
   const rateLimitedBefore = client.stats().rateLimited;
   const totals = { orders: 0, complete: 0, malformed: 0, pages: 0, written: 0 };
 
+  const wasClosed = (await readFleetOrderHistoryDayClosed(parkDay)) === true;
+
   const saveDay = (finishedAt: Date | null): Promise<void> =>
     upsertFleetOrderHistoryDay({
       parkDay,
@@ -108,7 +114,16 @@ export const collectHistoryDay = async (
       finishedAt,
     });
 
-  await saveDay(null);
+  await createFleetOrderHistoryDayIfAbsent({
+    parkDay,
+    orders: 0,
+    complete: 0,
+    malformed: 0,
+    pages: 0,
+    rateLimited: 0,
+    startedAt,
+    finishedAt: null,
+  });
 
   try {
     for await (const page of readOrdersByEndedAt(client, window, pageLimit)) {
@@ -120,8 +135,11 @@ export const collectHistoryDay = async (
       totals.malformed += page.malformed;
     }
   } catch (error) {
-    // Что успели — фиксируем в журнале, строка остаётся незакрытой: обход прервался.
-    await saveDay(null);
+    // Закрытую до запуска строку не трогаем. Незакрытая получает то, что успели.
+    if (!wasClosed) {
+      await saveDay(null);
+    }
+
     throw new HistoryDayStoppedError(
       parkDayText,
       error instanceof Error ? error.message : 'неизвестный отказ',

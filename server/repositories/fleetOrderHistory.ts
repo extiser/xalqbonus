@@ -111,3 +111,20 @@ export const upsertFleetOrderHistoryDay = async (day: FleetOrderHistoryDayInput)
     update: columns,
   });
 };
+
+/** Закрыт ли обход суток: `null` — строки нет, `false` — обход прервался, `true` — пройден. */
+export const readFleetOrderHistoryDayClosed = async (parkDay: Date): Promise<boolean | null> => {
+  const day = await db.fleetOrderHistoryDay.findUnique({
+    where: { parkDay },
+    select: { finishedAt: true },
+  });
+
+  return day === null ? null : day.finishedAt !== null;
+};
+
+/** Заводит строку суток, только если её ещё нет: существующая, в том числе закрытая, не трогается. */
+export const createFleetOrderHistoryDayIfAbsent = async (
+  day: FleetOrderHistoryDayInput,
+): Promise<void> => {
+  await db.fleetOrderHistoryDay.createMany({ data: [day], skipDuplicates: true });
+};
