@@ -65,4 +65,6 @@ export type SurveyRequestInvalidReason =
   | 'points'
   | 'content'
   | 'question_type'
-  | 'question_options';
+  | 'question_options'
+  | 'question_own_answer'
+  | 'option_exclusive';

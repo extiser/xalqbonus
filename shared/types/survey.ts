@@ -36,6 +36,8 @@ export type SurveyOption = {
   optionId: string;
   textRu: string | null;
   textUz: string | null;
+  /** Исключающий — отметка снимает остальные (issue #335). Бывает только у `multiple`. */
+  exclusive: boolean;
 };
 
 export type SurveyQuestion = {
@@ -44,6 +46,8 @@ export type SurveyQuestion = {
   textRu: string | null;
   textUz: string | null;
   required: boolean;
+  /** «Свой вариант» — ответ своими словами (issue #335). Бывает только у `single` и `multiple`. */
+  allowOwnAnswer: boolean;
   /** По порядку. У `text` и `scale` пусто всегда. */
   options: SurveyOption[];
 };
@@ -94,8 +98,10 @@ export type SurveyQuestionInput = {
   textRu: string;
   textUz: string;
   required: boolean;
-  /** Только у `single` и `multiple`; у остальных — пустой список. */
-  options: { textRu: string; textUz: string }[];
+  /** `true` — только у `single` и `multiple`. */
+  allowOwnAnswer: boolean;
+  /** Только у `single` и `multiple`; у остальных — пустой список. `exclusive: true` — только у `multiple`. */
+  options: { textRu: string; textUz: string; exclusive: boolean }[];
 };
 
 /**

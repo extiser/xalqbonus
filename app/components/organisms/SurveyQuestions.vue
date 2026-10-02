@@ -10,11 +10,12 @@ import type { SelectOption } from '~/types/selectOption';
  * Вопросы опроса с вариантами (issue #320): добавляются, удаляются и переставляются.
  *
  * У вопроса — тип и галочка «Обязательный»; у вопроса с одним или несколькими ответами —
- * варианты, тоже в две колонки RU и UZ. У шкалы значения 1–5 фиксированы, у свободного
- * текста вариантов нет — вместо списка стоит пояснение.
+ * варианты, тоже в две колонки RU и UZ, и галочка «Можно свой ответ» (issue #335). У варианта
+ * вопроса с несколькими ответами — галочка «Исключающий». У шкалы значения 1–5 фиксированы,
+ * у свободного текста вариантов нет — вместо списка стоит пояснение.
  *
- * Варианты при смене типа на шкалу или текст не стираются, а только не уходят: тип,
- * переключённый по ошибке, возвращается вместе с набранным.
+ * Варианты и галочки при смене типа не стираются, а только не уходят: тип, переключённый
+ * по ошибке, возвращается вместе с набранным.
  *
  * `readonly` — опрос заморожен или демо у того, кто демо не правит: всё видно, кнопок нет.
  */
@@ -59,16 +60,18 @@ const addQuestion = (): void => {
     textRu: '',
     textUz: '',
     required: true,
+    allowOwnAnswer: false,
     options: [],
   });
 };
 
 const addOption = (question: SurveyFormQuestion): void => {
-  question.options.push({ key: newSurveyFormKey(), textRu: '', textUz: '' });
+  question.options.push({ key: newSurveyFormKey(), textRu: '', textUz: '', exclusive: false });
 };
 
 const SCALE_NOTE = 'Шкала от 1 до 5: значения фиксированы, вариантов нет.';
 const TEXT_NOTE = 'Водитель отвечает своими словами. Вариантов нет.';
+const EXCLUSIVE_NOTE = 'Исключающий вариант снимает остальные отметки — например, «Такого не было».';
 </script>
 
 <template>
@@ -118,7 +121,14 @@ const TEXT_NOTE = 'Водитель отвечает своими словами
             :disabled="readonly"
             @update:model-value="(value) => setType(question, value)"
           />
-          <MoleculesCheckboxField v-model="question.required" label="Обязательный" />
+          <div class="flex flex-wrap gap-x-6 gap-y-2">
+            <MoleculesCheckboxField v-model="question.required" label="Обязательный" />
+            <MoleculesCheckboxField
+              v-if="surveyQuestionHasOptions(question.type)"
+              v-model="question.allowOwnAnswer"
+              label="Можно свой ответ"
+            />
+          </div>
         </div>
 
         <div class="grid gap-3 sm:grid-cols-2">
@@ -134,11 +144,17 @@ const TEXT_NOTE = 'Водитель отвечает своими словами
           <div
             v-for="(option, optionIndex) in question.options"
             :key="option.key"
-            class="grid gap-2 border-t border-slate-100 pt-2 first:border-t-0 first:pt-0 sm:grid-cols-[auto_1fr_1fr_auto] sm:items-center"
+            class="grid gap-2 border-t border-slate-100 pt-2 first:border-t-0 first:pt-0 sm:items-center"
+            :class="question.type === 'multiple' ? 'sm:grid-cols-[auto_1fr_1fr_auto_auto]' : 'sm:grid-cols-[auto_1fr_1fr_auto]'"
           >
             <span class="text-sm text-slate-500 tabular-nums">{{ optionIndex + 1 }}.</span>
             <AtomsTextInput v-model="option.textRu" type="text" aria-label="Вариант, RU" placeholder="RU" />
             <AtomsTextInput v-model="option.textUz" type="text" aria-label="Вариант, UZ" placeholder="UZ" />
+            <MoleculesCheckboxField
+              v-if="question.type === 'multiple'"
+              v-model="option.exclusive"
+              label="Исключающий"
+            />
             <div v-if="!readonly" class="flex flex-wrap gap-2">
               <AtomsActionButton
                 label="Выше"
@@ -157,6 +173,7 @@ const TEXT_NOTE = 'Водитель отвечает своими словами
               />
             </div>
           </div>
+          <p v-if="question.type === 'multiple'" class="text-sm text-slate-500">{{ EXCLUSIVE_NOTE }}</p>
           <AtomsActionButton v-if="!readonly" label="Добавить вариант" @click="addOption(question)" />
         </div>
         <p v-else class="text-sm text-slate-500">

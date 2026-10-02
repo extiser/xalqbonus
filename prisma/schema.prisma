@@ -1898,13 +1898,16 @@ model Survey {
 /// Вопрос опроса. Порядок — `position`, пара с опросом уникальна. Удаление черновика опроса
 /// уносит вопросы.
 model SurveyQuestion {
-  id       String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  surveyId String             @map("survey_id") @db.Uuid
-  position Int
-  type     SurveyQuestionType
-  textRu   String?            @map("text_ru")
-  textUz   String?            @map("text_uz")
-  required Boolean            @default(true)
+  id             String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  surveyId       String             @map("survey_id") @db.Uuid
+  position       Int
+  type           SurveyQuestionType
+  textRu         String?            @map("text_ru")
+  textUz         String?            @map("text_uz")
+  required       Boolean            @default(true)
+  /// «Свой вариант»: водитель может вписать ответ своими словами (issue #335). Только
+  /// у `single` и `multiple` — проверкой `survey_questions_own_answer_check`.
+  allowOwnAnswer Boolean            @default(false) @map("allow_own_answer")
 
   survey  Survey         @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   options SurveyOption[]
@@ -1922,6 +1925,10 @@ model SurveyOption {
   position   Int
   textRu     String? @map("text_ru")
   textUz     String? @map("text_uz")
+  /// Исключающий вариант — «Такого не было»: отметка снимает остальные (issue #335). Бывает
+  /// только у `multiple`; `CHECK` типа вопроса из соседней таблицы не видит, и правило держит
+  /// разбор тела ручки.
+  exclusive  Boolean @default(false)
 
   question SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
 

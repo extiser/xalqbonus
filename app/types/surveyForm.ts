@@ -12,6 +12,8 @@ export type SurveyFormOption = {
   key: string;
   textRu: string;
   textUz: string;
+  /** У вопроса не `multiple` хранится, но уходит `false`: смена типа галочку не теряет. */
+  exclusive: boolean;
 };
 
 export type SurveyFormQuestion = {
@@ -20,6 +22,8 @@ export type SurveyFormQuestion = {
   textRu: string;
   textUz: string;
   required: boolean;
+  /** У шкалы и текста хранится, но уходит `false` — как варианты. */
+  allowOwnAnswer: boolean;
   /** У шкалы и текста хранятся, но не уходят: смена типа туда и обратно варианты не теряет. */
   options: SurveyFormOption[];
 };

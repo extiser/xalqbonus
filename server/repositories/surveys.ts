@@ -53,6 +53,7 @@ export type SurveyQuestionRow = {
   textRu: string | null;
   textUz: string | null;
   required: boolean;
+  allowOwnAnswer: boolean;
 };
 
 export type SurveyOptionRow = {
@@ -60,6 +61,7 @@ export type SurveyOptionRow = {
   questionId: string;
   textRu: string | null;
   textUz: string | null;
+  exclusive: boolean;
 };
 
 const SURVEY_COLUMNS = Prisma.sql`
@@ -114,7 +116,8 @@ export const listSurveyQuestions = async (
   client: Executor = db,
 ): Promise<SurveyQuestionRow[]> =>
   client.$queryRaw<SurveyQuestionRow[]>`
-    SELECT "id", "type", "text_ru" AS "textRu", "text_uz" AS "textUz", "required"
+    SELECT "id", "type", "text_ru" AS "textRu", "text_uz" AS "textUz", "required",
+           "allow_own_answer" AS "allowOwnAnswer"
       FROM xb.survey_questions
      WHERE "survey_id" = ${surveyId}::uuid
      ORDER BY "position"
@@ -129,7 +132,8 @@ export const listSurveyOptions = async (
     SELECT option."id",
            option."question_id" AS "questionId",
            option."text_ru"     AS "textRu",
-           option."text_uz"     AS "textUz"
+           option."text_uz"     AS "textUz",
+           option."exclusive"
       FROM xb.survey_options AS option
       JOIN xb.survey_questions AS question ON question."id" = option."question_id"
      WHERE question."survey_id" = ${surveyId}::uuid
@@ -247,7 +251,8 @@ export type SurveyQuestionInsert = {
   textRu: string | null;
   textUz: string | null;
   required: boolean;
-  options: { textRu: string | null; textUz: string | null }[];
+  allowOwnAnswer: boolean;
+  options: { textRu: string | null; textUz: string | null; exclusive: boolean }[];
 };
 
 /**
@@ -268,14 +273,17 @@ export const replaceSurveyQuestions = async (
 
   for (const [questionIndex, question] of questions.entries()) {
     const rows = await client.$queryRaw<{ id: string }[]>`
-      INSERT INTO xb.survey_questions ("survey_id", "position", "type", "text_ru", "text_uz", "required")
+      INSERT INTO xb.survey_questions (
+        "survey_id", "position", "type", "text_ru", "text_uz", "required", "allow_own_answer"
+      )
       VALUES (
         ${surveyId}::uuid,
         ${questionIndex + 1},
         ${question.type}::xb.survey_question_type,
         ${question.textRu},
         ${question.textUz},
-        ${question.required}
+        ${question.required},
+        ${question.allowOwnAnswer}
       )
       RETURNING "id"
     `;
@@ -288,8 +296,14 @@ export const replaceSurveyQuestions = async (
 
     for (const [optionIndex, option] of question.options.entries()) {
       await client.$executeRaw`
-        INSERT INTO xb.survey_options ("question_id", "position", "text_ru", "text_uz")
-        VALUES (${questionRow.id}::uuid, ${optionIndex + 1}, ${option.textRu}, ${option.textUz})
+        INSERT INTO xb.survey_options ("question_id", "position", "text_ru", "text_uz", "exclusive")
+        VALUES (
+          ${questionRow.id}::uuid,
+          ${optionIndex + 1},
+          ${option.textRu},
+          ${option.textUz},
+          ${option.exclusive}
+        )
       `;
     }
   }

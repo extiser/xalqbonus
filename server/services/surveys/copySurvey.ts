@@ -51,7 +51,12 @@ export const copySurvey = async (surveyId: string, createdById: string): Promise
         textRu: question.textRu,
         textUz: question.textUz,
         required: question.required,
-        options: question.options.map((option) => ({ textRu: option.textRu, textUz: option.textUz })),
+        allowOwnAnswer: question.allowOwnAnswer,
+        options: question.options.map((option) => ({
+          textRu: option.textRu,
+          textUz: option.textUz,
+          exclusive: option.exclusive,
+        })),
       })),
       transaction,
     );
