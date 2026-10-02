@@ -430,6 +430,14 @@ export type ReadOrdersOptions = {
    * живой синхронизации, у которой окна перекрываются и есть догоняющий проход.
    */
   stopOnShortPage?: boolean;
+  /**
+   * Курсор, с которого продолжить обход, — из ответа на страницу, прочитанную раньше.
+   * Окно и `pageLimit` обязаны быть теми же, что у того обхода: курсор привязан к выборке
+   * (issue #328).
+   */
+  startCursor?: string | null;
+  /** Номер первой запрашиваемой страницы: при продолжении счёт в описании запроса идёт дальше. */
+  startPage?: number;
 };
 
 /**
@@ -442,9 +450,9 @@ export async function* readOrdersByEndedAt(
   pageLimit: number,
   options: ReadOrdersOptions = {},
 ): AsyncGenerator<OrdersPage> {
-  let cursor: string | null = null;
+  let cursor: string | null = options.startCursor ?? null;
 
-  for (let page = 1; page <= MAX_PAGES; page += 1) {
+  for (let page = options.startPage ?? 1; page <= MAX_PAGES; page += 1) {
     const payload = await client.post(
       ORDERS_PATH,
       buildRequestBody(client.parkId, window, pageLimit, cursor),

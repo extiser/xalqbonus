@@ -1,4 +1,5 @@
 import { db } from '#server/db';
+import type { Prisma } from '#server/generated/prisma/client';
 
 /**
  * История заказов парка (issue #315).
@@ -34,6 +35,7 @@ const asTimestampLiteral = (value: Date | null): string | null => value?.toISOSt
  */
 export const upsertFleetOrderHistory = async (
   orders: readonly FleetOrderHistoryInput[],
+  client: Prisma.TransactionClient = db,
 ): Promise<number> => {
   // Повтор `order_id` внутри одной вставки Postgres отбивает целиком; побеждает последний.
   const unique = [...new Map(orders.map((order) => [order.orderId, order])).values()];
@@ -42,7 +44,7 @@ export const upsertFleetOrderHistory = async (
   for (let offset = 0; offset < unique.length; offset += CHUNK_SIZE) {
     const chunk = unique.slice(offset, offset + CHUNK_SIZE);
 
-    written += await db.$executeRaw`
+    written += await client.$executeRaw`
       INSERT INTO xb.fleet_order_history (
         "order_id", "profile_id", "status", "category", "payment_method",
         "work_rule_id", "booked_at", "ended_at", "price", "car_callsign"
@@ -100,6 +102,8 @@ export type FleetOrderHistoryDayInput = {
   startedAt: Date;
   /** `null` — обход суток прервался. */
   finishedAt: Date | null;
+  /** Курсор страницы, следующей за последней записанной; `null` — продолжать не с чего. */
+  nextCursor: string | null;
 };
 
 export const upsertFleetOrderHistoryDay = async (day: FleetOrderHistoryDayInput): Promise<void> => {
@@ -111,6 +115,55 @@ export const upsertFleetOrderHistoryDay = async (day: FleetOrderHistoryDayInput)
     update: columns,
   });
 };
+
+/**
+ * Записывает страницу обхода: её заказы и итоги суток с курсором следующей страницы —
+ * одной транзакцией. Курсор не может оказаться впереди записанных заказов: при обрыве
+ * между двумя отдельными записями страница потерялась бы молча (issue #328).
+ *
+ * Итоги ложатся только на незакрытую строку: закрытые сутки, пройденные повтором, получают
+ * заказы, но журнал их не меняется до закрытия. Возвращает число записанных заказов.
+ */
+export const saveFleetOrderHistoryPage = (
+  orders: readonly FleetOrderHistoryInput[],
+  day: Omit<FleetOrderHistoryDayInput, 'finishedAt'>,
+): Promise<number> => {
+  const { parkDay, ...columns } = day;
+
+  return db.$transaction(async (transaction) => {
+    const written = await upsertFleetOrderHistory(orders, transaction);
+
+    await transaction.fleetOrderHistoryDay.updateMany({
+      where: { parkDay, finishedAt: null },
+      data: columns,
+    });
+
+    return written;
+  });
+};
+
+export type FleetOrderHistoryDayState = {
+  orders: number;
+  complete: number;
+  malformed: number;
+  pages: number;
+  finishedAt: Date | null;
+  nextCursor: string | null;
+};
+
+/** Строка журнала суток: итоги, закрытие и курсор продолжения. `null` — строки нет. */
+export const readFleetOrderHistoryDay = (parkDay: Date): Promise<FleetOrderHistoryDayState | null> =>
+  db.fleetOrderHistoryDay.findUnique({
+    where: { parkDay },
+    select: {
+      orders: true,
+      complete: true,
+      malformed: true,
+      pages: true,
+      finishedAt: true,
+      nextCursor: true,
+    },
+  });
 
 /** Закрыт ли обход суток: `null` — строки нет, `false` — обход прервался, `true` — пройден. */
 export const readFleetOrderHistoryDayClosed = async (parkDay: Date): Promise<boolean | null> => {
