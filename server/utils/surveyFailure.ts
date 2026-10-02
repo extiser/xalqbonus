@@ -36,6 +36,8 @@ const INVALID_TEXT: Record<SurveyRequestInvalidReason, string> = {
   content: 'Опрос пришёл в непонятном виде.',
   question_type: 'Тип вопроса — один ответ, несколько ответов, шкала или свободный текст.',
   question_options: 'Варианты бывают только у вопросов с одним или несколькими ответами.',
+  question_own_answer: '«Свой вариант» бывает только у вопросов с одним или несколькими ответами.',
+  option_exclusive: 'Исключающий вариант бывает только у вопроса с несколькими ответами.',
 };
 
 const reject = (statusCode: 400 | 404 | 409, statusMessage: string, message: string): H3Error =>

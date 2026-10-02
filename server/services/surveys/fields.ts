@@ -51,9 +51,15 @@ export const toSurvey = (
     textRu: question.textRu,
     textUz: question.textUz,
     required: question.required,
+    allowOwnAnswer: question.allowOwnAnswer,
     options: options
       .filter((option) => option.questionId === question.id)
-      .map((option) => ({ optionId: option.id, textRu: option.textRu, textUz: option.textUz })),
+      .map((option) => ({
+        optionId: option.id,
+        textRu: option.textRu,
+        textUz: option.textUz,
+        exclusive: option.exclusive,
+      })),
   })),
 });
 
@@ -136,7 +142,12 @@ const isQuestionType = (value: unknown): value is SurveyQuestionType =>
   typeof value === 'string' && (SURVEY_QUESTION_TYPES as readonly string[]).includes(value);
 
 const readQuestion = (value: unknown): SurveyQuestionInsert => {
-  if (!isRecord(value) || typeof value.required !== 'boolean' || !Array.isArray(value.options)) {
+  if (
+    !isRecord(value) ||
+    typeof value.required !== 'boolean' ||
+    typeof value.allowOwnAnswer !== 'boolean' ||
+    !Array.isArray(value.options)
+  ) {
     throw new SurveyRequestInvalidError('content');
   }
 
@@ -149,17 +160,36 @@ const readQuestion = (value: unknown): SurveyQuestionInsert => {
     throw new SurveyRequestInvalidError('question_options');
   }
 
+  // «Свой вариант» — ответ рядом с вариантами: у шкалы и текста ему не к чему встать.
+  // Того же требует база (`survey_questions_own_answer_check`), здесь — чтобы сказать словами.
+  if (!surveyQuestionHasOptions(value.type) && value.allowOwnAnswer) {
+    throw new SurveyRequestInvalidError('question_own_answer');
+  }
+
+  const type = value.type;
+
   return {
-    type: value.type,
+    type,
     textRu: readText(value.textRu),
     textUz: readText(value.textUz),
     required: value.required,
+    allowOwnAnswer: value.allowOwnAnswer,
     options: value.options.map((option) => {
-      if (!isRecord(option)) {
+      if (!isRecord(option) || typeof option.exclusive !== 'boolean') {
         throw new SurveyRequestInvalidError('content');
       }
 
-      return { textRu: readText(option.textRu), textUz: readText(option.textUz) };
+      // Исключающий снимает остальные отметки — у одного ответа отметка и так одна. База
+      // этого не держит: тип вопроса в соседней таблице, `CHECK` его не видит.
+      if (option.exclusive && type !== 'multiple') {
+        throw new SurveyRequestInvalidError('option_exclusive');
+      }
+
+      return {
+        textRu: readText(option.textRu),
+        textUz: readText(option.textUz),
+        exclusive: option.exclusive,
+      };
     }),
   };
 };
