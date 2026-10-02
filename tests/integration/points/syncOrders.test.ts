@@ -29,15 +29,18 @@ import { disconnectQueues } from '../support/queues';
  * живут уникальные ограничения, на которых всё это держится.
  */
 
+/**
+ * Размер страницы: из него выставляется `SYNC_PAGE_LIMIT` ниже, по нему живой прогон узнаёт
+ * последнюю страницу, и по нему же тест строит полную.
+ */
+const PAGE_LIMIT = 500;
+
 // Настройки окна фиксируются тестом: иначе ожидаемые границы зависели бы от `.env`
 // той машины, где прогоняются тесты.
 process.env['SYNC_LIVE_OVERLAP_MIN'] = '10';
 process.env['SYNC_LIVE_LAG_SEC'] = '60';
 process.env['SYNC_LIVE_MAX_WINDOW_MIN'] = '360';
-process.env['SYNC_PAGE_LIMIT'] = '500';
-
-/** Размер страницы из `SYNC_PAGE_LIMIT` выше: по нему живой прогон узнаёт последнюю страницу. */
-const PAGE_LIMIT = 500;
+process.env['SYNC_PAGE_LIMIT'] = String(PAGE_LIMIT);
 process.env['SYNC_CATCHUP_DAYS'] = '7';
 
 const NOW = new Date('2026-08-28T12:00:00.000Z');
