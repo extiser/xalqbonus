@@ -540,7 +540,7 @@ describe('демо-рассылки', () => {
 
   it('демо-рассылка уходит только демо-водителям, живая — всем, копия наследует признак', async () => {
     const { employeeId } = await createTestEmployee({ role: 'owner' });
-    const demoBefore = await readMailingAudience(true);
+    const demoBefore = await readMailingAudience(true, null);
 
     const livePersonId = await createDriver({ demo: false });
     const demoPersonId = await createDriver({ demo: true });
@@ -548,11 +548,18 @@ describe('демо-рассылки', () => {
     await linkTestDriver(livePersonId, nextTestTelegramUserId());
     await linkTestDriver(demoPersonId, nextTestTelegramUserId());
 
-    const demoAfter = await readMailingAudience(true);
+    const demoAfter = await readMailingAudience(true, null);
 
     expect(demoAfter.total - demoBefore.total).toBe(1);
 
-    const fields = { title: 'Демо-проверка', textRu: 'Привет', textUz: 'Salom' };
+    // Без сегмента и опроса: демо-рассылке без сегмента адресаты — все демо-водители (issue #321).
+    const fields = {
+      title: 'Демо-проверка',
+      textRu: 'Привет',
+      textUz: 'Salom',
+      segmentId: null,
+      surveyId: null,
+    };
     const demoMailing = await createMailing(fields, employeeId, true);
     const liveMailing = await createMailing(fields, employeeId, false);
 
