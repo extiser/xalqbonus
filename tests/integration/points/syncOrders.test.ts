@@ -123,6 +123,9 @@ const makeTransport = (pages: readonly RawOrder[][]): FleetTransport => {
 
       return { orders, limit: 500, cursor: isLast ? '' : `page-${issued}` } as Payload;
     },
+    get: async () => {
+      throw new Error('заказы ходят методом POST: справочник в этом тесте не запрашивается');
+    },
     stats: () => ({ requests: issued, rateLimited: 0, waitedMs: 0 }),
   };
 };
@@ -146,6 +149,9 @@ const transportFailingAfter = (pages: readonly RawOrder[][]): FleetTransport => 
 
       return { orders, limit: 500, cursor: `page-${issued}` } as Payload;
     },
+    get: async () => {
+      throw new Error('заказы ходят методом POST: справочник в этом тесте не запрашивается');
+    },
     stats: () => ({ requests: issued + 1, rateLimited: 0, waitedMs: 0 }),
   };
 };
@@ -154,6 +160,9 @@ const transportFailingAfter = (pages: readonly RawOrder[][]): FleetTransport => 
 const failingTransport = (): FleetTransport => ({
   parkId: 'test-park',
   post: async () => {
+    throw new Error('связь оборвалась');
+  },
+  get: async () => {
     throw new Error('связь оборвалась');
   },
   stats: () => ({ requests: 1, rateLimited: 3, waitedMs: 0 }),

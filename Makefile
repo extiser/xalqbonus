@@ -247,7 +247,7 @@ migrate-diff: ## Показать расхождение schema.prisma с лок
 migrate-sql: ## Напечатать SQL, приводящий локальную БД к schema.prisma (черновик миграции)
 	$(COMPOSE) exec -T app npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script
 
-typecheck: ## Проверить типы (nuxt typecheck)
+typecheck: ## Проверить типы приложения и тестов (nuxt typecheck + tsconfig.tests.json)
 	npm run typecheck
 
 # Скрипт проверки движка Mini App (issue #223) — строка, которую сборщик не транспилирует:

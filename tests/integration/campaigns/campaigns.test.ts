@@ -378,7 +378,8 @@ describe('акции', () => {
 
     const page = await readCampaignParticipants(
       campaignId,
-      { half: 'a', state: 'joined' },
+      { half: 'a', state: 'joined', outcome: null },
+      'name',
       25,
       0,
     );

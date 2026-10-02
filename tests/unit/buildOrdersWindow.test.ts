@@ -30,10 +30,16 @@ const config: SyncConfig = {
   catchupDays: 7,
   catchupSliceHours: 12,
   catchupPassEveryHours: 24,
+  registryEnabled: true,
+  registryIntervalSec: 3_600,
+  registryOverlapMinutes: 60,
+  registryLagSeconds: 60,
   overlapMinutes: 10,
   lagSeconds: 60,
   pageLimit: 500,
   liveMaxWindowMinutes: 360,
+  abandonedRunMinutes: 180,
+  staleFloorMinutes: 15,
 };
 
 const now = new Date('2026-08-28T12:00:00.000Z');

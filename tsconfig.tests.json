@@ -1,0 +1,20 @@
+{
+  // Тесты не входят ни в один из проектов, которые проверяет `nuxt typecheck`: серверный берёт
+  // `server/`, клиентский — `app/` и `tests/nuxt/`. Без этого конфига расхождение теста с кодом
+  // ловил только прогон `make test` (issue #337).
+  //
+  // Основа — серверный конфиг: тесты ходят в сервисы и репозитории, и псевдонимы `#server`
+  // и `#shared` у него те же, что в `vitest.config.ts`.
+  "extends": "./.nuxt/tsconfig.server.json",
+  "compilerOptions": {
+    // Тест признака личности импортирует композабл клиента, а тот читает `window`. Серверному
+    // конфигу `dom` не нужен, тестам — нужен: набор тот же, что у клиентского конфига Nuxt.
+    "lib": ["esnext", "dom", "dom.iterable", "webworker"]
+  },
+  "include": [
+    ".nuxt/types/nitro-nuxt.d.ts",
+    ".nuxt/types/nitro.d.ts",
+    "shared/**/*.d.ts",
+    "tests/**/*.ts"
+  ]
+}
