@@ -420,6 +420,18 @@ const buildRequestBody = (
   ...(cursor ? { cursor } : {}),
 });
 
+export type ReadOrdersOptions = {
+  /**
+   * Закончить обход на неполной странице — пришло заказов меньше `pageLimit`.
+   *
+   * По документации конец выборки — отсутствие курсора, но Яндекс отдаёт курсор и на
+   * последней странице, и без этого флага конец выборки стоит лишнего запроса за пустой
+   * страницей (issue #327). Флаг для того, кому обрыв на короткой странице не страшен:
+   * живой синхронизации, у которой окна перекрываются и есть догоняющий проход.
+   */
+  stopOnShortPage?: boolean;
+};
+
 /**
  * Читает окно постранично. Фильтры между страницами не меняются — курсор привязан
  * к исходной выборке.
@@ -428,6 +440,7 @@ export async function* readOrdersByEndedAt(
   client: FleetTransport,
   window: OrdersWindow,
   pageLimit: number,
+  options: ReadOrdersOptions = {},
 ): AsyncGenerator<OrdersPage> {
   let cursor: string | null = null;
 
@@ -447,6 +460,12 @@ export async function* readOrdersByEndedAt(
     // по пришедшим заказам, а не по разобранным: страница, целиком не поддавшаяся
     // разбору, — это повод остановить не обход, а разбор.
     if (!cursor || parsed.received === 0) {
+      return;
+    }
+
+    // Неполная страница — последняя: следующую Яндекс отдаст пустой. Считаем так же
+    // по пришедшим заказам.
+    if (options.stopOnShortPage && parsed.received < pageLimit) {
       return;
     }
   }

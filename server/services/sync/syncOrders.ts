@@ -366,7 +366,10 @@ export const runOrdersSync = async (options: RunOrdersSyncOptions = {}): Promise
 
   warnIfWatermarkStale(kind, state?.watermark ?? null, now, config);
 
-  return runOrdersWindow(kind, window, config, { client: options.client, now });
+  // Живому прогону обрыв на неполной странице безопасен: окна перекрываются
+  // на `SYNC_LIVE_OVERLAP_MIN`, раз в сутки идёт догоняющий проход, и недошедший заказ
+  // заберёт следующий прогон. Зато он не тратит запрос на пустую страницу (issue #327).
+  return runOrdersWindow(kind, window, config, { client: options.client, now, stopOnShortPage: true });
 };
 
 /**
@@ -381,9 +384,9 @@ export const runOrdersWindow = async (
   kind: OrdersSyncKind,
   window: OrdersWindow,
   config: SyncConfig,
-  options: { client?: FleetTransport; now: Date },
+  options: { client?: FleetTransport; now: Date; stopOnShortPage?: boolean },
 ): Promise<OrdersSyncSummary> => {
-  const { now } = options;
+  const { now, stopOnShortPage } = options;
 
   // Клиент собирается до строки прогона: незаполненные реквизиты в окружении — это отказ
   // на старте, а не прогон, навсегда оставшийся в состоянии `running`.
@@ -427,7 +430,7 @@ export const runOrdersWindow = async (
   });
 
   try {
-    for await (const page of readOrdersByEndedAt(client, window, config.pageLimit)) {
+    for await (const page of readOrdersByEndedAt(client, window, config.pageLimit, { stopOnShortPage })) {
       pages += 1;
       ordersSeen += page.received;
       malformed += page.malformed;
