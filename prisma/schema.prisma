@@ -2362,6 +2362,8 @@ model FleetOrderHistory {
 /// По нему полный прогон продолжается с места остановки. `finished_at = null` —
 /// обход суток прервался. Строка заводится в начале обхода, только если её ещё нет, и
 /// закрывается итогами в конце успешного обхода; оборванный повтор закрытые сутки не трогает.
+/// У незакрытых суток итоги и курсор пишутся после каждой страницы, в одной транзакции
+/// с её заказами (issue #328).
 model FleetOrderHistoryDay {
   /// Парковые сутки `D`: `ended_at` с `D 00:00:00Z` по `D+1 00:00:00Z`, то есть 05:00–05:00
   /// по Ташкенту.
@@ -2373,6 +2375,9 @@ model FleetOrderHistoryDay {
   rateLimited Int       @map("rate_limited")
   startedAt   DateTime  @map("started_at") @db.Timestamptz(6)
   finishedAt  DateTime? @map("finished_at") @db.Timestamptz(6)
+  /// Курсор Fleet API на страницу, следующую за последней записанной: с него оборванные
+  /// сутки продолжаются. Пуст у закрытых суток и у суток, не прошедших ни одной страницы.
+  nextCursor  String?   @map("next_cursor")
 
   @@map("fleet_order_history_days")
   @@schema("xb")
