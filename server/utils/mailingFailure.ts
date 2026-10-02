@@ -1,19 +1,31 @@
 import { createError, type H3Error } from 'h3';
 
 import {
+  InvalidMailingFieldsError,
   MailingAudienceEmptyError,
   MailingFieldTooLongError,
   MailingNotLaunchableError,
   MailingPhotoTooLargeError,
   MailingPhotoTypeNotAllowedError,
   MailingRecallUnavailableError,
+  MailingSegmentArchivedError,
+  MailingSegmentDemoMismatchError,
+  MailingSegmentUnknownError,
   MailingStatusMismatchError,
+  MailingSurveyClosedError,
+  MailingSurveyDemoMismatchError,
+  MailingSurveyIncompleteError,
+  MailingSurveyUnknownError,
   UnknownMailingError,
+  type MailingFieldProblem,
 } from '#server/services/mailings/errors';
 import {
-  MAILING_AUDIENCE_EMPTY_TEXT,
+  MAILING_SEGMENT_ARCHIVED_TEXT,
+  MAILING_SURVEY_CLOSED_TEXT,
+  mailingAudienceEmptyText,
   mailingLaunchProblemText,
   mailingRecallProblemText,
+  mailingSurveyIncompleteText,
 } from '#shared/mailing';
 import { MAX_PHOTO_MB } from '#shared/photo';
 
@@ -25,8 +37,9 @@ import { MAX_PHOTO_MB } from '#shared/photo';
  * словарём»). Собраны в одном месте, потому что ручек рассылок десять, а отказов на всех
  * один набор, и девять копий разошлись бы формулировкой.
  *
- * Причины незапускаемой рассылки и фраза про пустую аудиторию берутся из `shared/mailing.ts`:
- * те же стоят у закрытой кнопки запуска на экране.
+ * Причины незапускаемой рассылки, фразы про пустую аудиторию, архивный сегмент, закрытый
+ * и недописанный опрос берутся из `shared/mailing.ts`: те же стоят у закрытой кнопки запуска
+ * на экране.
  *
  * `null` — не отказ, а поломка: такое уходит пятисоткой.
  */
@@ -42,6 +55,11 @@ const FIELD_TEXT = {
   textRu: 'Текст на русском',
   textUz: 'Текст на узбекском',
 } as const;
+
+const FIELD_PROBLEM_TEXT: Record<MailingFieldProblem, string> = {
+  segment_invalid: 'Сегмент выбран неверно — выберите его из списка заново.',
+  survey_invalid: 'Опрос выбран неверно — выберите его из списка заново.',
+};
 
 const reject = (
   statusCode: 400 | 404 | 409 | 413 | 415,
@@ -80,7 +98,55 @@ export const explainMailingFailure = (error: unknown): H3Error | null => {
   }
 
   if (error instanceof MailingAudienceEmptyError) {
-    return reject(409, 'Conflict', MAILING_AUDIENCE_EMPTY_TEXT);
+    return reject(409, 'Conflict', mailingAudienceEmptyText(error.withSegment));
+  }
+
+  if (error instanceof InvalidMailingFieldsError) {
+    return reject(400, 'Bad Request', FIELD_PROBLEM_TEXT[error.problem]);
+  }
+
+  if (error instanceof MailingSegmentUnknownError) {
+    return reject(400, 'Bad Request', 'Такого сегмента нет.');
+  }
+
+  if (error instanceof MailingSegmentArchivedError) {
+    return reject(409, 'Conflict', MAILING_SEGMENT_ARCHIVED_TEXT);
+  }
+
+  if (error instanceof MailingSegmentDemoMismatchError) {
+    return reject(
+      409,
+      'Conflict',
+      error.mailingIsDemo
+        ? 'Демо-рассылка уходит только по демо-сегменту — выберите демо-сегмент.'
+        : 'Живая рассылка не уходит по демо-сегменту — выберите живой сегмент.',
+    );
+  }
+
+  if (error instanceof MailingSurveyUnknownError) {
+    return reject(400, 'Bad Request', 'Такого опроса нет.');
+  }
+
+  if (error instanceof MailingSurveyDemoMismatchError) {
+    return reject(
+      409,
+      'Conflict',
+      error.mailingIsDemo
+        ? 'К демо-рассылке прикрепляется только демо-опрос.'
+        : 'К живой рассылке не прикрепляется демо-опрос.',
+    );
+  }
+
+  if (error instanceof MailingSurveyClosedError) {
+    return reject(409, 'Conflict', MAILING_SURVEY_CLOSED_TEXT);
+  }
+
+  if (error instanceof MailingSurveyIncompleteError) {
+    return reject(
+      409,
+      'Conflict',
+      `Рассылку нельзя запустить. ${mailingSurveyIncompleteText(error.problems)}`,
+    );
   }
 
   // 415 и 413 — как у фото товара: тело понято, не принимается тип или размер.

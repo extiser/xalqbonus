@@ -71,31 +71,54 @@ export type DeliverMailingInput = {
 const uploadedPhotoFileIds = new Map<string, string>();
 
 /**
- * Подпись кнопки — на обоих языках, раз и сообщение на обоих. Через косую черту, как у
+ * Подписи кнопок — на обоих языках, раз и сообщение на обоих. Через косую черту, как у
  * заглушки Mini App, где язык человека тоже не прочитан (docs/frontend.md → «Язык»);
  * русский первым — как в самом сообщении.
  *
- * Без эмодзи: подарок на кнопке обещает конкретное, а рассылка бывает и про смену адреса
- * офиса. Ни одна кнопка бота эмодзи не носит, и самое массовое сообщение исключением
- * не становится (решение Руслана 15-09-2026).
+ * С 🎁, как кнопка во всех остальных сообщениях бота (`button_open_app` в server/bot/texts.ts):
+ * решение 15-09-2026 оставить рассылку без эмодзи Руслан отменил 02-10-2026 (issue #321).
  */
-const OPEN_APP_BUTTON_TEXT = 'Открыть приложение / Ilovani ochish';
+const OPEN_APP_BUTTON_TEXT = '🎁 Открыть приложение / Ilovani ochish';
+
+/** Узбекская часть — черновик, вычитывает переводчик (issue #321). */
+const SURVEY_BUTTON_TEXT = "✍️ Пройти опрос / So'rovnomadan o'tish";
 
 /**
- * Кнопка «Открыть приложение». Пусто на машине без `TG_MINIAPP_URL`: Telegram открывает
- * Mini App только по `https`, и сообщение уходит без кнопки — так же, как приветствие бота
- * (server/bot/greeting.ts).
+ * Параметр адреса Mini App, по которому страница опроса открывает опрос, — контракт
+ * со страницей опроса (`survey-miniapp-page`). Пока её нет, кнопка открывает главный экран.
  */
-const openAppButton = (): OpenAppButton | undefined => {
-  const url = readMiniAppUrl();
+const SURVEY_URL_PARAMETER = 'survey';
 
-  return url === '' ? undefined : { text: OPEN_APP_BUTTON_TEXT, url };
+/**
+ * Кнопка сообщения. У рассылки с опросом — одна «Пройти опрос» вместо «Открыть приложение»:
+ * в приложение водитель попадает с финала опроса (решение Руслана 02-10-2026).
+ *
+ * Пусто на машине без `TG_MINIAPP_URL`: Telegram открывает Mini App только по `https`,
+ * и сообщение уходит без кнопки — так же, как приветствие бота (server/bot/greeting.ts).
+ */
+const messageButton = (surveyId: string | null): OpenAppButton | undefined => {
+  const miniAppUrl = readMiniAppUrl();
+
+  if (miniAppUrl === '') {
+    return undefined;
+  }
+
+  if (surveyId === null) {
+    return { text: OPEN_APP_BUTTON_TEXT, url: miniAppUrl };
+  }
+
+  // Через `URL`, а не склейкой строки: у адреса Mini App могут быть свои параметры.
+  const url = new URL(miniAppUrl);
+
+  url.searchParams.set(SURVEY_URL_PARAMETER, surveyId);
+
+  return { text: SURVEY_BUTTON_TEXT, url: url.toString() };
 };
 
 /** Шлёт сообщение и возвращает его `message_id`. */
 const send = async (token: string, telegramChatId: bigint, row: MailingDeliveryRow): Promise<number> => {
   const { html } = buildMailingMessage(row.textRu, row.textUz);
-  const button = openAppButton();
+  const button = messageButton(row.surveyId);
 
   if (row.photoPath === null) {
     return sendTelegramMessage({ token, telegramChatId, text: html, openAppButton: button });

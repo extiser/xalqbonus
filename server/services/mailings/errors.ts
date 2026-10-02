@@ -1,5 +1,6 @@
 import type { MailingStatus } from '#server/generated/prisma/enums';
 import type { MailingLaunchProblem, MailingRecallProblem } from '#shared/mailing';
+import type { SurveyFreezeProblem } from '#shared/survey';
 
 /**
  * Доменные ошибки рассылок.
@@ -81,8 +82,98 @@ export class MailingRecallUnavailableError extends MailingError {
 
 /** По фильтру рассылки на момент запуска не нашлось ни одного адресата. */
 export class MailingAudienceEmptyError extends MailingError {
-  constructor(public readonly mailingId: string) {
+  constructor(
+    public readonly mailingId: string,
+    /** Аудиторию резал сегмент — фраза отказа своя. */
+    public readonly withSegment: boolean,
+  ) {
     super(`у рассылки ${mailingId} нет адресатов`);
+  }
+}
+
+/** Что не так с полями рассылки. Текст к каждой причине — у ручки. */
+export type MailingFieldProblem =
+  /** Идентификатор сегмента — не uuid. */
+  | 'segment_invalid'
+  /** Идентификатор опроса — не uuid. */
+  | 'survey_invalid';
+
+export class InvalidMailingFieldsError extends MailingError {
+  constructor(public readonly problem: MailingFieldProblem) {
+    super(`поля рассылки не годятся: ${problem}`);
+  }
+}
+
+/** Выбранного сегмента нет. */
+export class MailingSegmentUnknownError extends MailingError {
+  constructor(public readonly segmentId: string) {
+    super(`сегмента ${segmentId} нет`);
+  }
+}
+
+/** Сегмент в архиве (issue #321): при выборе он не предлагается, и запуск по нему не проходит. */
+export class MailingSegmentArchivedError extends MailingError {
+  constructor(public readonly segmentId: string) {
+    super(`сегмент ${segmentId} в архиве`);
+  }
+}
+
+/**
+ * Сегмент не того мира (issue #321): демо-рассылка — только с демо-сегментом, живая — только
+ * с живым, как у акции.
+ */
+export class MailingSegmentDemoMismatchError extends MailingError {
+  constructor(
+    public readonly segmentId: string,
+    public readonly mailingIsDemo: boolean,
+  ) {
+    super(
+      `сегмент ${segmentId} ${mailingIsDemo ? 'живой, а рассылка демо' : 'демо, а рассылка живая'}`,
+    );
+  }
+}
+
+/** Выбранного опроса нет. */
+export class MailingSurveyUnknownError extends MailingError {
+  constructor(public readonly surveyId: string) {
+    super(`опроса ${surveyId} нет`);
+  }
+}
+
+/**
+ * Опрос не того мира (issue #321): живой опрос в демо-рассылке начислил бы баллы
+ * демо-водителям тем же ключом, что живым (решение Руслана 02-10-2026).
+ */
+export class MailingSurveyDemoMismatchError extends MailingError {
+  constructor(
+    public readonly surveyId: string,
+    public readonly mailingIsDemo: boolean,
+  ) {
+    super(
+      `опрос ${surveyId} ${mailingIsDemo ? 'живой, а рассылка демо' : 'демо, а рассылка живая'}`,
+    );
+  }
+}
+
+/** Опрос закрыт по сроку (issue #321): водитель открыл бы опрос, который уже не принимает ответов. */
+export class MailingSurveyClosedError extends MailingError {
+  constructor(public readonly surveyId: string) {
+    super(`опрос ${surveyId} закрыт по сроку`);
+  }
+}
+
+/**
+ * Опрос не дописан (issue #321) — отказ запуска и только его: черновик опроса правится и после
+ * прикрепления. Несёт все причины сразу, теми же значениями, что экран опроса.
+ */
+export class MailingSurveyIncompleteError extends MailingError {
+  constructor(
+    public readonly surveyId: string,
+    public readonly problems: SurveyFreezeProblem[],
+  ) {
+    super(
+      `опрос ${surveyId} не дописан: ${problems.map((problem) => problem.kind).join(', ')}`,
+    );
   }
 }
 

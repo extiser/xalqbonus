@@ -8,12 +8,16 @@ import { mailingStatusLabel, mailingStatusTone } from '~/utils/labels';
 import { failureText } from '~/utils/requestError';
 import { toLoadState } from '~/utils/loadState';
 import {
-  MAILING_AUDIENCE_EMPTY_TEXT,
   MAILING_RECALL_WINDOW_HOURS,
+  MAILING_SEGMENT_ARCHIVED_TEXT,
+  MAILING_SURVEY_CLOSED_TEXT,
+  mailingAudienceEmptyText,
   mailingLaunchProblems,
   mailingLaunchProblemText,
   mailingRecallProblemText,
+  mailingSurveyIncompleteText,
 } from '#shared/mailing';
+import { surveyFreezeProblems } from '#shared/survey';
 import type {
   Mailing,
   MailingAudienceResponse,
@@ -21,6 +25,9 @@ import type {
   MailingRequestBody,
   MailingResponse,
 } from '#shared/types/mailing';
+import type { SegmentListResponse } from '#shared/types/segment';
+import type { Survey, SurveyListResponse, SurveyResponse } from '#shared/types/survey';
+import type { SelectOption } from '~/types/selectOption';
 
 /**
  * Экран рассылки. Что на нём можно, решает статус:
@@ -41,6 +48,12 @@ import type {
  * **Демо** (issue #212): поле «Демо» новой рассылки видит только владелец, и уходит оно одним
  * заведением. Число адресатов демо-рассылки — только демо-водители. Демо-рассылку у остальных
  * экран открывает на чтение: без автосохранения и кнопок.
+ *
+ * **Сегмент и опрос** (issue #321) выбираются у черновика и сохраняются вместе с текстами.
+ * Число адресатов считается с сегментом — тем же отбором, что снимок. Почему запуск не пройдёт
+ * из-за них — сегмент в архиве, срок опроса прошёл, опрос не дописан, — экран говорит у кнопки
+ * теми же фразами, что отказ ручки. Полноту опроса страница считает по самому опросу:
+ * он правится и после прикрепления, и решает всё равно запуск.
  */
 
 definePageMeta({
@@ -85,6 +98,8 @@ const toFields = (source: Mailing | null): MailingRequestBody => ({
   title: source?.title ?? '',
   textRu: source?.textRu ?? '',
   textUz: source?.textUz ?? '',
+  segmentId: source?.segment?.segmentId ?? '',
+  surveyId: source?.survey?.surveyId ?? '',
 });
 
 /** То, что на экране. Ответ сервера его не перезаписывает. */
@@ -127,8 +142,103 @@ const headerNote = computed(() => {
   return phrases.join(' ');
 });
 
-/** Аудитория своя у демо-рассылки: только демо-водители. */
-const audienceQuery = computed(() => ({ demo: String(isDemo.value) }));
+/**
+ * Сегменты и опросы для выбора. Списки целиком — их единицы и десятки; отбор по миру,
+ * архиву и сроку — здесь, у того, кто знает, что выбирают.
+ */
+const { data: segments } = await useFetch<SegmentListResponse>('/api/segments');
+const { data: surveys } = await useFetch<SurveyListResponse>('/api/surveys');
+
+const selectedSegment = computed(
+  () =>
+    segments.value?.segments.find((segment) => segment.segmentId === fields.value.segmentId) ??
+    null,
+);
+
+const selectedSurveyItem = computed(
+  () => surveys.value?.surveys.find((survey) => survey.surveyId === fields.value.surveyId) ?? null,
+);
+
+/** Название выбранного сегмента: из списка, а пока он не пришёл — из самой рассылки. */
+const selectedSegmentName = computed(() => {
+  const own = mailing.value?.segment;
+
+  return (
+    selectedSegment.value?.name ??
+    (own && own.segmentId === fields.value.segmentId ? own.name : null)
+  );
+});
+
+/** Рабочие сегменты того же мира и уже выбранный — даже архивный: он стоит в черновике. */
+const segmentOptions = computed<SelectOption[]>(() =>
+  (segments.value?.segments ?? [])
+    .filter(
+      (segment) =>
+        segment.segmentId === fields.value.segmentId ||
+        (segment.archivedAt === null && segment.isDemo === isDemo.value),
+    )
+    .map((segment) => ({
+      value: segment.segmentId,
+      label: segment.archivedAt === null ? segment.name : `${segment.name} (в архиве)`,
+    })),
+);
+
+/** Опросы того же мира, не закрытые по сроку, и уже выбранный — даже закрытый. */
+const surveyOptions = computed<SelectOption[]>(() =>
+  (surveys.value?.surveys ?? [])
+    .filter(
+      (survey) =>
+        survey.surveyId === fields.value.surveyId ||
+        (!survey.closed && survey.isDemo === isDemo.value),
+    )
+    .map((survey) => {
+      const title = survey.title ?? 'Без названия';
+
+      return { value: survey.surveyId, label: survey.closed ? `${title} (срок прошёл)` : title };
+    }),
+);
+
+/** Демо-признак новой рассылки сменился — прежний выбор другого мира не годится. */
+watch(demo, () => {
+  if (mailing.value === null) {
+    fields.value.segmentId = '';
+    fields.value.surveyId = '';
+  }
+});
+
+/**
+ * Выбранный опрос целиком — ради полноты: в списке текстов нет. Читается в браузере, по смене
+ * выбора; ответ на прежний выбор, пришедший позже, отбрасывается.
+ */
+const selectedSurvey = ref<Survey | null>(null);
+let surveySequence = 0;
+
+const loadSelectedSurvey = async (surveyId: string): Promise<void> => {
+  const current = ++surveySequence;
+
+  selectedSurvey.value = null;
+
+  if (surveyId === '') {
+    return;
+  }
+
+  try {
+    const response = await $fetch<SurveyResponse>(`/api/surveys/${surveyId}`);
+
+    if (current === surveySequence) {
+      selectedSurvey.value = response.survey;
+    }
+  } catch {
+    // Не прочитался — причину у кнопки не покажем, а запуск всё равно проверит полноту сам.
+  }
+};
+
+/** Аудитория своя у демо-рассылки и у рассылки с сегментом. */
+const audienceQuery = computed(() =>
+  fields.value.segmentId === ''
+    ? { demo: String(isDemo.value) }
+    : { demo: String(isDemo.value), segmentId: fields.value.segmentId },
+);
 
 const { data: audience, status: audienceStatus } = await useFetch<MailingAudienceResponse>(
   '/api/mailings/audience',
@@ -198,8 +308,24 @@ const launchProblems = computed(() => {
     mailingLaunchProblemText,
   );
 
+  if (selectedSegment.value?.archivedAt != null) {
+    problems.push(MAILING_SEGMENT_ARCHIVED_TEXT);
+  }
+
+  if (selectedSurveyItem.value?.closed === true || selectedSurvey.value?.closed === true) {
+    problems.push(MAILING_SURVEY_CLOSED_TEXT);
+  }
+
+  if (selectedSurvey.value !== null && selectedSurvey.value.surveyId === fields.value.surveyId) {
+    const surveyProblems = surveyFreezeProblems(selectedSurvey.value);
+
+    if (surveyProblems.length > 0) {
+      problems.push(mailingSurveyIncompleteText(surveyProblems));
+    }
+  }
+
   if (audience.value?.total === 0) {
-    problems.push(MAILING_AUDIENCE_EMPTY_TEXT);
+    problems.push(mailingAudienceEmptyText(fields.value.segmentId !== ''));
   }
 
   return problems;
@@ -349,9 +475,15 @@ const launch = (): Promise<void> =>
         ? `Из них ${formatNumber(fresh.notificationsDisabled)} отключили уведомления и сообщения не получат. `
         : '';
 
+    const survey = selectedSurveyItem.value;
+    const freezeNote =
+      survey !== null && survey.frozenAt === null
+        ? `Опрос «${survey.title ?? 'Без названия'}» заморозится: после запуска в нём правятся только название и дата окончания. `
+        : '';
+
     const confirmed = await askConfirmation({
       title: `Разослать «${fields.value.title.trim()}» — ${formatNumber(fresh.total)} адресатам?`,
-      message: `${disabledNote}Отозвать отправленное можно только в течение ${MAILING_RECALL_WINDOW_HOURS} часов.`,
+      message: `${disabledNote}${freezeNote}Отозвать отправленное можно только в течение ${MAILING_RECALL_WINDOW_HOURS} часов.`,
       confirmLabel: 'Запустить',
       tone: 'primary',
     });
@@ -559,6 +691,12 @@ const inProgress = computed(() => {
 });
 
 onMounted(() => {
+  watch(
+    () => fields.value.surveyId,
+    (surveyId) => void loadSelectedSurvey(surveyId),
+    { immediate: true },
+  );
+
   now.value = Date.now();
   nowTimer = setInterval(() => {
     now.value = Date.now();
@@ -649,6 +787,8 @@ onBeforeUnmount(() => {
         v-model:title="fields.title"
         v-model:text-ru="fields.textRu"
         v-model:text-uz="fields.textUz"
+        v-model:segment-id="fields.segmentId"
+        v-model:survey-id="fields.surveyId"
         heading="Черновик"
         :mailing="mailing"
         :autosave-state="autosave.state.value"
@@ -658,6 +798,9 @@ onBeforeUnmount(() => {
         :uploading="uploading"
         :photo-error="photoError"
         :demo="isDemo"
+        :segment-options="segmentOptions"
+        :survey-options="surveyOptions"
+        :segment-name="selectedSegmentName"
         :readonly="!editable"
         @upload="upload"
         @remove-photo="removePhoto"
@@ -687,7 +830,7 @@ onBeforeUnmount(() => {
       <MoleculesSectionPanel
         v-if="mailing && editable"
         title="Копия"
-        note="Новый черновик с тем же заголовком, текстами и фото. Этот черновик остаётся как есть."
+        note="Новый черновик с тем же заголовком, текстами, фото, сегментом и опросом. Этот черновик остаётся как есть."
       >
         <AtomsActionButton label="Скопировать в новый черновик" :disabled="acting" @click="copy" />
       </MoleculesSectionPanel>

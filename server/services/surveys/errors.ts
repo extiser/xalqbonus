@@ -43,6 +43,16 @@ export class SurveyFrozenFieldRequiredError extends SurveyError {
   }
 }
 
+/**
+ * Черновик опроса прикреплён к черновику рассылки (issue #321): удалить его нельзя, пока
+ * не откреплён там. Откреплять молча — менять чужой черновик.
+ */
+export class SurveyAttachedError extends SurveyError {
+  constructor(public readonly surveyId: string) {
+    super(`опрос ${surveyId} прикреплён к рассылке и не удаляется`);
+  }
+}
+
 /** Тело запроса не разобрать: не тот тип вопроса, не дата, не целое число баллов. */
 export class SurveyRequestInvalidError extends SurveyError {
   constructor(public readonly reason: SurveyRequestInvalidReason) {

@@ -1,6 +1,7 @@
 import { createError, type H3Error } from 'h3';
 
 import {
+  SurveyAttachedError,
   SurveyFrozenError,
   SurveyFrozenFieldRequiredError,
   SurveyRequestInvalidError,
@@ -47,6 +48,14 @@ export const explainSurveyFailure = (error: unknown): H3Error | null => {
 
   if (error instanceof SurveyFrozenError) {
     return reject(409, 'Conflict', FROZEN_TEXT[error.action]);
+  }
+
+  if (error instanceof SurveyAttachedError) {
+    return reject(
+      409,
+      'Conflict',
+      'Опрос прикреплён к черновику рассылки — сначала открепите его там.',
+    );
   }
 
   if (error instanceof SurveyFrozenFieldRequiredError) {

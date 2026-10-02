@@ -10,6 +10,7 @@ import {
 } from '#shared/mailing';
 import type { Mailing, MailingAudienceResponse } from '#shared/types/mailing';
 import type { LoadState } from '~/types/loadState';
+import type { SelectOption } from '~/types/selectOption';
 
 /**
  * Форма черновика рассылки — тексты и фото на одном экране.
@@ -36,6 +37,11 @@ import type { LoadState } from '~/types/loadState';
  *
  * Демо-рассылка (issue #212) уходит только демо-водителям — так и подписано число адресатов.
  * `readonly` — демо-рассылка у того, кто её не правит: поля видны, но закрыты.
+ *
+ * Сегмент и опрос (issue #321) выбираются здесь же. Списки составляет страница: рабочие
+ * сегменты и опросы, не закрытые по сроку, того же мира, что рассылка, — плюс уже выбранный,
+ * даже если он с тех пор ушёл в архив или закрылся: иначе поле показало бы пустой выбор
+ * там, где он есть.
  */
 const props = defineProps<{
   heading: string;
@@ -49,6 +55,10 @@ const props = defineProps<{
   photoError: string | null;
   /** Рассылка демо — своя или ставится полем «Демо» до заведения. */
   demo: boolean;
+  segmentOptions: SelectOption[];
+  surveyOptions: SelectOption[];
+  /** Название выбранного сегмента — для подписи числа адресатов. `null` — ещё не прочитано. */
+  segmentName: string | null;
   readonly?: boolean;
 }>();
 
@@ -57,6 +67,8 @@ const emit = defineEmits<{ upload: [file: File]; removePhoto: []; retry: [] }>()
 const title = defineModel<string>('title', { required: true });
 const textRu = defineModel<string>('textRu', { required: true });
 const textUz = defineModel<string>('textUz', { required: true });
+const segmentId = defineModel<string>('segmentId', { required: true });
+const surveyId = defineModel<string>('surveyId', { required: true });
 
 const withPhoto = computed(() => props.mailing?.photoPath != null);
 const limit = computed(() => mailingMessageLimit(withPhoto.value));
@@ -78,6 +90,46 @@ const photoNote = `Необязательно. С фото сообщение у
           hint="Для списка рассылок. Водителю не уходит."
         />
 
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div class="space-y-1">
+            <label class="block">
+              <span class="mb-1 block text-sm font-medium text-slate-700">Кому</span>
+              <AtomsSelectInput v-model="segmentId" :options="segmentOptions">
+                <option value="">Все участники</option>
+              </AtomsSelectInput>
+            </label>
+            <p class="text-xs text-slate-500">
+              Сегмент отбирает, но не расширяет: сообщение получат только участники программы
+              с привязанным Telegram.
+              <NuxtLink
+                v-if="segmentId !== ''"
+                :to="`/segments/${segmentId}`"
+                class="underline underline-offset-2"
+              >
+                Открыть сегмент
+              </NuxtLink>
+            </p>
+          </div>
+          <div class="space-y-1">
+            <label class="block">
+              <span class="mb-1 block text-sm font-medium text-slate-700">Опрос</span>
+              <AtomsSelectInput v-model="surveyId" :options="surveyOptions">
+                <option value="">Без опроса</option>
+              </AtomsSelectInput>
+            </label>
+            <p v-if="surveyId === ''" class="text-xs text-slate-500">
+              Под сообщением — кнопка «Открыть приложение».
+            </p>
+            <p v-else class="text-xs text-slate-500">
+              Под сообщением — одна кнопка «Пройти опрос» вместо «Открыть приложение». Запуск
+              заморозит опрос: после него в нём правятся только название и дата окончания.
+              <NuxtLink :to="`/mailings/surveys/${surveyId}`" class="underline underline-offset-2">
+                Открыть опрос
+              </NuxtLink>
+            </p>
+          </div>
+        </div>
+
         <!-- Поля в том же порядке, в каком блоки уйдут в сообщении: узбекский первым (issue #160). -->
         <MoleculesTextAreaField
           v-model="textUz"
@@ -98,7 +150,7 @@ const photoNote = `Необязательно. С фото сообщение у
         <!-- Аудиторию по языку мы не режем сознательно, а пишущий узбекский текст легко решит,
              что тот уйдёт только узбекоязычным. -->
         <p class="text-sm text-slate-500">
-          Сообщение уходит всем участникам программы — независимо от языка в их профиле.
+          Сообщение уходит адресатам на обоих языках — независимо от языка в их профиле.
         </p>
 
         <div class="rounded-md px-3 py-2 text-sm" :class="tooLong ? 'bg-red-50' : 'bg-slate-50'">
@@ -142,11 +194,17 @@ const photoNote = `Необязательно. С фото сообщение у
           <p v-else class="text-slate-700">
             Адресатов сейчас:
             <span class="font-semibold text-slate-900">{{ formatNumber(audience.total) }}</span> —
-            {{
-              demo
-                ? 'только демо-водители с привязанным Telegram: демо-рассылка живым не уходит.'
-                : 'все участники программы с привязанным Telegram.'
-            }}
+            <template v-if="segmentId !== ''">
+              участники программы с привязанным Telegram из
+              {{ segmentName === null ? 'выбранного сегмента' : `сегмента «${segmentName}»` }}.
+            </template>
+            <template v-else>
+              {{
+                demo
+                  ? 'только демо-водители с привязанным Telegram: демо-рассылка живым не уходит.'
+                  : 'все участники программы с привязанным Telegram.'
+              }}
+            </template>
             <template v-if="audience.notificationsDisabled > 0">
               Из них {{ formatNumber(audience.notificationsDisabled) }} отключили уведомления — будут
               в счётчике, но сообщения не получат.

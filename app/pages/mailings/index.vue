@@ -34,8 +34,9 @@ const state = computed(() => toLoadState(status.value));
     <div class="flex flex-wrap items-start justify-between gap-4">
       <div>
         <p class="text-sm text-slate-500">
-          Сообщение всем участникам программы в Telegram с кнопкой «Открыть приложение». Черновик
-          правится сколько угодно; отправленное не отзывается.
+          Сообщение в Telegram участникам программы — всем или сегменту — с кнопкой «Открыть
+          приложение» или «Пройти опрос». Черновик правится сколько угодно; отправленное не
+          отзывается.
         </p>
       </div>
       <AtomsActionButton

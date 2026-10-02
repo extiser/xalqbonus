@@ -1,8 +1,11 @@
 import type { MailingFieldsInput, MailingRow } from '#server/repositories/mailings';
 import {
+  InvalidMailingFieldsError,
   MailingFieldTooLongError,
   MailingNotLaunchableError,
 } from '#server/services/mailings/errors';
+import { isSurveyClosed } from '#server/services/surveys/closed';
+import { readUuid } from '#server/utils/query';
 import { MAILING_TEXT_MAX_LENGTH, mailingLaunchProblems } from '#shared/mailing';
 import type { Mailing } from '#shared/types/mailing';
 
@@ -19,6 +22,24 @@ export const toMailing = (row: MailingRow): Mailing => ({
   photoPath: row.photoPath,
   status: row.status,
   isDemo: row.isDemo,
+  segment:
+    row.segmentId === null || row.segmentName === null
+      ? null
+      : {
+          segmentId: row.segmentId,
+          name: row.segmentName,
+          archivedAt: row.segmentArchivedAt?.toISOString() ?? null,
+        },
+  survey:
+    row.surveyId === null
+      ? null
+      : {
+          surveyId: row.surveyId,
+          title: row.surveyTitle,
+          endsOn: row.surveyEndsOn,
+          closed: isSurveyClosed(row.surveyEndsOn, new Date()),
+          frozenAt: row.surveyFrozenAt?.toISOString() ?? null,
+        },
   createdByName: row.createdByName,
   createdAt: row.createdAt.toISOString(),
   startedAt: row.startedAt?.toISOString() ?? null,
@@ -47,6 +68,8 @@ export type MailingRequestFields = {
   title?: unknown;
   textRu?: unknown;
   textUz?: unknown;
+  segmentId?: unknown;
+  surveyId?: unknown;
   /** Только у заведения: правка признак не трогает (issue #212). */
   isDemo?: unknown;
 };
@@ -58,6 +81,23 @@ const readText = (value: unknown): string | null => {
   return text === '' ? null : text;
 };
 
+/** Ссылка из тела: пусто — не выбрано, иначе uuid. Не uuid — отказ, а не «не выбрано». */
+const readReference = (value: unknown, problem: 'segment_invalid' | 'survey_invalid'): string | null => {
+  const text = readText(value);
+
+  if (text === null) {
+    return null;
+  }
+
+  const id = readUuid(text);
+
+  if (id === null) {
+    throw new InvalidMailingFieldsError(problem);
+  }
+
+  return id;
+};
+
 /**
  * Поля черновика из тела запроса. Обязательных нет: черновик заводится первым набранным
  * символом или выбранным файлом, и заголовка у него в этот момент может не быть
@@ -67,6 +107,8 @@ export const readMailingFields = (body: MailingRequestFields | null | undefined)
   title: readText(body?.title),
   textRu: readText(body?.textRu),
   textUz: readText(body?.textUz),
+  segmentId: readReference(body?.segmentId, 'segment_invalid'),
+  surveyId: readReference(body?.surveyId, 'survey_invalid'),
 });
 
 /**

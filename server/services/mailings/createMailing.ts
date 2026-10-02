@@ -1,5 +1,7 @@
 import { consola } from 'consola';
 import { insertDraftMailing } from '#server/repositories/mailings';
+import { checkMailingSegment } from '#server/services/mailings/checkMailingSegment';
+import { checkMailingSurvey } from '#server/services/mailings/checkMailingSurvey';
 import { assertMailingFieldLengths, type MailingFields } from '#server/services/mailings/fields';
 import { readMailing } from '#server/services/mailings/readMailing';
 import type { Mailing } from '#shared/types/mailing';
@@ -16,6 +18,9 @@ import type { Mailing } from '#shared/types/mailing';
  *
  * Признак демо ставится здесь и больше нигде (issue #212). Кто вправе его поставить, решила
  * ручка — `requireDemoEditor`.
+ *
+ * Сегмент и опрос могут прийти и с заведением — первым действием бывает их выбор
+ * (issue #321). Проверяются они так же, как при правке.
  */
 const log = consola.withTag('mailings:create');
 
@@ -26,6 +31,8 @@ export const createMailing = async (
 ): Promise<Mailing> => {
   // Только жёсткий предел поля: склейка по потолку Telegram — условие запуска, а не сохранения.
   assertMailingFieldLengths(fields);
+  await checkMailingSegment(fields.segmentId, null, isDemo);
+  await checkMailingSurvey(fields.surveyId, null, isDemo);
 
   const mailingId = await insertDraftMailing({ ...fields, photoPath: null, createdById, isDemo });
 
