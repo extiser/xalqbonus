@@ -403,6 +403,21 @@ enum MailingRecipientOutcome {
   @@schema("xb")
 }
 
+/// Тип вопроса опроса (issue #320).
+enum SurveyQuestionType {
+  /// Один ответ из вариантов.
+  single
+  /// Несколько ответов из вариантов.
+  multiple
+  /// Свободный текст. Вариантов нет.
+  text
+  /// Шкала 1–5. Значения фиксированы и вариантами не заводятся.
+  scale
+
+  @@map("survey_question_type")
+  @@schema("xb")
+}
+
 /// Состояние акции. Путь один и в одну сторону: черновик → идёт → окончена. Запущенная
 /// не правится и не отменяется: окно кончается само (issue #166).
 enum CampaignStatus {
@@ -899,6 +914,7 @@ model Employee {
   ordersCancelled Order[]          @relation("order_cancelled_by")
   stockMovements  StockMovement[]
   mailings        Mailing[]
+  surveys         Survey[]
   segments        Segment[]
   campaigns       Campaign[]
   rewardsIssued   Reward[]         @relation("reward_issued_by")
@@ -1805,6 +1821,94 @@ model MailingRecipient {
   @@index([mailingId, outcome])
   @@index([personId])
   @@map("mailing_recipients")
+  @@schema("xb")
+}
+
+// ---------------------------------------------------------------------------
+// Опросы
+
+/// Опрос водителей (issue #320). Заводится в админке, прикрепляется к рассылке, и один опрос
+/// может уйти несколькими рассылками.
+///
+/// Черновик правится целиком. После отправки рассылки опрос замораживается (`frozen_at`):
+/// вопросы, варианты и тексты не правятся — ответы до и после правки несравнимы. У замороженного
+/// правятся только название и дата окончания; всё остальное — копией в новый черновик.
+///
+/// Тексты — на двух языках обязательно: опрос — не объявление, и вопрос без перевода половина
+/// водителей не прочитает. Черновик хранит пустые поля; у замороженного пустых нет — проверкой
+/// `surveys_frozen_complete_check` на этой строке и триггером на тексты вопросов и вариантов.
+model Survey {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// Служебное название для списка. Водителю не уходит. Пусто только у черновика.
+  title            String?
+  /// Экран открытия опроса.
+  introRu          String?   @map("intro_ru")
+  introUz          String?   @map("intro_uz")
+  /// Экран финала.
+  finishRu         String?   @map("finish_ru")
+  finishUz         String?   @map("finish_uz")
+  /// Кнопка отказа на экране открытия — «Закрыть», «Не интересует», как напишут.
+  declineButtonRu  String?   @map("decline_button_ru")
+  declineButtonUz  String?   @map("decline_button_uz")
+  /// Кнопка перехода в приложение на финале.
+  appButtonRu      String?   @map("app_button_ru")
+  appButtonUz      String?   @map("app_button_uz")
+  /// Баллы за пройденный опрос. Ноль — опрос без награды.
+  points           Int       @default(0)
+  /// Последний день опроса, календарный. Закрыт с 00:00 следующего дня по Ташкенту — сутки
+  /// механики с 05:00 здесь не применяются: опрос не связан с поездками (решение Руслана
+  /// 02-10-2026). Пусто только у черновика.
+  endsOn           DateTime? @map("ends_on") @db.Date
+  /// Когда заморожен. Пусто — черновик, правится целиком. Ставит запуск рассылки с опросом.
+  frozenAt         DateTime? @map("frozen_at") @db.Timestamptz(6)
+  /// Демо-опрос — как у рассылки (issue #212): ставится при заведении и не меняется, копия
+  /// наследует. Править демо-опрос может только владелец.
+  isDemo           Boolean   @default(false) @map("is_demo")
+  createdById      String    @map("created_by_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  createdBy Employee         @relation(fields: [createdById], references: [id])
+  questions SurveyQuestion[]
+
+  @@index([createdAt(sort: Desc)])
+  @@map("surveys")
+  @@schema("xb")
+}
+
+/// Вопрос опроса. Порядок — `position`, пара с опросом уникальна. Удаление черновика опроса
+/// уносит вопросы.
+model SurveyQuestion {
+  id       String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  surveyId String             @map("survey_id") @db.Uuid
+  position Int
+  type     SurveyQuestionType
+  textRu   String?            @map("text_ru")
+  textUz   String?            @map("text_uz")
+  required Boolean            @default(true)
+
+  survey  Survey         @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  options SurveyOption[]
+
+  @@unique([surveyId, position])
+  @@map("survey_questions")
+  @@schema("xb")
+}
+
+/// Вариант ответа — только у `single` и `multiple`: у шкалы значения 1–5 фиксированы,
+/// у текста вариантов нет. Удаление вопроса уносит его варианты.
+model SurveyOption {
+  id         String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  questionId String  @map("question_id") @db.Uuid
+  position   Int
+  textRu     String? @map("text_ru")
+  textUz     String? @map("text_uz")
+
+  question SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, position])
+  @@map("survey_options")
   @@schema("xb")
 }
 

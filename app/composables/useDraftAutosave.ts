@@ -27,7 +27,11 @@ export type AutosaveState = 'idle' | 'saving' | 'saved' | 'failed';
 /** Сколько ждать после последнего знака. Меньше — запрос на каждую букву, больше — «не сохранилось». */
 const AUTOSAVE_DELAY_MS = 800;
 
-type AutosaveOptions<Fields extends Record<string, string>> = {
+/**
+ * Поля — всё, что переживает `JSON`: строки формы рассылки и товара, а у опроса ещё и списки
+ * вопросов с вариантами (issue #320). Снимок и сравнение идут через `JSON.stringify`.
+ */
+type AutosaveOptions<Fields extends Record<string, unknown>> = {
   /** Поля формы — то, что на экране. */
   fields: Ref<Fields>;
   /** Сохраняет снимок полей. Отказ — исключением: его текст встанет рядом с отметкой. */
@@ -36,7 +40,7 @@ type AutosaveOptions<Fields extends Record<string, string>> = {
   enabled: () => boolean;
 };
 
-export const useDraftAutosave = <Fields extends Record<string, string>>(
+export const useDraftAutosave = <Fields extends Record<string, unknown>>(
   options: AutosaveOptions<Fields>,
 ) => {
   const state = ref<AutosaveState>('idle');

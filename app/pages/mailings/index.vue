@@ -9,6 +9,8 @@ import type { MailingListResponse } from '#shared/types/mailing';
  * Формы заведения здесь больше нет: новая рассылка открывается экраном рассылки
  * (`/mailings/new`), где черновик заводится первым набранным символом или выбранным фото,
  * а тексты, фото и запуск живут на одном экране (issue #148). Открыл и ушёл — записи нет.
+ *
+ * Раздел двумя вкладками — рассылки и опросы (issue #320), у каждой свой адрес.
  */
 
 definePageMeta({
@@ -24,10 +26,14 @@ const state = computed(() => toLoadState(status.value));
 
 <template>
   <div class="space-y-6">
+    <div class="space-y-4">
+      <h1 class="text-xl font-semibold text-slate-900">Рассылки</h1>
+      <OrganismsMailingTabs active="mailings" />
+    </div>
+
     <div class="flex flex-wrap items-start justify-between gap-4">
       <div>
-        <h1 class="text-xl font-semibold text-slate-900">Рассылки</h1>
-        <p class="mt-1 text-sm text-slate-500">
+        <p class="text-sm text-slate-500">
           Сообщение всем участникам программы в Telegram с кнопкой «Открыть приложение». Черновик
           правится сколько угодно; отправленное не отзывается.
         </p>
