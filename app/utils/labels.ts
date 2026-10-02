@@ -13,6 +13,7 @@ import type {
 } from '#shared/types/campaign';
 import type { EmployeeAccount } from '#shared/types/employee';
 import type { Mailing } from '#shared/types/mailing';
+import type { SurveyQuestionType } from '#shared/types/survey';
 import type { OfficeOrder } from '#shared/types/orders';
 import type { OfficeReward } from '#shared/types/rewards';
 import type { SyncRunRow, SyncSkipRow } from '#shared/types/sync';
@@ -390,3 +391,14 @@ const CLIENT_ENGINE_LABELS: Record<ClientPlatform, string | null> = {
 
 export const clientEngineLabel = (platform: ClientPlatform): string | null =>
   CLIENT_ENGINE_LABELS[platform];
+
+/** Типы вопросов опроса (issue #320) — словами формы. */
+const SURVEY_QUESTION_TYPE_LABELS: Record<SurveyQuestionType, string> = {
+  single: 'один ответ',
+  multiple: 'несколько ответов',
+  scale: 'шкала 1–5',
+  text: 'свободный текст',
+};
+
+export const surveyQuestionTypeLabel = (type: SurveyQuestionType): string =>
+  SURVEY_QUESTION_TYPE_LABELS[type];

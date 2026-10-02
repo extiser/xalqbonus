@@ -288,6 +288,7 @@ export type DemoEntityKind =
   | 'product'
   | 'office'
   | 'mailing'
+  | 'survey'
   | 'segment'
   | 'campaign'
   | 'employee'
@@ -301,6 +302,7 @@ const DEMO_TABLES = {
   product: Prisma.sql`xb.products`,
   office: Prisma.sql`xb.offices`,
   mailing: Prisma.sql`xb.mailings`,
+  survey: Prisma.sql`xb.surveys`,
   segment: Prisma.sql`xb.segments`,
   campaign: Prisma.sql`xb.campaigns`,
   employee: Prisma.sql`xb.employees`,
