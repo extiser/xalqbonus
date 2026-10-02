@@ -48,6 +48,7 @@ const REASON_KEYS: Readonly<
   merge: 'reason_correction',
   campaign: 'reason_campaign',
   demo_grant: 'reason_demo_grant',
+  survey: 'reason_survey',
 };
 
 const reasonText = (reason: PointReason, delta: bigint, language: Language): string => {
