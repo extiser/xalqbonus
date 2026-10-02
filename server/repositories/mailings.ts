@@ -4,6 +4,8 @@ import type { MailingRecipientOutcome, MailingStatus } from '#server/generated/p
 // Относительным путём, а не через `#shared`: модуль собирается в воркер, а бандл воркера
 // знает только псевдоним `#server` (package.json → build:worker).
 import { MAILING_RECALL_WINDOW_HOURS } from '../../shared/mailing';
+import type { SegmentConditions } from '../../shared/types/segment';
+import { segmentMembersSql } from './segments';
 
 /**
  * Рассылки и снимок их адресатов.
@@ -29,6 +31,16 @@ export type MailingRow = {
   status: MailingStatus;
   /** Демо-рассылка (issue #212): уходит только демо-водителям. */
   isDemo: boolean;
+  /** Сегмент адресатов (issue #321). Пусто — все участники. */
+  segmentId: string | null;
+  segmentName: string | null;
+  segmentArchivedAt: Date | null;
+  /** Прикреплённый опрос (issue #321). Пусто — без опроса. */
+  surveyId: string | null;
+  surveyTitle: string | null;
+  /** `YYYY-MM-DD`. */
+  surveyEndsOn: string | null;
+  surveyFrozenAt: Date | null;
   createdByName: string;
   createdAt: Date;
   startedAt: Date | null;
@@ -60,6 +72,13 @@ const MAILING_SELECT = Prisma.sql`
          mailing."photo_path"         AS "photoPath",
          mailing."status",
          mailing."is_demo"            AS "isDemo",
+         mailing."segment_id"         AS "segmentId",
+         segment."name"               AS "segmentName",
+         segment."archived_at"        AS "segmentArchivedAt",
+         mailing."survey_id"          AS "surveyId",
+         survey."title"               AS "surveyTitle",
+         survey."ends_on"::text       AS "surveyEndsOn",
+         survey."frozen_at"           AS "surveyFrozenAt",
          author."full_name"           AS "createdByName",
          mailing."created_at"         AS "createdAt",
          mailing."started_at"         AS "startedAt",
@@ -78,6 +97,8 @@ const MAILING_SELECT = Prisma.sql`
                                       AS "recallDeadlineAt"
     FROM xb.mailings AS mailing
     JOIN xb.employees AS author ON author."id" = mailing."created_by_id"
+    LEFT JOIN xb.segments AS segment ON segment."id" = mailing."segment_id"
+    LEFT JOIN xb.surveys AS survey ON survey."id" = mailing."survey_id"
     LEFT JOIN LATERAL (
          SELECT count(*)::int                                                 AS "total",
                 count(*) FILTER (WHERE recipient."outcome" = 'pending')::int          AS "pending",
@@ -115,6 +136,10 @@ export type MailingFieldsInput = {
   title: string | null;
   textRu: string | null;
   textUz: string | null;
+  /** Пусто — все участники. */
+  segmentId: string | null;
+  /** Пусто — без опроса. */
+  surveyId: string | null;
 };
 
 export type InsertMailingInput = MailingFieldsInput & {
@@ -131,7 +156,8 @@ export const insertDraftMailing = async (
 ): Promise<string> => {
   const rows = await client.$queryRaw<{ id: string }[]>`
     INSERT INTO xb.mailings (
-      "title", "text_ru", "text_uz", "photo_path", "status", "created_by_id", "is_demo"
+      "title", "text_ru", "text_uz", "photo_path", "status", "created_by_id", "is_demo",
+      "segment_id", "survey_id"
     )
     VALUES (
       ${input.title},
@@ -140,7 +166,9 @@ export const insertDraftMailing = async (
       ${input.photoPath},
       'draft'::xb.mailing_status,
       ${input.createdById}::uuid,
-      ${input.isDemo}
+      ${input.isDemo},
+      ${input.segmentId}::uuid,
+      ${input.surveyId}::uuid
     )
     RETURNING "id"
   `;
@@ -165,6 +193,8 @@ export const updateDraftMailing = async (
        SET "title"      = ${input.title},
            "text_ru"    = ${input.textRu},
            "text_uz"    = ${input.textUz},
+           "segment_id" = ${input.segmentId}::uuid,
+           "survey_id"  = ${input.surveyId}::uuid,
            "updated_at" = now()
      WHERE "id" = ${mailingId}::uuid
        AND "status" = 'draft'
@@ -234,10 +264,21 @@ export const deleteDraftMailing = async (
   return rows[0] ?? null;
 };
 
+/** Сегмент, которым режется аудитория: его условия и признак — то, из чего строится состав. */
+export type MailingAudienceSegment = {
+  conditions: SegmentConditions;
+  isDemo: boolean;
+};
+
 /**
  * Участники программы, которых возьмёт рассылка: строка `person_settings` и активная
- * привязка Telegram. Все до одного — фильтров нет: резать аудиторию не на чем, пока нет
- * дашборда (решение Руслана 15-09-2026, issue #136).
+ * привязка Telegram.
+ *
+ * С сегментом (issue #321) — пересечение этой аудитории с его составом. Сегмент отбирает,
+ * но не расширяет: человек без привязки сообщения не получит, в какой бы сегмент ни попал.
+ * Состав — тем же построителем `segmentMembersSql`, что считает число на экране сегмента.
+ * Условие сегмента добавляется к запросу целиком или не добавляется вовсе — ввода
+ * пользователя в склейке нет, параметры по-прежнему уходят параметрами.
  *
  * Один и тот же отбор нужен подсчёту на экране и снимку при запуске — поэтому он собран
  * один раз: разойдись они, экран обещал бы одно число, а в снимок ложилось бы другое.
@@ -245,7 +286,17 @@ export const deleteDraftMailing = async (
  * Признак рассылки (issue #212): у демо-рассылки аудитория — только демо-водители, у живой —
  * все участники, демо-водители тоже: живое до демо доходит, демо до живого — нет.
  */
-const audienceSql = (isDemo: boolean): Prisma.Sql => Prisma.sql`
+const audienceSql = (isDemo: boolean, segment: MailingAudienceSegment | null): Prisma.Sql => {
+  const segmentFilter =
+    segment === null
+      ? Prisma.empty
+      : Prisma.sql`
+     AND settings."person_id" IN (
+           SELECT member."personId"
+             FROM (${segmentMembersSql(segment.conditions, segment.isDemo)}) AS member
+         )`;
+
+  return Prisma.sql`
   SELECT settings."person_id",
          settings."notifications_enabled"
     FROM xb.person_settings AS settings
@@ -254,19 +305,21 @@ const audienceSql = (isDemo: boolean): Prisma.Sql => Prisma.sql`
      AND link."closed_at" IS NULL
     JOIN xb.persons AS person
       ON person."id" = settings."person_id"
-   WHERE (NOT ${isDemo}::boolean OR person."is_demo")
+   WHERE (NOT ${isDemo}::boolean OR person."is_demo")${segmentFilter}
 `;
+};
 
 export type AudienceCountRow = { total: number; notificationsDisabled: number };
 
 export const countMailingAudience = async (
   isDemo: boolean,
+  segment: MailingAudienceSegment | null,
   client: Executor = db,
 ): Promise<AudienceCountRow> => {
   const rows = await client.$queryRaw<AudienceCountRow[]>`
     SELECT count(*)::int                                           AS "total",
            count(*) FILTER (WHERE NOT audience."notifications_enabled")::int AS "notificationsDisabled"
-      FROM (${audienceSql(isDemo)}) AS audience
+      FROM (${audienceSql(isDemo, segment)}) AS audience
   `;
 
   return rows[0] ?? { total: 0, notificationsDisabled: 0 };
@@ -294,11 +347,12 @@ export const markMailingRunning = async (
  * остальные — `pending`. Повтор второй строки не заводит: пара — первичный ключ.
  *
  * `isDemo` — признак самой рассылки: он не меняется после заведения, и прочитанный запуском
- * верен и здесь.
+ * верен и здесь. `segment` — сегмент рассылки, прочитанный запуском в той же транзакции.
  */
 export const insertMailingRecipients = async (
   mailingId: string,
   isDemo: boolean,
+  segment: MailingAudienceSegment | null,
   client: Executor = db,
 ): Promise<number> =>
   client.$executeRaw`
@@ -310,7 +364,7 @@ export const insertMailingRecipients = async (
                 ELSE 'skipped_disabled'::xb.mailing_recipient_outcome
            END,
            CASE WHEN audience."notifications_enabled" THEN NULL ELSE now() END
-      FROM (${audienceSql(isDemo)}) AS audience
+      FROM (${audienceSql(isDemo, segment)}) AS audience
     ON CONFLICT ("mailing_id", "person_id") DO NOTHING
   `;
 
@@ -379,6 +433,8 @@ export type MailingDeliveryRow = {
   textRu: string | null;
   textUz: string | null;
   photoPath: string | null;
+  /** Прикреплённый опрос: с ним кнопка ведёт в опрос, а не на главный экран. */
+  surveyId: string | null;
   /** Исход этого адресата. `null` — в снимке его нет. */
   outcome: MailingRecipientOutcome | null;
   /** Куда писать: активная привязка на момент отправки. `null` — привязки нет. */
@@ -406,6 +462,7 @@ export const findMailingDelivery = async (
            mailing."text_ru"                AS "textRu",
            mailing."text_uz"                AS "textUz",
            mailing."photo_path"             AS "photoPath",
+           mailing."survey_id"              AS "surveyId",
            recipient."outcome",
            link."telegram_chat_id"          AS "telegramChatId",
            settings."notifications_enabled" AS "notificationsEnabled"

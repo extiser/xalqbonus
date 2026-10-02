@@ -1,3 +1,4 @@
+import { surveyFreezeProblemText, type SurveyFreezeProblem } from './survey';
 import { escapeHtml } from './telegramHtml';
 
 /**
@@ -121,7 +122,7 @@ const isBlank = (value: string | null): boolean => value === null || value.trim(
  * символом, и человек вправе сначала положить картинку, а потом подрезать текст (issue #136).
  *
  * Пустой аудитории здесь нет: её знает только подсчёт в базе, и отказ о ней отдельный —
- * `MAILING_AUDIENCE_EMPTY_TEXT`.
+ * `mailingAudienceEmptyText`.
  */
 export const mailingLaunchProblems = (
   fields: MailingLaunchFields,
@@ -181,6 +182,29 @@ export const mailingRecallProblemText = (problem: MailingRecallProblem): string 
   }
 };
 
-/** Адресатов ноль — фраза одна на отказ запуска и на причину у закрытой кнопки. */
-export const MAILING_AUDIENCE_EMPTY_TEXT =
-  'Участников программы с привязанным Telegram сейчас нет — рассылать некому.';
+/**
+ * Адресатов ноль — фраза одна на отказ запуска и на причину у закрытой кнопки. С сегментом
+ * своя: участники в парке есть, но в сегмент не попал ни один.
+ */
+export const mailingAudienceEmptyText = (withSegment: boolean): string =>
+  withSegment
+    ? 'В сегменте нет ни одного участника программы с привязанным Telegram — рассылать некому.'
+    : 'Участников программы с привязанным Telegram сейчас нет — рассылать некому.';
+
+/**
+ * Сегмент рассылки в архиве (issue #321). Выбрать его заново нельзя, но выбранный до архива
+ * остаётся в черновике и в копии — не пускает его запуск.
+ */
+export const MAILING_SEGMENT_ARCHIVED_TEXT =
+  'Сегмент в архиве — по нему рассылка не запустится. Выберите рабочий сегмент или «Все участники».';
+
+/** Срок прикреплённого опроса прошёл (issue #321): водитель открыл бы закрытый опрос. */
+export const MAILING_SURVEY_CLOSED_TEXT =
+  'Срок опроса прошёл — с ним рассылка не запустится. Продлите опрос или выберите другой.';
+
+/**
+ * Прикреплённый опрос не дописан (issue #321) — теми же фразами, что видны на экране опроса
+ * (`shared/survey.ts`): сотрудник идёт туда и находит то же самое.
+ */
+export const mailingSurveyIncompleteText = (problems: SurveyFreezeProblem[]): string =>
+  `Опрос не дописан. ${problems.map(surveyFreezeProblemText).join(' ')}`;

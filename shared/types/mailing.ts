@@ -38,6 +38,27 @@ export type MailingRecall = {
   deadlineAt: string | null;
 };
 
+/** Сегмент адресатов рассылки (issue #321). */
+export type MailingSegmentRef = {
+  segmentId: string;
+  name: string;
+  /** Заполнено — сегмент в архиве: запуск по нему не пройдёт. */
+  archivedAt: string | null;
+};
+
+/** Прикреплённый опрос (issue #321). */
+export type MailingSurveyRef = {
+  surveyId: string;
+  /** Пусто только у черновика опроса. */
+  title: string | null;
+  /** Последний день опроса, `YYYY-MM-DD`. Пусто только у черновика опроса. */
+  endsOn: string | null;
+  /** Закрыт по сроку: запуск рассылки с ним не пройдёт. */
+  closed: boolean;
+  /** Заморожен — ушёл рассылкой раньше или ушёл этой. */
+  frozenAt: string | null;
+};
+
 export type Mailing = {
   mailingId: string;
   /** Пусто только у черновика: он заводится первым набранным символом (issue #148). */
@@ -57,6 +78,10 @@ export type Mailing = {
    * и не меняется, копия наследует; править её может только владелец.
    */
   isDemo: boolean;
+  /** Пусто — все участники программы с привязкой Telegram. */
+  segment: MailingSegmentRef | null;
+  /** Пусто — рассылка без опроса, с кнопкой «Открыть приложение». */
+  survey: MailingSurveyRef | null;
   createdByName: string;
   createdAt: string;
   startedAt: string | null;
@@ -84,6 +109,10 @@ export type MailingRequestBody = {
   title: string;
   textRu: string;
   textUz: string;
+  /** Пустая строка — все участники. */
+  segmentId: string;
+  /** Пустая строка — без опроса. */
+  surveyId: string;
 };
 
 /**
@@ -94,7 +123,10 @@ export type MailingCreateRequestBody = MailingRequestBody & { isDemo: boolean };
 
 /** Сколько человек получит рассылку, если запустить её сейчас. */
 export type MailingAudienceResponse = {
-  /** Участники программы с активной привязкой. Столько строк ляжет в снимок. */
+  /**
+   * Участники программы с активной привязкой — из сегмента, если он выбран. Столько строк
+   * ляжет в снимок.
+   */
   total: number;
   /** Из них выключили уведомления: в снимок попадут, сообщения не получат. */
   notificationsDisabled: number;

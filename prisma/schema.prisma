@@ -1782,11 +1782,24 @@ model Mailing {
   /// демо-водителям тоже — живое до демо доходит. Ставится при заведении и не меняется; копия
   /// наследует. Править демо-рассылку может только владелец.
   isDemo           Boolean       @default(false) @map("is_demo")
+  /// Сегмент адресатов (issue #321). Пусто — все участники программы с привязкой Telegram.
+  /// Сегмент отбирает, но не расширяет: адресаты — пересечение его состава с этой аудиторией.
+  /// Правится только у черновика.
+  segmentId        String?       @map("segment_id") @db.Uuid
+  /// Прикреплённый опрос (issue #321): сообщение уходит с кнопкой «Пройти опрос». Запуск
+  /// замораживает опрос. Один опрос — у нескольких рассылок. Правится только у черновика.
+  surveyId         String?       @map("survey_id") @db.Uuid
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   createdBy  Employee           @relation(fields: [createdById], references: [id])
+  /// `Restrict`, как у акции: сегмент не удаляется (архив), а удалённый не должен молча
+  /// стирать ответ «кому ушло».
+  segment    Segment?           @relation(fields: [segmentId], references: [id], onDelete: Restrict)
+  /// `Restrict`: черновик опроса, прикреплённый к рассылке, не удаляется — отказ словами
+  /// (`deleteDraftSurvey`), а не молчаливое открепление чужого черновика.
+  survey     Survey?            @relation(fields: [surveyId], references: [id], onDelete: Restrict)
   recipients MailingRecipient[]
 
   @@index([createdAt(sort: Desc)])
@@ -1871,6 +1884,7 @@ model Survey {
 
   createdBy Employee         @relation(fields: [createdById], references: [id])
   questions SurveyQuestion[]
+  mailings  Mailing[]
 
   @@index([createdAt(sort: Desc)])
   @@map("surveys")
@@ -1959,6 +1973,7 @@ model Segment {
 
   createdBy  Employee    @relation(fields: [createdById], references: [id])
   campaigns  Campaign[]
+  mailings   Mailing[]
   /// Демо-сегмент (issue #212): отбирает только демо-водителей, живой — только живых.
   /// Признак — часть отбора (`segmentMembersSql`), а не условие формы: условий у сегмента
   /// по-прежнему хотя бы одно. Ставится при заведении и не меняется.

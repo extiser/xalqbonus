@@ -14,7 +14,7 @@ import { formatCalendarDate, formatClockTime } from '#server/utils/parkTime';
 import type { Mailing } from '#shared/types/mailing';
 
 /**
- * Копия рассылки в новый черновик: заголовок с пометкой копии, тексты и фото. Копируется всё, кроме идущей
+ * Копия рассылки в новый черновик: заголовок с пометкой копии, тексты, фото, сегмент и опрос. Копируется всё, кроме идущей
  * (решение Руслана 15-09-2026): завершённую — чтобы повторить то же объявление через неделю,
  * черновик — чтобы сделать из него второй похожий, остановленную — чтобы разослать заново.
  *
@@ -28,6 +28,11 @@ import type { Mailing } from '#shared/types/mailing';
  *
  * Признак демо копия берёт у оригинала (issue #212): копия демо-рассылки — демо, живой — живая.
  * Иначе копия стала бы способом превратить одно в другое.
+ *
+ * Сегмент и опрос копия переносит (issue #321, решение Руслана 02-10-2026): копия — «разослать
+ * то же заново». Повторно баллы за опрос не придут: ключ `survey:<surveys.id>:<persons.id>`
+ * от рассылки не зависит (docs/points.md). Сегмент в архиве и опрос с прошедшим сроком
+ * копию не останавливают — её не пустит запуск, с понятной причиной.
  */
 const log = consola.withTag('mailings:copy');
 
@@ -71,6 +76,8 @@ export const copyMailing = async (mailingId: string, createdById: string): Promi
     title: copyMailingTitle(source.title, new Date()),
     textRu: source.textRu,
     textUz: source.textUz,
+    segmentId: source.segmentId,
+    surveyId: source.surveyId,
     photoPath: null,
     createdById,
     isDemo: source.isDemo,

@@ -296,15 +296,42 @@ export const replaceSurveyQuestions = async (
 };
 
 /**
- * Удаляет черновик физически — вопросы и варианты уходят каскадом. `false` — строки нет
- * или опрос заморожен: условие стоит в самом `DELETE`, а не проверкой перед ним.
+ * Удаляет черновик физически — вопросы и варианты уходят каскадом. `false` — строки нет,
+ * опрос заморожен или прикреплён к рассылке (issue #321): условия стоят в самом `DELETE`,
+ * а не проверкой перед ним. Прикреплённый черновик не удаляется — откреплять его молча
+ * значило бы менять чужой черновик рассылки.
  */
 export const deleteDraftSurvey = async (surveyId: string, client: Executor = db): Promise<boolean> => {
   const deleted = await client.$executeRaw`
-    DELETE FROM xb.surveys
+    DELETE FROM xb.surveys AS survey
+     WHERE survey."id" = ${surveyId}::uuid
+       AND survey."frozen_at" IS NULL
+       AND NOT EXISTS (
+             SELECT 1 FROM xb.mailings AS mailing
+              WHERE mailing."survey_id" = survey."id"
+           )
+  `;
+
+  return deleted > 0;
+};
+
+/**
+ * Замораживает опрос — запуском рассылки с ним (issue #321), в той же транзакции, что смена
+ * статуса рассылки и снимок. Условие «ещё не заморожен» в самом `UPDATE`: замороженный
+ * прежней рассылкой повторно не замораживается, и `frozen_at` остаётся моментом первой.
+ * `false` — уже был заморожен.
+ *
+ * Полноту на переходе проверяет база (`surveys_frozen_complete_check`, триггер
+ * `surveys_frozen_questions`); вызывающий проверил её раньше, чтобы назвать причины словами.
+ */
+export const freezeSurvey = async (surveyId: string, client: Executor): Promise<boolean> => {
+  const updated = await client.$executeRaw`
+    UPDATE xb.surveys
+       SET "frozen_at"  = now(),
+           "updated_at" = now()
      WHERE "id" = ${surveyId}::uuid
        AND "frozen_at" IS NULL
   `;
 
-  return deleted > 0;
+  return updated > 0;
 };
