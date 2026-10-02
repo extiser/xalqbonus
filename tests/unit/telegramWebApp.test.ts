@@ -57,6 +57,7 @@ describe('loadTelegramWebApp', () => {
     initData: 'auth_date=1789126043&hash=c1f0a2b9',
     ready: () => {},
     expand: () => {},
+    close: () => {},
   };
 
   /** Документ, который умеет сказать, что у него просили создать тег. */
@@ -119,6 +120,7 @@ describe('resolveInitData', () => {
     initData,
     ready: () => {},
     expand: () => {},
+    close: () => {},
   });
 
   /**
