@@ -122,6 +122,26 @@ export const buildCampaignIdempotencyKey = (slug: string, personId: string): Ide
   return buildKey('campaign', `${trimmedSlug}:${personId.trim()}`);
 };
 
+/**
+ * Баллы за пройденный опрос: `survey:<surveys.id>:<persons.id>` — одни на человека и опрос
+ * (docs/points.md → «Баллы за опрос — своя причина, ключ от опроса, а не от рассылки»).
+ *
+ * Рассылки в ключе нет: один опрос уходит несколькими рассылками — основной, напоминанием,
+ * на новый сегмент, — и с рассылкой в ключе второе приглашение стало бы вторым начислением.
+ * Копия опроса — новый `id`, и за неё баллы приходят снова: это намеренно.
+ */
+export const buildSurveyIdempotencyKey = (surveyId: string, personId: string): IdempotencyKey => {
+  const trimmedSurvey = surveyId.trim();
+
+  // Пустой опрос дал бы ключ `survey::<persons.id>`, общий для всех опросов человека:
+  // второй пройденный вернулся бы как повтор первого.
+  if (trimmedSurvey.length === 0) {
+    throw new Error('ключ опроса: опрос пуст');
+  }
+
+  return buildKey('survey', `${trimmedSurvey}:${personId.trim()}`);
+};
+
 /** Приставка метки подарка от Xalq Taxi — по ней подарок узнаётся в журнале. */
 const GIFT_SLUG_PREFIX = 'gift-';
 

@@ -23,4 +23,5 @@ export const POINT_REASON_LABELS: Record<PointReason, string> = {
   raffle: 'выплата приза',
   campaign: 'акция',
   demo_grant: 'баллы демо-водителю',
+  survey: 'опрос',
 };

@@ -116,6 +116,7 @@ export type TextKey =
   | 'reason_campaign'
   | 'reason_gift'
   | 'reason_demo_grant'
+  | 'reason_survey'
   | 'history_order_reason'
   | 'button_exchange_points'
   | 'button_back'
@@ -793,6 +794,11 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   reason_demo_grant: {
     ru: 'Баллы демо-аккаунта',
     uz: 'Demo-akkaunt ballari',
+  },
+  /** Баллы за пройденный опрос (issue #322). Узбекский — черновой. */
+  reason_survey: {
+    ru: 'Опрос',
+    uz: "So'rovnoma",
   },
   /**
    * Списание и возврат по заказу — причина и номер, без лишних слов. Номер тот же, что
