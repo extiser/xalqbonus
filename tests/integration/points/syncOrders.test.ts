@@ -29,12 +29,18 @@ import { disconnectQueues } from '../support/queues';
  * живут уникальные ограничения, на которых всё это держится.
  */
 
+/**
+ * Размер страницы: из него выставляется `SYNC_PAGE_LIMIT` ниже, по нему живой прогон узнаёт
+ * последнюю страницу, и по нему же тест строит полную.
+ */
+const PAGE_LIMIT = 500;
+
 // Настройки окна фиксируются тестом: иначе ожидаемые границы зависели бы от `.env`
 // той машины, где прогоняются тесты.
 process.env['SYNC_LIVE_OVERLAP_MIN'] = '10';
 process.env['SYNC_LIVE_LAG_SEC'] = '60';
 process.env['SYNC_LIVE_MAX_WINDOW_MIN'] = '360';
-process.env['SYNC_PAGE_LIMIT'] = '500';
+process.env['SYNC_PAGE_LIMIT'] = String(PAGE_LIMIT);
 process.env['SYNC_CATCHUP_DAYS'] = '7';
 
 const NOW = new Date('2026-08-28T12:00:00.000Z');
@@ -80,6 +86,25 @@ const buildRawOrder = (
   driving_at: '2026-08-28T11:41:00.000+00:00',
   flags: [],
 });
+
+/**
+ * Полная страница: заказ `orderId` водителя и заказы вне программы до `PAGE_LIMIT`.
+ *
+ * Живой прогон заканчивает обход на неполной странице (issue #327), и следующую он
+ * запрашивает только после полной. Добивка — заказы человека вне программы: они пишутся,
+ * а баллов не дают, и баланс водителя считает только его собственный заказ.
+ */
+const buildFullPage = (
+  orderId: string,
+  profileId: string,
+  outsiderProfileId: string,
+  endedAt: string,
+): RawOrder[] => [
+  buildRawOrder(orderId, profileId, 'complete', endedAt),
+  ...Array.from({ length: PAGE_LIMIT - 1 }, (_, index) =>
+    buildRawOrder(`order-filler-${index}-${outsiderProfileId}`, outsiderProfileId, 'complete', endedAt),
+  ),
+];
 
 /**
  * Поддельный транспорт: отдаёт заранее заготовленные страницы, окно запроса игнорирует.
@@ -310,17 +335,20 @@ describe('прогон синхронизации заказов', () => {
 
   it('несколько страниц читаются курсором до конца выборки', async () => {
     driver = await createTestPerson({ inProgram: true });
+    const outsider = await createTestPerson({ inProgram: false });
 
+    // Первая страница полная — за ней курсором идёт вторая; вторая неполная — на ней
+    // обход и кончается (issue #327).
     const summary = await runOrdersSync({
       now: NOW,
       client: makeTransport([
-        [buildRawOrder(`order-1-${driver.profileId}`, driver.profileId, 'complete', '2026-08-28T11:50:00.000+00:00')],
+        buildFullPage(`order-1-${driver.profileId}`, driver.profileId, outsider.profileId, '2026-08-28T11:50:00.000+00:00'),
         [buildRawOrder(`order-2-${driver.profileId}`, driver.profileId, 'complete', '2026-08-28T11:51:00.000+00:00')],
       ]),
     });
 
     expect(summary.pages).toBe(2);
-    expect(summary.ordersWritten).toBe(2);
+    expect(summary.ordersWritten).toBe(PAGE_LIMIT + 1);
     expect(await readAccountBalance(driver.personId)).toBe(2n);
   });
 });
@@ -361,8 +389,6 @@ describe('журнал прогона синхронизации', () => {
         [
           buildRawOrder(`order-1-${driver.profileId}`, driver.profileId, 'complete', '2026-08-28T11:50:00.000+00:00'),
           buildRawOrder('order-stranger', 'profile-never-seen', 'complete', '2026-08-28T11:51:00.000+00:00'),
-        ],
-        [
           buildRawOrder(`order-2-${outsider.profileId}`, outsider.profileId, 'complete', '2026-08-28T11:52:00.000+00:00'),
         ],
       ]),
@@ -385,8 +411,9 @@ describe('журнал прогона синхронизации', () => {
       outsideProgram: summary.accrual.outsideProgram,
       unknownTrip: summary.accrual.unknownTrip,
     });
-    // Сводка не пустая: сверять нули с нулями смысла нет.
-    expect(details?.pages).toBe(2);
+    // Сводка не пустая: сверять нули с нулями смысла нет. Страница неполная, и живой
+    // прогон на ней кончается (issue #327).
+    expect(details?.pages).toBe(1);
     expect(details?.ordersInserted).toBe(2);
     expect(details?.skippedUnknownProfile).toBe(1);
     expect(details?.unknownProfiles).toBe(1);
@@ -396,19 +423,19 @@ describe('журнал прогона синхронизации', () => {
 
   it('упавший прогон оставляет детали того, что успел', async () => {
     driver = await createTestPerson({ inProgram: true });
+    const outsider = await createTestPerson({ inProgram: false });
 
+    // Страница полная: живой прогон идёт за следующей (issue #327) и на ней падает.
     await expect(
       runOrdersSync({
         now: NOW,
         client: transportFailingAfter([
-          [
-            buildRawOrder(
-              `order-${driver.profileId}`,
-              driver.profileId,
-              'complete',
-              '2026-08-28T11:50:00.000+00:00',
-            ),
-          ],
+          buildFullPage(
+            `order-${driver.profileId}`,
+            driver.profileId,
+            outsider.profileId,
+            '2026-08-28T11:50:00.000+00:00',
+          ),
         ]),
       }),
     ).rejects.toThrow('связь оборвалась');
@@ -421,7 +448,7 @@ describe('журнал прогона синхронизации', () => {
     // успел разобрать и начислить до обрыва — неизвестно.
     const details = await readSyncRunOrders(runs[0]?.id as string);
     expect(details?.pages).toBe(1);
-    expect(details?.ordersInserted).toBe(1);
+    expect(details?.ordersInserted).toBe(PAGE_LIMIT);
     expect(details?.awarded).toBe(1);
   });
 

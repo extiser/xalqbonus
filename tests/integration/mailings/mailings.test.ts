@@ -61,9 +61,10 @@ import { disconnectQueues } from '../support/queues';
  * и воркер. Настоящей отправки в Telegram здесь нет: проверяются ветки, которые решаются
  * до неё, — остановленная рассылка, закрытая привязка, выключенные уведомления.
  *
- * Фильтров у аудитории нет, и снимок берёт всех участников тестовой базы. Между тестами
- * она пуста — уборка идёт по заведённым людям, — поэтому точные числа снимка ниже
- * означают «ровно заведённые этим тестом».
+ * Сегмента и опроса у тестовых рассылок нет — `segmentId` и `surveyId` пусты (issue #321), —
+ * и снимок берёт всех участников тестовой базы. Между тестами она пуста — уборка идёт
+ * по заведённым людям, — поэтому точные числа снимка ниже означают «ровно заведённые
+ * этим тестом».
  */
 
 const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
@@ -86,7 +87,7 @@ const createMember = async (
 
 const createDraft = async (createdById: string) => {
   const mailing = await createMailing(
-    { title: 'Тестовая рассылка', textRu: 'Привет', textUz: 'Salom' },
+    { title: 'Тестовая рассылка', textRu: 'Привет', textUz: 'Salom', segmentId: null, surveyId: null },
     createdById,
     false,
   );
@@ -116,7 +117,7 @@ describe('рассылки', () => {
   });
 
   it('аудитория — все участники программы с активной привязкой', async () => {
-    const before = await readMailingAudience(false);
+    const before = await readMailingAudience(false, null);
 
     await createMember();
     await createMember();
@@ -126,7 +127,7 @@ describe('рассылки', () => {
     const muted = await createMember();
     await setTestNotificationsEnabled(muted, false);
 
-    const after = await readMailingAudience(false);
+    const after = await readMailingAudience(false, null);
 
     // Три участника с привязкой: без привязки и вне программы не считаются.
     expect(after.total - before.total).toBe(3);
@@ -174,7 +175,7 @@ describe('рассылки', () => {
     const { employeeId } = await createTestEmployee({ role: 'admin' });
 
     // Условие теста, а не проверка: участников в тестовой базе между тестами нет.
-    expect((await readMailingAudience(false)).total).toBe(0);
+    expect((await readMailingAudience(false, null)).total).toBe(0);
 
     const draft = await createDraft(employeeId);
 
@@ -257,6 +258,8 @@ describe('рассылки', () => {
       title: 'На знак длиннее',
       textRu: 'р'.repeat(2034),
       textUz: 'o'.repeat(2041),
+      segmentId: null,
+      surveyId: null,
     });
 
     expect(overflowing.textRu).toHaveLength(2034);
@@ -271,6 +274,8 @@ describe('рассылки', () => {
       title: 'Под фото',
       textRu: 'р'.repeat(500),
       textUz: 'o'.repeat(503),
+      segmentId: null,
+      surveyId: null,
     });
 
     const photographed = await saveMailingPhoto({
@@ -297,13 +302,23 @@ describe('рассылки', () => {
     const { employeeId } = await createTestEmployee({ role: 'admin' });
 
     await expect(
-      createMailing({ title: 'Роман', textRu: 'р'.repeat(4097), textUz: null }, employeeId, false),
+      createMailing(
+        { title: 'Роман', textRu: 'р'.repeat(4097), textUz: null, segmentId: null, surveyId: null },
+        employeeId,
+        false,
+      ),
     ).rejects.toMatchObject({ field: 'textRu', limit: 4096 });
 
     const draft = await createDraft(employeeId);
 
     await expect(
-      updateMailing(draft.mailingId, { title: 'Роман', textRu: 'Привет', textUz: 'o'.repeat(4097) }),
+      updateMailing(draft.mailingId, {
+        title: 'Роман',
+        textRu: 'Привет',
+        textUz: 'o'.repeat(4097),
+        segmentId: null,
+        surveyId: null,
+      }),
     ).rejects.toBeInstanceOf(MailingFieldTooLongError);
 
     // Ровно потолок поля сохраняется.
@@ -311,6 +326,8 @@ describe('рассылки', () => {
       title: 'Ровно',
       textRu: 'р'.repeat(4096),
       textUz: null,
+      segmentId: null,
+      surveyId: null,
     });
 
     expect(exact.textRu).toHaveLength(4096);
@@ -458,7 +475,11 @@ describe('рассылки', () => {
     await createMember();
 
     // Первым действием выбрали фото: заголовка и текстов ещё нет, а черновик уже есть.
-    const empty = await createMailing({ title: null, textRu: null, textUz: null }, employeeId, false);
+    const empty = await createMailing(
+      { title: null, textRu: null, textUz: null, segmentId: null, surveyId: null },
+      employeeId,
+      false,
+    );
 
     trackTestMailing(empty.mailingId);
 
@@ -472,7 +493,13 @@ describe('рассылки', () => {
     });
 
     // Заголовок без текста — текста нет ни на одном языке.
-    await updateMailing(empty.mailingId, { title: 'Заголовок', textRu: null, textUz: null });
+    await updateMailing(empty.mailingId, {
+      title: 'Заголовок',
+      textRu: null,
+      textUz: null,
+      segmentId: null,
+      surveyId: null,
+    });
 
     await expect(launchMailing(empty.mailingId)).rejects.toMatchObject({
       problems: [{ kind: 'missing_text' }],
@@ -480,7 +507,13 @@ describe('рассылки', () => {
 
     // Одного языка достаточно, любого: только узбекский запускается — и проверка базы
     // `mailings_texts_check` пускает не черновик без русского текста.
-    await updateMailing(empty.mailingId, { title: 'Заголовок', textRu: null, textUz: 'Salom' });
+    await updateMailing(empty.mailingId, {
+      title: 'Заголовок',
+      textRu: null,
+      textUz: 'Salom',
+      segmentId: null,
+      surveyId: null,
+    });
 
     const launched = await launchMailing(empty.mailingId);
 
