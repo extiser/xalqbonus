@@ -58,12 +58,12 @@ body { display: flex; justify-content: center; }
 .next[disabled] { opacity: .55; box-shadow: none; cursor: default; }
 
 
-/* подложка — MemberCard plain: #14171D, контур 9 % */
-.gain { display: inline-block; margin: 28px 0 0; padding: 18px 22px 16px; border-radius: 20px; background: #14171D; border: 1px solid rgba(255,255,255,.09); }
-/* «крупное число» — MemberBigNumber: Unbounded 62/700, разрядка −3 */
-.gain .num { font-family: Unbounded, Manrope, sans-serif; font-size: 62px; font-weight: 700; letter-spacing: -3px; line-height: 1; color: #F4F6F8; }
-/* подпись под числом — как «поездок» под счётом дня: 12/200 #C2C9D3 */
-.gain .cap { margin-top: 8px; font-size: 12px; font-weight: 200; color: #C2C9D3; }
+/* своя карточка, вне шкалы намеренно (survey.md, сверка п. 5): подложка белая 5 %, контур 8 % */
+.gain { display: inline-block; margin: 28px 0 0; padding: 18px 22px 16px; border-radius: 20px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); }
+/* цифра: Unbounded 40/600; разрядка −2 не записана в решении — подобрана пропорционально, смотреть глазами */
+.gain .num { font-family: Unbounded, Manrope, sans-serif; font-size: 40px; font-weight: 600; letter-spacing: -2px; line-height: 1; color: #F4F6F8; }
+/* подпись под числом: 14/400 #A9B2BF */
+.gain .cap { margin-top: 8px; font-size: 14px; font-weight: 400; color: #A9B2BF; }
 .next { width: 100%; flex: none; }
 
 /* переключатель языка — как на регистрации (app/registration-screen.html): по умолчанию язык
