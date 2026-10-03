@@ -68,3 +68,25 @@ export type SurveyRequestInvalidReason =
   | 'question_options'
   | 'question_own_answer'
   | 'option_exclusive';
+
+/**
+ * Ответ водителя не разобран (issue #323): не тот вопрос, вариант чужого вопроса, значение
+ * не того типа, «Свой вариант» без разрешения, исключающий вариант с соседями, пустой ответ
+ * на обязательный вопрос. Экран такого не шлёт — это испорченный запрос, а не отказ водителю.
+ */
+export class SurveyAnswerInvalidError extends SurveyError {
+  constructor(public readonly reason: SurveyAnswerInvalidReason) {
+    super(`ответ на вопрос опроса не разобран: ${reason}`);
+  }
+}
+
+export type SurveyAnswerInvalidReason =
+  | 'question'
+  | 'option'
+  | 'value_type'
+  | 'own_answer'
+  | 'exclusive'
+  | 'single_choice'
+  | 'text_length'
+  | 'scale_value'
+  | 'required';

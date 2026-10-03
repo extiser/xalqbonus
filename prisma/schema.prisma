@@ -556,6 +556,7 @@ model Person {
   rewards       Reward[]
   giftGrants    GiftGrant[]
   demoViewer    DemoViewer?
+  surveys       SurveyResponse[]
 
   @@map("persons")
   @@schema("xb")
@@ -1889,6 +1890,7 @@ model Survey {
   createdBy Employee         @relation(fields: [createdById], references: [id])
   questions SurveyQuestion[]
   mailings  Mailing[]
+  responses SurveyResponse[]
 
   @@index([createdAt(sort: Desc)])
   @@map("surveys")
@@ -1911,6 +1913,7 @@ model SurveyQuestion {
 
   survey  Survey         @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   options SurveyOption[]
+  answers SurveyAnswer[]
 
   @@unique([surveyId, position])
   @@map("survey_questions")
@@ -1930,10 +1933,94 @@ model SurveyOption {
   /// разбор тела ручки.
   exclusive  Boolean @default(false)
 
-  question SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  question SurveyQuestion       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answers  SurveyAnswerOption[]
 
   @@unique([questionId, position])
   @@map("survey_options")
+  @@schema("xb")
+}
+
+/// Прохождение опроса человеком (issue #323) — строка на пару «опрос + человек». Пара —
+/// первичный ключ, и он же держит от второй строки при двойном открытии.
+///
+/// Метки воронки ставятся по одному разу, условием «ещё пусто»: повторное нажатие метку
+/// не сдвигает. Воронка считается по людям, а не по нажатиям (решение Руслана), поэтому
+/// журнала нажатий нет.
+///
+/// Строка заводится первым открытием опроса, поэтому `opened_at` не пуст никогда.
+model SurveyResponse {
+  surveyId     String    @map("survey_id") @db.Uuid
+  personId     String    @map("person_id") @db.Uuid
+  /// Первое открытие опроса.
+  openedAt     DateTime  @default(now()) @map("opened_at") @db.Timestamptz(6)
+  /// Нажата кнопка отказа на экране открытия. Начать опрос после отказа можно — метка
+  /// остаётся, какой была.
+  declinedAt   DateTime? @map("declined_at") @db.Timestamptz(6)
+  /// Первый сохранённый ответ.
+  startedAt    DateTime? @map("started_at") @db.Timestamptz(6)
+  /// Опрос пройден. Ставится одной транзакцией с баллами за опрос (`awardSurveyPoints`).
+  completedAt  DateTime? @map("completed_at") @db.Timestamptz(6)
+  /// Нажата кнопка перехода в приложение на финале.
+  appClickedAt DateTime? @map("app_clicked_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  survey  Survey         @relation(fields: [surveyId], references: [id])
+  person  Person         @relation(fields: [personId], references: [id])
+  answers SurveyAnswer[]
+
+  @@id([surveyId, personId])
+  @@index([personId])
+  @@map("survey_responses")
+  @@schema("xb")
+}
+
+/// Ответ человека на вопрос опроса (issue #323). Ответ на вопрос у человека один: повторная
+/// отправка его заменяет, пока опрос не пройден.
+///
+/// Значение — в колонке по типу вопроса: `text_value` у `text`, `scale_value` у `scale`,
+/// `own_text` («Свой вариант») у `single` и `multiple`, выбранные варианты — строками
+/// `survey_answer_options`. Строка без значения — пропущенный необязательный вопрос: человек
+/// его видел и прошёл мимо, а не бросил опрос на нём. Тип вопроса лежит в соседней таблице,
+/// и соответствие значения типу держит сервис сохранения ответа.
+model SurveyAnswer {
+  surveyId   String  @map("survey_id") @db.Uuid
+  personId   String  @map("person_id") @db.Uuid
+  questionId String  @map("question_id") @db.Uuid
+  /// Свободный ответ, до 300 знаков.
+  textValue  String? @map("text_value")
+  /// Оценка 1–5.
+  scaleValue Int?    @map("scale_value") @db.SmallInt
+  /// «Свой вариант», до 300 знаков. Только у вопроса с `allow_own_answer`.
+  ownText    String? @map("own_text")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  response SurveyResponse       @relation(fields: [surveyId, personId], references: [surveyId, personId], onDelete: Cascade)
+  question SurveyQuestion       @relation(fields: [questionId], references: [id])
+  options  SurveyAnswerOption[]
+
+  @@id([surveyId, personId, questionId])
+  @@map("survey_answers")
+  @@schema("xb")
+}
+
+/// Выбранный вариант ответа у вопросов `single` и `multiple` (issue #323). Замена ответа
+/// уносит прежние варианты каскадом.
+model SurveyAnswerOption {
+  surveyId   String @map("survey_id") @db.Uuid
+  personId   String @map("person_id") @db.Uuid
+  questionId String @map("question_id") @db.Uuid
+  optionId   String @map("option_id") @db.Uuid
+
+  answer SurveyAnswer @relation(fields: [surveyId, personId, questionId], references: [surveyId, personId, questionId], onDelete: Cascade)
+  option SurveyOption @relation(fields: [optionId], references: [id])
+
+  @@id([surveyId, personId, questionId, optionId])
+  @@map("survey_answer_options")
   @@schema("xb")
 }
 

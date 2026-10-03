@@ -85,7 +85,7 @@ const SURVEY_BUTTON_TEXT = "✍️ Пройти опрос / So'rovnomadan o'tis
 
 /**
  * Параметр адреса Mini App, по которому страница опроса открывает опрос, — контракт
- * со страницей опроса (`survey-miniapp-page`). Пока её нет, кнопка открывает главный экран.
+ * со страницей опроса (issue #323, `app/pages/app.vue`): опрос открывается поверх главной.
  */
 const SURVEY_URL_PARAMETER = 'survey';
 

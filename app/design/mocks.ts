@@ -30,6 +30,7 @@ import type {
   StaffOutcomeView,
   StaffRewardView,
 } from '~/types/staffView';
+import type { MemberSurvey, MemberSurveyView } from '#shared/types/memberSurvey';
 
 /**
  * Заглушки служебной страницы `/design` — значения сняты с макетов `_reference/design/`.
@@ -1936,4 +1937,246 @@ export const staffProfileMock = {
     { id: 'kadysheva', name: 'Кадышева', address: 'ул. Кадышева, 12' },
     { id: 'chilanzar', name: 'Чиланзар', address: 'Чиланзар, 9-й квартал, 4' },
   ],
+};
+
+// ---------------------------------------------------------------------------
+// Опрос (issue #323) — `_reference/design/survey/`. Тексты — из словарей `T` макетов. Второй вопрос
+// в макетах не нарисован — у заглушки он простой, с одним ответом.
+
+type SurveyMockQuestion = {
+  type: 'single' | 'multiple' | 'text' | 'scale';
+  required: boolean;
+  allowOwnAnswer: boolean;
+  text: Record<MemberLanguage, string>;
+  options: { text: Record<MemberLanguage, string>; exclusive?: boolean }[];
+};
+
+const SURVEY_MOCK_QUESTIONS: SurveyMockQuestion[] = [
+  {
+    type: 'multiple',
+    required: true,
+    allowOwnAnswer: true,
+    text: {
+      ru: 'На что за последний год пришлось разом потратить крупную сумму?',
+      uz: "O'tgan bir yilda nimaga bir martada katta pul ketdi?",
+    },
+    options: [
+      { text: { ru: 'Ремонт машины', uz: "Mashina ta'miri" } },
+      { text: { ru: 'Шины', uz: 'Shinalar' } },
+      { text: { ru: 'Учёба детей', uz: "Bolalar o'qishi" } },
+      { text: { ru: 'Свадьба, праздники', uz: "To'y, bayramlar" } },
+      { text: { ru: 'Лечение', uz: 'Davolanish' } },
+      { text: { ru: 'Жильё', uz: 'Uy-joy' } },
+      { text: { ru: 'Кредит за машину', uz: 'Mashina krediti' } },
+      { text: { ru: 'Такого не было', uz: "Bunday bo'lmadi" }, exclusive: true },
+    ],
+  },
+  {
+    type: 'single',
+    required: true,
+    allowOwnAnswer: false,
+    text: { ru: 'Как часто вы бываете в офисе парка?', uz: 'Park ofisiga qanchalik tez-tez borasiz?' },
+    options: [
+      { text: { ru: 'Раз в неделю и чаще', uz: 'Haftada bir marta va tez-tez' } },
+      { text: { ru: 'Раз в месяц', uz: 'Oyda bir marta' } },
+      { text: { ru: 'Реже', uz: 'Kamroq' } },
+    ],
+  },
+  {
+    type: 'scale',
+    required: true,
+    allowOwnAnswer: false,
+    text: { ru: 'Как вы оцениваете работу офисов Xalq Taxi?', uz: 'Xalq Taxi ofislari ishini qanday baholaysiz?' },
+    options: [],
+  },
+  {
+    type: 'single',
+    required: true,
+    allowOwnAnswer: true,
+    text: {
+      ru: 'Думали за последний год перейти в другой парк?',
+      uz: "O'tgan bir yilda boshqa parkka o'tishni o'ylaganmisiz?",
+    },
+    options: [
+      { text: { ru: 'Нет', uz: "Yo'q" } },
+      { text: { ru: 'Да — из-за комиссии', uz: 'Ha — komissiya sababli' } },
+      { text: { ru: 'Да — из-за бонусов в другом парке', uz: 'Ha — boshqa parkdagi bonuslar sababli' } },
+      { text: { ru: 'Да — из-за отношения в парке', uz: 'Ha — parkdagi munosabat sababli' } },
+    ],
+  },
+  {
+    type: 'text',
+    required: false,
+    allowOwnAnswer: false,
+    text: { ru: 'Что парку стоит изменить в первую очередь?', uz: 'Park birinchi navbatda nimani o\'zgartirishi kerak?' },
+    options: [],
+  },
+];
+
+const SURVEY_MOCK_TEXTS = {
+  ru: {
+    title: 'Короткий опрос',
+    lead: 'Хотим понять, чем парк может помочь водителям. Ответьте на несколько вопросов — это займёт меньше минуты.',
+    terms: [
+      { kind: 'questions' as const, parts: [{ text: '5 вопросов, по одному на экран', strong: false }] },
+      {
+        kind: 'points' as const,
+        parts: [
+          { text: '+50 баллов', strong: true },
+          { text: ' на баланс сразу после ответов', strong: false },
+        ],
+      },
+      { kind: 'until' as const, parts: [{ text: 'Пройти можно до 15 октября', strong: false }] },
+      { kind: 'saved' as const, parts: [{ text: 'Ответы сохраняются — можно закончить позже', strong: false }] },
+    ],
+    start: 'Начать',
+    decline: 'Закрыть',
+    number: (index: number) => `Вопрос ${index} из 5`,
+    hints: {
+      single: 'Выберите один ответ',
+      multiple: 'Можно выбрать несколько',
+      text: 'Ответьте своими словами',
+      scale: 'Выберите оценку от 1 до 5',
+    },
+    controls: {
+      next: 'Далее',
+      skip: 'Пропустить',
+      back: 'Назад',
+      ownAnswer: 'Свой вариант',
+      placeholder: 'Напишите своими словами',
+      scaleLow: 'Плохо',
+      scaleHigh: 'Отлично',
+      saveFailed: 'Приложение не ответило. Проверьте связь и попробуйте ещё раз.',
+    },
+    finish: {
+      title: 'Спасибо за ответы!',
+      lead: 'Они помогут парку решить, что делать для водителей дальше.',
+      caption: 'баллов уже на балансе',
+      app: 'Открыть приложение',
+    },
+    closed: {
+      title: 'Опрос уже закончился',
+      lead: 'Ответы принимались до 15 октября. Спасибо, что заглянули — новые опросы придут в этот бот.',
+      button: 'Понятно',
+    },
+  },
+  uz: {
+    title: "Qisqa so'rovnoma",
+    lead: 'Park haydovchilarga qanday yordam bera olishini bilmoqchimiz. Bir nechta savolga javob bering — bu bir daqiqadan kam vaqt oladi.',
+    terms: [
+      { kind: 'questions' as const, parts: [{ text: '5 ta savol, har biri alohida ekranda', strong: false }] },
+      {
+        kind: 'points' as const,
+        parts: [
+          { text: 'Javoblardan keyin darhol balansga ', strong: false },
+          { text: '+50 ball', strong: true },
+        ],
+      },
+      { kind: 'until' as const, parts: [{ text: "15-oktabrgacha o'tish mumkin", strong: false }] },
+      { kind: 'saved' as const, parts: [{ text: 'Javoblar saqlanadi — keyinroq tugatish mumkin', strong: false }] },
+    ],
+    start: 'Boshlash',
+    decline: 'Yopish',
+    number: (index: number) => `5 tadan ${index}-savol`,
+    hints: {
+      single: 'Bitta javobni tanlang',
+      multiple: 'Bir nechtasini tanlash mumkin',
+      text: "O'z so'zlaringiz bilan javob bering",
+      scale: '1 dan 5 gacha baho tanlang',
+    },
+    controls: {
+      next: 'Keyingi',
+      skip: "O'tkazib yuborish",
+      back: 'Orqaga',
+      ownAnswer: 'Boshqa javob',
+      placeholder: "O'z so'zlaringiz bilan yozing",
+      scaleLow: 'Yomon',
+      scaleHigh: "A'lo",
+      saveFailed: "Ilova javob bermadi. Aloqani tekshirib, qaytadan urinib ko'ring.",
+    },
+    finish: {
+      title: 'Javoblaringiz uchun rahmat!',
+      lead: 'Ular parkka haydovchilar uchun keyin nima qilishni hal qilishga yordam beradi.',
+      caption: 'ball allaqachon balansda',
+      app: 'Ilovani ochish',
+    },
+    closed: {
+      title: "So'rovnoma allaqachon tugagan",
+      lead: "Javoblar 15-oktabrgacha qabul qilindi. Kirganingiz uchun rahmat — yangi so'rovnomalar shu botga keladi.",
+      button: 'Tushunarli',
+    },
+  },
+};
+
+const surveyMockView = (language: MemberLanguage, points: number): MemberSurveyView => {
+  const texts = SURVEY_MOCK_TEXTS[language];
+
+  return {
+    intro: {
+      title: texts.title,
+      lead: texts.lead,
+      terms: points > 0 ? texts.terms : texts.terms.filter((term) => term.kind !== 'points'),
+      start: texts.start,
+      decline: texts.decline,
+    },
+    questions: SURVEY_MOCK_QUESTIONS.map((question, questionIndex) => ({
+      questionId: `question-${questionIndex + 1}`,
+      type: question.type,
+      required: question.required,
+      allowOwnAnswer: question.allowOwnAnswer,
+      number: texts.number(questionIndex + 1),
+      text: question.text[language],
+      hint: texts.hints[question.type],
+      options: question.options.map((option, optionIndex) => ({
+        optionId: `option-${questionIndex + 1}-${optionIndex + 1}`,
+        text: option.text[language],
+        exclusive: option.exclusive ?? false,
+      })),
+    })),
+    controls: texts.controls,
+    finish: {
+      title: texts.finish.title,
+      lead: texts.finish.lead,
+      gain: points > 0 ? { amount: `+${points}`, caption: texts.finish.caption } : null,
+      app: texts.finish.app,
+    },
+    closed: texts.closed,
+  };
+};
+
+/** Опрос на пять вопросов за 50 баллов до 15 октября — как в макетах. `points = 0` — без награды. */
+export const surveyMock = (points = 50): MemberSurvey => ({
+  surveyId: 'survey-1',
+  stage: 'intro',
+  language: 'ru',
+  answers: [],
+  views: { ru: surveyMockView('ru', points), uz: surveyMockView('uz', points) },
+});
+
+/** Плашка «Опрос не закончен» — `survey/main-screen-survey.html`. */
+export const homeSurveyMock = {
+  ...homeMock,
+  promo: undefined,
+  survey: {
+    kicker: 'Опрос не закончен',
+    title: 'Осталось 3 вопроса',
+    when: [
+      { text: 'Ответьте до 15 октября — ', strong: false },
+      { text: '+50 баллов', strong: true },
+    ],
+  },
+};
+
+/** Плашка «Пройдите опрос» — `survey/main-screen-survey-start.html`. */
+export const homeSurveyStartMock = {
+  ...homeMock,
+  promo: undefined,
+  survey: {
+    kicker: 'Опрос для вас',
+    title: 'Пройдите короткий опрос',
+    when: [
+      { text: '5 вопросов до 15 октября — ', strong: false },
+      { text: '+50 баллов', strong: true },
+    ],
+  },
 };
