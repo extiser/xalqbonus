@@ -15,9 +15,12 @@ import {
   MailingSurveyClosedError,
   MailingSurveyDemoMismatchError,
   MailingSurveyIncompleteError,
+  MailingSurveyResultsUnavailableError,
+  MailingSurveySliceInvalidError,
   MailingSurveyUnknownError,
   UnknownMailingError,
   type MailingFieldProblem,
+  type MailingSurveySliceProblem,
 } from '#server/services/mailings/errors';
 import {
   MAILING_SEGMENT_ARCHIVED_TEXT,
@@ -59,6 +62,17 @@ const FIELD_TEXT = {
 const FIELD_PROBLEM_TEXT: Record<MailingFieldProblem, string> = {
   segment_invalid: 'Сегмент выбран неверно — выберите его из списка заново.',
   survey_invalid: 'Опрос выбран неверно — выберите его из списка заново.',
+};
+
+const SURVEY_RESULTS_UNAVAILABLE_TEXT = {
+  no_survey: 'К этой рассылке не прикреплён опрос — итогов у неё нет.',
+  not_launched: 'Рассылка ещё не запущена — итоги опроса появятся после запуска.',
+} as const;
+
+const SLICE_PROBLEM_TEXT: Record<MailingSurveySliceProblem, string> = {
+  slice: 'Срез выбран неверно — выберите его заново.',
+  segment_invalid: 'Сегмент среза выбран неверно — выберите его из списка заново.',
+  segment_demo_mismatch: 'Срез строится только по сегменту того же мира, что рассылка: демо — по демо, живая — по живому.',
 };
 
 const reject = (
@@ -147,6 +161,14 @@ export const explainMailingFailure = (error: unknown): H3Error | null => {
       'Conflict',
       `Рассылку нельзя запустить. ${mailingSurveyIncompleteText(error.problems)}`,
     );
+  }
+
+  if (error instanceof MailingSurveyResultsUnavailableError) {
+    return reject(409, 'Conflict', SURVEY_RESULTS_UNAVAILABLE_TEXT[error.reason]);
+  }
+
+  if (error instanceof MailingSurveySliceInvalidError) {
+    return reject(400, 'Bad Request', SLICE_PROBLEM_TEXT[error.problem]);
   }
 
   // 415 и 413 — как у фото товара: тело понято, не принимается тип или размер.

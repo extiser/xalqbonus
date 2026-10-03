@@ -15,6 +15,7 @@ import type {
   SurveyRequestBody,
   SurveyResponse,
 } from '#shared/types/survey';
+import type { SurveyResultsResponse } from '#shared/types/surveyResults';
 
 /**
  * Экран опроса (issue #320). Что на нём можно, решает заморозка:
@@ -26,9 +27,9 @@ import type {
  * Новый и заведённый из него черновик — один экземпляр страницы (`key` ниже): адрес меняется
  * на адрес записи без перехода, и набранное не теряется (issue #148).
  *
- * Списка рассылок опроса здесь нет: опрос прикрепляется на экране рассылки (issue #321),
- * а прикреплённый к черновику рассылки черновик опроса не удаляется — отказ ручки говорит,
- * где открепить.
+ * Опрос прикрепляется на экране рассылки (issue #321), а прикреплённый к черновику рассылки
+ * черновик опроса не удаляется — отказ ручки говорит, где открепить. Здесь — рассылки, которыми
+ * опрос уже ушёл, и сводная воронка по ним (issue #325).
  *
  * **Демо** (issue #212): поле «Демо» нового опроса видит только тот, кто правит демо.
  * Демо-опрос у остальных открыт на чтение — без автосохранения и кнопок.
@@ -53,6 +54,16 @@ const { data, status, refresh } = await useFetch<SurveyResponse>(
 );
 
 const survey = computed<Survey | null>(() => data.value?.survey ?? null);
+
+/** Рассылки опроса и сводная воронка (issue #325). У нового опроса их нет и быть не может. */
+const {
+  data: resultsData,
+  status: resultsStatus,
+  refresh: refreshResults,
+} = await useFetch<SurveyResultsResponse>(() => `/api/surveys/${routeId.value}/results`, {
+  immediate: routeId.value !== NEW_SURVEY,
+  watch: false,
+});
 
 const setSurvey = (next: Survey): void => {
   data.value = { survey: next };
@@ -156,7 +167,8 @@ watch(routeId, async (id) => {
   }
 
   data.value = undefined;
-  await refresh();
+  resultsData.value = undefined;
+  await Promise.all([refresh(), refreshResults()]);
   autosave.replace(toSurveyFormFields(survey.value));
 });
 
@@ -314,6 +326,12 @@ onBeforeUnmount(() => resolveDelete(false));
       />
 
       <OrganismsSurveyQuestions v-model:fields="fields" :readonly="frozen || !editable" />
+
+      <OrganismsSurveyMailings
+        v-if="frozen"
+        :state="toLoadState(resultsStatus)"
+        :results="resultsData ?? null"
+      />
 
       <MoleculesAutosaveStatus
         v-if="editable"

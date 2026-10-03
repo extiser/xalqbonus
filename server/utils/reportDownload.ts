@@ -6,7 +6,7 @@ const XLSX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreads
  * Имя файла для `filename*` (RFC 5987): percent-encoding UTF-8. `encodeURIComponent` оставляет
  * `' ( ) *` как есть, а в этом поле они запрещены — офис со скобками в названии сломал бы имя.
  */
-const encodeFileName = (fileName: string): string =>
+export const encodeFileName = (fileName: string): string =>
   encodeURIComponent(fileName).replace(
     /['()*]/g,
     (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
