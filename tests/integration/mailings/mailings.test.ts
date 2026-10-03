@@ -6,6 +6,7 @@ import {
   deleteMailingPhoto,
   resolveMailingPhotoFile,
 } from '#server/adapters/uploads/mailingPhotos';
+import { db } from '#server/db';
 import { markRecipientRecalled, recordRecipientOutcome } from '#server/repositories/mailings';
 import { completeMailingRecall } from '#server/services/mailings/completeMailingRecall';
 import { copyMailing, copyMailingTitle } from '#server/services/mailings/copyMailing';
@@ -29,6 +30,10 @@ import { saveMailingPhoto } from '#server/services/mailings/saveMailingPhoto';
 import { startMailingRecall } from '#server/services/mailings/startMailingRecall';
 import { stopMailing } from '#server/services/mailings/stopMailing';
 import { updateMailing } from '#server/services/mailings/updateMailing';
+import { createSegment } from '#server/services/segments/createSegment';
+import { createSurvey } from '#server/services/surveys/createSurvey';
+import { readSurvey } from '#server/services/surveys/readSurvey';
+import { EMPTY_SEGMENT_CONDITIONS } from '#shared/segment';
 import type { MailingCounters } from '#shared/types/mailing';
 import { cleanupTestData, createTestPerson, disconnectDatabase } from '../support/database';
 import {
@@ -50,7 +55,10 @@ import {
   shiftTestOutcomeAt,
   trackTestMailing,
 } from '../support/mailings';
+import { grantPoints } from '../support/points';
 import { disconnectQueues } from '../support/queues';
+import { cleanupTestSegments, trackTestSegment } from '../support/segments';
+import { cleanupTestSurveys, trackTestSurvey } from '../support/surveys';
 
 /**
  * Рассылки: аудитория, снимок при запуске, предел длины при запуске, остановка, копия,
@@ -61,10 +69,14 @@ import { disconnectQueues } from '../support/queues';
  * и воркер. Настоящей отправки в Telegram здесь нет: проверяются ветки, которые решаются
  * до неё, — остановленная рассылка, закрытая привязка, выключенные уведомления.
  *
- * Сегмента и опроса у тестовых рассылок нет — `segmentId` и `surveyId` пусты (issue #321), —
- * и снимок берёт всех участников тестовой базы. Между тестами она пуста — уборка идёт
- * по заведённым людям, — поэтому точные числа снимка ниже означают «ровно заведённые
- * этим тестом».
+ * У большинства тестовых рассылок сегмента и опроса нет — `segmentId` и `surveyId` пусты
+ * (issue #321), — и снимок берёт всех участников тестовой базы. Между тестами она пуста —
+ * уборка идёт по заведённым людям, — поэтому точные числа снимка ниже означают «ровно
+ * заведённые этим тестом».
+ *
+ * Ветка с сегментом — отбор через `segmentMembersSql` и снимок с ним — гоняется последними
+ * тестами файла на демо-рассылке: этим путём уходит опрос водителям, и снимок при запуске
+ * необратим.
  */
 
 const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
@@ -97,6 +109,71 @@ const createDraft = async (createdById: string) => {
   return mailing;
 };
 
+/** Окно баланса демо-сегмента: в него попадают только люди этого файла. */
+const SEGMENT_BALANCE_FROM = 7_343_000;
+const SEGMENT_BALANCE_TO = 7_343_999;
+
+/** Демо-водитель с привязкой. Баланс — настоящим переводом, им его отбирает сегмент. */
+const createDemoMember = async (balance: number | null): Promise<string> => {
+  const personId = await createMember();
+
+  await db.person.update({ where: { id: personId }, data: { isDemo: true } });
+
+  if (balance !== null) {
+    await grantPoints(personId, balance);
+  }
+
+  return personId;
+};
+
+/**
+ * Три демо-водителя с привязкой и демо-сегмент по окну баланса, в который попадают двое.
+ * Третий — в аудитории рассылки без сегмента, но не в сегменте.
+ */
+const createDemoSegmentAudience = async (
+  createdById: string,
+): Promise<{ segmentId: string; members: string[]; outsider: string }> => {
+  const members = [
+    await createDemoMember(SEGMENT_BALANCE_FROM + 1),
+    await createDemoMember(SEGMENT_BALANCE_FROM + 2),
+  ];
+  const outsider = await createDemoMember(null);
+
+  const segment = await createSegment(
+    {
+      name: 'Тестовый демо-сегмент',
+      description: null,
+      conditions: {
+        ...EMPTY_SEGMENT_CONDITIONS,
+        balanceMin: SEGMENT_BALANCE_FROM,
+        balanceMax: SEGMENT_BALANCE_TO,
+      },
+    },
+    createdById,
+    true,
+  );
+
+  trackTestSegment(segment.segmentId);
+
+  return { segmentId: segment.segmentId, members, outsider };
+};
+
+const createDemoSegmentDraft = async (
+  createdById: string,
+  segmentId: string,
+  surveyId: string | null,
+) => {
+  const mailing = await createMailing(
+    { title: 'Тестовая рассылка', textRu: 'Привет', textUz: 'Salom', segmentId, surveyId },
+    createdById,
+    true,
+  );
+
+  trackTestMailing(mailing.mailingId);
+
+  return mailing;
+};
+
 const sumOutcomes = (counters: MailingCounters): number =>
   counters.pending +
   counters.sent +
@@ -106,7 +183,10 @@ const sumOutcomes = (counters: MailingCounters): number =>
 
 describe('рассылки', () => {
   afterEach(async () => {
+    // Рассылка ссылается на сегмент и опрос, они — на автора: рассылки первыми.
     await cleanupTestMailings();
+    await cleanupTestSegments();
+    await cleanupTestSurveys();
     await cleanupTestEmployees();
     await cleanupTestData();
   });
@@ -665,5 +745,109 @@ describe('рассылки', () => {
       problem: 'window_expired',
     });
     expect((await readMailing(late.mailingId)).recall.startedAt).toBeNull();
+  });
+
+  it('аудитория с сегментом — только те, кто в его составе', async () => {
+    const { employeeId } = await createTestEmployee({ role: 'owner' });
+    const { segmentId, members } = await createDemoSegmentAudience(employeeId);
+
+    await setTestNotificationsEnabled(members[1] as string, false);
+
+    // Без сегмента демо-рассылка взяла бы всех троих.
+    expect((await readMailingAudience(true, null)).total).toBe(3);
+    expect(await readMailingAudience(true, segmentId)).toEqual({ total: 2, notificationsDisabled: 1 });
+  });
+
+  it('запуск с сегментом снимает в снимок ровно его состав', async () => {
+    const { employeeId } = await createTestEmployee({ role: 'owner' });
+    const { segmentId, members, outsider } = await createDemoSegmentAudience(employeeId);
+    const [enabled, muted] = members as [string, string];
+
+    await setTestNotificationsEnabled(muted, false);
+
+    const draft = await createDemoSegmentDraft(employeeId, segmentId, null);
+    const launched = await launchMailing(draft.mailingId);
+
+    expect(launched.status).toBe('running');
+    expect(launched.segment).toEqual(
+      expect.objectContaining({ segmentId, name: 'Тестовый демо-сегмент', archivedAt: null }),
+    );
+    expect(launched.counters.total).toBe(2);
+    expect(await countTestRecipients(draft.mailingId)).toBe(2);
+
+    const recipients = await readTestRecipients(draft.mailingId, [enabled, muted, outsider]);
+
+    expect(recipients).toHaveLength(2);
+    expect(recipients).toEqual(
+      expect.arrayContaining([
+        { personId: enabled, outcome: 'pending', outcomeAt: null },
+        expect.objectContaining({ personId: muted, outcome: 'skipped_disabled' }),
+      ]),
+    );
+  });
+
+  it('запуск с сегментом и опросом замораживает опрос, копия несёт сегмент и опрос', async () => {
+    const { employeeId } = await createTestEmployee({ role: 'owner' });
+    const { segmentId, members, outsider } = await createDemoSegmentAudience(employeeId);
+
+    // Черновик опроса, полный для заморозки: заморозку ставит запуск, а не фикстура.
+    const survey = await createSurvey(
+      {
+        settings: { title: 'Тестовый опрос', endsOn: '2099-12-31' },
+        content: {
+          introRu: 'Вступление',
+          introUz: 'Kirish',
+          finishRu: 'Финал',
+          finishUz: 'Yakun',
+          declineButtonRu: 'Закрыть',
+          declineButtonUz: 'Yopish',
+          appButtonRu: 'Открыть приложение',
+          appButtonUz: 'Ilovani ochish',
+          points: 10,
+          questions: [
+            {
+              type: 'text',
+              textRu: 'Что улучшить?',
+              textUz: 'Nimani yaxshilash kerak?',
+              required: false,
+              allowOwnAnswer: false,
+              options: [],
+            },
+          ],
+        },
+      },
+      employeeId,
+      true,
+    );
+
+    trackTestSurvey(survey.surveyId);
+    expect(survey.frozenAt).toBeNull();
+
+    const draft = await createDemoSegmentDraft(employeeId, segmentId, survey.surveyId);
+    const launched = await launchMailing(draft.mailingId);
+
+    expect(launched.survey).toEqual(expect.objectContaining({ surveyId: survey.surveyId }));
+    expect((await readSurvey(survey.surveyId)).frozenAt).not.toBeNull();
+
+    const recipients = await readTestRecipients(draft.mailingId, [...members, outsider]);
+
+    expect(recipients.map((row) => row.personId).sort()).toEqual([...members].sort());
+
+    // Идущую не копируют — копия делается с остановленной.
+    await stopMailing(draft.mailingId);
+
+    const copy = await copyMailing(draft.mailingId, employeeId);
+
+    trackTestMailing(copy.mailingId);
+
+    expect(copy).toEqual(
+      expect.objectContaining({
+        status: 'draft',
+        isDemo: true,
+        segment: expect.objectContaining({ segmentId }),
+        survey: expect.objectContaining({ surveyId: survey.surveyId }),
+      }),
+    );
+    expect(copy.counters.total).toBe(0);
   });
 });
