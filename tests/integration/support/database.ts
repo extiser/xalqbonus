@@ -621,6 +621,10 @@ export const cleanupTestData = async (): Promise<void> => {
     await transaction.$executeRaw`
       DELETE FROM xb.accounts WHERE "person_id" = ANY(${personIds}::uuid[])
     `;
+    // Прохождения опросов ссылаются на человека ключом `RESTRICT`; ответы уходят с ними каскадом.
+    await transaction.$executeRaw`
+      DELETE FROM xb.survey_responses WHERE "person_id" = ANY(${personIds}::uuid[])
+    `;
     // События и точки маршрута ссылаются на поездку — уходят первыми.
     await transaction.$executeRaw`
       DELETE FROM xb.trip_events

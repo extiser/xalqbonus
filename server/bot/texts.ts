@@ -309,7 +309,32 @@ export type TextKey =
   | 'demo_invite_expired'
   | 'demo_invite_telegram_linked'
   | 'demo_invite_telegram_employee'
-  | 'demo_invite_no_source';
+  | 'demo_invite_no_source'
+  | 'survey_title'
+  | 'survey_term_points'
+  | 'survey_term_until'
+  | 'survey_term_saved'
+  | 'survey_start'
+  | 'survey_question_number'
+  | 'survey_hint_single'
+  | 'survey_hint_multiple'
+  | 'survey_hint_text'
+  | 'survey_hint_scale'
+  | 'survey_own_answer'
+  | 'survey_answer_placeholder'
+  | 'survey_next'
+  | 'survey_skip'
+  | 'survey_scale_low'
+  | 'survey_scale_high'
+  | 'survey_finish_title'
+  | 'survey_closed_title'
+  | 'survey_closed_text'
+  | 'survey_closed_button'
+  | 'survey_banner_progress_kicker'
+  | 'survey_banner_progress_when'
+  | 'survey_banner_progress_saved'
+  | 'survey_banner_start_kicker'
+  | 'survey_banner_start_title';
 
 const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   /**
@@ -1782,6 +1807,123 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Демо сейчас недоступно. Сообщите тому, кто прислал ссылку.',
     uz: "Hozir demo mavjud emas. Havolani yuborgan kishiga xabar bering.",
   },
+  // Страница опроса в Mini App (issue #323) — дословно из словаря `T` макетов
+  // `_reference/design/survey/`. Узбекский — черновик, вычитывает переводчик.
+  /** Заголовок экрана открытия — один на все опросы, поля в опросе нет (решение Руслана 03-10-2026). */
+  survey_title: {
+    ru: 'Короткий опрос',
+    uz: "Qisqa so'rovnoma",
+  },
+  /** Строка условий о баллах. `{points}` — «+50 баллов», выделяется жирным. При нуле строки нет. */
+  survey_term_points: {
+    ru: '{points} на баланс сразу после ответов',
+    uz: 'Javoblardan keyin darhol balansga {points}',
+  },
+  /** `{date}` — последний день опроса словом: «15 октября», «15-oktabr». */
+  survey_term_until: {
+    ru: 'Пройти можно до {date}',
+    uz: "{date}gacha o'tish mumkin",
+  },
+  survey_term_saved: {
+    ru: 'Ответы сохраняются — можно закончить позже',
+    uz: 'Javoblar saqlanadi — keyinroq tugatish mumkin',
+  },
+  survey_start: {
+    ru: 'Начать',
+    uz: 'Boshlash',
+  },
+  /** Надзаголовок над вопросом. */
+  survey_question_number: {
+    ru: 'Вопрос {number} из {total}',
+    uz: '{total} tadan {number}-savol',
+  },
+  survey_hint_single: {
+    ru: 'Выберите один ответ',
+    uz: 'Bitta javobni tanlang',
+  },
+  survey_hint_multiple: {
+    ru: 'Можно выбрать несколько',
+    uz: 'Bir nechtasini tanlash mumkin',
+  },
+  survey_hint_text: {
+    ru: 'Ответьте своими словами',
+    uz: "O'z so'zlaringiz bilan javob bering",
+  },
+  survey_hint_scale: {
+    ru: 'Выберите оценку от 1 до 5',
+    uz: '1 dan 5 gacha baho tanlang',
+  },
+  survey_own_answer: {
+    ru: 'Свой вариант',
+    uz: 'Boshqa javob',
+  },
+  /**
+   * Подсказка в поле «Своего варианта» и в поле свободного ответа — одна на оба: пример из макета
+   * свободного ответа привязан к вопросу и в общий текст не переносится (решение Руслана 03-10-2026).
+   */
+  survey_answer_placeholder: {
+    ru: 'Напишите своими словами',
+    uz: "O'z so'zlaringiz bilan yozing",
+  },
+  survey_next: {
+    ru: 'Далее',
+    uz: 'Keyingi',
+  },
+  /** Основная кнопка необязательного вопроса без ответа. */
+  survey_skip: {
+    ru: 'Пропустить',
+    uz: "O'tkazib yuborish",
+  },
+  /** Подписи концов шкалы — общие для всех опросов: своих у шкалы нет. */
+  survey_scale_low: {
+    ru: 'Плохо',
+    uz: 'Yomon',
+  },
+  survey_scale_high: {
+    ru: 'Отлично',
+    uz: "A'lo",
+  },
+  /** Заголовок финала — один на все опросы, `finish` опроса идёт абзацем под ним (решение Руслана 03-10-2026). */
+  survey_finish_title: {
+    ru: 'Спасибо за ответы!',
+    uz: 'Javoblaringiz uchun rahmat!',
+  },
+  survey_closed_title: {
+    ru: 'Опрос уже закончился',
+    uz: "So'rovnoma allaqachon tugagan",
+  },
+  survey_closed_text: {
+    ru: 'Ответы принимались до {date}. Спасибо, что заглянули — новые опросы придут в этот бот.',
+    uz: "Javoblar {date}gacha qabul qilindi. Kirganingiz uchun rahmat — yangi so'rovnomalar shu botga keladi.",
+  },
+  survey_closed_button: {
+    ru: 'Понятно',
+    uz: 'Tushunarli',
+  },
+  // Плашки опроса на главной — `_reference/design/survey/main-screen-survey*.html`. Словаря `T`
+  // у макетов главной нет: узбекский написан черновиком (решение Руслана 03-10-2026).
+  survey_banner_progress_kicker: {
+    ru: 'Опрос не закончен',
+    uz: "So'rovnoma tugallanmagan",
+  },
+  /** `{points}` — «+50 баллов», выделяется жирным. */
+  survey_banner_progress_when: {
+    ru: 'Ответьте до {date} — {points}',
+    uz: '{date}gacha javob bering — {points}',
+  },
+  /** Опрос без награды. */
+  survey_banner_progress_saved: {
+    ru: 'Ответы сохранены, ответьте до {date}',
+    uz: 'Javoblar saqlandi, {date}gacha javob bering',
+  },
+  survey_banner_start_kicker: {
+    ru: 'Опрос для вас',
+    uz: "Siz uchun so'rovnoma",
+  },
+  survey_banner_start_title: {
+    ru: 'Пройдите короткий опрос',
+    uz: "Qisqa so'rovnomadan o'ting",
+  },
 };
 
 /**
@@ -1815,7 +1957,13 @@ export type CountedTextKey =
   | 'campaign_chest_three_days_condition'
   | 'campaign_chest_days_left'
   | 'campaign_finish_day_chests'
-  | 'notification_unopened_chests';
+  | 'notification_unopened_chests'
+  | 'survey_points'
+  | 'survey_term_questions'
+  | 'survey_gain_caption'
+  | 'survey_banner_progress_title'
+  | 'survey_banner_start_when'
+  | 'survey_banner_start_when_free';
 
 const COUNTED_TEXTS: Readonly<Record<CountedTextKey, Readonly<Record<Language, CountedForms>>>> = {
   /** Заголовок карточки подарка: «300 баллов в подарок» (issue #219). Узбекский — черновой. */
@@ -1963,6 +2111,84 @@ const COUNTED_TEXTS: Readonly<Record<CountedTextKey, Readonly<Record<Language, C
       one: "{count} ta kun sandig'i",
       few: "{count} ta kun sandig'i",
       many: "{count} ta kun sandig'i",
+    },
+  },
+  /** Баллы за опрос — выделенная часть строк опроса: «+50 баллов» (issue #323). */
+  survey_points: {
+    ru: {
+      one: '+{count} балл',
+      few: '+{count} балла',
+      many: '+{count} баллов',
+    },
+    uz: {
+      one: '+{count} ball',
+      few: '+{count} ball',
+      many: '+{count} ball',
+    },
+  },
+  /** Первая строка условий на экране открытия опроса. */
+  survey_term_questions: {
+    ru: {
+      one: '{count} вопрос, по одному на экран',
+      few: '{count} вопроса, по одному на экран',
+      many: '{count} вопросов, по одному на экран',
+    },
+    uz: {
+      one: '{count} ta savol, har biri alohida ekranda',
+      few: '{count} ta savol, har biri alohida ekranda',
+      many: '{count} ta savol, har biri alohida ekranda',
+    },
+  },
+  /** Подпись под числом в карточке финала: «+50 — баллов уже на балансе». Числа в строке нет. */
+  survey_gain_caption: {
+    ru: {
+      one: 'балл уже на балансе',
+      few: 'балла уже на балансе',
+      many: 'баллов уже на балансе',
+    },
+    uz: {
+      one: 'ball allaqachon balansda',
+      few: 'ball allaqachon balansda',
+      many: 'ball allaqachon balansda',
+    },
+  },
+  /** Заголовок плашки незаконченного опроса — по вопросам без ответа. */
+  survey_banner_progress_title: {
+    ru: {
+      one: 'Остался {count} вопрос',
+      few: 'Осталось {count} вопроса',
+      many: 'Осталось {count} вопросов',
+    },
+    uz: {
+      one: '{count} ta savol qoldi',
+      few: '{count} ta savol qoldi',
+      many: '{count} ta savol qoldi',
+    },
+  },
+  /** Строка плашки «Пройдите опрос». `{date}` и `{points}` подставляет вызывающий. */
+  survey_banner_start_when: {
+    ru: {
+      one: '{count} вопрос до {date} — {points}',
+      few: '{count} вопроса до {date} — {points}',
+      many: '{count} вопросов до {date} — {points}',
+    },
+    uz: {
+      one: '{date}gacha {count} ta savol — {points}',
+      few: '{date}gacha {count} ta savol — {points}',
+      many: '{date}gacha {count} ta savol — {points}',
+    },
+  },
+  /** Та же строка у опроса без награды. */
+  survey_banner_start_when_free: {
+    ru: {
+      one: '{count} вопрос до {date}',
+      few: '{count} вопроса до {date}',
+      many: '{count} вопросов до {date}',
+    },
+    uz: {
+      one: '{date}gacha {count} ta savol',
+      few: '{date}gacha {count} ta savol',
+      many: '{date}gacha {count} ta savol',
     },
   },
   /** Сообщение об итоге: «У вас 2 неоткрытых сундука». */

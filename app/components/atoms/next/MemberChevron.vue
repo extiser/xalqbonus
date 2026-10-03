@@ -4,9 +4,10 @@
  * и у строк настроек.
  *
  * Цвет у шеврона свой по смыслу строки, а не общий: зелёный зовёт за кодом, золотой
- * повторяет подарок, синий ведёт наружу, в карту. Значение `tone`, а не класс снаружи.
+ * повторяет подарок, синий ведёт наружу, в карту, розовый — у плашки опроса на главной (issue #323).
+ * Значение `tone`, а не класс снаружи.
  */
-type ChevronTone = 'light' | 'grey' | 'dim' | 'muted' | 'green' | 'gold' | 'amber' | 'blue';
+type ChevronTone = 'light' | 'grey' | 'dim' | 'muted' | 'green' | 'gold' | 'amber' | 'blue' | 'pink';
 
 withDefaults(
   defineProps<{
@@ -25,6 +26,7 @@ const TONE_CLASSES: Record<ChevronTone, string> = {
   gold: 'text-xb-gold-light',
   amber: 'text-xb-gold',
   blue: 'text-xb-map',
+  pink: 'text-xb-scarlet-soft',
 };
 </script>
 

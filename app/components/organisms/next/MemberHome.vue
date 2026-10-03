@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import type { MemberSurveyTextPart } from '#shared/types/memberSurvey';
 import type {
   MemberGiftView,
   MemberOperationDayView,
@@ -13,7 +14,8 @@ import type {
  * Главный экран водителя — `_reference/design/home/main-screen.html` и `main-screen-invite.html`.
  *
  * Сверху липкая шапка, под ней живой фон и баллы; под баллами — плашка приглашения, если водитель
- * попал в снимок акции и не вступил. Фон начинается от верха экрана и уходит под шапку. Дальше
+ * попал в снимок акции и не вступил, или плашка опроса (`_reference/design/survey/main-screen-survey*.html`,
+ * issue #323) — на том же месте. Фон начинается от верха экрана и уходит под шапку. Дальше
  * блоки в порядке срочности: заказы (живут сутки), награды (недели), каталог, история. Заказы выше
  * наград — первым говорит то, что горит. Каталог — выше истории (`catalog-block.md`, «Место на главной»).
  * Подарки от Xalq Taxi — первыми карточками в блоке наград (`_reference/design/gifts/main-screen-gift.html`),
@@ -34,6 +36,8 @@ const props = defineProps<{
   promo?: { done: number; total: number };
   /** Плашка приглашения. Есть — водитель в снимке акции, но не вступил. */
   invite?: { kicker: string; title: string; when: string };
+  /** Плашка опроса: «Опрос не закончен» или «Пройдите опрос». Нажатие отдаётся наружу `survey`. */
+  survey?: { kicker: string; title: string; when: MemberSurveyTextPart[] };
   orders: { state: MemberViewLoad; items: MemberOrderRowView[] };
   rewards: { state: MemberViewLoad; items: MemberRewardView[]; gifts?: MemberGiftView[] };
   /** Блок каталога. Нет — блока нет. */
@@ -75,6 +79,7 @@ defineEmits<{
   promo: [];
   exchange: [];
   invite: [];
+  survey: [];
   orders: [];
   order: [orderId: string];
   rewards: [];
@@ -113,7 +118,7 @@ const barSurface = ref(false);
 
     <!-- overflow: clip, а не hidden: живой фон обрезается по блоку, а контейнером прокрутки
          блок не становится -->
-    <div class="relative z-[6] flex flex-col gap-[34px] overflow-clip px-5 pt-[104px]" :class="props.invite ? 'pb-4' : 'pb-11'">
+    <div class="relative z-[6] flex flex-col gap-[34px] overflow-clip px-5 pt-[104px]" :class="props.invite || props.survey ? 'pb-4' : 'pb-11'">
       <AtomsNextMemberLiveBackdrop variant="home" />
 
       <OrganismsNextMemberBalance
@@ -129,6 +134,14 @@ const barSurface = ref(false);
         :title="props.invite.title"
         :when="props.invite.when"
         @open="$emit('invite')"
+      />
+
+      <MoleculesNextMemberSurveyBanner
+        v-if="props.survey"
+        :kicker="props.survey.kicker"
+        :title="props.survey.title"
+        :when="props.survey.when"
+        @open="$emit('survey')"
       />
     </div>
 

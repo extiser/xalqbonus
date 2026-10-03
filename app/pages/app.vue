@@ -25,6 +25,7 @@ import { useMemberGifts } from '~/composables/useMemberGifts';
 import { useMemberHistory } from '~/composables/useMemberHistory';
 import { useMemberOrders } from '~/composables/useMemberOrders';
 import { useMemberRewards } from '~/composables/useMemberRewards';
+import { useMemberSurvey } from '~/composables/useMemberSurvey';
 import { useOfficeDesk } from '~/composables/useOfficeDesk';
 import { useDesignFonts } from '~/design/fonts';
 import type { MemberSheetReward } from '#shared/types/rewards';
@@ -345,6 +346,19 @@ const memberGifts = useMemberGifts(() => initData, {
   remove: (rewardId) => memberRewards.removeGift(rewardId),
   readTakeFailed: () => member.value?.rewardTexts.giftTakeFailed ?? LOAD_FAILED_TEXT,
 });
+
+/**
+ * Опрос (issue #323): экран поверх главной — по кнопке рассылки `?survey=<id>` или с плашки
+ * на главной. Свой язык, свои экраны внутри и черновики ответов держит композабл.
+ */
+const memberSurvey = useMemberSurvey(() => initData);
+
+/**
+ * Опрос из адреса запуска — кнопка «✍️ Пройти опрос» в рассылке открывает Mini App с `?survey=<id>`
+ * (issue #321). Читается один раз, при первой загрузке экрана участника: смена демо-роли
+ * и «Обновить» на заглушке опрос второй раз не открывают.
+ */
+let launchSurveyId: string | null = null;
 
 /**
  * Экран сотрудника (issue #250): выбор офиса, стойка, карточка заказа или награды и профиль —
@@ -754,7 +768,16 @@ const closeDemoSheet = (): void => {
  * строку, и роутер при переходе портит её (issue #90, #105). «Назад» — своей кнопкой экрана:
  * системная кнопка Telegram в приложении не используется.
  */
-type MemberScreenName = 'home' | 'history' | 'catalog' | 'order' | 'orders' | 'rewards' | 'reward' | 'profile';
+type MemberScreenName =
+  | 'home'
+  | 'history'
+  | 'catalog'
+  | 'order'
+  | 'orders'
+  | 'rewards'
+  | 'reward'
+  | 'profile'
+  | 'survey';
 
 /** Путь по экранам. Последний — показанный; «назад» снимает его. */
 const screens = ref<MemberScreenName[]>(['home']);
@@ -885,6 +908,18 @@ watch(currentScreen, (screen) => {
   if (screen !== 'catalog') {
     resetCatalog();
   }
+});
+
+// Уход из опроса снимает его вместе с черновиками ответов: следующее открытие читает его заново.
+watch(currentScreen, (screen) => {
+  if (screen !== 'survey') {
+    memberSurvey.reset();
+  }
+});
+
+// Следующий вопрос и экран внутри опроса открываются с начала, как новый экран.
+watch([memberSurvey.screen, memberSurvey.index], () => {
+  window.scrollTo(0, 0);
 });
 
 // Уход с профиля сбрасывает раскрытый номер и шторку.
@@ -1040,6 +1075,51 @@ const openProfile = (): void => {
 };
 
 /** Раздел истории: страницы уже читает главная, раздел показывает их все и листает дальше. */
+/** Плашка опроса на главной. Опрос не открылся — недоступен или не прочитался — главная перечитывается. */
+const openSurvey = async (surveyId: string): Promise<void> => {
+  if (await memberSurvey.open(surveyId)) {
+    openScreen('survey');
+  } else {
+    void reloadHome();
+  }
+};
+
+/**
+ * Уход из опроса на главную — отказом, с финала или с экрана «опрос закрыт». Опрос всегда стоит
+ * поверх главной, и «назад» перечитывает её: баланс вырос, плашка сменилась или ушла.
+ */
+const leaveSurvey = (): void => {
+  goBack();
+};
+
+const declineSurvey = (): void => {
+  void memberSurvey.decline();
+  leaveSurvey();
+};
+
+const openAppFromSurvey = (): void => {
+  void memberSurvey.markApp();
+  leaveSurvey();
+};
+
+/** Опрос — свойствами экранов опроса: полоски, вопрос с черновиком, финал. */
+const surveyScreen = computed(() => {
+  const view = memberSurvey.view.value;
+
+  if (!view) {
+    return null;
+  }
+
+  const count = view.questions.length;
+
+  return {
+    view,
+    count,
+    questionBars: { count, filled: memberSurvey.index.value + 1 },
+    finishBars: { count, filled: count },
+  };
+});
+
 const openHistory = (): void => {
   openScreen('history');
 };
@@ -1450,6 +1530,7 @@ const homeView = computed(() => {
     name: current.name,
     callsign: current.callsign ?? undefined,
     points: current.balancePoints,
+    survey: current.survey ?? undefined,
     orders: homeOrdersView(memberOrders.ordersState.value, memberOrders.orders.value, texts),
     rewards: homeRewardsView(memberRewards.state.value, memberRewards.rewards.value, memberRewards.gifts.value, texts),
     catalog: homeCatalogView(memberOrders.latestState.value, memberOrders.latestProducts.value),
@@ -2083,7 +2164,19 @@ const loadState = async (): Promise<void> => {
   try {
     const state = await fetchState();
 
-    showNext(() => applyState(state));
+    // Опрос из адреса открывается до показа экрана: главная под ним не мелькает. Не открылся —
+    // главная, как без параметра.
+    const surveyId = launchSurveyId;
+    launchSurveyId = null;
+    const surveyOpened = state.screen === 'member' && surveyId !== null && (await memberSurvey.open(surveyId));
+
+    showNext(() => {
+      applyState(state);
+
+      if (surveyOpened) {
+        screens.value = ['home', 'survey'];
+      }
+    });
 
     if (state.screen === 'member') {
       // Блоки главной догружаются следом, каждый своим состоянием: отказ гасит блок, а не экран
@@ -2288,6 +2381,7 @@ onMounted(async () => {
 
   webApp = await loadTelegramWebApp();
   initData = resolveInitData(webApp);
+  launchSurveyId = new URLSearchParams(window.location.search).get('survey') || null;
 
   // Ни строки от Telegram, ни своей копии — значит страницу открыли не из мессенджера.
   // Это не поломка, и разбирать её незачем: человеку нужно сказать, где дверь.
@@ -2608,6 +2702,7 @@ const openMap = (office: MemberOfficeView): void => {
           @catalog="openCatalog()"
           @product="openCatalog"
           @history="openHistory"
+          @survey="homeView.survey && openSurvey(homeView.survey.surveyId)"
           @retry-orders="memberOrders.loadOrders()"
           @retry-rewards="memberRewards.load()"
           @retry-catalog="memberOrders.loadLatest()"
@@ -2628,6 +2723,56 @@ const openMap = (office: MemberOfficeView): void => {
           @popped="memberGifts.popped"
           @open="openSheetReward"
           @close="closeGiftSheet"
+        />
+      </template>
+
+      <template v-else-if="currentScreen === 'survey' && surveyScreen">
+        <OrganismsNextMemberSurveyIntro
+          v-if="memberSurvey.screen.value === 'intro'"
+          v-model:language="memberSurvey.language.value"
+          :question-count="surveyScreen.count"
+          :texts="surveyScreen.view.intro"
+          @start="memberSurvey.start"
+          @decline="declineSurvey"
+        />
+        <OrganismsNextMemberSurveyQuestion
+          v-else-if="memberSurvey.screen.value === 'question' && memberSurvey.question.value"
+          v-model:language="memberSurvey.language.value"
+          :bars="surveyScreen.questionBars"
+          :question="memberSurvey.question.value"
+          :answer="memberSurvey.draft.value"
+          :can-next="memberSurvey.canNext.value"
+          :skip="memberSurvey.skip.value"
+          :saving="memberSurvey.saving.value"
+          :failed="memberSurvey.saveFailed.value ? surveyScreen.view.controls.saveFailed : null"
+          :texts="surveyScreen.view.controls"
+          @option="memberSurvey.toggleOption"
+          @own="memberSurvey.openOwn"
+          @update:own-text="memberSurvey.setOwnText"
+          @update:text-value="memberSurvey.setTextValue"
+          @scale="memberSurvey.setScale"
+          @next="memberSurvey.next"
+          @back="memberSurvey.back"
+        />
+        <OrganismsNextMemberSurveyFinish
+          v-else-if="memberSurvey.screen.value === 'finish'"
+          v-model:language="memberSurvey.language.value"
+          :bars="surveyScreen.finishBars"
+          :title="surveyScreen.view.finish.title"
+          :lead="surveyScreen.view.finish.lead"
+          :gain="surveyScreen.view.finish.gain"
+          :button="surveyScreen.view.finish.app"
+          @action="openAppFromSurvey"
+        />
+        <OrganismsNextMemberSurveyFinish
+          v-else-if="memberSurvey.screen.value === 'closed'"
+          v-model:language="memberSurvey.language.value"
+          :bars="null"
+          :title="surveyScreen.view.closed.title"
+          :lead="surveyScreen.view.closed.lead"
+          :gain="null"
+          :button="surveyScreen.view.closed.button"
+          @action="leaveSurvey"
         />
       </template>
 

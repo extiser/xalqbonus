@@ -179,6 +179,21 @@ export const hasTransferByIdempotencyKey = async (idempotencyKey: string): Promi
   return rows[0]?.exists ?? false;
 };
 
+/**
+ * Сумма перевода по ключу. Пусто — перевода с таким ключом нет. Обычное чтение по уникальному
+ * индексу: без блокировок счетов, которые берёт `writeTransfer` даже на повторе (issue #323).
+ */
+export const findTransferAmountByIdempotencyKey = async (
+  idempotencyKey: string,
+  client: Prisma.TransactionClient = db,
+): Promise<bigint | null> => {
+  const rows = await client.$queryRaw<{ amount: bigint }[]>`
+    SELECT "amount" FROM xb.point_transfers WHERE "idempotency_key" = ${idempotencyKey}
+  `;
+
+  return rows[0]?.amount ?? null;
+};
+
 // Клиент передаётся параметром: внутри транзакции читать глобальным клиентом нельзя —
 // это другое соединение, и собственных, ещё не зафиксированных строк оно не видит.
 const selectTransferByIdempotencyKey = async (

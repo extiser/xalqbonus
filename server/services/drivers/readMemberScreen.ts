@@ -7,6 +7,7 @@ import { memberScreenTexts } from '#server/services/drivers/memberScreen';
 import type { LinkedDriver } from '#server/services/drivers/readLinkedDriver';
 import { memberOrderTexts } from '#server/services/orders/memberOrderScreen';
 import { memberRewardTexts } from '#server/services/rewards/memberRewardScreen';
+import { readMemberSurveyBanner } from '#server/services/surveys/readMemberSurveyBanner';
 import { DAY_MS, formatCalendarDate, formatClockTime } from '#server/utils/parkTime';
 import type { MiniAppDemo, MiniAppStateResponse, TripsNote } from '#shared/types/miniapp';
 
@@ -63,10 +64,11 @@ export const readMemberScreen = async (
   now: Date,
   demo: MiniAppDemo | null = null,
 ): Promise<MiniAppStateResponse> => {
-  const [hasTrips, syncedAt, profile] = await Promise.all([
+  const [hasTrips, syncedAt, profile, survey] = await Promise.all([
     hasTripOperations(driver.personId),
     findLastSuccessfulRunFinishedAt(FRESHNESS_KIND),
     readMemberProfile(driver.personId, telegramChatId),
+    readMemberSurveyBanner(driver, now),
   ]);
 
   // Успешных прогонов не было ни одного — строка говорит, что данных ещё нет. Пустота
@@ -100,5 +102,6 @@ export const readMemberScreen = async (
     profile,
     profileTexts: memberProfileTexts(driver.language),
     demo,
+    survey,
   };
 };

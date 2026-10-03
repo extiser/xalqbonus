@@ -10,6 +10,9 @@ import {
   homeQuietCancelledMock,
   homeQuietMock,
   homeSeveralMock,
+  homeSurveyMock,
+  homeSurveyStartMock,
+  surveyMock,
   historyEmptyMock,
   historyErrorMock,
   historyLoadingMock,
@@ -78,6 +81,7 @@ import {
 } from '~/design/mocks';
 import type { CatalogCart, CatalogScene, GiftSheetScene, RegistrationOutcomeScene } from '~/design/mocks';
 import { findDesignScreen } from '~/design/screens';
+import { useMemberSurvey, type MemberSurveyDraft, type MemberSurveyScreen } from '~/composables/useMemberSurvey';
 import type {
   MemberChestCardView,
   MemberDemoRole,
@@ -123,6 +127,8 @@ const home = computed(() =>
     demo: homeMock,
     'demo-sheet': homeMock,
     'home-invite': homeInviteMock,
+    'home-survey': homeSurveyMock,
+    'home-survey-start': homeSurveyStartMock,
     'home-several': homeSeveralMock,
     'home-quiet': homeQuietMock,
     'home-quiet-cancelled': homeQuietCancelledMock,
@@ -700,6 +706,80 @@ function refreshStaffDesk(): void {
 function go(target: string): void {
   void navigateTo(`/design/${target}`);
 }
+
+// Опрос (issue #323): экраны и черновики — тем же композаблом, что в приложении, на заглушке
+// вместо ручки. «Далее» и «Назад» ведут ссылками по соседним адресам, а не в ручку.
+type SurveyScene = {
+  screen: MemberSurveyScreen;
+  /** Номер вопроса с нуля. */
+  index: number;
+  points?: number;
+  /** Черновик вопроса на экране. */
+  draft?: Partial<MemberSurveyDraft>;
+  failed?: boolean;
+  next?: string;
+  back?: string;
+};
+
+const SURVEY_SCENES: Record<string, SurveyScene> = {
+  'survey-intro': { screen: 'intro', index: 0 },
+  'survey-intro-free': { screen: 'intro', index: 0, points: 0 },
+  'survey-multiple': {
+    screen: 'question',
+    index: 0,
+    draft: { optionIds: ['option-1-1', 'option-1-2'] },
+    next: 'survey-scale',
+    back: 'survey-intro',
+  },
+  'survey-scale': { screen: 'question', index: 2, next: 'survey-single', back: 'survey-multiple' },
+  'survey-single': { screen: 'question', index: 3, next: 'survey-text', back: 'survey-scale' },
+  'survey-single-own': {
+    screen: 'question',
+    index: 3,
+    draft: { ownOpen: true, ownText: 'Далеко ездить до офиса' },
+    next: 'survey-text',
+    back: 'survey-scale',
+  },
+  'survey-save-failed': {
+    screen: 'question',
+    index: 3,
+    draft: { optionIds: ['option-4-2'] },
+    failed: true,
+    next: 'survey-text',
+    back: 'survey-scale',
+  },
+  'survey-text': { screen: 'question', index: 4, next: 'survey-finish', back: 'survey-single' },
+  'survey-finish': { screen: 'finish', index: 4 },
+  'survey-finish-free': { screen: 'finish', index: 4, points: 0 },
+  'survey-closed': { screen: 'closed', index: 0 },
+};
+
+const surveyScene = pick(SURVEY_SCENES);
+const surveyDesign = useMemberSurvey(() => '');
+
+if (surveyScene) {
+  const mock = surveyMock(surveyScene.points ?? 50);
+  const question = mock.views.ru.questions[surveyScene.index];
+
+  surveyDesign.survey.value = mock;
+  surveyDesign.screen.value = surveyScene.screen;
+  surveyDesign.index.value = surveyScene.index;
+  if (question && surveyScene.draft) {
+    surveyDesign.setOwnText(surveyScene.draft.ownText ?? '');
+
+    for (const optionId of surveyScene.draft.optionIds ?? []) {
+      surveyDesign.toggleOption(optionId);
+    }
+
+    if (surveyScene.draft.ownOpen) {
+      surveyDesign.openOwn();
+    }
+
+    surveyDesign.saveFailed.value = surveyScene.failed ?? false;
+  }
+}
+
+const surveyView = computed(() => surveyDesign.view.value);
 </script>
 
 <template>
@@ -862,6 +942,56 @@ function go(target: string): void {
         @popped="removeGift"
       />
 
+      <template v-else-if="surveyScene && surveyView">
+        <OrganismsNextMemberSurveyIntro
+          v-if="surveyDesign.screen.value === 'intro'"
+          v-model:language="surveyDesign.language.value"
+          :question-count="surveyView.questions.length"
+          :texts="surveyView.intro"
+          @start="go('survey-multiple')"
+          @decline="go('home-survey-start')"
+        />
+        <OrganismsNextMemberSurveyQuestion
+          v-else-if="surveyDesign.screen.value === 'question' && surveyDesign.question.value"
+          v-model:language="surveyDesign.language.value"
+          :bars="{ count: surveyView.questions.length, filled: surveyDesign.index.value + 1 }"
+          :question="surveyDesign.question.value"
+          :answer="surveyDesign.draft.value"
+          :can-next="surveyDesign.canNext.value"
+          :skip="surveyDesign.skip.value"
+          :saving="false"
+          :failed="surveyDesign.saveFailed.value ? surveyView.controls.saveFailed : null"
+          :texts="surveyView.controls"
+          @option="surveyDesign.toggleOption"
+          @own="surveyDesign.openOwn"
+          @update:own-text="surveyDesign.setOwnText"
+          @update:text-value="surveyDesign.setTextValue"
+          @scale="surveyDesign.setScale"
+          @next="surveyScene.next && go(surveyScene.next)"
+          @back="surveyScene.back && go(surveyScene.back)"
+        />
+        <OrganismsNextMemberSurveyFinish
+          v-else-if="surveyDesign.screen.value === 'finish'"
+          v-model:language="surveyDesign.language.value"
+          :bars="{ count: surveyView.questions.length, filled: surveyView.questions.length }"
+          :title="surveyView.finish.title"
+          :lead="surveyView.finish.lead"
+          :gain="surveyView.finish.gain"
+          :button="surveyView.finish.app"
+          @action="go('home')"
+        />
+        <OrganismsNextMemberSurveyFinish
+          v-else
+          v-model:language="surveyDesign.language.value"
+          :bars="null"
+          :title="surveyView.closed.title"
+          :lead="surveyView.closed.lead"
+          :gain="null"
+          :button="surveyView.closed.button"
+          @action="go('home')"
+        />
+      </template>
+
       <OrganismsNextMemberHome
         v-else-if="home"
         v-bind="home"
@@ -874,6 +1004,7 @@ function go(target: string): void {
         @order="openOrder"
         @profile="go('profile')"
         @invite="go('promo')"
+        @survey="go(slug === 'home-survey' ? 'survey-single' : 'survey-intro')"
         @promo="go('campaign')"
       />
 

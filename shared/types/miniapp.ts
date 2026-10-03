@@ -25,6 +25,7 @@ import type {
   OrderStatus,
 } from '../../server/generated/prisma/enums';
 import type { FormattedPhone } from '../phone';
+import type { MemberSurveyBanner } from './memberSurvey';
 import type { EmployeeOffice } from './orders';
 import type { MemberRewardTexts } from './rewards';
 
@@ -265,6 +266,11 @@ export type MiniAppMemberScreen = {
   profileTexts: MemberProfileTexts;
   /** Полоса «Демо-аккаунт». `null` у всех, кто не демо-зритель. */
   demo: MiniAppDemo | null;
+  /**
+   * Плашка опроса под баллами (issue #323): «Опрос не закончен» или «Пройдите опрос». Едет
+   * с экраном, отдельного запроса нет. `null` — плашки нет.
+   */
+  survey: MemberSurveyBanner | null;
 };
 
 /**
