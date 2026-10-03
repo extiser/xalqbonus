@@ -104,6 +104,8 @@ const photoNote = `Необязательно. С фото сообщение у
               <NuxtLink
                 v-if="segmentId !== ''"
                 :to="`/segments/${segmentId}`"
+                target="_blank"
+                rel="noopener"
                 class="underline underline-offset-2"
               >
                 Открыть сегмент
@@ -123,7 +125,12 @@ const photoNote = `Необязательно. С фото сообщение у
             <p v-else class="text-xs text-slate-500">
               Под сообщением — одна кнопка «Пройти опрос» вместо «Открыть приложение». Запуск
               заморозит опрос: после него в нём правятся только название и дата окончания.
-              <NuxtLink :to="`/mailings/surveys/${surveyId}`" class="underline underline-offset-2">
+              <NuxtLink
+                :to="`/mailings/surveys/${surveyId}`"
+                target="_blank"
+                rel="noopener"
+                class="underline underline-offset-2"
+              >
                 Открыть опрос
               </NuxtLink>
             </p>

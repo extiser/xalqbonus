@@ -214,7 +214,7 @@ const surveyResults = useMailingSurveyResults(() => {
 
 /** Срезы: по активности и рабочие сегменты того же мира. */
 const surveySliceOptions = computed<SelectOption[]>(() => [
-  { value: ACTIVITY_SLICE, label: 'По активности: верхние 20 % по поездкам' },
+  { value: ACTIVITY_SLICE, label: 'Самые ездящие: 20 % за 30 дней до рассылки' },
   ...(segments.value?.segments ?? [])
     .filter((segment) => segment.archivedAt === null && segment.isDemo === isDemo.value)
     .map((segment) => ({ value: segment.segmentId, label: `Сегмент «${segment.name}»` })),

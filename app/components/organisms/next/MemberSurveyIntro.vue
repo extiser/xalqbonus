@@ -30,7 +30,8 @@ defineEmits<{ start: []; decline: [] }>();
 </script>
 
 <template>
-  <div class="relative flex min-h-dvh flex-col overflow-clip bg-xb-screen font-manrope leading-[normal] text-xb-text">
+  <!-- Высота — остаток окна под полосой «Демо-аккаунт», а не окно: см. `MemberSurveyQuestion`. -->
+  <div class="relative flex min-h-[calc(100dvh-var(--xb-demo-offset))] flex-col overflow-clip bg-xb-screen font-manrope leading-[normal] text-xb-text">
     <div class="pointer-events-none absolute inset-x-0 top-0 h-[470px] overflow-hidden">
       <AtomsNextMemberLiveBackdrop variant="registration" />
     </div>

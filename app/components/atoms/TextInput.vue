@@ -90,7 +90,7 @@ onMounted(() => {
     :autofocus="autofocus"
     :required="required"
     :inputmode="inputmode"
-    class="w-full rounded-md border border-slate-300 bg-white text-slate-900 transition-colors placeholder:text-slate-400 focus-visible:border-slate-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
+    class="w-full rounded-md border border-slate-300 bg-white text-slate-900 transition-colors placeholder:text-slate-400 focus-visible:border-slate-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
     :class="SIZE_CLASSES[size]"
   />
 </template>

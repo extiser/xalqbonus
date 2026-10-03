@@ -193,6 +193,23 @@ export const formatCalendarDate = (value: string | null): string => {
 };
 
 /**
+ * Календарная дата словами, без года: «3 сентября» — в тексте, который читают как фразу
+ * (issue #346). Вход — та же строка `YYYY-MM-DD`, что у `formatCalendarDate`, и считается
+ * она в UTC по той же причине: зона показа сдвинула бы день.
+ */
+export const formatCalendarDayWord = (value: string | null): string => {
+  if (!value) {
+    return DASH;
+  }
+
+  return new Date(`${value}T00:00:00Z`).toLocaleString('ru-RU', {
+    timeZone: 'UTC',
+    day: 'numeric',
+    month: 'long',
+  });
+};
+
+/**
  * Баллы со знаком: «+1», «−2 342».
  *
  * Знак обязателен у обоих направлений: в двусторонней записи «1» без знака не отвечает
