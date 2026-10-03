@@ -13,8 +13,13 @@ import type { MemberLanguage } from '~/types/memberView';
  * «Далее» обязательного вопроса без ответа погашено. У необязательного без ответа основная кнопка
  * серая и называется «Пропустить» (`skip`); отдельной кнопки «Пропустить» нет.
  *
- * Варианты `multiple` идут сразу за вопросом и прокручиваются, «Назад» и «Далее» прилипают
+ * Варианты `multiple` идут за вопросом и прокручиваются, «Назад» и «Далее» прилипают
  * к низу; у остальных типов ответы стоят внизу, в зоне большого пальца.
+ *
+ * Помещается — прокрутки нет (issue #346). Экран высотой в остаток окна под полосой
+ * «Демо-аккаунт», а не в окно: с полосой страница выходила на 44 px выше окна, прокручивалась
+ * всегда, и прилипший низ накрывал последний вариант. Свободное место забирает блок вопроса
+ * (`grow`) — варианты прижаты к низу; не хватает места — прокрутка.
  *
  * Состояния ответа здесь нет: черновик (`answer`) держит страница, нажатия уходят событиями.
  */
@@ -64,7 +69,7 @@ const SCALE = [1, 2, 3, 4, 5] as const;
 </script>
 
 <template>
-  <div class="relative flex min-h-dvh flex-col overflow-clip bg-xb-screen font-manrope leading-[normal] text-xb-text">
+  <div class="relative flex min-h-[calc(100dvh-var(--xb-demo-offset))] flex-col overflow-clip bg-xb-screen font-manrope leading-[normal] text-xb-text">
     <div class="pointer-events-none absolute inset-x-0 top-0 h-[470px] overflow-hidden">
       <AtomsNextMemberLiveBackdrop variant="registration" />
     </div>

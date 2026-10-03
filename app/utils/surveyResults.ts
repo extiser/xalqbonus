@@ -1,4 +1,4 @@
-import { formatCalendarDate, formatNumber, formatShare, pluralize } from '~/utils/format';
+import { formatCalendarDayWord, formatNumber, formatShare, pluralize } from '~/utils/format';
 import type {
   SurveyFunnelStage,
   SurveyResultsColumn,
@@ -37,22 +37,26 @@ export const surveyResultsColumnLabel = (
     return `«${slice.name}»`;
   }
 
-  return 'Верхние 20 % по поездкам';
+  return 'Самые ездящие';
 };
 
-/** Пояснение к срезу по активности — окно и порог. */
+/**
+ * Пояснение к срезу по активности — окно и порог, словами директора (issue #346). Окно — то,
+ * по которому срез посчитан: тридцать суток парка до суток запуска.
+ */
 export const surveyActivitySliceNote = (slice: SurveyResultsSlice | null): string | null => {
   if (slice?.kind !== 'activity') {
     return null;
   }
 
-  const window = `${formatCalendarDate(slice.windowFrom)}–${formatCalendarDate(slice.windowTo)}`;
+  const from = formatCalendarDayWord(slice.windowFrom);
+  const to = formatCalendarDayWord(slice.windowTo);
 
   if (slice.minTrips === null) {
-    return `Завершённые поездки за сутки парка ${window}: в этом окне не ездил ни один участник программы.`;
+    return `За 30 дней до рассылки, с ${from} по ${to}, не ездил ни один участник программы — сравнивать не с чем.`;
   }
 
-  return `Завершённые поездки за сутки парка ${window}, порог — от ${formatNumber(slice.minTrips)} ${pluralize(slice.minTrips, 'поездки', 'поездок', 'поездок')} по всем участникам программы с поездками в окне.`;
+  return `Делит получивших опрос на две колонки: 20 % водителей, которые больше всех ездили с ${from} по ${to} — от ${formatNumber(slice.minTrips)} ${pluralize(slice.minTrips, 'поездки', 'поездок', 'поездок')}, — и все остальные. Видно, отличаются ли ответы тех, кто даёт парку основные поездки.`;
 };
 
 /** Ячейка «число · доля». Доля — от своего целого той же колонки. */

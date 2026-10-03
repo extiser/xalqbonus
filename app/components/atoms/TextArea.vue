@@ -41,7 +41,7 @@ const model = defineModel<string>({ required: true });
     :aria-invalid="props.invalid || undefined"
     :required="props.required"
     :maxlength="props.maxlength"
-    class="w-full rounded-md border bg-white px-3 py-2 text-sm text-slate-900 transition-colors placeholder:text-slate-400 focus-visible:outline-2 focus-visible:outline-offset-2"
+    class="w-full rounded-md border bg-white px-3 py-2 text-sm text-slate-900 transition-colors placeholder:text-slate-400 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
     :class="
       props.invalid
         ? 'border-red-400 focus-visible:border-red-500 focus-visible:outline-red-300'
