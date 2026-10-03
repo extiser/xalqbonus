@@ -25,6 +25,7 @@ import {
 import {
   MAILING_SEGMENT_ARCHIVED_TEXT,
   MAILING_SURVEY_CLOSED_TEXT,
+  MAILING_SURVEY_FINISHED_TEXT,
   mailingAudienceEmptyText,
   mailingLaunchProblemText,
   mailingRecallProblemText,
@@ -152,7 +153,11 @@ export const explainMailingFailure = (error: unknown): H3Error | null => {
   }
 
   if (error instanceof MailingSurveyClosedError) {
-    return reject(409, 'Conflict', MAILING_SURVEY_CLOSED_TEXT);
+    return reject(
+      409,
+      'Conflict',
+      error.finished ? MAILING_SURVEY_FINISHED_TEXT : MAILING_SURVEY_CLOSED_TEXT,
+    );
   }
 
   if (error instanceof MailingSurveyIncompleteError) {

@@ -1,5 +1,6 @@
 import type { SelectOption } from '~/types/selectOption';
 import { formatNumber } from '~/utils/format';
+import { surveyOptionLabel } from '~/utils/labels';
 import type { SegmentConditions, SegmentSurveyState } from '#shared/types/segment';
 import type { SurveyListItem } from '#shared/types/survey';
 
@@ -62,11 +63,7 @@ export const segmentSurveyOptions = (
         survey.surveyId === selectedSurveyId ||
         (survey.frozenAt !== null && survey.isDemo === isDemo),
     )
-    .map((survey) => {
-      const title = survey.title ?? 'Без названия';
-
-      return { value: survey.surveyId, label: survey.closed ? `${title} (срок прошёл)` : title };
-    });
+    .map((survey) => ({ value: survey.surveyId, label: surveyOptionLabel(survey) }));
 
 const toBoundDraft = (value: number | null): string => (value === null ? '' : String(value));
 

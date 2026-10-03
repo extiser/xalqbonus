@@ -330,6 +330,7 @@ describe('конструктор опроса', () => {
       endsOn: SETTINGS.endsOn,
       frozenAt: null,
       closed: false,
+      finishedAt: null,
       isDemo: false,
       createdByName: 'Тестовый Сотрудник',
       createdAt: full.createdAt,

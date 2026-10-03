@@ -40,6 +40,8 @@ const props = withDefaults(
      */
     required?: boolean;
     inputmode?: InputMode;
+    /** Нижняя граница поля `date` — `YYYY-MM-DD`: день раньше календарь не даст выбрать. */
+    min?: string;
   }>(),
   {
     size: 'medium',
@@ -49,6 +51,7 @@ const props = withDefaults(
     autofocus: false,
     required: false,
     inputmode: undefined,
+    min: undefined,
   },
 );
 
@@ -90,6 +93,7 @@ onMounted(() => {
     :autofocus="autofocus"
     :required="required"
     :inputmode="inputmode"
+    :min="min"
     class="w-full rounded-md border border-slate-300 bg-white text-slate-900 transition-colors placeholder:text-slate-400 focus-visible:border-slate-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
     :class="SIZE_CLASSES[size]"
   />

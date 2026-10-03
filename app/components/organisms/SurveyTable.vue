@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { formatCalendarDate, formatDate, formatNumber } from '~/utils/format';
+import { surveyClosedLabel } from '~/utils/labels';
 import type { SurveyListItem } from '#shared/types/survey';
 import type { LoadState } from '~/types/loadState';
 
 /**
  * Список опросов: название, состояние, число вопросов, баллы и дата окончания (issue #320).
  *
- * Состояние — черновик или заморожен; «закрыт по сроку» — отдельной пометкой рядом, а не
- * третьим значением: черновик с прошедшей датой всё ещё правится, а замороженный, срок
- * которого продлили, снова открыт. Демо помечены так же, как в списке рассылок.
+ * Состояние — черновик или заморожен; «закрыт по сроку» или «завершён досрочно» — отдельной
+ * пометкой рядом, а не третьим значением: черновик с прошедшей датой всё ещё правится,
+ * а замороженный, срок которого продлили, снова открыт. Демо помечены так же, как в списке
+ * рассылок.
  */
 defineProps<{
   state: LoadState;
@@ -50,7 +52,11 @@ defineProps<{
               :tone="survey.frozenAt ? 'ok' : 'muted'"
               :label="survey.frozenAt ? 'заморожен' : 'черновик'"
             />
-            <AtomsStatusBadge v-if="survey.closed" tone="warn" label="закрыт по сроку" />
+            <AtomsStatusBadge
+              v-if="surveyClosedLabel(survey)"
+              tone="warn"
+              :label="surveyClosedLabel(survey) ?? ''"
+            />
             <AtomsStatusBadge v-if="survey.isDemo" tone="demo" label="ДЕМО" />
           </div>
           <p class="mt-0.5 text-xs text-slate-500">

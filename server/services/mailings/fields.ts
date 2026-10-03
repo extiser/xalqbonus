@@ -37,7 +37,11 @@ export const toMailing = (row: MailingRow): Mailing => ({
           surveyId: row.surveyId,
           title: row.surveyTitle,
           endsOn: row.surveyEndsOn,
-          closed: isSurveyClosed(row.surveyEndsOn, new Date()),
+          closed: isSurveyClosed(
+            { endsOn: row.surveyEndsOn, finishedAt: row.surveyFinishedAt },
+            new Date(),
+          ),
+          finishedAt: row.surveyFinishedAt?.toISOString() ?? null,
           frozenAt: row.surveyFrozenAt?.toISOString() ?? null,
         },
   createdByName: row.createdByName,

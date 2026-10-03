@@ -53,6 +53,43 @@ export class SurveyAttachedError extends SurveyError {
   }
 }
 
+/**
+ * Последний день, который ставят опросу, уже прошёл (issue #348). Закрыть опрос сейчас —
+ * кнопкой «Завершить опрос», а не датой в прошлом.
+ */
+export class SurveyEndsOnPastError extends SurveyError {
+  constructor(public readonly endsOn: string) {
+    super(`последний день опроса ${endsOn} уже прошёл`);
+  }
+}
+
+/**
+ * Опрос уже завершён досрочно (issue #348): второе нажатие «Завершить опрос» или правка
+ * последнего дня у завершённого. Отметка не снимается, а последний день у завершённого
+ * ничего не решает — менять его незачем.
+ */
+export class SurveyFinishedError extends SurveyError {
+  constructor(
+    public readonly surveyId: string,
+    public readonly action: 'finish' | 'ends_on',
+  ) {
+    super(`опрос ${surveyId} уже завершён досрочно, действие ${action} не допускается`);
+  }
+}
+
+/**
+ * Опрос не из тех, что завершаются досрочно (issue #348): черновик никуда не уходил,
+ * а закрытый по сроку уже закрыт.
+ */
+export class SurveyNotFinishableError extends SurveyError {
+  constructor(
+    public readonly surveyId: string,
+    public readonly reason: 'draft' | 'closed',
+  ) {
+    super(`опрос ${surveyId} не завершается досрочно: ${reason}`);
+  }
+}
+
 /** Тело запроса не разобрать: не тот тип вопроса, не дата, не целое число баллов. */
 export class SurveyRequestInvalidError extends SurveyError {
   constructor(public readonly reason: SurveyRequestInvalidReason) {

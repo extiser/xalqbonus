@@ -2,8 +2,11 @@ import { createError, type H3Error } from 'h3';
 
 import {
   SurveyAttachedError,
+  SurveyEndsOnPastError,
+  SurveyFinishedError,
   SurveyFrozenError,
   SurveyFrozenFieldRequiredError,
+  SurveyNotFinishableError,
   SurveyRequestInvalidError,
   UnknownSurveyError,
   type SurveyRequestInvalidReason,
@@ -30,6 +33,16 @@ const FROZEN_FIELD_TEXT = {
   endsOn: 'У ушедшего опроса дата окончания обязательна.',
 } as const;
 
+const FINISHED_TEXT = {
+  finish: 'Опрос уже завершён.',
+  ends_on: 'Опрос завершён досрочно — последний день у него не правится.',
+} as const;
+
+const NOT_FINISHABLE_TEXT = {
+  draft: 'Завершается только опрос, ушедший рассылкой. Черновик никуда не уходил.',
+  closed: 'Опрос уже закрыт по сроку.',
+} as const;
+
 const INVALID_TEXT: Record<SurveyRequestInvalidReason, string> = {
   ends_on: 'Дата окончания — день в виде ГГГГ-ММ-ДД.',
   points: 'Баллы — целое число, не меньше нуля.',
@@ -40,8 +53,14 @@ const INVALID_TEXT: Record<SurveyRequestInvalidReason, string> = {
   option_exclusive: 'Исключающий вариант бывает только у вопроса с несколькими ответами.',
 };
 
-const reject = (statusCode: 400 | 404 | 409, statusMessage: string, message: string): H3Error =>
-  createError({ statusCode, statusMessage, message });
+/** `field` — поле формы, у которого встаёт текст отказа (`failureField` на клиенте). */
+const reject = (
+  statusCode: 400 | 404 | 409,
+  statusMessage: string,
+  message: string,
+  field?: 'endsOn',
+): H3Error =>
+  createError({ statusCode, statusMessage, message, data: field ? { field } : undefined });
 
 export const explainSurveyFailure = (error: unknown): H3Error | null => {
   if (error instanceof UnknownSurveyError) {
@@ -62,6 +81,28 @@ export const explainSurveyFailure = (error: unknown): H3Error | null => {
 
   if (error instanceof SurveyFrozenFieldRequiredError) {
     return reject(400, 'Bad Request', FROZEN_FIELD_TEXT[error.field]);
+  }
+
+  if (error instanceof SurveyEndsOnPastError) {
+    return reject(
+      400,
+      'Bad Request',
+      'Последний день не может быть в прошлом. Чтобы закрыть опрос сейчас — «Завершить опрос».',
+      'endsOn',
+    );
+  }
+
+  if (error instanceof SurveyFinishedError) {
+    return reject(
+      409,
+      'Conflict',
+      FINISHED_TEXT[error.action],
+      error.action === 'ends_on' ? 'endsOn' : undefined,
+    );
+  }
+
+  if (error instanceof SurveyNotFinishableError) {
+    return reject(409, 'Conflict', NOT_FINISHABLE_TEXT[error.reason]);
   }
 
   if (error instanceof SurveyRequestInvalidError) {

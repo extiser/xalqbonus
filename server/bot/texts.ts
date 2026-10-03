@@ -329,6 +329,8 @@ export type TextKey =
   | 'survey_finish_title'
   | 'survey_closed_title'
   | 'survey_closed_text'
+  | 'survey_closed_early_title'
+  | 'survey_closed_early_text'
   | 'survey_closed_button'
   | 'survey_banner_progress_kicker'
   | 'survey_banner_progress_when'
@@ -1893,6 +1895,17 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     uz: "So'rovnoma allaqachon tugagan",
   },
   survey_closed_text: {
+    ru: 'Ответы принимались до {date}. Спасибо, что заглянули — новые опросы придут в этот бот.',
+    uz: "Javoblar {date}gacha qabul qilindi. Kirganingiz uchun rahmat — yangi so'rovnomalar shu botga keladi.",
+  },
+  // Опрос, завершённый досрочно кнопкой в админке (issue #348): день — день завершения
+  // по Ташкенту, а не последний день. Узбекский — черновик Cowork, переводчик посмотрит вместе
+  // с остальными текстами опроса.
+  survey_closed_early_title: {
+    ru: 'Опрос закрыт досрочно',
+    uz: "So'rovnoma muddatidan oldin yopildi",
+  },
+  survey_closed_early_text: {
     ru: 'Ответы принимались до {date}. Спасибо, что заглянули — новые опросы придут в этот бот.',
     uz: "Javoblar {date}gacha qabul qilindi. Kirganingiz uchun rahmat — yangi so'rovnomalar shu botga keladi.",
   },
