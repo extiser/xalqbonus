@@ -42,7 +42,7 @@ const EMPTY_MESSAGES: Record<ReportKey, string> = {
   points_economy: 'За период движения баллов не было.',
 };
 
-/** Сегодня — сутки парка: до 05:00 по Ташкенту это ещё вчера. */
+/** Сегодня — календарный день по Ташкенту. */
 const today = reportDayKey(new Date());
 
 const report = ref<ReportKey>('sales');
@@ -95,7 +95,7 @@ const show = (): Promise<void> => reports.show(report.value, query());
       <h1 class="text-xl font-semibold text-slate-900">Отчёты</h1>
       <p class="mt-1 text-sm text-slate-500">
         Продажи, остатки, движение товара, награды, заказы, работа сотрудников и баллы — на экран
-        и в Excel. Сутки — с 05:00 по Ташкенту, демо в отчёты не входит.
+        и в Excel. Сутки — по Ташкенту, с полуночи, демо в отчёты не входит.
       </p>
     </div>
 

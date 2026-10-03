@@ -10,6 +10,7 @@ export type GiftSnapshot = {
   claimedAt: Date | null;
   claimMode: string | null;
   giftShownAt: Date | null;
+  expiresAt: Date | null;
 };
 
 export const readGift = async (rewardId: string): Promise<GiftSnapshot | null> => {
@@ -17,7 +18,8 @@ export const readGift = async (rewardId: string): Promise<GiftSnapshot | null> =
     SELECT "status"::text     AS "status",
            "claimed_at"       AS "claimedAt",
            "claim_mode"::text AS "claimMode",
-           "gift_shown_at"    AS "giftShownAt"
+           "gift_shown_at"    AS "giftShownAt",
+           "expires_at"       AS "expiresAt"
       FROM xb.rewards
      WHERE "id" = ${rewardId}::uuid
   `;

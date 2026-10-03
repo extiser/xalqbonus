@@ -21,7 +21,7 @@ import {
   type GiftCoverUpload,
 } from '#server/services/gifts/giftMessage';
 import { toSegmentConditions } from '#server/services/segments/fields';
-import { parkDayKey, shiftDayKey } from '#server/utils/parkTime';
+import { formatDayKey, shiftDayKey } from '#server/utils/parkTime';
 import { isCalendarDay } from '#shared/campaign';
 import { GIFT_REASON_MAX_LENGTH } from '#shared/gift';
 
@@ -158,9 +158,9 @@ const validate = (input: GrantGiftInput, now: Date): ValidGift => {
     throw new InvalidGiftGrantError('until_date_invalid');
   }
 
-  // Строки `YYYY-MM-DD` сравниваются как даты. Сегодняшний день парка не годится: подарок
+  // Строки `YYYY-MM-DD` сравниваются как даты. Сегодняшний календарный день не годится: подарок
   // зачислился бы этой же ночью, не успев подождать водителя.
-  if (untilDate < shiftDayKey(parkDayKey(now), 1)) {
+  if (untilDate < shiftDayKey(formatDayKey(now), 1)) {
     throw new InvalidGiftGrantError('until_date_too_early');
   }
 

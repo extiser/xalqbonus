@@ -72,3 +72,15 @@ export const expireTestReward = async (rewardId: string): Promise<void> => {
      WHERE "id" = ${rewardId}::uuid
   `;
 };
+
+/**
+ * Ставит награде срок меткой — так выглядит награда, выданная по прежнему правилу: срок хранится
+ * и при смене правила не пересчитывается (issue #352).
+ */
+export const setTestRewardExpiry = async (rewardId: string, expiresAt: Date): Promise<void> => {
+  await db.$executeRaw`
+    UPDATE xb.rewards
+       SET "expires_at" = ${expiresAt}::timestamptz
+     WHERE "id" = ${rewardId}::uuid
+  `;
+};

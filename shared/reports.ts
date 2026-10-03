@@ -46,13 +46,12 @@ export const PARK_WIDE_REPORTS: readonly ReportKey[] = ['points_economy'];
 export const REPORTS_HISTORY_START = '2026-09-28';
 
 /**
- * Зона и начало суток парка — те же, что `PARK_TIME_ZONE` и `PARK_DAY_START_HOUR` сервера
- * (`server/utils/parkTime.ts`), но своими константами: коду экрана до `server/` доступа нет
- * (так же устроен `shared/sendWindow.ts`). Нужны экрану ровно для одного — подставить
- * «сегодня» в фильтр по умолчанию; режет сутки отчёта сервер.
+ * Зона парка — та же, что `PARK_TIME_ZONE` сервера (`server/utils/parkTime.ts`), но своей
+ * константой: коду экрана до `server/` доступа нет (так же устроен `shared/sendWindow.ts`).
+ * Нужна экрану ровно для одного — подставить «сегодня» в фильтр по умолчанию; режет сутки
+ * отчёта сервер.
  */
 const REPORT_TIME_ZONE = 'Asia/Tashkent';
-const REPORT_DAY_START_HOUR = 5;
 
 const DAY_KEY = new Intl.DateTimeFormat('en-CA', {
   timeZone: REPORT_TIME_ZONE,
@@ -61,6 +60,8 @@ const DAY_KEY = new Intl.DateTimeFormat('en-CA', {
   day: '2-digit',
 });
 
-/** Сутки парка момента — `2026-09-30`: до 05:00 по Ташкенту это ещё вчера. */
-export const reportDayKey = (moment: Date): string =>
-  DAY_KEY.format(new Date(moment.getTime() - REPORT_DAY_START_HOUR * 60 * 60 * 1_000));
+/**
+ * Сутки момента — `2026-09-30`: календарный день по Ташкенту (docs/decisions.md → «Сутки —
+ * с 00:00 до 00:00 по Ташкенту; у акции — свои, с 05:00»).
+ */
+export const reportDayKey = (moment: Date): string => DAY_KEY.format(moment);

@@ -7,7 +7,7 @@ import type {
   CampaignStatus,
 } from '#server/generated/prisma/enums';
 import { segmentMembersSql } from '#server/repositories/segments';
-import { parkDaySql, parkDayStartSql } from '#server/utils/parkDaySql';
+import { promoDaySql, promoDayStartSql } from '#server/utils/parkDaySql';
 import { COMPLETED_TRIP_STATUS } from '#server/utils/tripStatus';
 import type { SegmentConditions } from '#shared/types/segment';
 
@@ -21,14 +21,14 @@ import type { SegmentConditions } from '#shared/types/segment';
  * внутри `UPDATE`, а не проверкой перед ним: два нажатия подряд обязаны дать один переход,
  * и решает это база (docs/principles.md → «Идемпотентность вместо аккуратности»).
  *
- * Окно хранится метками начала суток механики, а на экран уезжает ещё и датами. Перевод
- * в обе стороны — здесь, одним выражением (`parkDaySql`, `parkDayStartSql`): второй перевод
+ * Окно хранится метками начала суток акции, а на экран уезжает ещё и датами. Перевод
+ * в обе стороны — здесь, одним выражением (`promoDaySql`, `promoDayStartSql`): второй перевод
  * где-нибудь в коде однажды резал бы сутки по полуночи.
  */
 
 type Executor = Prisma.TransactionClient;
 
-/** Окно половины из базы. Даты — `YYYY-MM-DD` в сутках парка, последний день включительно. */
+/** Окно половины из базы. Даты — `YYYY-MM-DD` в сутках акции, последний день включительно. */
 export type CampaignWindowRow = {
   startsAt: Date | null;
   endsAt: Date | null;
@@ -73,16 +73,16 @@ type CampaignFlatRow = Omit<CampaignRow, 'halfA' | 'halfB'> & {
   halfBEndsOn: string | null;
 };
 
-/** Дата начала окна — сутки парка, в которые попадает метка начала. */
+/** Дата начала окна — сутки акции, в которые попадает метка начала. */
 const startsOnSql = (column: Prisma.Sql): Prisma.Sql =>
-  Prisma.sql`to_char(${parkDaySql(column)}, 'YYYY-MM-DD')`;
+  Prisma.sql`to_char(${promoDaySql(column)}, 'YYYY-MM-DD')`;
 
 /**
  * Дата последнего дня окна. Метка конца — начало суток, следующих за последним днём,
  * поэтому день на единицу раньше.
  */
 const endsOnSql = (column: Prisma.Sql): Prisma.Sql =>
-  Prisma.sql`to_char(${parkDaySql(column)} - 1, 'YYYY-MM-DD')`;
+  Prisma.sql`to_char(${promoDaySql(column)} - 1, 'YYYY-MM-DD')`;
 
 const CAMPAIGN_SELECT = Prisma.sql`
   SELECT campaign."id",
@@ -214,12 +214,12 @@ export type CampaignWindowDays = {
 /** Метка начала окна: 05:00 первого дня. */
 const windowStartSql = (startsOn: string | null): Prisma.Sql =>
   Prisma.sql`CASE WHEN ${startsOn}::date IS NULL THEN NULL
-                  ELSE ${parkDayStartSql(Prisma.sql`${startsOn}::date`)} END`;
+                  ELSE ${promoDayStartSql(Prisma.sql`${startsOn}::date`)} END`;
 
 /** Метка конца окна: 05:00 дня, следующего за последним. */
 const windowEndSql = (endsOn: string | null): Prisma.Sql =>
   Prisma.sql`CASE WHEN ${endsOn}::date IS NULL THEN NULL
-                  ELSE ${parkDayStartSql(Prisma.sql`${endsOn}::date + 1`)} END`;
+                  ELSE ${promoDayStartSql(Prisma.sql`${endsOn}::date + 1`)} END`;
 
 /**
  * Заводит черновик. Строку окна половины А ставит сервис в той же транзакции.
@@ -572,11 +572,11 @@ export type MemberCampaignRow = {
   startsOn: string;
   endsOn: string;
   joinedAt: Date | null;
-  /** Длина окна половины в сутках парка — `W`. */
+  /** Длина окна половины в сутках акции — `W`. */
   windowDays: number;
   /** Номер сегодняшнего дня окна, с единицы, — `d`. */
   day: number;
-  /** Сутки парка каждого дня окна, `YYYY-MM-DD`, по порядку. */
+  /** Сутки акции каждого дня окна, `YYYY-MM-DD`, по порядку. */
   dayDates: string[];
   outcome: CampaignParticipantOutcome | null;
   qualifiedDays: number | null;
@@ -584,22 +584,22 @@ export type MemberCampaignRow = {
   outcomeDayTrips: number[] | null;
 };
 
-/** Сутки парка, с которых начинается окно половины. */
-const windowFirstDaySql = (half: Prisma.Sql): Prisma.Sql => parkDaySql(Prisma.sql`${half}."starts_at"`);
+/** Сутки акции, с которых начинается окно половины. */
+const windowFirstDaySql = (half: Prisma.Sql): Prisma.Sql => promoDaySql(Prisma.sql`${half}."starts_at"`);
 
 /**
- * Длина окна половины в сутках парка — `W`. Метка конца — начало суток, следующих
+ * Длина окна половины в сутках акции — `W`. Метка конца — начало суток, следующих
  * за последним днём, поэтому разница дат и есть число дней.
  */
 const windowDaysSql = (half: Prisma.Sql): Prisma.Sql =>
-  Prisma.sql`(${parkDaySql(Prisma.sql`${half}."ends_at"`)} - ${windowFirstDaySql(half)})`;
+  Prisma.sql`(${promoDaySql(Prisma.sql`${half}."ends_at"`)} - ${windowFirstDaySql(half)})`;
 
 /**
  * Зачитанные поездки участника по дням окна — массивом из `W` чисел в порядке дней (issue #168).
  * Одно выражение на человека, а не семь запросов, и одно на экран и на итог окна: второй счёт
  * тех же поездок однажды разошёлся бы с первым, и итог объявил бы не то, что видел водитель.
  *
- * - сутки режет `parkDaySql` — с 05:00 по Ташкенту; заказ через границу суток ложится
+ * - сутки режет `promoDaySql` — с 05:00 по Ташкенту; заказ через границу суток ложится
  *   в день своего `ended_at` целиком;
  * - в зачёт идут только завершённые после вступления: `ended_at >= joined_at`. Не `synced_at` —
  *   он перезаписывается каждым прогоном, накрывшим заказ, и значит последнее касание,
@@ -615,7 +615,7 @@ const dayTripsSql = (participant: Prisma.Sql, half: Prisma.Sql): Prisma.Sql => P
     SELECT coalesce(per_day."trips", 0)
       FROM generate_series(0, ${windowDaysSql(half)} - 1) AS window_day("offset")
       LEFT JOIN (
-        SELECT ${parkDaySql(Prisma.sql`trip."ended_at"`)} AS "day", count(*)::int AS "trips"
+        SELECT ${promoDaySql(Prisma.sql`trip."ended_at"`)} AS "day", count(*)::int AS "trips"
           FROM xb.trips AS trip
           JOIN xb.park_profiles AS profile ON profile."profile_id" = trip."profile_id"
          WHERE profile."person_id" = ${participant}."person_id"
@@ -645,7 +645,7 @@ const dayTripsSql = (participant: Prisma.Sql, half: Prisma.Sql): Prisma.Sql => P
  *
  * Если окон сразу несколько, берётся запущенная последней. «Сейчас» приходит параметром:
  * граница окна проверяется тестом на заданном часе, а не ожиданием утра восьмого числа.
- * От него же считается день окна: сутки парка «сейчас» минус сутки начала, плюс единица, —
+ * От него же считается день окна: сутки акции «сейчас» минус сутки начала, плюс единица, —
  * в 04:50 это ещё вчерашний день, а после конца окна день на единицу больше его длины.
  */
 export const findMemberCampaign = async (
@@ -662,7 +662,7 @@ export const findMemberCampaign = async (
            ${endsOnSql(Prisma.sql`half."ends_at"`)}     AS "endsOn",
            participant."joined_at"                      AS "joinedAt",
            ${windowDaysSql(Prisma.sql`half`)}::int      AS "windowDays",
-           (${parkDaySql(Prisma.sql`${now}::timestamptz`)} - ${windowFirstDaySql(Prisma.sql`half`)} + 1)::int AS "day",
+           (${promoDaySql(Prisma.sql`${now}::timestamptz`)} - ${windowFirstDaySql(Prisma.sql`half`)} + 1)::int AS "day",
            ARRAY(
              SELECT to_char(${windowFirstDaySql(Prisma.sql`half`)} + window_day."offset", 'YYYY-MM-DD')
                FROM generate_series(0, ${windowDaysSql(Prisma.sql`half`)} - 1) AS window_day("offset")
@@ -727,7 +727,7 @@ export type CampaignHalfRef = {
 /**
  * Половины идущих акций, чьё окно кончилось не меньше `buffer` назад и у которых остались
  * участники без исхода. Буфер — на опоздавшие из Fleet API поездки (docs/decisions.md →
- * «Сутки — с 05:00 до 05:00 по Ташкенту»).
+ * «Сутки — с 00:00 до 00:00 по Ташкенту; у акции — свои, с 05:00»).
  */
 export const listHalvesDueForOutcome = async (
   now: Date,

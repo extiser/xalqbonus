@@ -416,7 +416,7 @@ export type MemberWeekLine = {
 export type MemberWeekDay = {
   /** Номер дня окна, с единицы. */
   day: number;
-  /** Сутки парка, `YYYY-MM-DD`. */
+  /** Сутки акции, `YYYY-MM-DD`. */
   date: string;
   /** Зачитанных поездок в этот день — завершённых после вступления. У будущего дня ноль. */
   trips: number;

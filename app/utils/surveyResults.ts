@@ -42,7 +42,7 @@ export const surveyResultsColumnLabel = (
 
 /**
  * Пояснение к срезу по активности — окно и порог, словами директора (issue #346). Окно — то,
- * по которому срез посчитан: тридцать суток парка до суток запуска.
+ * по которому срез посчитан: тридцать календарных суток до суток запуска.
  */
 export const surveyActivitySliceNote = (slice: SurveyResultsSlice | null): string | null => {
   if (slice?.kind !== 'activity') {
