@@ -390,6 +390,18 @@ enum MailingStatus {
   @@schema("xb")
 }
 
+/// Состояние человека по опросу в условии сегмента (issue #324). Оба — только среди получивших
+/// опрос: тех, кто есть в снимке рассылки с этим опросом с исходом `sent`.
+enum SegmentSurveyState {
+  /// Получил, но не прошёл и не отказался — не открывал вовсе или открыл и бросил.
+  not_completed
+  /// Отказался и после отказа не прошёл.
+  declined
+
+  @@map("segment_survey_state")
+  @@schema("xb")
+}
+
 /// Чем кончилась рассылка для одного адресата.
 enum MailingRecipientOutcome {
   /// Ещё не отправлено: очередь не дошла или рассылку остановили раньше.
@@ -1891,6 +1903,7 @@ model Survey {
   questions SurveyQuestion[]
   mailings  Mailing[]
   responses SurveyResponse[]
+  segments  Segment[]
 
   @@index([createdAt(sort: Desc)])
   @@map("surveys")
@@ -2061,6 +2074,12 @@ model Segment {
   balanceMin       BigInt?  @map("balance_min")
   /// Баланс водительского счёта — не больше.
   balanceMax       BigInt?  @map("balance_max")
+  /// Опрос условия (issue #324). Пусто — условия по опросу нет. Заполнены обе колонки
+  /// или ни одной — проверкой `segments_survey_condition_check`. Выбирается только
+  /// замороженный опрос того же мира, что сегмент, — это сервис.
+  surveyId         String?             @map("survey_id") @db.Uuid
+  /// Кто из получивших опрос входит в сегмент.
+  surveyState      SegmentSurveyState? @map("survey_state")
 
   createdById String    @map("created_by_id") @db.Uuid
   /// Заполнено — сегмент убран из обращения: при выборе не предлагается, по ссылке открывается.
@@ -2070,6 +2089,9 @@ model Segment {
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   createdBy  Employee    @relation(fields: [createdById], references: [id])
+  /// `Restrict`: в условие выбирается только замороженный опрос, а замороженный не удаляется.
+  /// Удалённый молча стёр бы условие и расширил состав.
+  survey     Survey?     @relation(fields: [surveyId], references: [id], onDelete: Restrict)
   campaigns  Campaign[]
   mailings   Mailing[]
   /// Демо-сегмент (issue #212): отбирает только демо-водителей, живой — только живых.

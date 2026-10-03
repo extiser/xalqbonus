@@ -10,11 +10,13 @@ import {
   describeSegmentConditions,
   fromConditionsDraft,
   sameSegmentConditions,
+  segmentSurveyOptions,
   toConditionsDraft,
   type SegmentConditionsDraft,
 } from '~/utils/segmentConditions';
 import { EMPTY_SEGMENT_CONDITIONS } from '#shared/segment';
 import type { SegmentRequestBody, SegmentResponse } from '#shared/types/segment';
+import type { SurveyListResponse } from '#shared/types/survey';
 
 /**
  * Страница сегмента: условия, предпросмотр состава и архив.
@@ -65,6 +67,17 @@ watch(
     conditions.value = toConditionsDraft(value?.conditions ?? EMPTY_SEGMENT_CONDITIONS);
   },
   { immediate: true },
+);
+
+/** Опросы для условия (issue #324) — того же мира, что сегмент, и уже выбранный. */
+const { data: surveys } = await useFetch<SurveyListResponse>('/api/surveys');
+
+const surveyOptions = computed(() =>
+  segmentSurveyOptions(
+    surveys.value?.surveys ?? [],
+    segment.value?.isDemo ?? false,
+    conditions.value.surveyId,
+  ),
 );
 
 const draftConditions = computed(() => fromConditionsDraft(conditions.value));
@@ -144,7 +157,7 @@ const toggleArchive = async (): Promise<void> => {
           {{ segment.description }}
         </p>
         <p class="mt-1 text-xs text-slate-500">
-          {{ describeSegmentConditions(segment.conditions).join(' · ') || 'все демо-водители' }}
+          {{ describeSegmentConditions(segment.conditions, segment.surveyTitle).join(' · ') || 'все демо-водители' }}
         </p>
         <p class="mt-1 text-xs text-slate-400">
           Завёл {{ segment.createdByName }} {{ formatDateTime(segment.createdAt) }} · изменён
@@ -174,6 +187,7 @@ const toggleArchive = async (): Promise<void> => {
         :error="saveError"
         :demo="segment.isDemo"
         :readonly="!editable"
+        :survey-options="surveyOptions"
         @submit="save"
       />
 
