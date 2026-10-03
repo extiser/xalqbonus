@@ -89,7 +89,7 @@ export const readStockReport = async (params: StockReportParams): Promise<Report
     },
   ];
 
-  // Сутки ещё не кончились — остаток на сейчас, и подпись говорит это, а не 05:00 завтрашнего дня.
+  // Сутки ещё не кончились — остаток на сейчас, и подпись говорит это, а не 00:00 завтрашнего дня.
   const at =
     moment.getTime() < dayEnd.getTime()
       ? `сейчас, ${formatClockTime(moment)}`
@@ -98,7 +98,7 @@ export const readStockReport = async (params: StockReportParams): Promise<Report
   return {
     report: 'stock',
     title: REPORT_TITLES.stock,
-    subtitle: `На ${formatReportDay(params.date)} — ${at} · ${officeSubtitle(params.office)} · сутки с 05:00 по Ташкенту`,
+    subtitle: `На ${formatReportDay(params.date)} — ${at} · ${officeSubtitle(params.office)} · сутки по Ташкенту`,
     generatedAt: new Date().toISOString(),
     sections,
     empty: isEmptyReport(sections),

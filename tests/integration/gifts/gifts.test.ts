@@ -18,7 +18,7 @@ import { transferPoints } from '#server/services/points/transfer';
 import { readMemberRewards } from '#server/services/rewards/readMemberRewards';
 import { createSegment } from '#server/services/segments/createSegment';
 import { setSegmentArchived } from '#server/services/segments/setSegmentArchived';
-import { parkDayKey, shiftDayKey } from '#server/utils/parkTime';
+import { formatDayKey, shiftDayKey } from '#server/utils/parkTime';
 import {
   cleanupTestData,
   countTransfersByKey,
@@ -299,7 +299,7 @@ describe('подарки от Xalq Taxi', () => {
     );
   });
 
-  it('отказы раздачи: вне программы, архивный сегмент, срок не позже сегодняшнего дня парка', async () => {
+  it('отказы раздачи: вне программы, архивный сегмент, срок не позже сегодняшнего календарного дня', async () => {
     const employeeId = await createOwner();
     const outsider = (await createTestPerson({ inProgram: false })).personId;
     const personId = await createMember(10);
@@ -331,7 +331,7 @@ describe('подарки от Xalq Taxi', () => {
         coverRu: null,
         coverUz: null,
         sendNow: false,
-        untilDate: parkDayKey(new Date()),
+        untilDate: formatDayKey(new Date()),
         employeeId,
       }),
     ).rejects.toMatchObject({ problem: 'until_date_too_early' });
@@ -454,7 +454,8 @@ describe('подарки от Xalq Taxi', () => {
       }),
     ).rejects.toMatchObject({ problem: 'segment_archived' });
 
-    // Завтрашний день парка — самый ранний годный.
+    // Завтрашний календарный день — самый ранний годный.
+    const tomorrowDay = shiftDayKey(formatDayKey(new Date()), 1);
     const tomorrow = await grantGift({
       recipient: { kind: 'person', personId },
       points: 100,
@@ -466,10 +467,17 @@ describe('подарки от Xalq Taxi', () => {
       coverRu: null,
       coverUz: null,
       sendNow: false,
-      untilDate: shiftDayKey(parkDayKey(new Date()), 1),
+      untilDate: tomorrowDay,
       employeeId,
     });
 
     expect(tomorrow.recipients).toBe(1);
+
+    // Срок — конец календарного дня «Забрать до»: 00:00 следующего по Ташкенту.
+    const tomorrowGift = await readGift(await findGiftRewardId(tomorrow.giftGrantId, personId));
+
+    expect(tomorrowGift?.expiresAt?.toISOString()).toBe(
+      new Date(`${shiftDayKey(tomorrowDay, 1)}T00:00:00+05:00`).toISOString(),
+    );
   });
 });

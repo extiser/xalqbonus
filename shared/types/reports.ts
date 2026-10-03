@@ -34,7 +34,7 @@ export type ReportSection = {
 export type ReportResult = {
   report: ReportKey;
   title: string;
-  /** Одна строка под заголовком: период или дата, офис, «сутки с 05:00». */
+  /** Одна строка под заголовком: период или дата, офис, «сутки по Ташкенту». */
   subtitle: string;
   generatedAt: string;
   sections: ReportSection[];

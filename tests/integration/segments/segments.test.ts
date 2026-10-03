@@ -87,8 +87,8 @@ type TestDriverInput = {
  * Водитель под сценарий. Баланс — настоящим переводом с эмиссионного счёта, а не правкой
  * `accounts`: инвариант журнала не должен расходиться после теста.
  *
- * Поездка ставится ровно на N×24 часа назад: перевода часов в Узбекистане нет, и сутки парка
- * между двумя такими моментами — ровно N, где бы ни стояла граница 05:00.
+ * Поездка ставится ровно на N×24 часа назад: перевода часов в Узбекистане нет, и календарных
+ * суток между двумя такими моментами — ровно N, где бы ни стояла полночь.
  */
 const createDriver = async (input: TestDriverInput): Promise<string> => {
   const { personId, profileId } = await createTestPerson({ inProgram: true });
@@ -309,7 +309,7 @@ describe('сегменты', () => {
     expect(consumer).not.toContain(cancelledOnlyId);
     expect(consumer).not.toContain(neverId);
 
-    // Границы давности берутся включительно и считаются в сутках парка.
+    // Границы давности берутся включительно и считаются в календарных сутках.
     const inside = await previewSegmentConditions(
       { ...WINDOW, daysSinceTripMin: 30, daysSinceTripMax: 30 },
       false,

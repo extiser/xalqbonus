@@ -20,7 +20,7 @@ import type { ReportColumn, ReportResult, ReportSection } from '#shared/types/re
 /**
  * «Продажи за период» (issue #308): что выдано за баллы и что за розницу, по офисам и товарам.
  *
- * Продажа — по выдаче, сутки — с 05:00 по Ташкенту, демо не входит: всё это решает выборка
+ * Продажа — по выдаче, сутки — календарные по Ташкенту, демо не входит: всё это решает выборка
  * (`listSalesLines`). Здесь — раскладка по разделам, себестоимость и итоги.
  *
  * Себестоимость — текущая цена каталога: в позиции заказа её снимка нет. Товар без
@@ -145,7 +145,7 @@ export const readSalesReport = async (params: PeriodReportParams): Promise<Repor
   ];
 
   const period = `${formatReportDay(params.from)}–${formatReportDay(params.to)}`;
-  const subtitle = `${period} · ${officeSubtitle(params.office)} · сутки с 05:00 по Ташкенту`;
+  const subtitle = `${period} · ${officeSubtitle(params.office)} · сутки по Ташкенту`;
 
   return {
     report: 'sales',

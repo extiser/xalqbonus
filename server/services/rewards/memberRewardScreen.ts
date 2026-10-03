@@ -6,10 +6,11 @@ import type { PersonRewardRow, SheetRewardRow } from '#server/repositories/rewar
 import { toMemberOffice } from '#server/services/offices/readMemberOffices';
 import {
   calendarDayMoment,
+  DAY_MS,
   formatCalendarDate,
   formatClockTime,
+  formatDayKey,
   formatDayMonthWord,
-  parkDayKey,
 } from '#server/utils/parkTime';
 import type { MemberGift, MemberReward, MemberRewardTexts, MemberSheetReward } from '#shared/types/rewards';
 
@@ -23,12 +24,17 @@ const formatMoment = (moment: Date): string =>
   `${formatCalendarDate(moment)}, ${formatClockTime(moment)}`;
 
 /**
- * День, до которого забрать ручную награду: сутки парка её последнего мига. Срок ручной
- * выдачи — 05:00 после дня «Забрать до» (issue #266), и календарный день этого мига назвал бы
- * следующее число, а не то, что выбрал сотрудник и написано в сообщении.
+ * День, до которого забрать ручную награду. Срок ручной выдачи — граница суток после дня
+ * «Забрать до» (issue #266), и календарный день самого срока назвал бы следующее число, а не то,
+ * что выбрал сотрудник и написано в сообщении.
+ *
+ * Граница — 00:00 следующего дня по Ташкенту (docs/decisions.md → «Сутки — с 00:00 до 00:00
+ * по Ташкенту; у акции — свои, с 05:00»), а у выданных до перехода на календарные сутки —
+ * 05:00: их срок хранится меткой и не пересчитывается (issue #352). Полсуток назад от любой
+ * из двух — внутри выбранного дня.
  */
 const manualDeadlineDay = (expiresAt: Date): Date =>
-  calendarDayMoment(parkDayKey(new Date(expiresAt.getTime() - 1)));
+  calendarDayMoment(formatDayKey(new Date(expiresAt.getTime() - DAY_MS / 2)));
 
 /**
  * Срок ждущей словом месяца: «5 октября». Пустого срока у ждущей не бывает — у баллов его нет,
@@ -152,7 +158,7 @@ export const describeMemberReward = (row: PersonRewardRow, language: Language): 
 
 /**
  * Ждущий подарок на языке водителя. Срок — день раздачи словом месяца: баллы придут сами
- * в конце этих суток парка. Обложка — тоже на его языке (issue #236).
+ * в конце этого календарного дня. Обложка — тоже на его языке (issue #236).
  */
 export const describeMemberGift = (row: MemberGiftRow, language: Language): MemberGift => ({
   rewardId: row.id,

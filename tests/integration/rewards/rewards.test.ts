@@ -28,7 +28,7 @@ import { readDriverRewards } from '#server/services/rewards/readDriverRewards';
 import { readMemberRewards } from '#server/services/rewards/readMemberRewards';
 import { readRewardGrantOptions } from '#server/services/rewards/readRewardGrantOptions';
 import { receiveStock } from '#server/services/stock/receiveStock';
-import { calendarDayMoment, formatDayMonthWord, parkDayKey, shiftDayKey } from '#server/utils/parkTime';
+import { calendarDayMoment, formatDayKey, formatDayMonthWord, shiftDayKey } from '#server/utils/parkTime';
 import {
   cleanupTestData,
   countTransfersByReason,
@@ -51,6 +51,7 @@ import {
   expireTestReward,
   listRewardMovements,
   readReward,
+  setTestRewardExpiry,
 } from '../support/rewards';
 
 /**
@@ -443,7 +444,7 @@ describe('награды', () => {
 
   it('отказы: «Забрать до» — не раньше завтра, «Почему» на обоих языках, текст влезает в сообщение', async () => {
     const scenario = await prizeScenario();
-    const today = parkDayKey(new Date());
+    const today = formatDayKey(new Date());
     const custom = (fields: Partial<Parameters<typeof grantManualReward>[0]>) =>
       grantManualReward({
         personId: scenario.personId,
@@ -476,13 +477,13 @@ describe('награды', () => {
     expect(await readStock(scenario.officeId, scenario.productId)).toEqual({ onHand: 3, reserved: 0 });
   });
 
-  it('«Забрать до» завтра — награда сгорает в 05:00 послезавтра по Ташкенту, водитель видит завтрашний день', async () => {
+  it('«Забрать до» завтра — награда сгорает в 00:00 послезавтра по Ташкенту, водитель видит завтрашний день', async () => {
     const scenario = await prizeScenario();
-    const tomorrow = shiftDayKey(parkDayKey(new Date()), 1);
+    const tomorrow = shiftDayKey(formatDayKey(new Date()), 1);
     const reward = await grantPrize(scenario, tomorrow);
 
     expect(reward.expiresAt?.toISOString()).toBe(
-      new Date(`${shiftDayKey(tomorrow, 1)}T05:00:00+05:00`).toISOString(),
+      new Date(`${shiftDayKey(tomorrow, 1)}T00:00:00+05:00`).toISOString(),
     );
 
     const { rewards } = await readMemberRewards({ personId: scenario.personId, language: 'ru' });
@@ -494,6 +495,18 @@ describe('награды', () => {
       claimHint: `заберите до ${day}`,
       stateText: `Ждёт в офисе до ${day}`,
     });
+  });
+
+  it('выданная до календарных суток — срок 05:00 остаётся, водитель видит тот же день', async () => {
+    const scenario = await prizeScenario();
+    const tomorrow = shiftDayKey(formatDayKey(new Date()), 1);
+    const reward = await grantPrize(scenario, tomorrow);
+
+    await setTestRewardExpiry(reward.id, new Date(`${shiftDayKey(tomorrow, 1)}T05:00:00+05:00`));
+
+    const { rewards } = await readMemberRewards({ personId: scenario.personId, language: 'ru' });
+
+    expect(rewards[0]?.stateHint).toBe(`до ${formatDayMonthWord(calendarDayMoment(tomorrow), 'ru')}`);
   });
 
   it('«Почему» — водителю на его языке, стойке — русское', async () => {
@@ -515,7 +528,7 @@ describe('награды', () => {
   it('шторка: ручная награда до отметки «видел», потом только в разделе; чужая отметка не ставится', async () => {
     const scenario = await prizeScenario();
     const stranger = await prizeScenario();
-    const tomorrow = shiftDayKey(parkDayKey(new Date()), 1);
+    const tomorrow = shiftDayKey(formatDayKey(new Date()), 1);
     const reward = await grantPrize(scenario, tomorrow);
     const foreign = await grantPrize(stranger);
 

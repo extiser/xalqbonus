@@ -20,7 +20,7 @@ import {
   RewardProductUnavailableError,
 } from '#server/services/rewards/errors';
 import { grantReward, type RewardGift } from '#server/services/rewards/grantReward';
-import { parkDayKey, shiftDayKey } from '#server/utils/parkTime';
+import { formatDayKey, shiftDayKey } from '#server/utils/parkTime';
 import { isCalendarDay } from '#shared/campaign';
 import { GIFT_REASON_MAX_LENGTH } from '#shared/gift';
 
@@ -87,8 +87,8 @@ const requireOffice = (input: ManualRewardInput): string => {
 };
 
 /**
- * «Забрать до» — тем же правилом, что у подарка: день календаря и не раньше завтрашнего дня
- * парка. Сегодняшний не годится — награда сгорела бы этой же ночью, не успев подождать водителя.
+ * «Забрать до» — тем же правилом, что у подарка: день календаря и не раньше завтрашнего
+ * календарного дня. Сегодняшний не годится — награда сгорела бы этой же ночью, не успев подождать водителя.
  */
 const requireUntilDate = (input: ManualRewardInput, now: Date): string => {
   const untilDate = input.untilDate.trim();
@@ -98,7 +98,7 @@ const requireUntilDate = (input: ManualRewardInput, now: Date): string => {
   }
 
   // Строки `YYYY-MM-DD` сравниваются как даты.
-  if (untilDate < shiftDayKey(parkDayKey(now), 1)) {
+  if (untilDate < shiftDayKey(formatDayKey(now), 1)) {
     throw new InvalidManualRewardError('until_date_too_early');
   }
 

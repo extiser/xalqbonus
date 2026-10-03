@@ -35,7 +35,7 @@ export const formatReportDay = (day: string): string => {
 /**
  * Подпись отчёта по движению товара за период (issue #309): период, офис, сутки. Конец,
  * обрезанный текущим моментом, говорит об этом, как подпись остатков: «На конец» тогда —
- * сейчас, а не 05:00 суток после последних.
+ * сейчас, а не 00:00 суток после последних.
  */
 export const periodSubtitle = (
   params: PeriodReportParams,
@@ -47,7 +47,7 @@ export const periodSubtitle = (
     moments.end.getTime() < moments.periodEnd.getTime()
       ? ` · на конец — сейчас, ${formatClockTime(moments.end)} ${formatCalendarDate(moments.end)}`
       : '';
-  const subtitle = `${period}${cut} · ${officeSubtitle(params.office)} · сутки с 05:00 по Ташкенту`;
+  const subtitle = `${period}${cut} · ${officeSubtitle(params.office)} · сутки по Ташкенту`;
 
   return params.from < REPORTS_HISTORY_START ? `${subtitle}. ${historyNote}` : subtitle;
 };
@@ -60,7 +60,7 @@ export const historyNote = (missing: string): string =>
   `Данные — с ${formatReportDay(REPORTS_HISTORY_START)}: ${missing} старого бота в системе нет.`;
 
 /**
- * Подпись отчёта, где событие ложится в сутки парка своим моментом (issue #310), — как у продаж:
+ * Подпись отчёта, где событие ложится в сутки своим моментом (issue #310), — как у продаж:
  * период, место, сутки, и строка про историю, если период начат до перехода.
  */
 export const eventPeriodSubtitle = (
@@ -68,7 +68,7 @@ export const eventPeriodSubtitle = (
   place: string,
   history: string,
 ): string => {
-  const subtitle = `${formatReportDay(params.from)}–${formatReportDay(params.to)} · ${place} · сутки с 05:00 по Ташкенту`;
+  const subtitle = `${formatReportDay(params.from)}–${formatReportDay(params.to)} · ${place} · сутки по Ташкенту`;
 
   return params.from < REPORTS_HISTORY_START ? `${subtitle}. ${history}` : subtitle;
 };
