@@ -1074,7 +1074,6 @@ const openProfile = (): void => {
   openScreen('profile');
 };
 
-/** Раздел истории: страницы уже читает главная, раздел показывает их все и листает дальше. */
 /** Плашка опроса на главной. Опрос не открылся — недоступен или не прочитался — главная перечитывается. */
 const openSurvey = async (surveyId: string): Promise<void> => {
   if (await memberSurvey.open(surveyId)) {
@@ -1120,6 +1119,7 @@ const surveyScreen = computed(() => {
   };
 });
 
+/** Раздел истории: страницы уже читает главная, раздел показывает их все и листает дальше. */
 const openHistory = (): void => {
   openScreen('history');
 };
