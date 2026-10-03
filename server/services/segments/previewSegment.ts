@@ -3,6 +3,7 @@ import {
   findSegment,
   listSegmentMembersPage,
 } from '#server/repositories/segments';
+import { checkSegmentSurvey } from '#server/services/segments/checkSegmentSurvey';
 import { UnknownSegmentError } from '#server/services/segments/errors';
 import { assertSegmentBounded, toSegmentConditions } from '#server/services/segments/fields';
 import { SEGMENT_PREVIEW_LIMIT } from '#shared/segment';
@@ -71,7 +72,8 @@ export const previewSavedSegment = async (
 /**
  * Состав по условиям формы, ничего не сохраняя. Условия уже разобраны. Признак демо — тоже
  * из формы (issue #212): несохранённый сегмент сохранится с ним же, и пустые условия у него —
- * все демо-водители. Живому без условий — отказ, как при сохранении.
+ * все демо-водители. Живому без условий — отказ, как при сохранении; опросу условия
+ * не того мира или не замороженному — тоже (issue #324).
  */
 export const previewSegmentConditions = async (
   conditions: SegmentConditions,
@@ -79,6 +81,7 @@ export const previewSegmentConditions = async (
   offset: number,
 ): Promise<SegmentPreviewResponse> => {
   assertSegmentBounded(conditions, isDemo);
+  await checkSegmentSurvey(conditions, isDemo);
 
   return previewConditions(conditions, isDemo, offset);
 };

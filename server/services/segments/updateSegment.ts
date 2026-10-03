@@ -1,4 +1,5 @@
 import { findSegment, updateSegmentFields } from '#server/repositories/segments';
+import { checkSegmentSurvey } from '#server/services/segments/checkSegmentSurvey';
 import { UnknownSegmentError } from '#server/services/segments/errors';
 import {
   assertSegmentBounded,
@@ -15,7 +16,7 @@ import type { Segment } from '#shared/types/segment';
  * кнопка и своя ручка.
  *
  * Пустые условия — только у демо-сегмента (issue #212): признак берётся из записи, он
- * после заведения не меняется.
+ * после заведения не меняется. По нему же сверяется мир опроса условия (issue #324).
  */
 export const updateSegment = async (segmentId: string, fields: SegmentFields): Promise<Segment> => {
   const current = await findSegment(segmentId);
@@ -25,6 +26,7 @@ export const updateSegment = async (segmentId: string, fields: SegmentFields): P
   }
 
   assertSegmentBounded(fields.conditions, current.isDemo);
+  await checkSegmentSurvey(fields.conditions, current.isDemo);
 
   const updated = await updateSegmentFields(segmentId, fields);
   const row = updated ? await findSegment(segmentId) : null;

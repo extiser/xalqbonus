@@ -6,7 +6,7 @@ import { COMPLETED_TRIP_STATUS } from '#server/utils/tripStatus';
 // собираются в воркер, бандл которого знает только псевдоним `#server` (package.json →
 // build:worker).
 import { isSegmentBounded } from '../../shared/segment';
-import type { SegmentConditions } from '../../shared/types/segment';
+import type { SegmentConditions, SegmentSurveyState } from '../../shared/types/segment';
 
 /**
  * Сегменты водителей и их состав.
@@ -34,6 +34,10 @@ export type SegmentRow = {
   telegramLinked: boolean | null;
   balanceMin: bigint | null;
   balanceMax: bigint | null;
+  /** Опрос условия (issue #324). Заданы оба или ни одного — `segments_survey_condition_check`. */
+  surveyId: string | null;
+  surveyState: SegmentSurveyState | null;
+  surveyTitle: string | null;
   /** Демо-сегмент (issue #212): отбирает только демо-водителей, живой — только живых. */
   isDemo: boolean;
   createdByName: string;
@@ -52,6 +56,9 @@ const SEGMENT_SELECT = Prisma.sql`
          segment."telegram_linked"     AS "telegramLinked",
          segment."balance_min"         AS "balanceMin",
          segment."balance_max"         AS "balanceMax",
+         segment."survey_id"           AS "surveyId",
+         segment."survey_state"::text  AS "surveyState",
+         survey."title"                AS "surveyTitle",
          segment."is_demo"             AS "isDemo",
          author."full_name"            AS "createdByName",
          segment."created_at"          AS "createdAt",
@@ -59,6 +66,7 @@ const SEGMENT_SELECT = Prisma.sql`
          segment."archived_at"         AS "archivedAt"
     FROM xb.segments AS segment
     JOIN xb.employees AS author ON author."id" = segment."created_by_id"
+    LEFT JOIN xb.surveys AS survey ON survey."id" = segment."survey_id"
 `;
 
 /**
@@ -107,6 +115,7 @@ export const insertSegment = async (
       "days_since_trip_min", "days_since_trip_max",
       "program_member", "telegram_linked",
       "balance_min", "balance_max",
+      "survey_id", "survey_state",
       "created_by_id", "is_demo"
     )
     VALUES (
@@ -118,6 +127,8 @@ export const insertSegment = async (
       ${conditions.telegramLinked}::boolean,
       ${conditions.balanceMin}::bigint,
       ${conditions.balanceMax}::bigint,
+      ${conditions.surveyId}::uuid,
+      ${conditions.surveyState}::xb.segment_survey_state,
       ${input.createdById}::uuid,
       ${input.isDemo}
     )
@@ -154,6 +165,8 @@ export const updateSegmentFields = async (
            "telegram_linked"     = ${conditions.telegramLinked}::boolean,
            "balance_min"         = ${conditions.balanceMin}::bigint,
            "balance_max"         = ${conditions.balanceMax}::bigint,
+           "survey_id"           = ${conditions.surveyId}::uuid,
+           "survey_state"        = ${conditions.surveyState}::xb.segment_survey_state,
            "updated_at"          = now()
      WHERE "id" = ${segmentId}::uuid
   `;
@@ -215,6 +228,13 @@ export const updateSegmentArchived = async (
  * условие» по-прежнему про условия, — и отключить его незаданным нельзя: признак есть всегда.
  * Поэтому живой срез демо-водителя не возьмёт никогда, и демо-акция живого — тоже. Демо-сегменту
  * условия необязательны: без них он отдаёт всех демо-водителей (`isSegmentBounded`).
+ *
+ * Условие по опросу (issue #324) берёт только получивших опрос: человек есть в снимке хотя бы
+ * одной рассылки с этим опросом с исходом `sent`. Выключившие уведомления, неотправленные
+ * и с мёртвым каналом опроса не получали. Из получивших `not_completed` — те, у кого
+ * в `survey_responses` нет ни прохождения, ни отказа (нет строки — не открывал вовсе),
+ * `declined` — отказавшиеся и не прошедшие после отказа. Прошедший выпадает из обоих сам:
+ * сегмент живой, а замораживает состав снимок рассылки.
  */
 export const segmentMembersSql = (conditions: SegmentConditions, isDemo: boolean): Prisma.Sql => {
   if (!isSegmentBounded(conditions, isDemo)) {
@@ -232,7 +252,10 @@ export const segmentMembersSql = (conditions: SegmentConditions, isDemo: boolean
                                                                   AS "daysSinceTrip",
                    (settings."person_id" IS NOT NULL)             AS "programMember",
                    (link."person_id" IS NOT NULL)                 AS "telegramLinked",
-                   account."balance"
+                   account."balance",
+                   (received."person_id" IS NOT NULL)             AS "surveyReceived",
+                   response."declined_at"                         AS "surveyDeclinedAt",
+                   response."completed_at"                        AS "surveyCompletedAt"
               FROM xb.persons AS person
               -- Последняя завершённая поездка — одним проходом по поездкам на весь реестр,
               -- а не подзапросом на каждого человека: счётчику нужен весь реестр целиком.
@@ -251,6 +274,20 @@ export const segmentMembersSql = (conditions: SegmentConditions, isDemo: boolean
                      ON link."person_id" = person."id" AND link."closed_at" IS NULL
               LEFT JOIN xb.accounts AS account
                      ON account."person_id" = person."id" AND account."type" = 'driver'
+              -- Получившие опрос условия — множеством людей: человек бывает в снимках
+              -- нескольких рассылок одного опроса, и строк соединение не множит. Условия
+              -- по опросу нет — множество пустое.
+              LEFT JOIN (
+                   SELECT DISTINCT recipient."person_id"
+                     FROM xb.mailing_recipients AS recipient
+                     JOIN xb.mailings AS mailing ON mailing."id" = recipient."mailing_id"
+                    WHERE mailing."survey_id" = ${conditions.surveyId}::uuid
+                      AND recipient."outcome" = 'sent'
+              ) AS received ON received."person_id" = person."id"
+              -- Прохождение у человека по опросу одно — первичным ключом пары.
+              LEFT JOIN xb.survey_responses AS response
+                     ON response."survey_id" = ${conditions.surveyId}::uuid
+                    AND response."person_id" = person."id"
              WHERE person."is_demo" = ${isDemo}::boolean
                -- Спрятанный демо-водитель в срез не попадает (issue #252); у живого пусто всегда.
                AND person."demo_hidden_at" IS NULL
@@ -267,6 +304,14 @@ export const segmentMembersSql = (conditions: SegmentConditions, isDemo: boolean
             OR candidate."balance" >= ${conditions.balanceMin}::bigint)
        AND (${conditions.balanceMax}::bigint IS NULL
             OR candidate."balance" <= ${conditions.balanceMax}::bigint)
+       AND (${conditions.surveyId}::uuid IS NULL
+            OR (candidate."surveyReceived"
+                AND candidate."surveyCompletedAt" IS NULL
+                AND CASE ${conditions.surveyState}::text
+                      WHEN 'not_completed' THEN candidate."surveyDeclinedAt" IS NULL
+                      WHEN 'declined' THEN candidate."surveyDeclinedAt" IS NOT NULL
+                      ELSE FALSE
+                    END))
   `;
 };
 

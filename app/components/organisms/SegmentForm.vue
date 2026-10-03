@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import type { SelectOption } from '~/types/selectOption';
 import {
   fromConditionsDraft,
   PROGRAM_MEMBER_OPTIONS,
+  SURVEY_STATE_OPTIONS,
   TELEGRAM_LINKED_OPTIONS,
   type SegmentConditionsDraft,
   type SegmentFlagChoice,
 } from '~/utils/segmentConditions';
 import { isSegmentBounded, SEGMENT_EMPTY_CONDITIONS_TEXT } from '#shared/segment';
+import type { SegmentSurveyState } from '#shared/types/segment';
 
 /**
  * Форма сегмента — одна на заведение и правку: имя, описание и условия отбора.
@@ -23,6 +26,9 @@ import { isSegmentBounded, SEGMENT_EMPTY_CONDITIONS_TEXT } from '#shared/segment
  * `readonly` — демо-сегмент у того, кто его не правит (issue #212): условия видны, но закрыты.
  * Поле «Демо» нового сегмента ставит страница слотом. Демо-сегменту условия необязательны:
  * без них он берёт всех демо-водителей, и кнопка не закрывается.
+ *
+ * Опросы для условия (issue #324) собирает страница (`segmentSurveyOptions`): список — запрос,
+ * а в компоненты данные не ходят (docs/frontend.md → «Данные в компоненты не ходят»).
  */
 const props = defineProps<{
   title: string;
@@ -33,6 +39,8 @@ const props = defineProps<{
   /** Что ответил сервер на последнюю попытку. `null` — ответа ждать нечего. */
   error: string | null;
   readonly?: boolean;
+  /** Опросы, годные в условие: замороженные того же мира и уже выбранный. */
+  surveyOptions: SelectOption[];
 }>();
 
 const emit = defineEmits<{ submit: [] }>();
@@ -62,6 +70,20 @@ const flagField = (key: 'programMember' | 'telegramLinked') =>
       conditions.value = { ...conditions.value, [key]: value as SegmentFlagChoice };
     },
   });
+
+const surveyId = computed({
+  get: () => conditions.value.surveyId,
+  set: (value: string) => {
+    conditions.value = { ...conditions.value, surveyId: value };
+  },
+});
+
+const surveyState = computed({
+  get: (): string => conditions.value.surveyState,
+  set: (value: string) => {
+    conditions.value = { ...conditions.value, surveyState: value as SegmentSurveyState };
+  },
+});
 
 const daysSinceTripMin = boundField('daysSinceTripMin');
 const daysSinceTripMax = boundField('daysSinceTripMax');
@@ -131,6 +153,32 @@ const hasConditions = computed(() =>
           </div>
           <p class="text-sm text-slate-500">
             Считается по водительскому счёту. Без счёта человек под это условие не подходит.
+          </p>
+        </fieldset>
+
+        <fieldset class="space-y-3">
+          <legend class="text-sm font-semibold text-slate-900">Опрос</legend>
+          <div class="grid gap-4 sm:grid-cols-2">
+            <label class="block">
+              <span class="mb-1 block text-sm font-medium text-slate-700">Опрос</span>
+              <AtomsSelectInput v-model="surveyId" :options="surveyOptions">
+                <option value="">Не важно</option>
+              </AtomsSelectInput>
+            </label>
+            <label class="block">
+              <span class="mb-1 block text-sm font-medium text-slate-700">Кто из получивших</span>
+              <AtomsSelectInput
+                v-model="surveyState"
+                :options="SURVEY_STATE_OPTIONS"
+                :disabled="surveyId === ''"
+              />
+            </label>
+          </div>
+          <p class="text-sm text-slate-500">
+            Получил — рассылка с этим опросом ушла человеку. Выключившие уведомления
+            и те, до кого сообщение не дошло, опроса не получали. Прошедший опрос выпадает
+            из сегмента сам; отказавшийся в «не прошёл» не входит. В списке — опросы, уже
+            уходившие рассылкой.
           </p>
         </fieldset>
 

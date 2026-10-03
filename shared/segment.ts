@@ -39,6 +39,8 @@ export const EMPTY_SEGMENT_CONDITIONS: SegmentConditions = {
   telegramLinked: null,
   balanceMin: null,
   balanceMax: null,
+  surveyId: null,
+  surveyState: null,
 };
 
 export const SEGMENT_EMPTY_CONDITIONS_TEXT =
