@@ -12,10 +12,20 @@ import type { SurveyTextField } from '#shared/types/survey';
  * `contentReadonly` — опрос заморожен: тексты и баллы закрыты, а название и срок правятся
  * (служебное название ответы не трогает, срок может понадобиться продлить).
  * `readonly` — закрыто всё: демо-опрос у того, кто демо не правит.
+ *
+ * Последний день — не раньше сегодняшнего по Ташкенту (issue #348): закрыть опрос сейчас можно
+ * только кнопкой «Завершить опрос». `endsOnMin` не даёт выбрать прошлое в календаре, а отказ
+ * сервера встаёт у поля — `endsOnError`. У завершённого досрочно срок не правится — `finished`.
  */
 defineProps<{
   contentReadonly: boolean;
   readonly: boolean;
+  /** Опрос завершён досрочно: последний день закрыт. */
+  finished: boolean;
+  /** Сегодняшний день, `YYYY-MM-DD`: раньше него последний день не ставится. */
+  endsOnMin: string;
+  /** Отказ сервера по последнему дню. `null` — отказа нет. */
+  endsOnError: string | null;
 }>();
 
 const fields = defineModel<SurveyFormFields>('fields', { required: true });
@@ -73,12 +83,20 @@ const TEXT_PAIRS: TextPair[] = [
             hint="Для списка опросов. Водителю не уходит."
           />
         </div>
-        <MoleculesFormField
-          v-model="fields.endsOn"
-          label="Последний день"
-          type="date"
-          hint="Опрос закрыт с 00:00 следующего дня по Ташкенту."
-        />
+        <fieldset :disabled="readonly || finished" class="min-w-0">
+          <MoleculesFormField
+            v-model="fields.endsOn"
+            label="Последний день"
+            type="date"
+            :min="finished ? undefined : endsOnMin"
+            :error="endsOnError"
+            :hint="
+              finished
+                ? 'Опрос завершён досрочно — последний день больше не правится.'
+                : 'Опрос закрыт с 00:00 следующего дня по Ташкенту.'
+            "
+          />
+        </fieldset>
         <fieldset :disabled="readonly || contentReadonly" class="min-w-0">
           <MoleculesNumberField
             v-model="fields.points"

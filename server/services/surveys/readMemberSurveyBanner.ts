@@ -1,32 +1,35 @@
 import { countedPlainText, plainText } from '#server/bot/texts';
-import { findOpenSurveyResponse } from '#server/repositories/surveyResponses';
+import { listUnfinishedSurveyResponses } from '#server/repositories/surveyResponses';
 import type { LinkedDriver } from '#server/services/drivers/readLinkedDriver';
+import { isSurveyClosed } from '#server/services/surveys/closed';
 import {
   surveyEndsOnWord,
   surveyPointsLabel,
   withStrongPoints,
 } from '#server/services/surveys/memberSurveyScreen';
-import { formatDayKey } from '#server/utils/parkTime';
 import type { MemberSurveyBanner } from '#shared/types/memberSurvey';
 
 /**
  * Плашка опроса на главной под баллами (issue #323) — одна из двух, на языке водителя:
  *
- * - «Опрос не закончен» — есть первый ответ, нет завершения, срок не прошёл. Заголовок —
+ * - «Опрос не закончен» — есть первый ответ, нет завершения, опрос не закрыт. Заголовок —
  *   по вопросам без ответа;
- * - «Пройдите опрос» — опрос открыт, ответов нет, срок не прошёл. И после отказа тоже: «Закрыть»
+ * - «Пройдите опрос» — опрос открыт, ответов нет, опрос не закрыт. И после отказа тоже: «Закрыть»
  *   могли нажать случайно (решение Руслана 03-10-2026).
  *
  * Кто опрос не открывал, плашки не видит: у него в чате сообщение рассылки с кнопкой. Открытых
- * опросов несколько — одна плашка, выбор в `findOpenSurveyResponse`.
+ * опросов несколько — одна плашка: первый незакрытый в порядке `listUnfinishedSurveyResponses`.
  *
- * «Срок не прошёл» — по календарному дню парка, как `isSurveyClosed`: опрос не связан с поездками.
+ * «Не закрыт» — `isSurveyClosed`, то же правило, что у экрана опроса: ни срок не прошёл, ни опрос
+ * не завершён досрочно (issue #348).
  */
 export const readMemberSurveyBanner = async (
   driver: LinkedDriver,
   now: Date,
 ): Promise<MemberSurveyBanner | null> => {
-  const row = await findOpenSurveyResponse(driver.personId, formatDayKey(now), driver.isDemo);
+  const row = (await listUnfinishedSurveyResponses(driver.personId, driver.isDemo)).find(
+    (candidate) => !isSurveyClosed(candidate, now),
+  );
 
   if (!row) {
     return null;

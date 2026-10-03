@@ -13,7 +13,7 @@ import type {
 } from '#shared/types/campaign';
 import type { EmployeeAccount } from '#shared/types/employee';
 import type { Mailing } from '#shared/types/mailing';
-import type { SurveyQuestionType } from '#shared/types/survey';
+import type { SurveyListItem, SurveyQuestionType } from '#shared/types/survey';
 import type { OfficeOrder } from '#shared/types/orders';
 import type { OfficeReward } from '#shared/types/rewards';
 import type { SyncRunRow, SyncSkipRow } from '#shared/types/sync';
@@ -402,3 +402,28 @@ const SURVEY_QUESTION_TYPE_LABELS: Record<SurveyQuestionType, string> = {
 
 export const surveyQuestionTypeLabel = (type: SurveyQuestionType): string =>
   SURVEY_QUESTION_TYPE_LABELS[type];
+
+type SurveyClosing = Pick<SurveyListItem, 'closed' | 'finishedAt'>;
+
+/**
+ * Пометка закрытого опроса — бейджем в списке и в шапке: завершённый досрочно и закрытый
+ * по сроку называются по-разному (issue #348). `null` — опрос открыт.
+ */
+export const surveyClosedLabel = (survey: SurveyClosing): string | null => {
+  if (survey.finishedAt !== null) {
+    return 'завершён досрочно';
+  }
+
+  return survey.closed ? 'закрыт по сроку' : null;
+};
+
+/** Опрос в выпадающем списке рассылки и сегмента: закрытый — с причиной в скобках. */
+export const surveyOptionLabel = (survey: SurveyClosing & Pick<SurveyListItem, 'title'>): string => {
+  const title = survey.title ?? 'Без названия';
+
+  if (survey.finishedAt !== null) {
+    return `${title} (завершён досрочно)`;
+  }
+
+  return survey.closed ? `${title} (срок прошёл)` : title;
+};

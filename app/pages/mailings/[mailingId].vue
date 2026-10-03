@@ -5,13 +5,14 @@ import { useDemoEditor } from '~/composables/useDemoEditor';
 import { useDraftAutosave } from '~/composables/useDraftAutosave';
 import { ACTIVITY_SLICE, useMailingSurveyResults } from '~/composables/useMailingSurveyResults';
 import { formatDateTime, formatNumber, pluralize } from '~/utils/format';
-import { mailingStatusLabel, mailingStatusTone } from '~/utils/labels';
+import { mailingStatusLabel, mailingStatusTone, surveyOptionLabel } from '~/utils/labels';
 import { failureText } from '~/utils/requestError';
 import { toLoadState } from '~/utils/loadState';
 import {
   MAILING_RECALL_WINDOW_HOURS,
   MAILING_SEGMENT_ARCHIVED_TEXT,
   MAILING_SURVEY_CLOSED_TEXT,
+  MAILING_SURVEY_FINISHED_TEXT,
   mailingAudienceEmptyText,
   mailingLaunchProblems,
   mailingLaunchProblemText,
@@ -187,7 +188,7 @@ const segmentOptions = computed<SelectOption[]>(() =>
     })),
 );
 
-/** Опросы того же мира, не закрытые по сроку, и уже выбранный — даже закрытый. */
+/** Опросы того же мира, не закрытые — ни по сроку, ни досрочно, — и уже выбранный, даже закрытый. */
 const surveyOptions = computed<SelectOption[]>(() =>
   (surveys.value?.surveys ?? [])
     .filter(
@@ -195,11 +196,7 @@ const surveyOptions = computed<SelectOption[]>(() =>
         survey.surveyId === fields.value.surveyId ||
         (!survey.closed && survey.isDemo === isDemo.value),
     )
-    .map((survey) => {
-      const title = survey.title ?? 'Без названия';
-
-      return { value: survey.surveyId, label: survey.closed ? `${title} (срок прошёл)` : title };
-    }),
+    .map((survey) => ({ value: survey.surveyId, label: surveyOptionLabel(survey) })),
 );
 
 /**
@@ -334,7 +331,9 @@ const launchProblems = computed(() => {
     problems.push(MAILING_SEGMENT_ARCHIVED_TEXT);
   }
 
-  if (selectedSurveyItem.value?.closed === true || selectedSurvey.value?.closed === true) {
+  if (selectedSurveyItem.value?.finishedAt != null || selectedSurvey.value?.finishedAt != null) {
+    problems.push(MAILING_SURVEY_FINISHED_TEXT);
+  } else if (selectedSurveyItem.value?.closed === true || selectedSurvey.value?.closed === true) {
     problems.push(MAILING_SURVEY_CLOSED_TEXT);
   }
 

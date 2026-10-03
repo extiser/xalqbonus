@@ -1,6 +1,7 @@
 import { consola } from 'consola';
 import { db } from '#server/db';
 import { insertDraftSurvey, replaceSurveyQuestions } from '#server/repositories/surveys';
+import { assertSurveyEndsOnNotPast } from '#server/services/surveys/closed';
 import { EMPTY_SURVEY_CONTENT, type SurveyRequest } from '#server/services/surveys/fields';
 import { readSurvey } from '#server/services/surveys/readSurvey';
 import type { Survey } from '#shared/types/survey';
@@ -10,6 +11,8 @@ import type { Survey } from '#shared/types/survey';
  *
  * Заводит его форма первым набранным символом (issue #148), поэтому поля могут быть пустыми
  * все: полнота текстов на обоих языках — условие заморозки, а не заведения.
+ *
+ * Последний день — не в прошлом (issue #348): закрыть опрос сейчас можно только кнопкой.
  *
  * Признак демо ставится здесь и больше нигде — как у рассылки (issue #212). Кто вправе его
  * поставить, решила ручка — `requireDemoEditor`.
@@ -21,6 +24,8 @@ export const createSurvey = async (
   createdById: string,
   isDemo: boolean,
 ): Promise<Survey> => {
+  assertSurveyEndsOnNotPast(request.settings.endsOn, null, new Date());
+
   const { questions, ...content } = request.content ?? EMPTY_SURVEY_CONTENT;
 
   const surveyId = await db.$transaction(async (transaction) => {

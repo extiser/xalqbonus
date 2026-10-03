@@ -282,3 +282,16 @@ export const formatDayRange = (from: string | null, to: string | null): string =
 
   return `${formatCalendarDate(from)} — ${formatCalendarDate(to)}`;
 };
+
+const DAY_KEY = new Intl.DateTimeFormat('en-CA', {
+  timeZone: DISPLAY_TIME_ZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+/**
+ * Календарный день момента по Ташкенту — `2026-10-03`, как `formatDayKey` на сервере. Нужен
+ * полю даты: значение `<input type="date">` и его `min` — день в этом же виде.
+ */
+export const formatDayKey = (moment: Date): string => DAY_KEY.format(moment);

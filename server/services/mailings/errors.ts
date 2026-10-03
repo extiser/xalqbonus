@@ -155,10 +155,17 @@ export class MailingSurveyDemoMismatchError extends MailingError {
   }
 }
 
-/** Опрос закрыт по сроку (issue #321): водитель открыл бы опрос, который уже не принимает ответов. */
+/**
+ * Опрос закрыт (issue #321) — по сроку или досрочно (issue #348): водитель открыл бы опрос,
+ * который уже не принимает ответов.
+ */
 export class MailingSurveyClosedError extends MailingError {
-  constructor(public readonly surveyId: string) {
-    super(`опрос ${surveyId} закрыт по сроку`);
+  constructor(
+    public readonly surveyId: string,
+    /** Завершён досрочно — продлить его нельзя, и отказ говорит об этом по-своему. */
+    public readonly finished: boolean,
+  ) {
+    super(`опрос ${surveyId} закрыт ${finished ? 'досрочно' : 'по сроку'}`);
   }
 }
 

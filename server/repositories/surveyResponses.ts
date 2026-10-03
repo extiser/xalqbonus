@@ -234,39 +234,42 @@ export const replaceSurveyAnswer = async (input: SurveyAnswerWrite, client: Exec
   `;
 };
 
-/** Незаконченный опрос человека для плашки на главной. */
-export type OpenSurveyResponseRow = {
+/** Незаконченный опрос человека — кандидат на плашку на главной. */
+export type UnfinishedSurveyResponseRow = {
   surveyId: string;
   /** Есть первый ответ. */
   started: boolean;
   points: number;
-  /** `YYYY-MM-DD`. */
+  /** `YYYY-MM-DD`. У замороженного опроса пустым не бывает. */
   endsOn: string;
+  /** Завершён досрочно (issue #348). */
+  finishedAt: Date | null;
   questionCount: number;
   /** Вопросов с сохранённым ответом — с пропущенными необязательными вместе. */
   answeredCount: number;
 };
 
 /**
- * Открытый, но не пройденный опрос с самым свежим действием — для плашки на главной. Пусто —
- * плашки нет.
+ * Открытые, но не пройденные опросы человека — кандидаты на плашку на главной, в порядке выбора:
+ * начатый раньше неначатого, среди равных — с самым поздним действием, ответом или открытием
+ * (issue #323). Отказ плашку не убирает: «Закрыть» могли нажать случайно (решение Руслана
+ * 03-10-2026).
  *
- * Только замороженные, не закрытые по сроку на `today` и видимые человеку: демо-опрос — только
- * демо-водителю. Начатый идёт раньше неначатого, среди равных — с самым поздним действием,
- * ответом или открытием (issue #323). Отказ плашку не убирает: «Закрыть» могли нажать случайно
- * (решение Руслана 03-10-2026).
+ * Только замороженные и видимые человеку: демо-опрос — только демо-водителю. Закрыт ли опрос —
+ * по сроку или досрочно — здесь не решается: правило одно на всё и живёт в `isSurveyClosed`,
+ * его применяет сервис плашки (issue #348). Незаконченных опросов у человека единицы.
  */
-export const findOpenSurveyResponse = async (
+export const listUnfinishedSurveyResponses = async (
   personId: string,
-  today: string,
   personIsDemo: boolean,
   client: Executor = db,
-): Promise<OpenSurveyResponseRow | null> => {
-  const rows = await client.$queryRaw<OpenSurveyResponseRow[]>`
+): Promise<UnfinishedSurveyResponseRow[]> =>
+  client.$queryRaw<UnfinishedSurveyResponseRow[]>`
     SELECT response."survey_id"           AS "surveyId",
            response."started_at" IS NOT NULL AS "started",
            survey."points",
            survey."ends_on"::text          AS "endsOn",
+           survey."finished_at"            AS "finishedAt",
            (SELECT count(*)::int
               FROM xb.survey_questions AS question
              WHERE question."survey_id" = survey."id") AS "questionCount",
@@ -279,7 +282,6 @@ export const findOpenSurveyResponse = async (
      WHERE response."person_id" = ${personId}::uuid
        AND response."completed_at" IS NULL
        AND survey."frozen_at" IS NOT NULL
-       AND survey."ends_on" >= ${today}::date
        AND (NOT survey."is_demo" OR ${personIsDemo}::boolean)
      ORDER BY response."started_at" IS NOT NULL DESC,
               GREATEST(
@@ -289,8 +291,4 @@ export const findOpenSurveyResponse = async (
                   WHERE answer."survey_id" = response."survey_id"
                     AND answer."person_id" = response."person_id")
               ) DESC
-     LIMIT 1
   `;
-
-  return rows[0] ?? null;
-};

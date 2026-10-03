@@ -931,7 +931,8 @@ model Employee {
   ordersCancelled Order[]          @relation("order_cancelled_by")
   stockMovements  StockMovement[]
   mailings        Mailing[]
-  surveys         Survey[]
+  surveys         Survey[]         @relation("survey_created_by")
+  surveysFinished Survey[]         @relation("survey_finished_by")
   segments        Segment[]
   campaigns       Campaign[]
   rewardsIssued   Reward[]         @relation("reward_issued_by")
@@ -1895,11 +1896,18 @@ model Survey {
   /// наследует. Править демо-опрос может только владелец.
   isDemo           Boolean   @default(false) @map("is_demo")
   createdById      String    @map("created_by_id") @db.Uuid
+  /// Когда завершён досрочно — кнопкой «Завершить опрос» (issue #348). Пусто — не завершался.
+  /// Ставится один раз и не снимается; последний день при этом не трогается. Завершается только
+  /// замороженный — проверкой `surveys_finished_check`.
+  finishedAt       DateTime? @map("finished_at") @db.Timestamptz(6)
+  /// Кто завершил. Заполнен ровно тогда, когда `finished_at`.
+  finishedById     String?   @map("finished_by_id") @db.Uuid
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  createdBy Employee         @relation(fields: [createdById], references: [id])
+  createdBy  Employee         @relation("survey_created_by", fields: [createdById], references: [id])
+  finishedBy Employee?        @relation("survey_finished_by", fields: [finishedById], references: [id], onDelete: Restrict)
   questions SurveyQuestion[]
   mailings  Mailing[]
   responses SurveyResponse[]

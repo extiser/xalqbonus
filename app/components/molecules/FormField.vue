@@ -23,6 +23,8 @@ withDefaults(
     hint?: string | null;
     /** Клавиатура на телефоне: `numeric` — только цифры (issue #305). */
     inputmode?: 'numeric' | 'decimal' | 'text';
+    /** Нижняя граница поля `date` — `YYYY-MM-DD`. */
+    min?: string;
   }>(),
   {
     placeholder: undefined,
@@ -32,6 +34,7 @@ withDefaults(
     error: null,
     hint: null,
     inputmode: undefined,
+    min: undefined,
   },
 );
 
@@ -50,6 +53,7 @@ const model = defineModel<string>({ required: true });
       :autofocus="autofocus"
       :required="required"
       :inputmode="inputmode"
+      :min="min"
     />
     <span v-if="error" class="mt-1 block text-sm text-red-700">{{ error }}</span>
     <span v-else-if="hint" class="mt-1 block text-sm text-slate-500">{{ hint }}</span>

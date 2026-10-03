@@ -41,8 +41,8 @@ import type { MemberSurveyAnswer, MiniAppSurveyResponse } from '#shared/types/me
  * недопройденный с виду, но уже оплаченный. Повтор завершения — второе «Далее» на последнем
  * вопросе — отвечает финалом с той же суммой и баллы не зовёт: сумма читается из журнала.
  *
- * После `completed_at` ответы не меняются: отправка отвечает финалом. Опрос, закрытый по сроку,
- * ответов не принимает и не завершается: отправка отвечает экраном «опрос закрыт», баллов нет.
+ * После `completed_at` ответы не меняются: отправка отвечает финалом. Опрос, закрытый по сроку
+ * или досрочно, ответов не принимает и не завершается: отправка отвечает экраном «опрос закрыт», баллов нет.
  *
  * Опроса нет или он недоступен — `{ survey: null }`, как у чтения.
  */
@@ -178,7 +178,7 @@ export const saveMemberSurveyAnswer = async (
       return present('finish', await readSurveyFinishPoints(survey, driver.personId, transaction));
     }
 
-    if (isSurveyClosed(survey.endsOn, now)) {
+    if (isSurveyClosed(survey, now)) {
       return present('closed', survey.points);
     }
 

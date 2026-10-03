@@ -37,6 +37,10 @@ export type SurveyRow = SurveyTextsRow & {
   /** `YYYY-MM-DD`. Пусто только у черновика. */
   endsOn: string | null;
   frozenAt: Date | null;
+  /** Завершён досрочно (issue #348). Пусто — не завершался. */
+  finishedAt: Date | null;
+  /** Кто завершил. Заполнено ровно тогда, когда `finishedAt`. */
+  finishedByName: string | null;
   isDemo: boolean;
   createdByName: string;
   createdAt: Date;
@@ -64,15 +68,23 @@ export type SurveyOptionRow = {
   exclusive: boolean;
 };
 
+/** Колонки опроса — к ним `SURVEY_JOINS`: автор и тот, кто завершил. */
 const SURVEY_COLUMNS = Prisma.sql`
   survey."id",
   survey."title",
   survey."points",
   survey."ends_on"::text      AS "endsOn",
   survey."frozen_at"          AS "frozenAt",
+  survey."finished_at"        AS "finishedAt",
+  finisher."full_name"        AS "finishedByName",
   survey."is_demo"            AS "isDemo",
   author."full_name"          AS "createdByName",
   survey."created_at"         AS "createdAt"
+`;
+
+const SURVEY_JOINS = Prisma.sql`
+  JOIN xb.employees AS author ON author."id" = survey."created_by_id"
+  LEFT JOIN xb.employees AS finisher ON finisher."id" = survey."finished_by_id"
 `;
 
 /** Все опросы, свежие первыми, с числом вопросов. Их единицы и десятки, страниц не нужно. */
@@ -83,7 +95,7 @@ export const listSurveys = async (client: Executor = db): Promise<SurveyListRow[
               FROM xb.survey_questions AS question
              WHERE question."survey_id" = survey."id") AS "questionCount"
       FROM xb.surveys AS survey
-      JOIN xb.employees AS author ON author."id" = survey."created_by_id"
+      ${SURVEY_JOINS}
      ORDER BY survey."created_at" DESC
   `;
 
@@ -103,7 +115,7 @@ export const findSurvey = async (
            survey."app_button_uz"     AS "appButtonUz",
            survey."updated_at"        AS "updatedAt"
       FROM xb.surveys AS survey
-      JOIN xb.employees AS author ON author."id" = survey."created_by_id"
+      ${SURVEY_JOINS}
      WHERE survey."id" = ${surveyId}::uuid
   `;
 
@@ -140,16 +152,28 @@ export const listSurveyOptions = async (
      ORDER BY question."position", option."position"
   `;
 
+/** Что правке и завершению нужно знать о строке, взятой под блокировку. */
+export type LockedSurveyRow = {
+  frozen: boolean;
+  /** `YYYY-MM-DD`. Пусто только у черновика. */
+  endsOn: string | null;
+  finishedAt: Date | null;
+};
+
 /**
- * Блокирует строку опроса до конца транзакции и говорит, заморожен ли он. Пусто — опроса нет.
- * Заморозка — `UPDATE` той же строки, поэтому правка и запуск рассылки идут друг за другом.
+ * Блокирует строку опроса до конца транзакции и говорит, заморожен ли он, какой у него
+ * последний день и завершён ли он досрочно. Пусто — опроса нет. Заморозка и досрочное
+ * завершение — `UPDATE` той же строки, поэтому правка, запуск рассылки и завершение идут
+ * друг за другом.
  */
 export const lockSurvey = async (
   surveyId: string,
   client: Executor,
-): Promise<{ frozen: boolean } | null> => {
-  const rows = await client.$queryRaw<{ frozen: boolean }[]>`
-    SELECT "frozen_at" IS NOT NULL AS "frozen"
+): Promise<LockedSurveyRow | null> => {
+  const rows = await client.$queryRaw<LockedSurveyRow[]>`
+    SELECT "frozen_at" IS NOT NULL AS "frozen",
+           "ends_on"::text         AS "endsOn",
+           "finished_at"           AS "finishedAt"
       FROM xb.surveys
      WHERE "id" = ${surveyId}::uuid
        FOR UPDATE
@@ -345,6 +369,30 @@ export const freezeSurvey = async (surveyId: string, client: Executor): Promise<
            "updated_at" = now()
      WHERE "id" = ${surveyId}::uuid
        AND "frozen_at" IS NULL
+  `;
+
+  return updated > 0;
+};
+
+/**
+ * Ставит отметку «завершён досрочно» (issue #348). Условия «заморожен» и «ещё не завершён» —
+ * в самом `UPDATE`: второе нажатие, ждавшее блокировку строки, видит отметку уже стоящей
+ * и не перезаписывает ни время, ни автора. `false` — строки нет, это черновик или отметка
+ * уже стоит. Последний день не трогается.
+ */
+export const markSurveyFinished = async (
+  surveyId: string,
+  finishedById: string,
+  client: Executor,
+): Promise<boolean> => {
+  const updated = await client.$executeRaw`
+    UPDATE xb.surveys
+       SET "finished_at"    = now(),
+           "finished_by_id" = ${finishedById}::uuid,
+           "updated_at"     = now()
+     WHERE "id" = ${surveyId}::uuid
+       AND "frozen_at" IS NOT NULL
+       AND "finished_at" IS NULL
   `;
 
   return updated > 0;

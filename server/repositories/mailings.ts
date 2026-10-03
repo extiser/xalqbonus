@@ -41,6 +41,8 @@ export type MailingRow = {
   /** `YYYY-MM-DD`. */
   surveyEndsOn: string | null;
   surveyFrozenAt: Date | null;
+  /** Опрос завершён досрочно (issue #348). */
+  surveyFinishedAt: Date | null;
   createdByName: string;
   createdAt: Date;
   startedAt: Date | null;
@@ -79,6 +81,7 @@ const MAILING_SELECT = Prisma.sql`
          survey."title"               AS "surveyTitle",
          survey."ends_on"::text       AS "surveyEndsOn",
          survey."frozen_at"           AS "surveyFrozenAt",
+         survey."finished_at"         AS "surveyFinishedAt",
          author."full_name"           AS "createdByName",
          mailing."created_at"         AS "createdAt",
          mailing."started_at"         AS "startedAt",

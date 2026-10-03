@@ -11,7 +11,7 @@ import { isSurveyClosed } from '#server/services/surveys/closed';
  *
  * - признак демо совпадает: живой опрос в демо-рассылке начислил бы баллы демо-водителям
  *   тем же ключом, что живым (решение Руслана 02-10-2026)
- * - опрос не закрыт по сроку по Ташкенту — `isSurveyClosed`
+ * - опрос не закрыт — ни по сроку по Ташкенту, ни досрочно (issue #348) — `isSurveyClosed`
  *
  * Полнота сюда не входит: она — условие запуска, а не выбора (решение Руслана 02-10-2026).
  * Черновик опроса правится и после прикрепления, и проверка при выборе ничего бы
@@ -32,8 +32,8 @@ export const assertMailingSurvey = (
     throw new MailingSurveyDemoMismatchError(surveyId, mailingIsDemo);
   }
 
-  if (isSurveyClosed(survey.endsOn, moment)) {
-    throw new MailingSurveyClosedError(surveyId);
+  if (isSurveyClosed(survey, moment)) {
+    throw new MailingSurveyClosedError(surveyId, survey.finishedAt !== null);
   }
 
   return survey;

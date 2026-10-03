@@ -4,8 +4,9 @@ import { useRoute } from 'vue-router';
 import { useDemoEditor } from '~/composables/useDemoEditor';
 import { useDraftAutosave } from '~/composables/useDraftAutosave';
 import type { SurveyFormFields } from '~/types/surveyForm';
-import { formatDateTime } from '~/utils/format';
-import { failureText } from '~/utils/requestError';
+import { formatDateTime, formatDayKey, formatMinuteDateTime } from '~/utils/format';
+import { surveyClosedLabel } from '~/utils/labels';
+import { failureField, failureMessage, failureText } from '~/utils/requestError';
 import { toLoadState } from '~/utils/loadState';
 import { toSurveyContentInput, toSurveyFormFields } from '~/utils/surveyForm';
 import { surveyFreezeProblems, surveyFreezeProblemText } from '#shared/survey';
@@ -22,7 +23,9 @@ import type { SurveyResultsResponse } from '#shared/types/surveyResults';
  *
  * - новый (`/mailings/surveys/new`) — пустая форма; черновик заводится первым символом
  * - черновик — всё правится и сохраняется само; копия и удаление
- * - заморожен — открыт на чтение, кроме названия и даты окончания; копия
+ * - заморожен — открыт на чтение, кроме названия и даты окончания; копия; «Завершить опрос»
+ *   в шапке, пока он не закрыт (issue #348)
+ * - завершён досрочно — как замороженный, но и последний день не правится
  *
  * Новый и заведённый из него черновик — один экземпляр страницы (`key` ниже): адрес меняется
  * на адрес записи без перехода, и набранное не теряется (issue #148).
@@ -71,6 +74,9 @@ const setSurvey = (next: Survey): void => {
 
 const frozen = computed(() => survey.value?.frozenAt != null);
 
+/** Завершён досрочно (issue #348): отметка не снимается, последний день не правится. */
+const finished = computed(() => survey.value?.finishedAt != null);
+
 const { ownsDemo, canEdit } = useDemoEditor();
 
 /** Поле «Демо» нового опроса. Уходит только заведением. */
@@ -92,6 +98,18 @@ const headingText = computed(
 
 useHead({ title: () => `${headingText.value} — Xalq Taxi Bonus` });
 
+/** Бейдж закрытого: «завершён досрочно» или «закрыт по сроку». */
+const closedLabel = computed(() => (survey.value ? surveyClosedLabel(survey.value) : null));
+
+/**
+ * Последний день — не раньше сегодняшнего по Ташкенту (issue #348): прошлое календарь
+ * не предлагает. Сравнивает сервер, тем же календарным днём; здесь — только подсказка полю.
+ */
+const endsOnMin = computed(() => formatDayKey(new Date()));
+
+/** Отказ сервера по последнему дню — встаёт у поля, а не только у отметки сохранения. */
+const endsOnError = ref<string | null>(null);
+
 const headerNote = computed(() => {
   const current = survey.value;
 
@@ -103,7 +121,9 @@ const headerNote = computed(() => {
 
   if (current.frozenAt) {
     phrases.push(
-      `Заморожен ${formatDateTime(current.frozenAt)}: ушёл рассылкой, правятся только название и дата окончания.`,
+      current.finishedAt
+        ? `Заморожен ${formatDateTime(current.frozenAt)}: ушёл рассылкой, правится только название.`
+        : `Заморожен ${formatDateTime(current.frozenAt)}: ушёл рассылкой, правятся только название и дата окончания.`,
     );
   }
 
@@ -115,6 +135,17 @@ const headerNote = computed(() => {
  * Замороженный отправляет только название и срок — содержимое ему сервер не примет.
  */
 const saveSurvey = async (snapshot: SurveyFormFields): Promise<void> => {
+  try {
+    await sendSurvey(snapshot);
+    endsOnError.value = null;
+  } catch (error) {
+    endsOnError.value = failureField(error) === 'endsOn' ? failureMessage(error) : null;
+
+    throw error;
+  }
+};
+
+const sendSurvey = async (snapshot: SurveyFormFields): Promise<void> => {
   const current = survey.value;
   const settings = { title: snapshot.title, endsOn: snapshot.endsOn };
 
@@ -258,8 +289,58 @@ const removeDraft = (): Promise<void> =>
     await navigateTo('/mailings/surveys');
   });
 
+/**
+ * «Завершить опрос» (issue #348) — у замороженного и ещё не закрытого, тем, кто правит опрос.
+ * Черновик не завершается: он никуда не уходил.
+ */
+const canFinish = computed(
+  () => survey.value !== null && frozen.value && !survey.value.closed && editable.value,
+);
+
+const finishConfirmOpen = ref(false);
+
+let answerFinish: ((confirmed: boolean) => void) | null = null;
+
+const resolveFinish = (confirmed: boolean): void => {
+  finishConfirmOpen.value = false;
+  answerFinish?.(confirmed);
+  answerFinish = null;
+};
+
+/**
+ * Досрочное завершение — после подтверждения: вернуть опрос нельзя. Набранное название
+ * досохраняется до него, как перед копией.
+ */
+const finishSurvey = (): Promise<void> =>
+  runAction(async () => {
+    finishConfirmOpen.value = true;
+
+    const confirmed = await new Promise<boolean>((resolve) => {
+      answerFinish = resolve;
+    });
+
+    if (!confirmed || !(await autosave.flush())) {
+      return;
+    }
+
+    const current = survey.value;
+
+    if (!current) {
+      return;
+    }
+
+    const updated = await $fetch<SurveyResponse>(`/api/surveys/${current.surveyId}/finish`, {
+      method: 'POST',
+    });
+
+    setSurvey(updated.survey);
+  });
+
 // Ушли со страницы с открытым вопросом — это отказ: действие не должно ждать ответа вечно.
-onBeforeUnmount(() => resolveDelete(false));
+onBeforeUnmount(() => {
+  resolveDelete(false);
+  resolveFinish(false);
+});
 </script>
 
 <template>
@@ -283,22 +364,45 @@ onBeforeUnmount(() => resolveDelete(false));
       @confirm="resolveDelete(true)"
       @cancel="resolveDelete(false)"
     />
+    <MoleculesConfirmDialog
+      :open="finishConfirmOpen"
+      :title="`Завершить «${headingText}» сейчас?`"
+      message="Водители больше не смогут отвечать, вернуть опрос нельзя."
+      confirm-label="Завершить"
+      tone="danger"
+      cancel-label="Отмена"
+      @confirm="resolveFinish(true)"
+      @cancel="resolveFinish(false)"
+    />
 
     <div>
       <NuxtLink to="/mailings/surveys" class="text-sm text-slate-500 underline underline-offset-2">
         ← Все опросы
       </NuxtLink>
-      <div class="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h1 class="text-xl font-semibold text-slate-900">{{ headingText }}</h1>
-        <AtomsStatusBadge
-          v-if="survey"
-          :tone="frozen ? 'ok' : 'muted'"
-          :label="frozen ? 'заморожен' : 'черновик'"
+      <div class="mt-2 flex flex-wrap items-start justify-between gap-3">
+        <div class="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h1 class="text-xl font-semibold text-slate-900">{{ headingText }}</h1>
+          <AtomsStatusBadge
+            v-if="survey"
+            :tone="frozen ? 'ok' : 'muted'"
+            :label="frozen ? 'заморожен' : 'черновик'"
+          />
+          <AtomsStatusBadge v-if="closedLabel" tone="warn" :label="closedLabel" />
+          <AtomsStatusBadge v-if="survey?.isDemo" tone="demo" label="ДЕМО" />
+        </div>
+        <AtomsActionButton
+          v-if="canFinish"
+          label="Завершить опрос"
+          tone="danger"
+          :disabled="acting"
+          @click="finishSurvey"
         />
-        <AtomsStatusBadge v-if="survey?.closed" tone="warn" label="закрыт по сроку" />
-        <AtomsStatusBadge v-if="survey?.isDemo" tone="demo" label="ДЕМО" />
       </div>
       <p v-if="state === 'ready'" class="mt-1 text-sm text-slate-500">{{ headerNote }}</p>
+      <p v-if="survey?.finishedAt" class="mt-1 text-sm text-slate-700">
+        Завершён досрочно {{ formatMinuteDateTime(survey.finishedAt) }} —
+        {{ survey.finishedByName }}
+      </p>
       <p v-if="survey?.isDemo" class="mt-1 text-sm text-slate-500">
         Демо-опрос.
         {{ editable ? '' : 'Менять его может только владелец.' }}
@@ -323,6 +427,9 @@ onBeforeUnmount(() => resolveDelete(false));
         v-model:fields="fields"
         :content-readonly="frozen"
         :readonly="!editable"
+        :finished="finished"
+        :ends-on-min="endsOnMin"
+        :ends-on-error="endsOnError"
       />
 
       <OrganismsSurveyQuestions v-model:fields="fields" :readonly="frozen || !editable" />

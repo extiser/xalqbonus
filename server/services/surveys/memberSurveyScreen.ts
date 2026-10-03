@@ -54,8 +54,8 @@ export const findAvailableSurvey = async (
 };
 
 /**
- * Экран опроса по прохождению. Пройденный показывает финал и после срока; закрытый по сроку —
- * «опрос закрыт»; начатый — вопросы с первого без ответа; остальное, отказ тоже, — открытие.
+ * Экран опроса по прохождению. Пройденный показывает финал и после закрытия; закрытый — по сроку
+ * или досрочно (issue #348) — «опрос закрыт»; начатый — вопросы с первого без ответа; остальное, отказ тоже, — открытие.
  */
 export const surveyStage = (
   survey: SurveyRow,
@@ -66,7 +66,7 @@ export const surveyStage = (
     return 'finish';
   }
 
-  if (isSurveyClosed(survey.endsOn, moment)) {
+  if (isSurveyClosed(survey, moment)) {
     return 'closed';
   }
 
@@ -97,6 +97,30 @@ export const readSurveyFinishPoints = async (
 /** Последний день опроса словом на языке: «15 октября», «15-oktabr». */
 export const surveyEndsOnWord = (endsOn: string, language: Language): string =>
   formatDayMonthWord(calendarDayMoment(endsOn), language);
+
+/**
+ * Экран закрытого опроса. Закрытый по сроку называет последний день; завершённый досрочно —
+ * день завершения по Ташкенту (решение Руслана 03-10-2026): последний день у него в будущем,
+ * и «ответы принимались до» него было бы неправдой.
+ */
+const closedView = (
+  survey: SurveyRow,
+  endsOn: string,
+  language: Language,
+): MemberSurveyView['closed'] =>
+  survey.finishedAt === null
+    ? {
+        title: plainText('survey_closed_title', language),
+        lead: plainText('survey_closed_text', language, { date: endsOn }),
+        button: plainText('survey_closed_button', language),
+      }
+    : {
+        title: plainText('survey_closed_early_title', language),
+        lead: plainText('survey_closed_early_text', language, {
+          date: formatDayMonthWord(survey.finishedAt, language),
+        }),
+        button: plainText('survey_closed_button', language),
+      };
 
 /** «+50 баллов». */
 export const surveyPointsLabel = (points: number, language: Language): string =>
@@ -212,11 +236,7 @@ const buildView = (input: SurveyViewInput, language: Language): MemberSurveyView
           : null,
       app: localized(survey.appButtonRu, survey.appButtonUz, language),
     },
-    closed: {
-      title: plainText('survey_closed_title', language),
-      lead: plainText('survey_closed_text', language, { date: endsOn }),
-      button: plainText('survey_closed_button', language),
-    },
+    closed: closedView(survey, endsOn, language),
   };
 };
 

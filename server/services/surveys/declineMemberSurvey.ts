@@ -13,7 +13,7 @@ const log = consola.withTag('surveys:decline');
  * начать, а на главной у него плашка «Пройдите опрос» — «Закрыть» могли нажать случайно (решение
  * Руслана 03-10-2026). Метка остаётся в воронке, какой была.
  *
- * Повтор, недоступный и закрытый по сроку опрос — успех без записи: экрану водителя тут нечего
+ * Повтор, недоступный и закрытый — по сроку или досрочно — опрос — успех без записи: экрану водителя тут нечего
  * объяснять, он и так уходит на главную.
  */
 export const declineMemberSurvey = async (
@@ -23,7 +23,7 @@ export const declineMemberSurvey = async (
 ): Promise<void> => {
   const survey = await findAvailableSurvey(surveyId, driver);
 
-  if (!survey || isSurveyClosed(survey.endsOn, now)) {
+  if (!survey || isSurveyClosed(survey, now)) {
     return;
   }
 

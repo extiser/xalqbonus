@@ -65,8 +65,15 @@ export type Survey = SurveyTexts & {
    * название и дата окончания.
    */
   frozenAt: string | null;
-  /** Срок прошёл: по Ташкенту уже следующий день после `endsOn`. */
+  /**
+   * Закрыт: срок прошёл — по Ташкенту уже следующий день после `endsOn`, — или опрос завершён
+   * досрочно (`finishedAt`).
+   */
   closed: boolean;
+  /** Завершён досрочно кнопкой «Завершить опрос» (issue #348). Пусто — не завершался. */
+  finishedAt: string | null;
+  /** Кто завершил. Заполнено ровно тогда, когда `finishedAt`. */
+  finishedByName: string | null;
   /** Демо-опрос: ставится при заведении и не меняется, копия наследует. */
   isDemo: boolean;
   createdByName: string;
@@ -79,7 +86,16 @@ export type Survey = SurveyTexts & {
 /** Строка списка: без текстов и вопросов — только их число. */
 export type SurveyListItem = Pick<
   Survey,
-  'surveyId' | 'title' | 'points' | 'endsOn' | 'frozenAt' | 'closed' | 'isDemo' | 'createdByName' | 'createdAt'
+  | 'surveyId'
+  | 'title'
+  | 'points'
+  | 'endsOn'
+  | 'frozenAt'
+  | 'closed'
+  | 'finishedAt'
+  | 'isDemo'
+  | 'createdByName'
+  | 'createdAt'
 > & {
   questionCount: number;
 };
