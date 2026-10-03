@@ -193,3 +193,31 @@ export class MailingPhotoTooLargeError extends MailingError {
     super(`фото ${bytes} б больше потолка ${limitBytes} б`);
   }
 }
+
+/**
+ * Итогов опроса у рассылки нет (issue #325): к ней не прикреплён опрос или она не запущена —
+ * снимка адресатов, по которому строится таблица, ещё нет.
+ */
+export class MailingSurveyResultsUnavailableError extends MailingError {
+  constructor(
+    public readonly mailingId: string,
+    public readonly reason: 'no_survey' | 'not_launched',
+  ) {
+    super(`итогов опроса у рассылки ${mailingId} нет: ${reason}`);
+  }
+}
+
+export type MailingSurveySliceProblem =
+  /** Вид среза не из списка или у среза по сегменту нет сегмента. */
+  | 'slice'
+  /** Идентификатор сегмента — не uuid. */
+  | 'segment_invalid'
+  /** Сегмент не того мира, что рассылка: срез по нему пуст по построению. */
+  | 'segment_demo_mismatch';
+
+/** Срез итогов опроса не разобран (issue #325). Экран такого не шлёт — это испорченная ссылка. */
+export class MailingSurveySliceInvalidError extends MailingError {
+  constructor(public readonly problem: MailingSurveySliceProblem) {
+    super(`срез итогов опроса не разобран: ${problem}`);
+  }
+}

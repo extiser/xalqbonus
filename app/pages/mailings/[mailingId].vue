@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useDemoEditor } from '~/composables/useDemoEditor';
 import { useDraftAutosave } from '~/composables/useDraftAutosave';
+import { ACTIVITY_SLICE, useMailingSurveyResults } from '~/composables/useMailingSurveyResults';
 import { formatDateTime, formatNumber, pluralize } from '~/utils/format';
 import { mailingStatusLabel, mailingStatusTone } from '~/utils/labels';
 import { failureText } from '~/utils/requestError';
@@ -54,6 +55,9 @@ import type { SelectOption } from '~/types/selectOption';
  * из-за них — сегмент в архиве, срок опроса прошёл, опрос не дописан, — экран говорит у кнопки
  * теми же фразами, что отказ ручки. Полноту опроса страница считает по самому опросу:
  * он правится и после прикрепления, и решает всё равно запуск.
+ *
+ * **Итоги опроса** (issue #325) — у запущенной рассылки с опросом: воронка, «Где бросают»
+ * и ответы одной таблицей, срез по сегменту того же мира или по активности, выгрузка CSV.
  */
 
 definePageMeta({
@@ -197,6 +201,24 @@ const surveyOptions = computed<SelectOption[]>(() =>
       return { value: survey.surveyId, label: survey.closed ? `${title} (срок прошёл)` : title };
     }),
 );
+
+/**
+ * Итоги опроса — только у запущенной рассылки с опросом: до запуска снимка нет. Идентификатор
+ * не меняется, пока рассылка идёт, и перечитывание счётчиков итоги не пересчитывает.
+ */
+const surveyResults = useMailingSurveyResults(() => {
+  const current = mailing.value;
+
+  return current?.survey && current.startedAt ? current.mailingId : null;
+});
+
+/** Срезы: по активности и рабочие сегменты того же мира. */
+const surveySliceOptions = computed<SelectOption[]>(() => [
+  { value: ACTIVITY_SLICE, label: 'По активности: верхние 20 % по поездкам' },
+  ...(segments.value?.segments ?? [])
+    .filter((segment) => segment.archivedAt === null && segment.isDemo === isDemo.value)
+    .map((segment) => ({ value: segment.segmentId, label: `Сегмент «${segment.name}»` })),
+]);
 
 /** Демо-признак новой рассылки сменился — прежний выбор другого мира не годится. */
 watch(demo, () => {
@@ -883,6 +905,17 @@ onBeforeUnmount(() => {
           <p v-if="actionError" class="mt-3 text-sm text-red-700">{{ actionError }}</p>
         </div>
       </MoleculesSectionPanel>
+
+      <OrganismsMailingSurveyResults
+        v-if="mailing.survey"
+        v-model:slice="surveyResults.slice.value"
+        v-model:completed-only="surveyResults.completedOnly.value"
+        :state="surveyResults.state.value"
+        :results="surveyResults.results.value"
+        :error="surveyResults.error.value"
+        :slice-options="surveySliceOptions"
+        :export-url="surveyResults.exportUrl.value"
+      />
 
       <OrganismsMailingContent :mailing="mailing" />
     </template>
