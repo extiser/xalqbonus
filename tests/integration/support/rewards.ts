@@ -11,6 +11,8 @@ export type RewardSnapshot = {
   issuedAt: Date | null;
   issuedByEmployeeId: string | null;
   expiredAt: Date | null;
+  /** Снимок себестоимости товара (issue #372). Пусто у баллов и произвольной. */
+  cost: number | null;
 };
 
 export const readReward = async (rewardId: string): Promise<RewardSnapshot | null> => {
@@ -19,7 +21,8 @@ export const readReward = async (rewardId: string): Promise<RewardSnapshot | nul
            "code",
            "issued_at"                   AS "issuedAt",
            "issued_by_employee_id"       AS "issuedByEmployeeId",
-           "expired_at"                  AS "expiredAt"
+           "expired_at"                  AS "expiredAt",
+           "cost"
       FROM xb.rewards
      WHERE "id" = ${rewardId}::uuid
   `;
@@ -82,5 +85,15 @@ export const setTestRewardExpiry = async (rewardId: string, expiresAt: Date): Pr
     UPDATE xb.rewards
        SET "expires_at" = ${expiresAt}::timestamptz
      WHERE "id" = ${rewardId}::uuid
+  `;
+};
+
+/**
+ * Стирает снимок себестоимости награды — так выглядит награда, которую миграция снимка
+ * заполнила по товару без себестоимости (issue #372).
+ */
+export const clearTestRewardCost = async (rewardId: string): Promise<void> => {
+  await db.$executeRaw`
+    UPDATE xb.rewards SET "cost" = NULL WHERE "id" = ${rewardId}::uuid
   `;
 };

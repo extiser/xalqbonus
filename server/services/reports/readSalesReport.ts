@@ -23,11 +23,13 @@ import type { ReportColumn, ReportResult, ReportSection } from '#shared/types/re
  * Продажа — по выдаче, сутки — календарные по Ташкенту, демо не входит: всё это решает выборка
  * (`listSalesLines`). Здесь — раскладка по разделам, себестоимость и итоги.
  *
- * Себестоимость — текущая цена каталога: в позиции заказа её снимка нет. Товар без
- * себестоимости не прячется и нулём не считается — пустая ячейка и причина в примечании.
+ * Себестоимость — снимок в позиции заказа на момент оформления (issue #372), а не текущая
+ * цена каталога. Строка без снимка не прячется и нулём не считается — пустая ячейка
+ * и причина в примечании.
  */
 
-const COST_NOTE = 'Себестоимость — по текущей цене товара в каталоге.';
+const COST_NOTE =
+  'Себестоимость — на момент заказа или награды; у выданного до снимка — по цене каталога на день, когда снимок заведён.';
 
 const HISTORY_NOTE = `Данные — с ${formatReportDay(REPORTS_HISTORY_START)}: продаж старого бота в системе нет.`;
 
@@ -59,9 +61,9 @@ const SALES_AGGREGATES: ReportAggregates<SalesLine> = {
   orders: (group) => new Set(group.flatMap((line) => line.orderIds)).size,
 };
 
-/** Себестоимость строки: штуки × текущая цена. Цены нет — значения нет. */
+/** Себестоимость строки — сумма снимков. Снимка нет хоть у одной позиции — значения нет. */
 const lineCost = (row: SalesLineRow): number | null =>
-  row.priceCost === null ? null : Number(row.quantity) * row.priceCost;
+  row.cost === null ? null : Number(row.cost);
 
 const lineHead = (row: SalesLineRow): Omit<SalesLine, 'cells'> => ({
   officeId: row.officeId,

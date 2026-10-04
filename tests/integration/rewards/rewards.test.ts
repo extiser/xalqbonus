@@ -39,6 +39,7 @@ import {
   readAccountBalance,
   readStock,
   runRawQuery,
+  setTestProductCost,
   trackTestProduct,
 } from '../support/database';
 import { cleanupTestEmployees, createTestEmployee, setTestProfilePhone } from '../support/employees';
@@ -261,6 +262,36 @@ describe('награды', () => {
     });
 
     await expectStockInvariantsHold();
+  });
+
+  it('награда-товар помнит себестоимость на момент вручения; у баллов и произвольной её нет (issue #372)', async () => {
+    const scenario = await prizeScenario();
+
+    const prize = await grantPrize(scenario);
+    const custom = await grantCustom(scenario, 'Мойка салона');
+    const { giftGrantId } = await grantGift({
+      recipient: { kind: 'person', personId: scenario.personId },
+      points: 100,
+      reasonRu: 'компенсация',
+      reasonUz: 'компенсация',
+      messageRu: '',
+      messageUz: '',
+      coverRu: null,
+      coverUz: null,
+      sendNow: false,
+      untilDate: FAR_UNTIL_DATE,
+      employeeId: scenario.employeeId,
+    });
+    const gift = await findGiftRewardId(giftGrantId, scenario.personId);
+
+    // Приз без цены в баллах: себестоимость фикстуры — 5 × 800 сумов.
+    expect((await readReward(prize.id))?.cost).toBe(4_000);
+
+    await setTestProductCost(scenario.productId, 7_000);
+
+    expect((await readReward(prize.id))?.cost).toBe(4_000);
+    expect((await readReward(custom.id))?.cost).toBeNull();
+    expect((await readReward(gift))?.cost).toBeNull();
   });
 
   it('свободного остатка нет — награда не заводится, ничего не записано', async () => {

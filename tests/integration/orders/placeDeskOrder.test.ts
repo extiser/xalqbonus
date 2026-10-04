@@ -32,6 +32,7 @@ import {
   readStock,
   readSystemBalance,
   readTransfer,
+  setTestProductCost,
 } from '../support/database';
 import { cleanupTestEmployees, createTestEmployee } from '../support/employees';
 import { grantPoints } from '../support/points';
@@ -183,7 +184,7 @@ describe('заказ у стойки', () => {
     expect(await countTransfersByKey(buildOrderSpendIdempotencyKey(placed.orderId))).toBe(1);
 
     expect(await listOrderItemSnapshots(placed.orderId)).toEqual([
-      { productId: scenario.productId, quantity: 2, unitPoints: 40, unitRetail: null },
+      { productId: scenario.productId, quantity: 2, unitPoints: 40, unitRetail: null, unitCost: 32_000 },
     ]);
 
     // Два движения, резерв и выдача, — как у заказа бота, только разом и от сотрудника.
@@ -219,9 +220,21 @@ describe('заказ у стойки', () => {
     expect(await readSystemBalance('redemption')).toBe(redemptionBefore);
 
     expect(await listOrderItemSnapshots(placed.orderId)).toEqual([
-      { productId: scenario.productId, quantity: 3, unitPoints: null, unitRetail: 35_000 },
+      { productId: scenario.productId, quantity: 3, unitPoints: null, unitRetail: 35_000, unitCost: 32_000 },
     ]);
     expect(await readStock(scenario.officeId, scenario.productId)).toEqual({ onHand: 2, reserved: 0 });
+  });
+
+  it('позиция помнит себестоимость на момент заказа: правка каталога её не трогает (issue #372)', async () => {
+    const scenario = await deskScenario({ points: 100 });
+
+    const placed = await placeAtDesk(scenario, 'points', [{ productId: scenario.productId, quantity: 1 }]);
+
+    await setTestProductCost(scenario.productId, 50_000);
+
+    expect(await listOrderItemSnapshots(placed.orderId)).toEqual([
+      { productId: scenario.productId, quantity: 1, unitPoints: 40, unitRetail: null, unitCost: 32_000 },
+    ]);
   });
 
   it('за розницу у водителя с баллами баланс не трогается', async () => {

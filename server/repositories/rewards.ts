@@ -100,6 +100,10 @@ export type InsertRewardInput = {
  * (`insertGiftRewards`), — незабранная награда и незабранный подарок кончаются в один миг.
  * Иначе — `lifetime_days` от часов базы, как у приза акции.
  *
+ * Себестоимость награды-товара берётся из каталога в той же вставке (issue #372): снимок —
+ * цена на момент создания награды, дальше она живёт своей жизнью от каталога. У баллов
+ * и произвольной её нет — проверкой `rewards_cost_check`.
+ *
  * `null` означает ровно одно: код уже занят другой ждущей наградой. Отказ гасится
  * `ON CONFLICT … DO NOTHING` по частичному индексу, а не ловится исключением: отбитая вставка
  * отравляет транзакцию целиком, и попытка с новым кодом потребовала бы переоткрыть её вместе
@@ -113,7 +117,7 @@ export const insertReward = async (
     INSERT INTO xb.rewards (
       "id", "person_id", "kind", "title", "points", "product_id", "office_id", "code", "status",
       "expires_at", "source", "campaign_id", "source_note", "source_note_uz", "message_ru",
-      "message_uz", "cover_ru_path", "cover_uz_path", "granted_by_employee_id"
+      "message_uz", "cover_ru_path", "cover_uz_path", "granted_by_employee_id", "cost"
     )
     VALUES (
       COALESCE(${input.id}::uuid, gen_random_uuid()),
@@ -138,7 +142,10 @@ export const insertReward = async (
       ${input.messageUz},
       ${input.coverRuPath},
       ${input.coverUzPath},
-      ${input.grantedByEmployeeId}::uuid
+      ${input.grantedByEmployeeId}::uuid,
+      CASE WHEN ${input.kind}::xb.reward_kind = 'product'
+             THEN (SELECT "price_cost" FROM xb.products WHERE "id" = ${input.productId}::uuid)
+           ELSE NULL END
     )
     ON CONFLICT ("code") WHERE "status" = 'awaiting' DO NOTHING
     RETURNING ${REWARD_COLUMNS}

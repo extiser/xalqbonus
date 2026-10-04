@@ -20,12 +20,14 @@ import {
   createTestPerson,
   createTestProduct,
   disconnectDatabase,
+  listOrderItemSnapshots,
   listStockMovements,
   readAccountBalance,
   readOrder,
   readStock,
   readSystemBalance,
   readTransfer,
+  setTestProductCost,
 } from '../support/database';
 import { cleanupTestEmployees, createTestEmployee } from '../support/employees';
 import { grantPoints } from '../support/points';
@@ -129,6 +131,33 @@ describe('оформление заказа', () => {
     // 2 × 10 + 1 × 25.
     expect(order.totalPoints).toBe(45);
     expect(await readAccountBalance(person.personId)).toBe(55n);
+  });
+
+  it('позиция помнит себестоимость на момент заказа: правка каталога её не трогает (issue #372)', async () => {
+    const person = await createTestPerson({ inProgram: true });
+    const { employeeId } = await createTestEmployee({ role: 'manager' });
+    const officeId = await createTestOffice();
+    // Себестоимость фикстуры — 800 сумов за балл цены: 10 баллов — 8 000 сумов.
+    const productId = await createTestProduct({ pricePoints: 10 });
+
+    await grantPoints(person.personId, 100);
+    await receiveStock({ officeId, productId, quantity: 3, employeeId });
+
+    const order = await placeOrder({
+      personId: person.personId,
+      officeId,
+      items: [{ productId, quantity: 2 }],
+      actor: 'mini_app',
+      driverIsDemo: false,
+    });
+
+    expect(await listOrderItemSnapshots(order.orderId)).toEqual([
+      { productId, quantity: 2, unitPoints: 10, unitRetail: null, unitCost: 8_000 },
+    ]);
+
+    await setTestProductCost(productId, 9_500);
+
+    expect((await listOrderItemSnapshots(order.orderId))[0]?.unitCost).toBe(8_000);
   });
 
   it('не хватает баллов — ни заказа, ни движения остатка', async () => {

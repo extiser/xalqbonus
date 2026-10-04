@@ -11,7 +11,7 @@ COMPOSE_COPY = docker compose -f docker/compose.local.yml -f docker/compose.copy
         db-restore db-drop db-schema invariants license-collisions legacy-vs-api import-legacy import-legacy-awarded-trips \
         employee-owner prod-employee-owner \
         import-legacy-dump \
-        copy-restore copy-up copy-psql copy-status metrics-recompute \
+        copy-restore copy-up copy-psql copy-status metrics-recompute report-print \
         sync-orders sync-registry sync-state fleet-history fleet-history-status \
         prod-up prod-down prod-restart prod-logs prod-ps prod-shell prod-psql prod-invariants prod-migrate prod-migrate-rolled-back \
         prod-stop prod-start prod-sql prod-db-restore prod-uploads-restore \
@@ -61,11 +61,11 @@ psql: ## Войти в psql локальной БД. Другая база ст�
 # `-v ON_ERROR_STOP=1` — чтобы ошибка в запросе останавливала прогон и давала ненулевой код:
 # по умолчанию psql печатает ошибку, идёт дальше и выходит с нулём. `-X` — чтобы личный
 # `.psqlrc` не менял поведение прогона. `-q` глушит служебные `CREATE TABLE` / `INSERT 0 N`,
-# результаты запросов остаются обычными таблицами psql.
-sql: ## Прогнать SQL-файл по локальной БД одной сессией. Использование: make sql file=scripts/sync-state.sql
+# результаты запросов остаются обычными таблицами psql. `db=` — другая база стека, как у `psql`.
+sql: ## Прогнать SQL-файл по локальной БД одной сессией. make sql file=scripts/sync-state.sql [db=xalqbonus_prod_copy]
 	@test -n "$(file)" || { echo "укажите файл: make sql file=<путь>.sql"; exit 1; }
 	@test -f "$(file)" || { echo "файла нет: $(file)"; exit 1; }
-	$(COMPOSE) exec -T postgres sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -q' < "$(file)"
+	$(COMPOSE) exec -T postgres sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$(or $(db),$$POSTGRES_DB)" -q' < "$(file)"
 
 migrate: ## Применить миграции к локальной БД
 	$(COMPOSE) exec app npx prisma migrate deploy
@@ -348,6 +348,11 @@ copy-up: ## Поднять app на копии боевой базы, в фон�
 # на проде таблицу наполнит первая ночь.
 metrics-recompute: ## Пересчитать таблицу метрик дашборда разово, в базу app (на копии — в копию)
 	$(COMPOSE) exec -T app npx tsx scripts/metrics-recompute.ts
+
+# Отчёт текстом мимо веба (issue #372) — теми же сервисами, что ручки. Идёт в базу, на которой
+# стоит app: в режиме копии (`make copy-up`) — в копию. Только чтение.
+report-print: ## Отчёт по всему парку текстом. make report-print report=points-economy|sales|rewards from=ГГГГ-ММ-ДД to=ГГГГ-ММ-ДД
+	$(COMPOSE) exec -T app npx tsx scripts/report-print.ts "$(report)" "$(from)" "$(to)"
 
 copy-psql: ## Войти в psql копии боевой базы
 	$(COMPOSE) exec postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$(COPY_DB)"'

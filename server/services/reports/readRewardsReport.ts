@@ -26,11 +26,12 @@ import type { ReportColumn, ReportResult, ReportSection } from '#shared/types/re
  * Только награды, которые занимают товар или выдаются в офисе, — товар и произвольная. Баллы-
  * награды и подарки баллами — перевод причиной `campaign`, их считает «Экономика балла».
  *
- * Себестоимость — текущая цена каталога, как во всех отчётах раздела. У произвольной награды
- * её нет по устройству: это не товар из каталога.
+ * Себестоимость — снимок в награде на момент её создания (issue #372), а не текущая цена
+ * каталога. У произвольной награды её нет по устройству: это не товар из каталога.
  */
 
-const COST_NOTE = 'Себестоимость — по текущей цене товара в каталоге.';
+const COST_NOTE =
+  'Себестоимость — на момент заказа или награды; у выданного до снимка — по цене каталога на день, когда снимок заведён.';
 
 const RETURNED_NOTE = 'Товар несгоревших наград вернулся в остаток офиса.';
 
@@ -55,7 +56,7 @@ const rewardLine = (row: RewardLineRow): ReportLine => {
   const officeLabel = archivedLabel(row.officeName, row.officeArchived);
   const quantity = Number(row.quantity);
   const isCustom = row.kind === 'custom';
-  const cost = isCustom || row.priceCost === null ? null : quantity * row.priceCost;
+  const cost = isCustom || row.cost === null ? null : Number(row.cost);
 
   return {
     officeId: row.officeId,
