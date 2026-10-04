@@ -105,6 +105,18 @@ table.type { width: 100%; border-collapse: collapse; }
 .main-mock { display: grid; grid-template-columns: repeat(6, 1fr); grid-auto-rows: 120px; gap: 16px; }
 .main-mock .tile { padding: 22px; } .main-mock .pg { grid-column: span 6; grid-row: span 1; background: none; padding: 8px 4px; justify-content: flex-end; }
 
+/* Подсказка метрики (сессия 86): значок (i) у подписи, нажатие — определение простым языком.
+   Подсказка висит поверх страницы (position: fixed), плитка с overflow: hidden её не обрезает */
+.info { display: inline-grid; place-items: center; width: 28px; height: 28px; margin: -6px 0 -6px 2px; vertical-align: middle; border: 0; border-radius: 50%; background: none; color: var(--axis); cursor: pointer; padding: 0; }
+.info svg { width: 18px; height: 18px; }
+.glue { white-space: nowrap; } /* значок держится за последнее слово подписи и не уходит на строку один */
+.info:hover, .info[aria-expanded="true"] { color: var(--cyan); background: var(--raised); }
+.tip { position: fixed; z-index: 50; width: max-content; max-width: 300px; background: var(--raised); border-radius: 16px; padding: 14px 16px; font: 400 13px/1.45 Manrope; color: var(--title); box-shadow: 0 16px 40px rgba(0,0,0,.5), inset 0 0 0 1px var(--line); display: none; }
+.tip.on { display: block; }
+.tip b { display: block; color: var(--text); font: 600 14px/1.3 Manrope; margin-bottom: 4px; }
+.tip .how { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); color: var(--grey); font-size: 12px; }
+.mult-row { display: flex; align-items: center; gap: 2px; font: 500 14px Manrope; color: var(--title); margin-top: 18px; }
+
 /* Телефон */
 /* Панель меню внизу — на настоящем экране она прибита к низу окна (position: fixed), в макете телефона стоит под содержимым */
 .phone .side { position: relative; padding: 0; margin-top: 16px; height: auto; min-height: 0; z-index: 30; flex-direction: row; align-items: stretch; gap: 8px; background: none; border-radius: 0; box-shadow: none; overflow: visible; pointer-events: none; }
@@ -385,6 +397,34 @@ table.type { width: 100%; border-collapse: collapse; }
   </div>
 </div>
 
+<!-- 8. Подсказка метрики -->
+<div class="section">
+  <h2>8 · Подсказка метрики</h2>
+  <p class="rule">У каждой метрики рядом с подписью — значок (i). Нажатие открывает подсказку: название, что это значит простым языком, и под чертой — как считается. Значок стоит у подписи, а не у числа: число — ответ, подпись — вопрос, объяснение относится к вопросу.</p>
+  <div class="bento">
+    <div class="tile c4 r2">
+      <div class="head"><span class="t-title">Водителей на <span class="glue">линии<button class="info" type="button" aria-label="Что это: Водителей на линии" aria-expanded="false" data-tip-title="Водителей на линии" data-tip-text="Сколько разных водителей сделали хотя бы одну поездку за месяц. Водитель — человек: если у него несколько учётных записей в парке, он считается один раз." data-tip-how="Считаются только завершённые поездки. Демо не входит."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span><span class="go"><svg viewBox="0 0 16 16" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg></span></div>
+      <div class="t-big">431</div>
+      <span class="delta up"><b>+18</b> к сентябрю</span>
+    </div>
+    <div class="tile c4 r2">
+      <div class="head"><span class="t-title">Дней на <span class="glue">линии<button class="info" type="button" aria-label="Что это: Дней на линии" aria-expanded="false" data-tip-title="Дней на линии" data-tip-text="Сколько дней за месяц в среднем выходил на линию один водитель. День засчитывается, если в эти сутки по Ташкенту у него была хотя бы одна поездка." data-tip-how="Сумма дней на линии всех водителей ÷ водителей на линии"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span></div>
+      <div class="t-big">19,6<span class="t-unit">из 30</span></div>
+      <span class="delta up"><b>+0,4</b> к сентябрю</span>
+    </div>
+    <div class="tile c4 r2">
+      <div class="head"><span class="t-title">Поездок в <span class="glue">день<button class="info" type="button" aria-label="Что это: Поездок в день" aria-expanded="false" data-tip-title="Поездок в день" data-tip-text="Сколько поездок водитель делает за день, когда выходит на линию." data-tip-how="Все поездки месяца ÷ сумма дней на линии всех водителей"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span></div>
+      <div class="t-big">9,8</div>
+      <span class="delta down"><b>−0,2</b> к сентябрю</span>
+    </div>
+    <div class="tile c12 r1">
+      <div class="head"><span class="t-title">Строка внутри плитки</span><span class="badge">цифры условные</span></div>
+      <div class="mult-row"><span class="glue">Поездки<button class="info" type="button" aria-label="Что это: Поездки" aria-expanded="false" data-tip-title="Поездки" data-tip-text="Сколько поездок завершено за месяц. Это произведение трёх множителей: водители × дни × поездки в день." data-tip-how="Завершённые поездки за месяц по Ташкенту. Отменённые и демо не входят."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span><span style="margin-left:auto;font:700 18px Unbounded;color:var(--text)">83 120</span></div>
+    </div>
+  </div>
+  <p class="note">Значок — Phosphor <code>info</code> duotone 18, цвет оси <code>--axis</code>; поле нажатия 28 по кругу. Открытый — циан на поднятой подложке. Подсказка — поднятая поверхность, скругление 16, ширина до 300, открывается под значком, у края экрана сдвигается внутрь. Открыта одна за раз; закрывается повторным нажатием, щелчком мимо или Esc; при прокрутке едет за значком, а не закрывается. На ноутбуке и телефоне — одинаково, по нажатию, без наведения: наведения на телефоне нет, а два поведения — два места, где ошибиться. Нажатие на значок не открывает плитку, даже если вся плитка — вход. Значок держится за последнее слово подписи и на строку один не уходит. Значок есть у каждой подписи метрики: в шапке плитки, в строке разбора, в заголовке столбца таблицы. Тексты подсказок — одно определение на метрику в общем словаре `shared/metrics.ts`.</p>
+</div>
+
 </div>
 <script>
 /* Меню аккаунта открывается кнопкой и закрывается щелчком мимо — только чтобы макет можно было потрогать */
@@ -396,6 +436,36 @@ document.querySelectorAll('.side').forEach(function (side) {
 document.addEventListener('click', function () {
   document.querySelectorAll('.side.open').forEach(function (side) { side.classList.remove('open'); });
 });
+
+/* Подсказка метрики: одна на страницу, ставится под значком и не выходит за край окна */
+var tip = document.createElement('div'); tip.className = 'tip'; tip.setAttribute('role', 'tooltip'); document.body.appendChild(tip);
+var openInfo = null;
+function closeTip() { tip.classList.remove('on'); if (openInfo) openInfo.setAttribute('aria-expanded', 'false'); openInfo = null; }
+function openTip(btn) {
+  tip.innerHTML = '';
+  var title = document.createElement('b'); title.textContent = btn.dataset.tipTitle; tip.appendChild(title);
+  tip.appendChild(document.createTextNode(btn.dataset.tipText));
+  if (btn.dataset.tipHow) { var how = document.createElement('div'); how.className = 'how'; how.textContent = btn.dataset.tipHow; tip.appendChild(how); }
+  tip.classList.add('on');
+  btn.setAttribute('aria-expanded', 'true'); openInfo = btn;
+  placeTip();
+}
+/* Под значком; не влезает снизу — над ним; у края окна сдвигается внутрь */
+function placeTip() {
+  if (!openInfo) return;
+  var box = openInfo.getBoundingClientRect(), width = tip.offsetWidth, height = tip.offsetHeight;
+  var left = Math.min(Math.max(12, box.left + box.width / 2 - 24), window.innerWidth - width - 12);
+  var top = box.bottom + 8; if (top + height > window.innerHeight - 12) top = box.top - height - 8;
+  tip.style.left = left + 'px'; tip.style.top = top + 'px';
+}
+document.querySelectorAll('.info').forEach(function (btn) {
+  btn.addEventListener('click', function (event) { event.stopPropagation(); if (openInfo === btn) closeTip(); else { closeTip(); openTip(btn); } });
+});
+tip.addEventListener('click', function (event) { event.stopPropagation(); });
+document.addEventListener('click', closeTip);
+document.addEventListener('keydown', function (event) { if (event.key === 'Escape') closeTip(); });
+/* Прокрутка и смена размера окна подсказку не закрывают, а двигают за значком: на телефоне окно меняет высоту, когда прячется строка адреса */
+window.addEventListener('scroll', placeTip, true); window.addEventListener('resize', placeTip);
 </script>
 </body>
 </html>
