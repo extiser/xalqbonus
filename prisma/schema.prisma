@@ -533,6 +533,20 @@ enum ClientPlatform {
   @@schema("xb")
 }
 
+/// Носитель промо-метки (issue #380): где человек увидел ссылку или QR. Подписи —
+/// `shared/promo.ts`. После заведения метки не меняется — часть её смысла.
+enum PromoMedium {
+  poster
+  card
+  leaflet
+  video
+  sms
+  other
+
+  @@map("promo_medium")
+  @@schema("xb")
+}
+
 // ---------------------------------------------------------------------------
 // Люди и учётки
 // ---------------------------------------------------------------------------
@@ -942,6 +956,7 @@ model Employee {
   giftGrants      GiftGrant[]
   accessLinks       EmployeeAccessLink[] @relation("access_link_employee")
   accessLinksIssued EmployeeAccessLink[] @relation("access_link_issued_by")
+  promoLinks        PromoLink[]
 
   @@map("employees")
   @@schema("xb")
@@ -2588,8 +2603,8 @@ model MetricRecomputeRun {
 /// QR в офисе. Пишется каждое касание, а не первое, и касание участника программы тоже:
 /// уникальности нет, повторное нажатие того же QR — своя строка.
 ///
-/// Справочника меток пока нет: код пишется как пришёл, связь со справочником появится
-/// с разделом «Промо».
+/// Внешнего ключа на справочник `promo_links` нет намеренно (issue #380): бот пишет касание
+/// с любым годным кодом, даже если метки в справочнике нет, — касание не теряется.
 model PromoTouch {
   /// Журнальная таблица, на которую никто не ссылается, — bigint identity вместо uuid,
   /// как у `telegram_link_attempts`.
@@ -2615,5 +2630,29 @@ model PromoTouch {
   /// «Что было с этим человеком» — от перехода до регистрации.
   @@index([telegramUserId, touchedAt])
   @@map("promo_touches")
+  @@schema("xb")
+}
+
+/// Промо-метка (issue #380): носитель — плакат, визитка, ролик — со ссылкой в бота
+/// `t.me/<бот>?start=<код>` и QR для печати. Касания по ней пишет бот в `promo_touches`.
+///
+/// Код — первичный ключ: он напечатан и после заведения не меняется, как и носитель.
+/// Удаления нет.
+model PromoLink {
+  /// Код метки целиком, с префиксом: `p_poster1` (`shared/promoLinks.ts`).
+  code                String      @id
+  /// Видно только сотрудникам, до 80 символов.
+  name                String
+  medium              PromoMedium
+  /// Где висит или кому раздают, до 120 символов. Пусто — ещё не записали.
+  placement           String?
+  /// Кто завёл. Пусто — заведена миграцией при выкате.
+  createdByEmployeeId String?     @map("created_by_employee_id") @db.Uuid
+  createdAt           DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  createdByEmployee Employee? @relation(fields: [createdByEmployeeId], references: [id])
+
+  @@map("promo_links")
   @@schema("xb")
 }

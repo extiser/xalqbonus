@@ -28,6 +28,14 @@ export const TELEGRAM_BIND_START_PREFIX = 'emp_';
 export const buildTelegramBindLink = (botUsername: string, token: string): string =>
   `https://t.me/${botUsername}?start=${TELEGRAM_BIND_START_PREFIX}${token}`;
 
+/**
+ * Ссылка промо-метки (issue #380) — в того же бота, с кодом метки в параметре `/start`: код уже
+ * с префиксом `p_` (`shared/promoLinks.ts`). Здесь, рядом с привязкой, а не у раздела «Промо»:
+ * ссылки на бота собираются в одном месте и из одного имени бота.
+ */
+export const buildPromoLink = (botUsername: string, code: string): string =>
+  `https://t.me/${botUsername}?start=${code}`;
+
 /** Токен из параметра `/start`. `null` — параметр не про привязку сотрудника. */
 export const readTelegramBindToken = (startParameter: string): string | null => {
   if (!startParameter.startsWith(TELEGRAM_BIND_START_PREFIX)) {

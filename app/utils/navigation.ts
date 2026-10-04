@@ -9,6 +9,7 @@ import {
   PhPackage,
   PhPaperPlaneTilt,
   PhPresentation,
+  PhQrCode,
   PhShoppingBag,
   PhStorefront,
   PhUsers,
@@ -20,6 +21,7 @@ import {
   DEMO_EDITOR_ROLES,
   MAILING_ROLES,
   ORDER_ROLES,
+  PROMO_ROLES,
   REPORT_ROLES,
   REWARD_GRANT_ROLES,
   SEGMENT_ROLES,
@@ -40,7 +42,7 @@ import type { EmployeeIdentity } from '#shared/types/employee';
  *
  * Значок — свойство пункта, а не разметка меню (`_reference/design/web/icons-compare.md`):
  * меню веба рисует его, шапка светлой раскладки — нет. Набор — Phosphor, импорт поимённый,
- * чтобы сборка брала только эти двенадцать (`docs/decisions.md` → «Веб в стиле бенто»).
+ * чтобы сборка брала только используемые (`docs/decisions.md` → «Веб в стиле бенто»).
  * Пункт «Дашборд» (`PhSquaresFour`) появится вместе со страницей дашборда.
  */
 export type NavigationItem = {
@@ -66,6 +68,9 @@ const SERVICE_NAVIGATION: NavigationItem[] = [
   { title: 'Сегменты', path: '/segments', icon: PhFunnel, roles: SEGMENT_ROLES },
   { title: 'Рассылки', path: '/mailings', icon: PhPaperPlaneTilt, roles: MAILING_ROLES },
   { title: 'Акции', path: '/campaigns', icon: PhMegaphone, roles: CAMPAIGN_ROLES },
+  // Ссылки в бота с меткой и QR для носителей, с воронкой переходов (issue #380). Рядом
+  // с акциями: и то и другое — привлечение водителей в программу.
+  { title: 'Промо', path: '/promo', icon: PhQrCode, roles: PROMO_ROLES },
   { title: 'Сотрудники', path: '/employees', icon: PhIdentificationCard, roles: STAFF_ROLES },
   { title: 'Синхронизация', path: '/sync', icon: PhArrowsClockwise, roles: SYNC_ROLES },
   // Пульт демо — зрители, демо-водители, генератор, демо-менеджер (issue #252). Последним:

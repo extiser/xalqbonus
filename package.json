@@ -36,12 +36,14 @@
     "nuxt": "^4.5.2",
     "nuxt-echarts": "^1.1.0",
     "pg": "^8.23.0",
+    "qrcode": "^1.5.4",
     "vue": "^3.5.42",
     "vue-router": "^5.3.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "@types/pg": "^8.23.1",
+    "@types/qrcode": "^1.5.6",
     "dotenv": "^17.4.2",
     "esbuild": "^0.28.2",
     "prisma": "^7.10.0",
