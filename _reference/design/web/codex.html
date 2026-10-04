@@ -117,6 +117,24 @@ table.type { width: 100%; border-collapse: collapse; }
 .tip .how { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); color: var(--grey); font-size: 12px; }
 .mult-row { display: flex; align-items: center; gap: 2px; font: 500 14px Manrope; color: var(--title); margin-top: 18px; }
 
+/* Формы (сессия 86): поле, состояния, обязательность, ошибка — по форме «Новая метка» раздела «Промо» */
+.form-demo { max-width: 520px; }
+.f-field { margin-top: 20px; }
+.f-states .f-field { margin-top: 0; }
+.f-label { display: block; font: 600 13px Manrope; color: var(--title); margin-bottom: 8px; }
+.f-label .req { color: var(--scarlet); margin-left: 2px; }
+.f-input { width: 100%; height: 48px; border-radius: 14px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--line); color: var(--text); font: 500 15px Manrope; padding: 0 16px; display: flex; align-items: center; }
+.f-input.ph { color: var(--axis); }
+.f-input.focus { box-shadow: inset 0 0 0 1.5px rgba(156,238,255,.6); }
+.f-input.error { box-shadow: inset 0 0 0 1.5px var(--scarlet); }
+.f-input.disabled { color: var(--axis); background: rgba(156,238,255,.03); box-shadow: inset 0 0 0 1px var(--line); }
+.f-hint { font: 400 12px/1.45 Manrope; color: var(--grey); margin-top: 6px; }
+.f-error { font: 500 12px/1.45 Manrope; color: var(--scarlet); margin-top: 6px; display: flex; gap: 6px; align-items: flex-start; }
+.f-error svg { flex: none; width: 14px; height: 14px; margin-top: 1px; }
+.f-banner { border-radius: 14px; background: rgba(255,92,120,.10); box-shadow: inset 0 0 0 1px rgba(255,92,120,.35); color: var(--text); font: 500 13px/1.45 Manrope; padding: 12px 14px; margin-bottom: 20px; }
+.f-states { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px 28px; }
+@media (max-width: 900px) { .f-states { grid-template-columns: 1fr; } }
+
 /* Телефон */
 /* Панель меню внизу — на настоящем экране она прибита к низу окна (position: fixed), в макете телефона стоит под содержимым */
 .phone .side { position: relative; padding: 0; margin-top: 16px; height: auto; min-height: 0; z-index: 30; flex-direction: row; align-items: stretch; gap: 8px; background: none; border-radius: 0; box-shadow: none; overflow: visible; pointer-events: none; }
@@ -423,6 +441,22 @@ table.type { width: 100%; border-collapse: collapse; }
     </div>
   </div>
   <p class="note">Значок — Phosphor <code>info</code> duotone 18, цвет оси <code>--axis</code>; поле нажатия 28 по кругу. Открытый — циан на поднятой подложке. Подсказка — поднятая поверхность, скругление 16, ширина до 300, открывается под значком, у края экрана сдвигается внутрь. Открыта одна за раз; закрывается повторным нажатием, щелчком мимо или Esc; при прокрутке едет за значком, а не закрывается. На ноутбуке и телефоне — одинаково, по нажатию, без наведения: наведения на телефоне нет, а два поведения — два места, где ошибиться. Нажатие на значок не открывает плитку, даже если вся плитка — вход. Значок держится за последнее слово подписи и на строку один не уходит. Значок есть у каждой подписи метрики: в шапке плитки, в строке разбора, в заголовке столбца таблицы. Тексты подсказок — одно определение на метрику в общем словаре `shared/metrics.ts`.</p>
+</div>
+
+<!-- 9. Формы -->
+<div class="section">
+  <h2>9 · Формы</h2>
+  <p class="rule">Поле — подпись сверху, поле 48, под ним подсказка серым. Обязательное поле — звёздочка у подписи, необязательное — без пометок. Ошибка — алая обводка поля и алый текст под полем вместо подсказки: что не так и как исправить. Ошибка, которая не относится к одному полю, — плашкой над полями.</p>
+  <div class="tile" style="padding:28px">
+    <div class="f-states">
+      <div class="f-field"><span class="f-label">Название<span class="req">*</span></span><div class="f-input ph">Например, «Плакат у входа»</div><div class="f-hint">Пустое — подсказка внутри поля серым</div></div>
+      <div class="f-field"><span class="f-label">Название<span class="req">*</span></span><div class="f-input focus">Плакат — второй офис</div><div class="f-hint">В фокусе — циановая обводка</div></div>
+      <div class="f-field"><span class="f-label">Название<span class="req">*</span></span><div class="f-input error"></div><div class="f-error"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm-8-80V80a8,8,0,0,1,16,0v56a8,8,0,0,1-16,0Zm20,36a12,12,0,1,1-12-12A12,12,0,0,1,140,172Z"/></svg>Введите название — по нему метку найдут в списке</div></div>
+      <div class="f-field"><span class="f-label">Код в ссылке</span><div class="f-input disabled">p_poster1</div><div class="f-hint">Недоступно для правки — приглушённый текст, без обводки фокуса</div></div>
+    </div>
+    <div class="f-banner" style="margin:24px 0 0">Не удалось сохранить: связь с сервером прервалась. Данные формы не потеряны — нажмите «Создать метку» ещё раз.</div>
+  </div>
+  <p class="note">Ошибка показывается после попытки сохранить или после ухода из поля, а не на каждую букву. Первое поле с ошибкой получает фокус. Кнопка сохранения не гасится заранее: человек нажимает и видит, что не так. Текст ошибки — без кодов и названий полей из базы. Форма в окне — <code>promo/02-new.html</code>: ширина 560, выбор из нескольких — кнопками-пилюлями, значки действий внутри поля справа с подписью при наведении.</p>
 </div>
 
 </div>
