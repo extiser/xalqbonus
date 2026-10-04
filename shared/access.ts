@@ -99,6 +99,15 @@ export const SEGMENT_ROLES: readonly EmployeeRole[] = ['owner', 'admin'];
 export const CAMPAIGN_ROLES: readonly EmployeeRole[] = ['owner', 'admin'];
 
 /**
+ * Дашборд метрик — экран и ручки — владельцу и админу (issue #371).
+ *
+ * Менеджеру и старшему менеджеру дашборд закрыт: это цифры всего парка — поездки, водители,
+ * дальше деньги, — материал решений владельца, а не работы у стойки. Своим списком, а не
+ * `SYNC_ROLES`: состав сегодня совпадает, но это разные права.
+ */
+export const METRICS_ROLES: readonly EmployeeRole[] = ['owner', 'admin'];
+
+/**
  * Ручное начисление и списание баллов водителю — владельцу, админу и старшему менеджеру
  * (issue #131, #291).
  *

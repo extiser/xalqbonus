@@ -11,7 +11,7 @@ COMPOSE_COPY = docker compose -f docker/compose.local.yml -f docker/compose.copy
         db-restore db-drop db-schema invariants license-collisions legacy-vs-api import-legacy import-legacy-awarded-trips \
         employee-owner prod-employee-owner \
         import-legacy-dump \
-        copy-restore copy-up copy-psql copy-status \
+        copy-restore copy-up copy-psql copy-status metrics-recompute \
         sync-orders sync-registry sync-state fleet-history fleet-history-status \
         prod-up prod-down prod-restart prod-logs prod-ps prod-shell prod-psql prod-invariants prod-migrate prod-migrate-rolled-back \
         prod-stop prod-start prod-sql prod-db-restore prod-uploads-restore \
@@ -341,6 +341,13 @@ copy-up: ## Поднять app на копии боевой базы, в фон�
 	$(COMPOSE_COPY) up -d app
 	$(COMPOSE) stop worker
 	@echo "app на копии $(COPY_DB), worker остановлен: make copy-status; обратно на рабочую базу — make up-d"
+
+# Разовый пересчёт таблицы метрик дашборда (issue #371) мимо очереди — тем же сервисом, что
+# ночная задача воркера. Идёт в базу, на которой стоит app: в режиме копии (`make copy-up`) —
+# в копию, где воркер остановлен и таблицу наполняет только эта цель. Боевой цели нет:
+# на проде таблицу наполнит первая ночь.
+metrics-recompute: ## Пересчитать таблицу метрик дашборда разово, в базу app (на копии — в копию)
+	$(COMPOSE) exec -T app npx tsx scripts/metrics-recompute.ts
 
 copy-psql: ## Войти в psql копии боевой базы
 	$(COMPOSE) exec postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$(COPY_DB)"'

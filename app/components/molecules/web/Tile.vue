@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { resolveComponent } from 'vue';
+import type { MetricKey } from '#shared/metrics';
 
 /**
  * Плитка веба — `.tile` кодекса `_reference/design/web/codex.html`: фон плитки без контура,
@@ -30,6 +31,8 @@ defineProps<{
   title: string;
   /** Золотая точка программы перед названием — «Цена программы». */
   marker?: 'program';
+  /** Ключ метрики: после названия встаёт значок подсказки (`AtomsWebTileTitle`). */
+  metric?: MetricKey;
   /** Куда ведёт плитка: появляется кнопка-вход, и нажимается вся плитка. */
   to?: string;
 }>();
@@ -63,7 +66,7 @@ const ROWS_CLASSES: Record<TileRows, string> = {
     ]"
   >
     <div class="flex items-center justify-between gap-3">
-      <AtomsWebTileTitle :label="title" :marker="marker" />
+      <AtomsWebTileTitle :label="title" :marker="marker" :metric="metric" />
       <span v-if="to" class="grid size-10 shrink-0 place-items-center rounded-full bg-web-raised" aria-hidden="true">
         <svg
           viewBox="0 0 16 16"

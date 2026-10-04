@@ -569,6 +569,7 @@ model Person {
   demoViewer    DemoViewer?
   surveys       SurveyResponse[]
   segmentMemberships SegmentMember[]
+  metricDays    MetricPersonDay[]
 
   @@map("persons")
   @@schema("xb")
@@ -2523,5 +2524,48 @@ model FleetOrderHistoryDay {
   nextCursor  String?   @map("next_cursor")
 
   @@map("fleet_order_history_days")
+  @@schema("xb")
+}
+
+/// Поездки человека за сутки — готовая таблица ночного пересчёта метрик дашборда (issue #371).
+///
+/// Считается целиком заново (`server/services/metrics/recomputePersonDays.ts`), а не добавкой:
+/// история заказов догружается задним числом, и добавка пропустила бы дозакрытые сутки.
+/// Водитель — человек, а не учётная запись парка; поездка — завершённый заказ из `trips`
+/// и `fleet_order_history` (docs/decisions.md → «Метрики дашборда»). Строк без поездок нет:
+/// человек, не ездивший в сутки, в них отсутствует. Демо-людей нет.
+model MetricPersonDay {
+  /// Сутки по Ташкенту, календарные.
+  day      DateTime @db.Date
+  personId String   @map("person_id") @db.Uuid
+  /// Завершённых поездок человека за эти сутки, больше нуля.
+  trips    Int
+
+  person Person @relation(fields: [personId], references: [id])
+
+  @@id([day, personId])
+  @@index([personId, day])
+  @@map("metric_person_days")
+  @@schema("xb")
+}
+
+/// Журнал прогонов пересчёта метрик (issue #371): по нему экран говорит, когда посчитано,
+/// а разбор видит, что прогон шёл. `finished_at = null` — идёт или упал; у упавшего — `error`.
+model MetricRecomputeRun {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  startedAt          DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  finishedAt         DateTime? @map("finished_at") @db.Timestamptz(6)
+  /// Первые и последние сутки пересчёта, по Ташкенту.
+  daysFrom           DateTime  @map("days_from") @db.Date
+  daysTo             DateTime  @map("days_to") @db.Date
+  /// Строк `metric_person_days` записано.
+  rows               Int?
+  /// Завершённых заказов истории, у чьего профиля нет записи в `park_profiles`: человека
+  /// у них нет, и в таблицу они не попадают.
+  unattributedOrders Int?      @map("unattributed_orders")
+  error              String?
+
+  @@index([finishedAt])
+  @@map("metric_recompute_runs")
   @@schema("xb")
 }
