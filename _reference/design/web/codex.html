@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Кодекс веба — бенто</title>
+<!-- Кодекс веба XalqBonus в стиле бенто. Сессия 83, 04-10-2026. Объяснение — codex.md рядом.
+     Палитра — по референсу Руслана `inspiration/web/01-teal-tiles-yes.png` (04-10-2026): тёмный сине-зелёный,
+     циановые данные. Отходит от токенов Mini App — решение Руслана: «такие цвета нравятся, не бьёт по глазам».
+     Все цифры на листе условные: показывают устройство плитки, а не данные парка. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Unbounded:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* поверхности */
+  --page: #081114; --tile: #0E1B1F; --raised: #142429; --line: rgba(156,238,255,.07);
+  /* текст */
+  --text: #F4F9FA; --title: #9DB1B5; --grey: #7E9399; --axis: #566E74;
+  /* данные */
+  --cyan: #9CEEFF; --teal: #1C4A58; --teal-mid: #137B9C; --compare: #4F6C73;
+  /* смысл */
+  --green: #47CB4A; --scarlet: #FF5C78; --gold: #F7BC3E; --garnet: #E8365D;
+  --gap: 16px; --radius: 32px; --pad: 28px;
+}
+* { box-sizing: border-box; margin: 0; }
+body { background: var(--page); color: var(--text); font: 400 15px/1.45 Manrope, system-ui, sans-serif; padding: 48px 40px 96px; }
+.wrap { max-width: 1240px; margin: 0 auto; }
+h1 { font: 700 34px/1.1 Unbounded, sans-serif; letter-spacing: -.5px; }
+.lead { color: var(--grey); margin: 12px 0 0; max-width: 780px; }
+.section { margin-top: 64px; }
+.section > h2 { font: 600 13px/1 Manrope; color: var(--grey); text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 8px; }
+.rule { color: var(--title); margin-bottom: 20px; max-width: 840px; }
+.note { color: var(--grey); font-size: 13px; margin-top: 14px; max-width: 900px; }
+code { font: 500 .92em ui-monospace, Menlo, monospace; color: var(--title); }
+
+/* Сетка */
+.bento { display: grid; grid-template-columns: repeat(12, 1fr); grid-auto-rows: 120px; gap: var(--gap); }
+.tile { background: var(--tile); border-radius: var(--radius); padding: var(--pad); display: flex; flex-direction: column; min-width: 0; position: relative; overflow: hidden; }
+.c3 { grid-column: span 3; } .c4 { grid-column: span 4; } .c6 { grid-column: span 6; } .c8 { grid-column: span 8; } .c12 { grid-column: span 12; }
+.r1 { grid-row: span 1; } .r2 { grid-row: span 2; } .r3 { grid-row: span 3; }
+.size { position: absolute; right: 24px; bottom: 18px; font: 500 11px Manrope; color: var(--axis); }
+
+/* Шапка плитки: название и вход */
+.head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.t-title { font: 500 18px/1.25 Manrope; color: var(--title); }
+.go { flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--raised); display: grid; place-items: center; }
+.go svg { width: 16px; height: 16px; stroke: var(--text); }
+.t-hero { font: 700 60px/1 Unbounded; letter-spacing: -3px; margin-top: 18px; }
+.t-big { font: 700 34px/1.05 Unbounded; letter-spacing: -1px; margin-top: 14px; }
+.t-unit { font: 500 16px Manrope; color: var(--title); letter-spacing: 0; margin-left: 8px; }
+.t-sub { font: 300 13px/1.4 Manrope; color: var(--grey); margin-top: 8px; }
+.delta { display: inline-flex; align-items: baseline; gap: 6px; font: 600 15px Manrope; color: var(--title); margin-top: 10px; }
+.delta b { font-weight: 700; } .up b { color: var(--green); } .down b { color: var(--scarlet); }
+.delta svg { width: 18px; height: 12px; align-self: center; }
+.badge { display: inline-block; font: 600 11px Manrope; color: var(--grey); background: var(--raised); border-radius: 999px; padding: 4px 10px; }
+
+/* Палитра */
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.sw { background: var(--tile); border-radius: 20px; padding: 12px; }
+.sw i { display: block; height: 44px; border-radius: 12px; margin-bottom: 10px; box-shadow: inset 0 0 0 1px var(--line); }
+.sw b { display: block; font: 600 13px Manrope; } .sw span { font: 400 12px Manrope; color: var(--grey); }
+.group { font: 600 12px Manrope; color: var(--grey); text-transform: uppercase; letter-spacing: 1px; margin: 22px 0 10px; }
+
+/* Шрифты */
+table.type { width: 100%; border-collapse: collapse; }
+.type td { padding: 14px 12px; border-top: 1px solid var(--line); vertical-align: baseline; }
+.type td:first-child { width: 42%; } .type td.meta { color: var(--grey); font-size: 13px; }
+
+/* Разбор */
+.why { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+.why-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; font: 500 15px Manrope; color: var(--title); }
+.why-row b { font-weight: 700; text-align: right; } .pos { color: var(--green); } .neg { color: var(--scarlet); }
+.why-row.total { border-top: 1px solid var(--line); padding-top: 10px; color: var(--text); }
+
+/* Полоса доли */
+.split { margin-top: auto; }
+.split .lbl { display: flex; justify-content: space-between; font: 600 14px Manrope; color: var(--title); margin-bottom: 8px; }
+.split .lbl span:first-child { color: var(--cyan); }
+.split .bar { display: flex; gap: 4px; height: 20px; }
+.split .bar i { border-radius: 8px; }
+
+/* Меню слева */
+.shell { display: grid; grid-template-columns: 240px 1fr; gap: 16px; background: var(--page); border-radius: 28px; padding: 16px; box-shadow: inset 0 0 0 1px var(--line); }
+.side { position: relative; background: var(--tile); border-radius: 24px; padding: 22px 14px; display: flex; flex-direction: column; gap: 4px; min-height: 520px; }
+.brand { font: 700 15px Unbounded; padding: 0 10px 18px; } .brand span { color: var(--cyan); }
+.nav { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 14px; font: 500 14px Manrope; color: var(--title); }
+.nav svg { flex: none; width: 20px; height: 20px; color: var(--grey); }
+.nav.on { background: var(--raised); color: var(--text); } .nav.on svg { color: var(--cyan); }
+.nav .cnt { margin-left: auto; font: 600 11px Manrope; color: var(--page); background: var(--cyan); border-radius: 999px; padding: 2px 8px; }
+.navs { display: flex; flex-direction: column; gap: 4px; flex: 1; min-height: 0; overflow-y: auto; }
+/* Меню аккаунта: имя и роль, «Сменить пароль», «Выйти». На ноутбуке открывается над блоком «кто вошёл», на телефоне — под круглой кнопкой справа от строки меню */
+.who { margin-top: 8px; padding: 12px; border-radius: 16px; background: var(--raised); font: 400 13px Manrope; color: var(--title); display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 0; width: 100%; text-align: left; cursor: pointer; }
+.who b { color: var(--text); font-weight: 600; }
+.who svg { flex: none; width: 20px; height: 20px; color: var(--grey); }
+.acct { display: none; flex: none; width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--raised); color: var(--grey); place-items: center; cursor: pointer; }
+.acct svg { width: 24px; height: 24px; }
+.side.open .acct, .side.open .who svg { color: var(--cyan); }
+.acct-menu { display: none; position: absolute; z-index: 20; left: 14px; right: 14px; bottom: 84px; background: var(--raised); border-radius: 16px; padding: 6px; box-shadow: 0 16px 40px rgba(0,0,0,.5), inset 0 0 0 1px var(--line); }
+.side.open .acct-menu { display: block; }
+.acct-menu .me { padding: 10px 12px 8px; font-size: 13px; color: var(--title); border-bottom: 1px solid var(--line); margin-bottom: 4px; display: none; }
+.acct-menu .me b { color: var(--text); font-weight: 600; }
+.acct-menu .item { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 12px; font: 500 14px Manrope; color: var(--text); cursor: pointer; }
+.acct-menu .item svg { flex: none; width: 20px; height: 20px; color: var(--grey); }
+.acct-menu .item:hover { background: var(--tile); }
+.main-mock { display: grid; grid-template-columns: repeat(6, 1fr); grid-auto-rows: 120px; gap: 16px; }
+.main-mock .tile { padding: 22px; } .main-mock .pg { grid-column: span 6; grid-row: span 1; background: none; padding: 8px 4px; justify-content: flex-end; }
+
+/* Телефон */
+/* Панель меню внизу — на настоящем экране она прибита к низу окна (position: fixed), в макете телефона стоит под содержимым */
+.phone .side { position: relative; padding: 0; margin-top: 16px; height: auto; min-height: 0; z-index: 30; flex-direction: row; align-items: stretch; gap: 8px; background: none; border-radius: 0; box-shadow: none; overflow: visible; pointer-events: none; }
+.phone .side > * { pointer-events: auto; }
+.phone .side .brand, .phone .side .who { display: none; }
+.phone .side .navs { flex: 1; min-width: 0; flex-direction: row; gap: 2px; overflow-x: auto; overflow-y: hidden; padding: 6px; border-radius: 26px; scrollbar-width: none; background: rgba(14,27,31,.94); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); box-shadow: 0 10px 30px rgba(0,0,0,.45), inset 0 0 0 1px var(--line); }
+.phone .side .navs::-webkit-scrollbar { display: none; }
+.phone .side .navs::after { content: ""; position: sticky; right: -6px; flex: none; width: 32px; margin-left: -32px; background: linear-gradient(to right, transparent, rgba(14,27,31,.94)); pointer-events: none; }
+.phone .side .nav { position: relative; flex: none; flex-direction: column; gap: 4px; min-width: 68px; padding: 8px 6px 6px; border-radius: 18px; font: 500 11px Manrope; white-space: nowrap; }
+.phone .side .nav svg { width: 24px; height: 24px; }
+.phone .side .nav.on { background: none; color: var(--cyan); }
+.phone .side .nav .cnt { position: absolute; top: 3px; left: calc(50% + 6px); margin: 0; font-size: 10px; padding: 1px 6px; }
+.phone .side .acct { display: grid; flex: none; align-self: center; width: 66px; height: 66px; border-radius: 50%; color: var(--grey); background: rgba(14,27,31,.94); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); box-shadow: 0 10px 30px rgba(0,0,0,.45), inset 0 0 0 1px var(--line); }
+.phone .side .acct svg { width: 26px; height: 26px; }
+.phone .side .acct-menu { left: auto; right: 0px; top: auto; bottom: calc(100% + 8px); min-width: 220px; }
+.phone .side .acct-menu .me { display: block; }
+.phone { width: 100%; max-width: 390px; background: var(--page); border-radius: 36px; padding: 20px 16px; box-shadow: inset 0 0 0 1px var(--line); }
+.phone .bento { grid-template-columns: 1fr; grid-auto-rows: auto; }
+.phone .tile { grid-column: auto; grid-row: auto; min-height: 120px; padding: 24px; }
+.phone .t-hero { font-size: 44px; letter-spacing: -2px; }
+.two { display: grid; grid-template-columns: 1fr 390px; gap: 40px; align-items: start; }
+@media (max-width: 900px) {
+  body { padding: 24px 16px; }
+  .bento, .main-mock { grid-template-columns: 1fr; grid-auto-rows: auto; }
+  .tile { grid-column: auto !important; grid-row: auto !important; min-height: 120px; }
+  .two, .shell { grid-template-columns: 1fr; }
+  .shell .side { display: none; }
+  .t-hero { font-size: 44px; }
+  .type tr { display: block; border-top: 1px solid var(--line); padding: 10px 0; } .type td { display: block; border: 0; padding: 2px 0; width: auto !important; } .type td.meta { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Кодекс веба — бенто</h1>
+<p class="lead">Правила, по которым собирается каждый экран веба, начиная с дашборда T99. Тёмный сине-зелёный, данные — циановым, крупные белые числа, меню слева. Цифры на листе условные.</p>
+
+<!-- 1. Каркас -->
+<div class="section">
+  <h2>1 · Каркас — меню слева</h2>
+  <p class="rule">Меню — колонка слева шириной 240: в шапке пункты не помещаются. Активный пункт — подложкой и циановым значком. Внизу — кто вошёл: нажатие открывает меню аккаунта — «Сменить пароль» и «Выйти». На телефоне меню — панель внизу с прокруткой вбок, справа на ней — круглая кнопка аккаунта с тем же меню; в нём сверху имя и роль (раздел 7). Значки — Phosphor Duotone, неактивный серый, активный циан.</p>
+  <div class="shell">
+    <div class="side">
+      <div class="brand">Xalq Taxi <span>Bonus</span></div>
+      <nav class="navs">
+        <div class="nav on"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M112,56v48a8,8,0,0,1-8,8H56a8,8,0,0,1-8-8V56a8,8,0,0,1,8-8h48A8,8,0,0,1,112,56Zm88-8H152a8,8,0,0,0-8,8v48a8,8,0,0,0,8,8h48a8,8,0,0,0,8-8V56A8,8,0,0,0,200,48Zm-96,96H56a8,8,0,0,0-8,8v48a8,8,0,0,0,8,8h48a8,8,0,0,0,8-8V152A8,8,0,0,0,104,144Zm96,0H152a8,8,0,0,0-8,8v48a8,8,0,0,0,8,8h48a8,8,0,0,0,8-8V152A8,8,0,0,0,200,144Z" opacity="0.2"/><path d="M200,136H152a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V152A16,16,0,0,0,200,136Zm0,64H152V152h48v48ZM104,40H56A16,16,0,0,0,40,56v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V56A16,16,0,0,0,104,40Zm0,64H56V56h48v48Zm96-64H152a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V56A16,16,0,0,0,200,40Zm0,64H152V56h48v48Zm-96,32H56a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V152A16,16,0,0,0,104,136Zm0,64H56V152h48v48Z"/></svg>Дашборд</div>
+        <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M136,108A52,52,0,1,1,84,56,52,52,0,0,1,136,108Z" opacity="0.2"/><path d="M117.25,157.92a60,60,0,1,0-66.5,0A95.83,95.83,0,0,0,3.53,195.63a8,8,0,1,0,13.4,8.74,80,80,0,0,1,134.14,0,8,8,0,0,0,13.4-8.74A95.83,95.83,0,0,0,117.25,157.92ZM40,108a44,44,0,1,1,44,44A44.05,44.05,0,0,1,40,108Zm210.14,98.7a8,8,0,0,1-11.07-2.33A79.83,79.83,0,0,0,172,168a8,8,0,0,1,0-16,44,44,0,1,0-16.34-84.87,8,8,0,1,1-5.94-14.85,60,60,0,0,1,55.53,105.64,95.83,95.83,0,0,1,47.22,37.71A8,8,0,0,1,250.14,206.7Z"/></svg>Водители</div>
+        <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,56V200a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V56a8,8,0,0,1,8-8H216A8,8,0,0,1,224,56Z" opacity="0.2"/><path d="M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,160H40V56H216V200ZM176,88a48,48,0,0,1-96,0,8,8,0,0,1,16,0,32,32,0,0,0,64,0,8,8,0,0,1,16,0Z"/></svg>Заказы<span class="cnt">3</span></div>
+        <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,96v16a32,32,0,0,1-64,0V96H96v16a32,32,0,0,1-64,0V96L46.34,45.8A8,8,0,0,1,54,40H202a8,8,0,0,1,7.69,5.8Z" opacity="0.2"/><path d="M231.69,93.81,217.35,43.6A16.07,16.07,0,0,0,202,32H54A16.07,16.07,0,0,0,38.65,43.6L24.31,93.81A7.94,7.94,0,0,0,24,96v16a40,40,0,0,0,16,32v72a8,8,0,0,0,8,8H208a8,8,0,0,0,8-8V144a40,40,0,0,0,16-32V96A7.94,7.94,0,0,0,231.69,93.81ZM54,48H202l11.42,40H42.61Zm98,56v8a24,24,0,0,1-48,0v-8ZM51.06,132.2A24,24,0,0,1,40,112v-8H88v8a24,24,0,0,1-35.12,21.26A7.88,7.88,0,0,0,51.06,132.2ZM200,208H56V151.2a40.57,40.57,0,0,0,8,.8,40,40,0,0,0,32-16,40,40,0,0,0,64,0,40,40,0,0,0,32,16,40.57,40.57,0,0,0,8-.8Zm16-96a24,24,0,0,1-11.07,20.2,8.08,8.08,0,0,0-1.8,1.05A24,24,0,0,1,168,112v-8h48Z"/></svg>Офисы</div>
+        <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M128,129.09V232a8,8,0,0,1-3.84-1l-88-48.18a8,8,0,0,1-4.16-7V80.18a8,8,0,0,1,.7-3.25Z" opacity="0.2"/><path d="M223.68,66.15,135.68,18a15.88,15.88,0,0,0-15.36,0l-88,48.17a16,16,0,0,0-8.32,14v95.64a16,16,0,0,0,8.32,14l88,48.17a15.88,15.88,0,0,0,15.36,0l88-48.17a16,16,0,0,0,8.32-14V80.18A16,16,0,0,0,223.68,66.15ZM128,32l80.34,44-29.77,16.3-80.35-44ZM128,120,47.66,76l33.9-18.56,80.34,44ZM40,90l80,43.78v85.79L40,175.82Zm176,85.78h0l-80,43.79V133.82l32-17.51V152a8,8,0,0,0,16,0V107.55L216,90v85.77Z"/></svg>Каталог</div>
+        <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M208,40V208H152V40Z" opacity="0.2"/><path d="M224,200h-8V40a8,8,0,0,0-8-8H152a8,8,0,0,0-8,8V80H96a8,8,0,0,0-8,8v40H48a8,8,0,0,0-8,8v64H32a8,8,0,0,0,0,16H224a8,8,0,0,0,0-16ZM160,48h40V200H160ZM104,96h40V200H104ZM56,144H88v56H56Z"/></svg>Отчёты</div>
+        <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M208,128v72a8,8,0,0,1-8,8H56a8,8,0,0,1-8-8V128Z" opacity="0.2"/><path d="M216,72H180.92c.39-.33.79-.65,1.17-1A29.53,29.53,0,0,0,192,49.57,32.62,32.62,0,0,0,158.44,16,29.53,29.53,0,0,0,137,25.91a54.94,54.94,0,0,0-9,14.48,54.94,54.94,0,0,0-9-14.48A29.53,29.53,0,0,0,97.56,16,32.62,32.62,0,0,0,64,49.57,29.53,29.53,0,0,0,73.91,71c.38.33.78.65,1.17,1H40A16,16,0,0,0,24,88v32a16,16,0,0,0,16,16v64a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V136a16,16,0,0,0,16-16V88A16,16,0,0,0,216,72ZM149,36.51a13.69,13.69,0,0,1,10-4.5h.49A16.62,16.62,0,0,1,176,49.08a13.69,13.69,0,0,1-4.5,10c-9.49,8.4-25.24,11.36-35,12.4C137.7,60.89,141,45.5,149,36.51Zm-64.09.36A16.63,16.63,0,0,1,96.59,32h.49a13.69,13.69,0,0,1,10,4.5c8.39,9.48,11.35,25.2,12.39,34.92-9.72-1-25.44-4-34.92-12.39a13.69,13.69,0,0,1-4.5-10A16.6,16.6,0,0,1,84.87,36.87ZM40,88h80v32H40Zm16,48h64v64H56Zm144,64H136V136h64Zm16-80H136V88h80v32Z"/></svg>Награды</div>
+        <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M221.9,61.38,152,136v58.65a8,8,0,0,1-3.56,6.66l-32,21.33A8,8,0,0,1,104,216V136L34.1,61.38A8,8,0,0,1,40,48H216A8,8,0,0,1,221.9,61.38Z" opacity="0.2"/><path d="M230.6,49.53A15.81,15.81,0,0,0,216,40H40A16,16,0,0,0,28.19,66.76l.08.09L96,139.17V216a16,16,0,0,0,24.87,13.32l32-21.34A16,16,0,0,0,160,194.66V139.17l67.74-72.32.08-.09A15.8,15.8,0,0,0,230.6,49.53ZM40,56h0Zm106.18,74.58A8,8,0,0,0,144,136v58.66L112,216V136a8,8,0,0,0-2.16-5.47L40,56H216Z"/></svg>Сегменты</div>
+        <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M223.69,42.18l-58.22,192a8,8,0,0,1-14.92,1.25L108,148,20.58,105.45a8,8,0,0,1,1.25-14.92l192-58.22A8,8,0,0,1,223.69,42.18Z" opacity="0.2"/><path d="M227.32,28.68a16,16,0,0,0-15.66-4.08l-.15,0L19.57,82.84a16,16,0,0,0-2.49,29.8L102,154l41.3,84.87A15.86,15.86,0,0,0,157.74,248q.69,0,1.38-.06a15.88,15.88,0,0,0,14-11.51l58.2-191.94c0-.05,0-.1,0-.15A16,16,0,0,0,227.32,28.68ZM157.83,231.85l-.05.14,0-.07-40.06-82.3,48-48a8,8,0,0,0-11.31-11.31l-48,48L24.08,98.25l-.07,0,.14,0L216,40Z"/></svg>Рассылки</div>
+        <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M240,120a40,40,0,0,1-40,40H160V80h40A40,40,0,0,1,240,120Z" opacity="0.2"/><path d="M248,120a48.05,48.05,0,0,0-48-48H160.2c-2.91-.17-53.62-3.74-101.91-44.24A16,16,0,0,0,32,40V200a16,16,0,0,0,26.29,12.25c37.77-31.68,77-40.76,93.71-43.3v31.72A16,16,0,0,0,159.12,214l11,7.33A16,16,0,0,0,194.5,212l11.77-44.36A48.07,48.07,0,0,0,248,120ZM48,199.93V40h0c42.81,35.91,86.63,45,104,47.24v65.48C134.65,155,90.84,164.07,48,199.93Zm131,8,0,.11-11-7.33V168h21.6ZM200,152H168V88h32a32,32,0,1,1,0,64Z"/></svg>Акции</div>
+        <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M216,48H40a8,8,0,0,0-8,8V200a8,8,0,0,0,8,8H216a8,8,0,0,0,8-8V56A8,8,0,0,0,216,48ZM96,144a24,24,0,1,1,24-24A24,24,0,0,1,96,144Z" opacity="0.2"/><path d="M200,112a8,8,0,0,1-8,8H152a8,8,0,0,1,0-16h40A8,8,0,0,1,200,112Zm-8,24H152a8,8,0,0,0,0,16h40a8,8,0,0,0,0-16Zm40-80V200a16,16,0,0,1-16,16H40a16,16,0,0,1-16-16V56A16,16,0,0,1,40,40H216A16,16,0,0,1,232,56ZM216,200V56H40V200H216Zm-80.26-34a8,8,0,1,1-15.5,4c-2.63-10.26-13.06-18-24.25-18s-21.61,7.74-24.25,18a8,8,0,1,1-15.5-4,39.84,39.84,0,0,1,17.19-23.34,32,32,0,1,1,45.12,0A39.76,39.76,0,0,1,135.75,166ZM96,136a16,16,0,1,0-16-16A16,16,0,0,0,96,136Z"/></svg>Сотрудники</div>
+        <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M216,128a88,88,0,1,1-88-88A88,88,0,0,1,216,128Z" opacity="0.2"/><path d="M224,48V96a8,8,0,0,1-8,8H168a8,8,0,0,1,0-16h28.69L182.06,73.37a79.56,79.56,0,0,0-56.13-23.43h-.45A79.52,79.52,0,0,0,69.59,72.71,8,8,0,0,1,58.41,61.27a96,96,0,0,1,135,.79L208,76.69V48a8,8,0,0,1,16,0ZM186.41,183.29a80,80,0,0,1-112.47-.66L59.31,168H88a8,8,0,0,0,0-16H40a8,8,0,0,0-8,8v48a8,8,0,0,0,16,0V179.31l14.63,14.63A95.43,95.43,0,0,0,130,222.06h.53a95.36,95.36,0,0,0,67.07-27.33,8,8,0,0,0-11.18-11.44Z"/></svg>Синхронизация</div>
+        <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,56V176a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V56a8,8,0,0,1,8-8H216A8,8,0,0,1,224,56Z" opacity="0.2"/><path d="M216,40H136V24a8,8,0,0,0-16,0V40H40A16,16,0,0,0,24,56V176a16,16,0,0,0,16,16H79.36L57.75,219a8,8,0,0,0,12.5,10l29.59-37h56.32l29.59,37a8,8,0,1,0,12.5-10l-21.61-27H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,136H40V56H216V176Z"/></svg>Демо</div>
+      </nav>
+      <button class="who" type="button"><span><b>Руслан</b><br>владелец</span><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M80,176h96l-48,48ZM128,32,80,80h96Z" opacity="0.2"/><path d="M176,168H80a8,8,0,0,0-5.66,13.66l48,48a8,8,0,0,0,11.32,0l48-48A8,8,0,0,0,176,168Zm-48,44.69L99.31,184h57.38ZM80,88h96a8,8,0,0,0,5.66-13.66l-48-48a8,8,0,0,0-11.32,0l-48,48A8,8,0,0,0,80,88Zm48-44.69L156.69,72H99.31Z"/></svg></button>
+      <button class="acct" type="button" aria-label="Аккаунт"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a95.76,95.76,0,0,1-31.8,71.37A72,72,0,0,0,128,160a40,40,0,1,0-40-40,40,40,0,0,0,40,40,72,72,0,0,0-64.2,39.37h0A96,96,0,1,1,224,128Z" opacity="0.2"/><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24ZM74.08,197.5a64,64,0,0,1,107.84,0,87.83,87.83,0,0,1-107.84,0ZM96,120a32,32,0,1,1,32,32A32,32,0,0,1,96,120Zm97.76,66.41a79.66,79.66,0,0,0-36.06-28.75,48,48,0,1,0-59.4,0,79.66,79.66,0,0,0-36.06,28.75,88,88,0,1,1,131.52,0Z"/></svg></button>
+      <div class="acct-menu"><div class="me"><b>Руслан</b><br>владелец</div><div class="item"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232,98.36C230.73,136.92,198.67,168,160.09,168a71.68,71.68,0,0,1-26.92-5.17h0L120,176H96v24H72v24H40a8,8,0,0,1-8-8V187.31a8,8,0,0,1,2.34-5.65l58.83-58.83h0A71.68,71.68,0,0,1,88,95.91c0-38.58,31.08-70.64,69.64-71.87A72,72,0,0,1,232,98.36Z" opacity="0.2"/><path d="M216.57,39.43A80,80,0,0,0,83.91,120.78L28.69,176A15.86,15.86,0,0,0,24,187.31V216a16,16,0,0,0,16,16H72a8,8,0,0,0,8-8V208H96a8,8,0,0,0,8-8V184h16a8,8,0,0,0,5.66-2.34l9.56-9.57A79.73,79.73,0,0,0,160,176h.1A80,80,0,0,0,216.57,39.43ZM224,98.1c-1.09,34.09-29.75,61.86-63.89,61.9H160a63.7,63.7,0,0,1-23.65-4.51,8,8,0,0,0-8.84,1.68L116.69,168H96a8,8,0,0,0-8,8v16H72a8,8,0,0,0-8,8v16H40V187.31l58.83-58.82a8,8,0,0,0,1.68-8.84A63.72,63.72,0,0,1,96,95.92c0-34.14,27.81-62.8,61.9-63.89A64,64,0,0,1,224,98.1ZM192,76a12,12,0,1,1-12-12A12,12,0,0,1,192,76Z"/></svg>Сменить пароль</div><div class="item"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,56V200a16,16,0,0,1-16,16H48V40H208A16,16,0,0,1,224,56Z" opacity="0.2"/><path d="M120,216a8,8,0,0,1-8,8H48a8,8,0,0,1-8-8V40a8,8,0,0,1,8-8h64a8,8,0,0,1,0,16H56V208h56A8,8,0,0,1,120,216Zm109.66-93.66-40-40a8,8,0,0,0-11.32,11.32L204.69,120H112a8,8,0,0,0,0,16h92.69l-26.35,26.34a8,8,0,0,0,11.32,11.32l40-40A8,8,0,0,0,229.66,122.34Z"/></svg>Выйти</div></div>
+    </div>
+    <div class="main-mock">
+      <div class="tile pg"><span style="font:700 26px Unbounded">Дашборд</span></div>
+      <div class="tile" style="grid-column:span 4;grid-row:span 2"><div class="head"><span class="t-title">Главная плитка</span></div></div>
+      <div class="tile" style="grid-column:span 2;grid-row:span 2"><div class="head"><span class="t-title">Разбор</span></div></div>
+      <div class="tile" style="grid-column:span 2"><div class="head"><span class="t-title">Число</span></div></div>
+      <div class="tile" style="grid-column:span 2"><div class="head"><span class="t-title">Число</span></div></div>
+      <div class="tile" style="grid-column:span 2"><div class="head"><span class="t-title">Число</span></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- 2. Сетка -->
+<div class="section">
+  <h2>2 · Сетка</h2>
+  <p class="rule">12 колонок рабочей области, ряд 120, зазор 16, скругление плитки 32, поля 28. Контура у плитки нет — её отделяет от фона цвет. Размеры — 3, 4, 6, 8, 12 колонок на 1–3 ряда, других нет.</p>
+  <div class="bento">
+    <div class="tile c8 r2"><span class="size">8 × 2 · герой, одна на экран</span></div>
+    <div class="tile c4 r2"><span class="size">4 × 2 · разбор, список</span></div>
+    <div class="tile c3 r1"><span class="size">3 × 1</span></div>
+    <div class="tile c3 r1"><span class="size">3 × 1</span></div>
+    <div class="tile c6 r1"><span class="size">6 × 1</span></div>
+    <div class="tile c12 r1"><span class="size">12 × 1–3 · график, таблица, поимённый список</span></div>
+  </div>
+</div>
+
+<!-- 3. Цвет -->
+<div class="section">
+  <h2>3 · Цвет</h2>
+  <p class="rule">Данные — циановым: это «мы сейчас». Сравнение и фон шкалы — глубоким бирюзовым и серо-бирюзовым. Зелёный, алый, золото и гранат несут смысл, а не ряд. Цвет никогда не один: рядом знак, подпись или стрелка.</p>
+  <div class="group">Поверхности и текст</div>
+  <div class="swatches">
+    <div class="sw"><i style="background:#081114"></i><b>Фон страницы</b><span>#081114</span></div>
+    <div class="sw"><i style="background:#0E1B1F"></i><b>Плитка</b><span>#0E1B1F · без контура</span></div>
+    <div class="sw"><i style="background:#142429"></i><b>Поднятое</b><span>#142429 · кнопка-вход, активный пункт</span></div>
+    <div class="sw"><i style="background:#F4F9FA"></i><b>Числа и названия</b><span>#F4F9FA</span></div>
+    <div class="sw"><i style="background:#9DB1B5"></i><b>Название плитки</b><span>#9DB1B5</span></div>
+    <div class="sw"><i style="background:#7E9399"></i><b>Уточнение</b><span>#7E9399</span></div>
+  </div>
+  <div class="group">Данные</div>
+  <div class="swatches">
+    <div class="sw"><i style="background:#9CEEFF"></i><b>Сейчас</b><span>#9CEEFF · линия, текущий столбец, доля</span></div>
+    <div class="sw"><i style="background:#137B9C"></i><b>Вторая доля</b><span>#137B9C · когда долей две</span></div>
+    <div class="sw"><i style="background:#1C4A58"></i><b>Фон шкалы</b><span>#1C4A58 · прошлые столбцы, пустая часть</span></div>
+    <div class="sw"><i style="background:#4F6C73"></i><b>Сравнение</b><span>#4F6C73 · прошлый год, контроль</span></div>
+  </div>
+  <div class="group">Смысл</div>
+  <div class="swatches">
+    <div class="sw"><i style="background:#47CB4A"></i><b>Стало лучше</b><span>#47CB4A · линия роста, «+»</span></div>
+    <div class="sw"><i style="background:#FF5C78"></i><b>Стало хуже</b><span>#FF5C78 · падение, расход, отток</span></div>
+    <div class="sw"><i style="background:#F7BC3E"></i><b>Программа</b><span>#F7BC3E · баллы, цена программы</span></div>
+    <div class="sw"><i style="background:#E8365D"></i><b>Действие</b><span>#E8365D · метка акции и рассылки — цвет бренда</span></div>
+  </div>
+  <p class="note">Проверка палитры на фоне плитки: <b style="color:#F4F9FA">зелёный и золото для протанопа почти неразличимы</b> (ΔE 1,7), зелёный и алый — слабо. Правило: зелёный и золото не стоят рядом как два ряда одного графика, а цвет смысла всегда идёт со знаком или подписью.</p>
+</div>
+
+<!-- 4. Шрифты -->
+<div class="section">
+  <h2>4 · Шрифты</h2>
+  <p class="rule">Unbounded — только числа и заголовок страницы. Остальное — Manrope. Название плитки крупное и серое — читается первым, но не спорит с числом.</p>
+  <table class="type">
+    <tr><td><span style="font:700 60px/1 Unbounded;letter-spacing:-3px">48,2</span></td><td>Герой · Unbounded 60 / 700, −3</td><td class="meta">одна цифра экрана; на телефоне 44</td></tr>
+    <tr><td><span style="font:700 34px/1 Unbounded;letter-spacing:-1px">2 914</span></td><td>Число плитки · Unbounded 34 / 700, −1</td><td class="meta">плитки 3 × 1 и больше</td></tr>
+    <tr><td><span style="font:700 26px/1.1 Unbounded">Дашборд</span></td><td>Заголовок страницы · Unbounded 26 / 700</td><td class="meta">один на страницу</td></tr>
+    <tr><td><span style="font:500 18px Manrope;color:#9DB1B5">Поездки за месяц</span></td><td>Название плитки · Manrope 18 / 500</td><td class="meta">что это за число, с заглавной, без двоеточия</td></tr>
+    <tr><td><span style="font:600 15px Manrope;color:#9DB1B5"><b style="color:#47CB4A">+12 %</b> к сентябрю</span></td><td>Изменение · Manrope 15 / 600</td><td class="meta">знак обязателен, база словом</td></tr>
+    <tr><td><span style="font:500 15px Manrope">Строка списка или разбора</span></td><td>Строка · Manrope 15 / 400–500</td><td class="meta">списки, разбор, таблицы</td></tr>
+    <tr><td><span style="font:300 13px Manrope;color:#7E9399">Посчитано ночью, 05:00</span></td><td>Уточнение · Manrope 13 / 300</td><td class="meta">откуда цифра, когда посчитана</td></tr>
+    <tr><td><span style="font:500 12px Manrope;color:#566E74">1 окт · 8 окт · 15 окт</span></td><td>Ось графика · Manrope 12 / 500</td><td class="meta">тише уточнения</td></tr>
+  </table>
+</div>
+
+<!-- 5. Плитки -->
+<div class="section">
+  <h2>5 · Плитки</h2>
+  <p class="rule">Сверху — название и круглая кнопка-вход, если плитка ведёт глубже. Под названием — число, под числом — с чем сравнили. Внизу — график, доля или шкала, во всю ширину до края плитки.</p>
+  <div class="bento">
+    <div class="tile c8 r2">
+      <div class="head"><span class="t-title">Доход за вычетом программы · октябрь</span><span class="badge">цифры условные</span></div>
+      <div class="t-hero">48,2<span class="t-unit">млн сум</span></div>
+      <div style="display:flex;gap:28px;flex-wrap:wrap">
+        <span class="delta up"><b>+4,1 млн</b> к сентябрю <svg viewBox="0 0 18 12" fill="none" stroke="#47CB4A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 11l5-5 4 3 7-7M12 2h5v5"/></svg></span>
+        <span class="delta up"><b>+9,8 млн</b> к октябрю 2025</span>
+      </div>
+      <div class="t-sub">Расходы не введены — поэтому «доход за вычетом программы», а не «прибыль»</div>
+    </div>
+    <div class="tile c4 r2">
+      <div class="head"><span class="t-title">Почему изменилось</span><span class="go"><svg viewBox="0 0 16 16" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg></span></div>
+      <div class="why">
+        <div class="why-row"><span>Поездок больше</span><b class="pos">+3,6 млн</b></div>
+        <div class="why-row"><span>Доход с поездки</span><b class="pos">+1,2 млн</b></div>
+        <div class="why-row"><span>Программа</span><b class="neg">−0,7 млн</b></div>
+        <div class="why-row total"><span>Итого</span><b class="pos">+4,1 млн</b></div>
+      </div>
+    </div>
+
+    <div class="tile c4 r2">
+      <div class="head"><span class="t-title">Водителей на линии</span><span class="go"><svg viewBox="0 0 16 16" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg></span></div>
+      <div class="t-big">431</div>
+      <span class="delta up"><b>+18</b> к сентябрю</span>
+      <svg viewBox="0 0 300 70" preserveAspectRatio="none" style="margin:auto -28px -28px;width:calc(100% + 56px);height:76px">
+        <defs><linearGradient id="ga" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#47CB4A" stop-opacity=".35"/><stop offset="1" stop-color="#47CB4A" stop-opacity="0"/></linearGradient></defs>
+        <path d="M0 58 L20 50 L40 56 L60 44 L80 52 L100 40 L120 46 L140 30 L160 38 L180 26 L200 32 L220 22 L240 28 L260 16 L280 20 L300 8 L300 70 L0 70Z" fill="url(#ga)"/>
+        <path d="M0 58 L20 50 L40 56 L60 44 L80 52 L100 40 L120 46 L140 30 L160 38 L180 26 L200 32 L220 22 L240 28 L260 16 L280 20 L300 8" fill="none" stroke="#47CB4A" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+      </svg>
+    </div>
+    <div class="tile c4 r2">
+      <div class="head"><span class="t-title">Участники программы</span><span class="go"><svg viewBox="0 0 16 16" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg></span></div>
+      <div class="t-big">294<span class="t-unit">из 431</span></div>
+      <div class="split">
+        <div class="lbl"><span>В программе 68 %</span><span>Вне 32 %</span></div>
+        <div class="bar"><i style="flex:68;background:#9CEEFF"></i><i style="flex:32;background:#1C4A58"></i></div>
+      </div>
+    </div>
+    <div class="tile c4 r2">
+      <div class="head"><span class="t-title">Поездки за неделю</span><span class="go"><svg viewBox="0 0 16 16" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg></span></div>
+      <div class="t-big">21 640</div>
+      <svg viewBox="0 0 280 78" style="margin-top:auto;width:100%;height:78px">
+        <g fill="#1C4A58"><rect x="0" y="30" width="28" height="48" rx="6"/><rect x="42" y="22" width="28" height="56" rx="6"/><rect x="84" y="34" width="28" height="44" rx="6"/><rect x="126" y="18" width="28" height="60" rx="6"/><rect x="168" y="26" width="28" height="52" rx="6"/><rect x="210" y="38" width="28" height="40" rx="6"/></g>
+        <rect x="252" y="8" width="28" height="70" rx="6" fill="#9CEEFF"/>
+      </svg>
+    </div>
+  </div>
+  <p class="note">Кнопка-вход — круг 40 на поднятом цвете, вся плитка нажимается. Под линией — заливка того же цвета, от 35 % к нулю. Прошлые столбцы — фоном шкалы, текущий — циановым.</p>
+</div>
+
+<!-- 6. График -->
+<div class="section">
+  <h2>6 · График</h2>
+  <p class="rule">Линия 2 с мягкой заливкой под ней, точка только на последнем дне с подписью. Сейчас — циановым, сравнение — серо-бирюзовым. Сетка — едва заметные горизонтали. Ось одна. Метка действия — гранатовая вертикаль с подписью. Наведение показывает день и обе цифры.</p>
+  <div class="bento">
+    <div class="tile c8 r3">
+      <div class="head"><span class="t-title">Поездки по дням · октябрь против октября 2025</span><span class="badge">цифры условные</span></div>
+      <div style="display:flex;gap:18px;font:500 13px Manrope;color:#9DB1B5;margin-top:8px">
+        <span><i style="display:inline-block;width:14px;height:2px;background:#9CEEFF;vertical-align:middle;margin-right:6px"></i>октябрь 2026</span>
+        <span><i style="display:inline-block;width:14px;height:2px;background:#4F6C73;vertical-align:middle;margin-right:6px"></i>октябрь 2025</span>
+        <span><i style="display:inline-block;width:2px;height:12px;background:#E8365D;vertical-align:middle;margin-right:6px"></i>действие</span>
+      </div>
+      <svg viewBox="0 0 760 240" preserveAspectRatio="xMidYMid meet" style="flex:1;min-height:0;margin-top:10px" role="img" aria-label="Пример графика">
+        <defs><linearGradient id="gc" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9CEEFF" stop-opacity=".22"/><stop offset="1" stop-color="#9CEEFF" stop-opacity="0"/></linearGradient></defs>
+        <g stroke="rgba(156,238,255,.06)" stroke-width="1"><line x1="44" y1="20" x2="750" y2="20"/><line x1="44" y1="85" x2="750" y2="85"/><line x1="44" y1="150" x2="750" y2="150"/><line x1="44" y1="215" x2="750" y2="215"/></g>
+        <g font-family="Manrope" font-size="12" font-weight="500" fill="#566E74">
+          <text x="36" y="24" text-anchor="end">4 500</text><text x="36" y="89" text-anchor="end">3 500</text><text x="36" y="154" text-anchor="end">2 500</text><text x="36" y="219" text-anchor="end">1 500</text>
+          <text x="50" y="236">1 окт</text><text x="270" y="236">8 окт</text><text x="490" y="236">15 окт</text><text x="700" y="236">22 окт</text>
+        </g>
+        <polyline fill="none" stroke="#4F6C73" stroke-width="2" stroke-linejoin="round" points="50,120 82,112 114,128 146,140 178,118 210,110 242,124 274,116 306,108 338,126 370,138 402,120 434,114 466,122 498,118 530,110 562,128 594,134 626,116 658,112 690,124 722,118"/>
+        <path fill="url(#gc)" d="M50,104 82,98 114,110 146,118 178,96 210,92 242,104 274,98 306,94 338,106 370,112 402,96 434,80 466,76 498,82 530,70 562,78 594,84 626,66 658,62 690,72 722,58 L722,215 L50,215Z"/>
+        <polyline fill="none" stroke="#9CEEFF" stroke-width="2" stroke-linejoin="round" points="50,104 82,98 114,110 146,118 178,96 210,92 242,104 274,98 306,94 338,106 370,112 402,96 434,80 466,76 498,82 530,70 562,78 594,84 626,66 658,62 690,72 722,58"/>
+        <line x1="402" y1="20" x2="402" y2="215" stroke="#E8365D" stroke-width="1.5"/>
+        <text x="408" y="34" font-family="Manrope" font-size="12" font-weight="600" fill="#9DB1B5">Рассылка «Вернись»</text>
+        <circle cx="722" cy="58" r="5" fill="#9CEEFF" stroke="#0E1B1F" stroke-width="2"/>
+        <text x="716" y="46" text-anchor="end" font-family="Manrope" font-size="13" font-weight="700" fill="#F4F9FA">4 268</text>
+      </svg>
+    </div>
+    <div class="tile c4 r3">
+      <div class="head"><span class="t-title">Что нельзя</span></div>
+      <div style="margin-top:14px;display:flex;flex-direction:column;font-size:14px">
+        <div style="display:grid;grid-template-columns:1fr auto;padding:9px 0;border-top:1px solid var(--line)"><span>Вторая ось справа</span><span style="color:#7E9399">две плитки</span></div>
+        <div style="display:grid;grid-template-columns:1fr auto;padding:9px 0;border-top:1px solid var(--line)"><span>Цвет на каждый ряд</span><span style="color:#7E9399">циан + сравнение</span></div>
+        <div style="display:grid;grid-template-columns:1fr auto;padding:9px 0;border-top:1px solid var(--line)"><span>Свечение, звёзды, сетка-HUD</span><span style="color:#7E9399">плоско</span></div>
+        <div style="display:grid;grid-template-columns:1fr auto;padding:9px 0;border-top:1px solid var(--line)"><span>Число на каждой точке</span><span style="color:#7E9399">только последняя</span></div>
+        <div style="display:grid;grid-template-columns:1fr auto;padding:9px 0;border-top:1px solid var(--line)"><span>Контур у плитки</span><span style="color:#7E9399">цвет фона</span></div>
+        <div style="display:grid;grid-template-columns:1fr auto;padding:9px 0;border-top:1px solid var(--line)"><span>Пирог из 6 долей</span><span style="color:#7E9399">полоса</span></div>
+        <div style="display:grid;grid-template-columns:1fr auto;padding:9px 0;border-top:1px solid var(--line)"><span>Число без базы</span><span style="color:#7E9399">«к сентябрю»</span></div>
+      </div>
+    </div>
+  </div>
+  <p class="note">Реализация — ECharts (<code>nuxt-echarts</code>, решение сессии 82): тема собирается из этих токенов один раз и не правится на месте.</p>
+</div>
+
+<!-- 7. Телефон -->
+<div class="section">
+  <h2>7 · Телефон</h2>
+  <div class="two">
+    <p class="rule">Ниже 900 — одна колонка, меню — панелью внизу, как у iPhone: до верха экрана палец не дотягивается. Пункты прокручиваются вбок; справа отдельной круглой кнопкой — аккаунт с меню «Сменить пароль» и «Выйти». Дальше — плитки по высоте содержимого, главная цифра первой. Уровень 1 «деньги в кармане» читается с телефона с первого дня. Уровни 2 и 3 открываются, но отдельно не рисуются.</p>
+    <div class="phone">
+      <div class="bento">
+        <div class="tile">
+          <div class="head"><span class="t-title">Доход за вычетом программы · октябрь</span></div>
+          <div class="t-hero">48,2<span class="t-unit">млн сум</span></div>
+          <span class="delta up"><b>+4,1 млн</b> к сентябрю</span>
+          <span class="delta up" style="margin-top:4px"><b>+9,8 млн</b> к октябрю 2025</span>
+        </div>
+        <div class="tile">
+          <div class="head"><span class="t-title">Почему изменилось</span><span class="go"><svg viewBox="0 0 16 16" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg></span></div>
+          <div class="why">
+            <div class="why-row"><span>Поездок больше</span><b class="pos">+3,6 млн</b></div>
+            <div class="why-row"><span>Доход с поездки</span><b class="pos">+1,2 млн</b></div>
+            <div class="why-row"><span>Программа</span><b class="neg">−0,7 млн</b></div>
+          </div>
+        </div>
+      </div>
+      <div class="side">
+        <div class="brand">Xalq Taxi <span>Bonus</span></div>
+        <nav class="navs">
+        <div class="nav on"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M112,56v48a8,8,0,0,1-8,8H56a8,8,0,0,1-8-8V56a8,8,0,0,1,8-8h48A8,8,0,0,1,112,56Zm88-8H152a8,8,0,0,0-8,8v48a8,8,0,0,0,8,8h48a8,8,0,0,0,8-8V56A8,8,0,0,0,200,48Zm-96,96H56a8,8,0,0,0-8,8v48a8,8,0,0,0,8,8h48a8,8,0,0,0,8-8V152A8,8,0,0,0,104,144Zm96,0H152a8,8,0,0,0-8,8v48a8,8,0,0,0,8,8h48a8,8,0,0,0,8-8V152A8,8,0,0,0,200,144Z" opacity="0.2"/><path d="M200,136H152a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V152A16,16,0,0,0,200,136Zm0,64H152V152h48v48ZM104,40H56A16,16,0,0,0,40,56v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V56A16,16,0,0,0,104,40Zm0,64H56V56h48v48Zm96-64H152a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V56A16,16,0,0,0,200,40Zm0,64H152V56h48v48Zm-96,32H56a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V152A16,16,0,0,0,104,136Zm0,64H56V152h48v48Z"/></svg>Дашборд</div>
+        <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M136,108A52,52,0,1,1,84,56,52,52,0,0,1,136,108Z" opacity="0.2"/><path d="M117.25,157.92a60,60,0,1,0-66.5,0A95.83,95.83,0,0,0,3.53,195.63a8,8,0,1,0,13.4,8.74,80,80,0,0,1,134.14,0,8,8,0,0,0,13.4-8.74A95.83,95.83,0,0,0,117.25,157.92ZM40,108a44,44,0,1,1,44,44A44.05,44.05,0,0,1,40,108Zm210.14,98.7a8,8,0,0,1-11.07-2.33A79.83,79.83,0,0,0,172,168a8,8,0,0,1,0-16,44,44,0,1,0-16.34-84.87,8,8,0,1,1-5.94-14.85,60,60,0,0,1,55.53,105.64,95.83,95.83,0,0,1,47.22,37.71A8,8,0,0,1,250.14,206.7Z"/></svg>Водители</div>
+        <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,56V200a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V56a8,8,0,0,1,8-8H216A8,8,0,0,1,224,56Z" opacity="0.2"/><path d="M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,160H40V56H216V200ZM176,88a48,48,0,0,1-96,0,8,8,0,0,1,16,0,32,32,0,0,0,64,0,8,8,0,0,1,16,0Z"/></svg>Заказы<span class="cnt">3</span></div>
+        <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,96v16a32,32,0,0,1-64,0V96H96v16a32,32,0,0,1-64,0V96L46.34,45.8A8,8,0,0,1,54,40H202a8,8,0,0,1,7.69,5.8Z" opacity="0.2"/><path d="M231.69,93.81,217.35,43.6A16.07,16.07,0,0,0,202,32H54A16.07,16.07,0,0,0,38.65,43.6L24.31,93.81A7.94,7.94,0,0,0,24,96v16a40,40,0,0,0,16,32v72a8,8,0,0,0,8,8H208a8,8,0,0,0,8-8V144a40,40,0,0,0,16-32V96A7.94,7.94,0,0,0,231.69,93.81ZM54,48H202l11.42,40H42.61Zm98,56v8a24,24,0,0,1-48,0v-8ZM51.06,132.2A24,24,0,0,1,40,112v-8H88v8a24,24,0,0,1-35.12,21.26A7.88,7.88,0,0,0,51.06,132.2ZM200,208H56V151.2a40.57,40.57,0,0,0,8,.8,40,40,0,0,0,32-16,40,40,0,0,0,64,0,40,40,0,0,0,32,16,40.57,40.57,0,0,0,8-.8Zm16-96a24,24,0,0,1-11.07,20.2,8.08,8.08,0,0,0-1.8,1.05A24,24,0,0,1,168,112v-8h48Z"/></svg>Офисы</div>
+        <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M128,129.09V232a8,8,0,0,1-3.84-1l-88-48.18a8,8,0,0,1-4.16-7V80.18a8,8,0,0,1,.7-3.25Z" opacity="0.2"/><path d="M223.68,66.15,135.68,18a15.88,15.88,0,0,0-15.36,0l-88,48.17a16,16,0,0,0-8.32,14v95.64a16,16,0,0,0,8.32,14l88,48.17a15.88,15.88,0,0,0,15.36,0l88-48.17a16,16,0,0,0,8.32-14V80.18A16,16,0,0,0,223.68,66.15ZM128,32l80.34,44-29.77,16.3-80.35-44ZM128,120,47.66,76l33.9-18.56,80.34,44ZM40,90l80,43.78v85.79L40,175.82Zm176,85.78h0l-80,43.79V133.82l32-17.51V152a8,8,0,0,0,16,0V107.55L216,90v85.77Z"/></svg>Каталог</div>
+        <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M208,40V208H152V40Z" opacity="0.2"/><path d="M224,200h-8V40a8,8,0,0,0-8-8H152a8,8,0,0,0-8,8V80H96a8,8,0,0,0-8,8v40H48a8,8,0,0,0-8,8v64H32a8,8,0,0,0,0,16H224a8,8,0,0,0,0-16ZM160,48h40V200H160ZM104,96h40V200H104ZM56,144H88v56H56Z"/></svg>Отчёты</div>
+        <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M208,128v72a8,8,0,0,1-8,8H56a8,8,0,0,1-8-8V128Z" opacity="0.2"/><path d="M216,72H180.92c.39-.33.79-.65,1.17-1A29.53,29.53,0,0,0,192,49.57,32.62,32.62,0,0,0,158.44,16,29.53,29.53,0,0,0,137,25.91a54.94,54.94,0,0,0-9,14.48,54.94,54.94,0,0,0-9-14.48A29.53,29.53,0,0,0,97.56,16,32.62,32.62,0,0,0,64,49.57,29.53,29.53,0,0,0,73.91,71c.38.33.78.65,1.17,1H40A16,16,0,0,0,24,88v32a16,16,0,0,0,16,16v64a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V136a16,16,0,0,0,16-16V88A16,16,0,0,0,216,72ZM149,36.51a13.69,13.69,0,0,1,10-4.5h.49A16.62,16.62,0,0,1,176,49.08a13.69,13.69,0,0,1-4.5,10c-9.49,8.4-25.24,11.36-35,12.4C137.7,60.89,141,45.5,149,36.51Zm-64.09.36A16.63,16.63,0,0,1,96.59,32h.49a13.69,13.69,0,0,1,10,4.5c8.39,9.48,11.35,25.2,12.39,34.92-9.72-1-25.44-4-34.92-12.39a13.69,13.69,0,0,1-4.5-10A16.6,16.6,0,0,1,84.87,36.87ZM40,88h80v32H40Zm16,48h64v64H56Zm144,64H136V136h64Zm16-80H136V88h80v32Z"/></svg>Награды</div>
+        <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M221.9,61.38,152,136v58.65a8,8,0,0,1-3.56,6.66l-32,21.33A8,8,0,0,1,104,216V136L34.1,61.38A8,8,0,0,1,40,48H216A8,8,0,0,1,221.9,61.38Z" opacity="0.2"/><path d="M230.6,49.53A15.81,15.81,0,0,0,216,40H40A16,16,0,0,0,28.19,66.76l.08.09L96,139.17V216a16,16,0,0,0,24.87,13.32l32-21.34A16,16,0,0,0,160,194.66V139.17l67.74-72.32.08-.09A15.8,15.8,0,0,0,230.6,49.53ZM40,56h0Zm106.18,74.58A8,8,0,0,0,144,136v58.66L112,216V136a8,8,0,0,0-2.16-5.47L40,56H216Z"/></svg>Сегменты</div>
+        <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M223.69,42.18l-58.22,192a8,8,0,0,1-14.92,1.25L108,148,20.58,105.45a8,8,0,0,1,1.25-14.92l192-58.22A8,8,0,0,1,223.69,42.18Z" opacity="0.2"/><path d="M227.32,28.68a16,16,0,0,0-15.66-4.08l-.15,0L19.57,82.84a16,16,0,0,0-2.49,29.8L102,154l41.3,84.87A15.86,15.86,0,0,0,157.74,248q.69,0,1.38-.06a15.88,15.88,0,0,0,14-11.51l58.2-191.94c0-.05,0-.1,0-.15A16,16,0,0,0,227.32,28.68ZM157.83,231.85l-.05.14,0-.07-40.06-82.3,48-48a8,8,0,0,0-11.31-11.31l-48,48L24.08,98.25l-.07,0,.14,0L216,40Z"/></svg>Рассылки</div>
+        <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M240,120a40,40,0,0,1-40,40H160V80h40A40,40,0,0,1,240,120Z" opacity="0.2"/><path d="M248,120a48.05,48.05,0,0,0-48-48H160.2c-2.91-.17-53.62-3.74-101.91-44.24A16,16,0,0,0,32,40V200a16,16,0,0,0,26.29,12.25c37.77-31.68,77-40.76,93.71-43.3v31.72A16,16,0,0,0,159.12,214l11,7.33A16,16,0,0,0,194.5,212l11.77-44.36A48.07,48.07,0,0,0,248,120ZM48,199.93V40h0c42.81,35.91,86.63,45,104,47.24v65.48C134.65,155,90.84,164.07,48,199.93Zm131,8,0,.11-11-7.33V168h21.6ZM200,152H168V88h32a32,32,0,1,1,0,64Z"/></svg>Акции</div>
+        <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M216,48H40a8,8,0,0,0-8,8V200a8,8,0,0,0,8,8H216a8,8,0,0,0,8-8V56A8,8,0,0,0,216,48ZM96,144a24,24,0,1,1,24-24A24,24,0,0,1,96,144Z" opacity="0.2"/><path d="M200,112a8,8,0,0,1-8,8H152a8,8,0,0,1,0-16h40A8,8,0,0,1,200,112Zm-8,24H152a8,8,0,0,0,0,16h40a8,8,0,0,0,0-16Zm40-80V200a16,16,0,0,1-16,16H40a16,16,0,0,1-16-16V56A16,16,0,0,1,40,40H216A16,16,0,0,1,232,56ZM216,200V56H40V200H216Zm-80.26-34a8,8,0,1,1-15.5,4c-2.63-10.26-13.06-18-24.25-18s-21.61,7.74-24.25,18a8,8,0,1,1-15.5-4,39.84,39.84,0,0,1,17.19-23.34,32,32,0,1,1,45.12,0A39.76,39.76,0,0,1,135.75,166ZM96,136a16,16,0,1,0-16-16A16,16,0,0,0,96,136Z"/></svg>Сотрудники</div>
+        <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M216,128a88,88,0,1,1-88-88A88,88,0,0,1,216,128Z" opacity="0.2"/><path d="M224,48V96a8,8,0,0,1-8,8H168a8,8,0,0,1,0-16h28.69L182.06,73.37a79.56,79.56,0,0,0-56.13-23.43h-.45A79.52,79.52,0,0,0,69.59,72.71,8,8,0,0,1,58.41,61.27a96,96,0,0,1,135,.79L208,76.69V48a8,8,0,0,1,16,0ZM186.41,183.29a80,80,0,0,1-112.47-.66L59.31,168H88a8,8,0,0,0,0-16H40a8,8,0,0,0-8,8v48a8,8,0,0,0,16,0V179.31l14.63,14.63A95.43,95.43,0,0,0,130,222.06h.53a95.36,95.36,0,0,0,67.07-27.33,8,8,0,0,0-11.18-11.44Z"/></svg>Синхронизация</div>
+        <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,56V176a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V56a8,8,0,0,1,8-8H216A8,8,0,0,1,224,56Z" opacity="0.2"/><path d="M216,40H136V24a8,8,0,0,0-16,0V40H40A16,16,0,0,0,24,56V176a16,16,0,0,0,16,16H79.36L57.75,219a8,8,0,0,0,12.5,10l29.59-37h56.32l29.59,37a8,8,0,1,0,12.5-10l-21.61-27H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,136H40V56H216V176Z"/></svg>Демо</div>
+        </nav>
+        <button class="who" type="button"><span><b>Руслан</b><br>владелец</span><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M80,176h96l-48,48ZM128,32,80,80h96Z" opacity="0.2"/><path d="M176,168H80a8,8,0,0,0-5.66,13.66l48,48a8,8,0,0,0,11.32,0l48-48A8,8,0,0,0,176,168Zm-48,44.69L99.31,184h57.38ZM80,88h96a8,8,0,0,0,5.66-13.66l-48-48a8,8,0,0,0-11.32,0l-48,48A8,8,0,0,0,80,88Zm48-44.69L156.69,72H99.31Z"/></svg></button>
+        <button class="acct" type="button" aria-label="Аккаунт"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a95.76,95.76,0,0,1-31.8,71.37A72,72,0,0,0,128,160a40,40,0,1,0-40-40,40,40,0,0,0,40,40,72,72,0,0,0-64.2,39.37h0A96,96,0,1,1,224,128Z" opacity="0.2"/><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24ZM74.08,197.5a64,64,0,0,1,107.84,0,87.83,87.83,0,0,1-107.84,0ZM96,120a32,32,0,1,1,32,32A32,32,0,0,1,96,120Zm97.76,66.41a79.66,79.66,0,0,0-36.06-28.75,48,48,0,1,0-59.4,0,79.66,79.66,0,0,0-36.06,28.75,88,88,0,1,1,131.52,0Z"/></svg></button>
+        <div class="acct-menu"><div class="me"><b>Руслан</b><br>владелец</div><div class="item"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232,98.36C230.73,136.92,198.67,168,160.09,168a71.68,71.68,0,0,1-26.92-5.17h0L120,176H96v24H72v24H40a8,8,0,0,1-8-8V187.31a8,8,0,0,1,2.34-5.65l58.83-58.83h0A71.68,71.68,0,0,1,88,95.91c0-38.58,31.08-70.64,69.64-71.87A72,72,0,0,1,232,98.36Z" opacity="0.2"/><path d="M216.57,39.43A80,80,0,0,0,83.91,120.78L28.69,176A15.86,15.86,0,0,0,24,187.31V216a16,16,0,0,0,16,16H72a8,8,0,0,0,8-8V208H96a8,8,0,0,0,8-8V184h16a8,8,0,0,0,5.66-2.34l9.56-9.57A79.73,79.73,0,0,0,160,176h.1A80,80,0,0,0,216.57,39.43ZM224,98.1c-1.09,34.09-29.75,61.86-63.89,61.9H160a63.7,63.7,0,0,1-23.65-4.51,8,8,0,0,0-8.84,1.68L116.69,168H96a8,8,0,0,0-8,8v16H72a8,8,0,0,0-8,8v16H40V187.31l58.83-58.82a8,8,0,0,0,1.68-8.84A63.72,63.72,0,0,1,96,95.92c0-34.14,27.81-62.8,61.9-63.89A64,64,0,0,1,224,98.1ZM192,76a12,12,0,1,1-12-12A12,12,0,0,1,192,76Z"/></svg>Сменить пароль</div><div class="item"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,56V200a16,16,0,0,1-16,16H48V40H208A16,16,0,0,1,224,56Z" opacity="0.2"/><path d="M120,216a8,8,0,0,1-8,8H48a8,8,0,0,1-8-8V40a8,8,0,0,1,8-8h64a8,8,0,0,1,0,16H56V208h56A8,8,0,0,1,120,216Zm109.66-93.66-40-40a8,8,0,0,0-11.32,11.32L204.69,120H112a8,8,0,0,0,0,16h92.69l-26.35,26.34a8,8,0,0,0,11.32,11.32l40-40A8,8,0,0,0,229.66,122.34Z"/></svg>Выйти</div></div>
+        </div>
+    </div>
+  </div>
+</div>
+
+</div>
+<script>
+/* Меню аккаунта открывается кнопкой и закрывается щелчком мимо — только чтобы макет можно было потрогать */
+document.querySelectorAll('.side').forEach(function (side) {
+  side.querySelectorAll('.who, .acct').forEach(function (btn) {
+    btn.addEventListener('click', function (event) { event.stopPropagation(); side.classList.toggle('open'); });
+  });
+});
+document.addEventListener('click', function () {
+  document.querySelectorAll('.side.open').forEach(function (side) { side.classList.remove('open'); });
+});
+</script>
+</body>
+</html>
