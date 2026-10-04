@@ -111,10 +111,9 @@ body { color: var(--text); font: 400 15px/1.45 Manrope, system-ui, sans-serif; }
   .side .acct-menu .me { display: block; }
   .main { padding: 0 0 calc(110px + env(safe-area-inset-bottom)); }
   .top { padding: 4px 2px 14px; }
-  .bento { grid-template-columns: 1fr 1fr; grid-auto-rows: auto; gap: 12px; }
-  .tile { grid-column: span 2 !important; grid-row: auto !important; min-height: 120px; padding: 24px; }
-  .tile.c3 { grid-column: span 1 !important; padding: 18px; min-height: 104px; }
-  .tile.c3 .t-title { font-size: 14px; } .tile.c3 .t-big { font-size: 24px; letter-spacing: -.5px; } .tile.c3 .t-unit { font-size: 13px; margin-left: 4px; }
+  /* Телефон — одна колонка, как в кодексе (Руслан, 04-10-2026, сессия 85) */
+  .bento { grid-template-columns: 1fr; grid-auto-rows: auto; gap: 12px; }
+  .tile { grid-column: auto !important; grid-row: auto !important; min-height: 120px; padding: 24px; }
   .t-hero { font-size: 44px; letter-spacing: -2px; }
   .chart-tile { min-height: 300px; }
   .levels { overflow-x: auto; }
