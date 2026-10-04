@@ -1,17 +1,15 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { ref } from 'vue';
 import { useDemoEditor } from '~/composables/useDemoEditor';
 import { useSegmentPreview } from '~/composables/useSegmentPreview';
 import { failureText } from '~/utils/requestError';
 import {
   fromConditionsDraft,
-  segmentSurveyOptions,
   toConditionsDraft,
   type SegmentConditionsDraft,
 } from '~/utils/segmentConditions';
 import { EMPTY_SEGMENT_CONDITIONS } from '#shared/segment';
 import type { SegmentCreateRequestBody, SegmentResponse } from '#shared/types/segment';
-import type { SurveyListResponse } from '#shared/types/survey';
 
 /**
  * Новый сегмент: форма условий и предпросмотр состава по ним — до сохранения.
@@ -22,8 +20,9 @@ import type { SurveyListResponse } from '#shared/types/survey';
  * Поле «Демо» видит только владелец (issue #212); предпросмотр считает по нему же: демо-сегмент
  * берёт только демо-водителей, живой — только живых. Смена стороны условий не трогает
  * (issue #257): условия — числа и даты, одинаковые для живых и демо, и предпросмотр просто
- * пересчитывается по новой стороне. Исключение — опрос условия (issue #324): опрос живёт
- * в одном мире, и при смене стороны выбор снимается.
+ * пересчитывается по новой стороне.
+ *
+ * Здесь заводится только сегмент условиями: список заводится из итогов опроса (issue #356).
  */
 
 definePageMeta({
@@ -41,20 +40,10 @@ const { ownsDemo } = useDemoEditor();
 /** Поле «Демо» нового сегмента. */
 const demo = ref(false);
 
-/** Опросы для условия — список целиком, их единицы и десятки; отбор — `segmentSurveyOptions`. */
-const { data: surveys } = await useFetch<SurveyListResponse>('/api/surveys');
-
-const surveyOptions = computed(() =>
-  segmentSurveyOptions(surveys.value?.surveys ?? [], demo.value, conditions.value.surveyId),
-);
-
-watch(demo, () => {
-  conditions.value = { ...conditions.value, surveyId: '' };
-});
-
 const preview = useSegmentPreview(() => ({
   conditions: fromConditionsDraft(conditions.value),
   isDemo: demo.value,
+  listSegmentId: null,
   savedSegmentId: null,
 }));
 
@@ -102,7 +91,6 @@ const create = async (): Promise<void> => {
       :saving="saving"
       :error="saveError"
       :demo="demo"
-      :survey-options="surveyOptions"
       @submit="create"
     >
       <MoleculesDemoField

@@ -390,15 +390,14 @@ enum MailingStatus {
   @@schema("xb")
 }
 
-/// Состояние человека по опросу в условии сегмента (issue #324). Оба — только среди получивших
-/// опрос: тех, кто есть в снимке рассылки с этим опросом с исходом `sent`.
-enum SegmentSurveyState {
-  /// Получил, но не прошёл и не отказался — не открывал вовсе или открыл и бросил.
-  not_completed
-  /// Отказался и после отказа не прошёл.
-  declined
+/// Чем задан сегмент (issue #356).
+enum SegmentKind {
+  /// Условиями: состав считается запросом в момент обращения.
+  conditions
+  /// Списком людей (`segment_members`): состав зафиксирован при заведении и не пересчитывается.
+  list
 
-  @@map("segment_survey_state")
+  @@map("segment_kind")
   @@schema("xb")
 }
 
@@ -569,6 +568,7 @@ model Person {
   giftGrants    GiftGrant[]
   demoViewer    DemoViewer?
   surveys       SurveyResponse[]
+  segmentMemberships SegmentMember[]
 
   @@map("persons")
   @@schema("xb")
@@ -1911,7 +1911,6 @@ model Survey {
   questions SurveyQuestion[]
   mailings  Mailing[]
   responses SurveyResponse[]
-  segments  Segment[]
 
   @@index([createdAt(sort: Desc)])
   @@map("surveys")
@@ -2061,6 +2060,10 @@ model SurveyAnswerOption {
 /// условие задано всегда — проверкой в миграции: сегмент без условий — это весь реестр парка
 /// под видом среза.
 ///
+/// Сегмент-список (issue #356) — исключение: людей он хранит, строками `segment_members`,
+/// и условий у него нет. Заводится только из итогов опроса, состав фиксируется в момент
+/// заведения. Отбор у него тот же построитель — по реестру, с признаком демо и без спрятанных.
+///
 /// Не удаляется, а архивируется: на сегмент ссылаются рассылки и акции, и удалённый унёс бы
 /// ответ на вопрос «кого мы тогда звали».
 model Segment {
@@ -2083,12 +2086,9 @@ model Segment {
   balanceMin       BigInt?  @map("balance_min")
   /// Баланс водительского счёта — не больше.
   balanceMax       BigInt?  @map("balance_max")
-  /// Опрос условия (issue #324). Пусто — условия по опросу нет. Заполнены обе колонки
-  /// или ни одной — проверкой `segments_survey_condition_check`. Выбирается только
-  /// замороженный опрос того же мира, что сегмент, — это сервис.
-  surveyId         String?             @map("survey_id") @db.Uuid
-  /// Кто из получивших опрос входит в сегмент.
-  surveyState      SegmentSurveyState? @map("survey_state")
+  /// Чем задан сегмент (issue #356). У списка все колонки условий пусты — проверкой
+  /// `segments_list_without_conditions_check`: состав — строки `segment_members`.
+  kind             SegmentKind @default(conditions)
 
   createdById String    @map("created_by_id") @db.Uuid
   /// Заполнено — сегмент убран из обращения: при выборе не предлагается, по ссылке открывается.
@@ -2098,9 +2098,7 @@ model Segment {
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   createdBy  Employee    @relation(fields: [createdById], references: [id])
-  /// `Restrict`: в условие выбирается только замороженный опрос, а замороженный не удаляется.
-  /// Удалённый молча стёр бы условие и расширил состав.
-  survey     Survey?     @relation(fields: [surveyId], references: [id], onDelete: Restrict)
+  members    SegmentMember[]
   campaigns  Campaign[]
   mailings   Mailing[]
   /// Демо-сегмент (issue #212): отбирает только демо-водителей, живой — только живых.
@@ -2110,6 +2108,22 @@ model Segment {
   giftGrants GiftGrant[]
 
   @@map("segments")
+  @@schema("xb")
+}
+
+/// Человек сегмента-списка (issue #356). Пишется один раз, при заведении списка, и больше
+/// не меняется ничем: список не пересчитывается.
+model SegmentMember {
+  segmentId String   @map("segment_id") @db.Uuid
+  personId  String   @map("person_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  segment Segment @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+  /// `Restrict`: человек из списка не исчезает молча — список говорит, кого тогда взяли.
+  person  Person  @relation(fields: [personId], references: [id], onDelete: Restrict)
+
+  @@id([segmentId, personId])
+  @@map("segment_members")
   @@schema("xb")
 }
 

@@ -10,13 +10,11 @@ import {
   describeSegmentConditions,
   fromConditionsDraft,
   sameSegmentConditions,
-  segmentSurveyOptions,
   toConditionsDraft,
   type SegmentConditionsDraft,
 } from '~/utils/segmentConditions';
 import { EMPTY_SEGMENT_CONDITIONS } from '#shared/segment';
 import type { SegmentRequestBody, SegmentResponse } from '#shared/types/segment';
-import type { SurveyListResponse } from '#shared/types/survey';
 
 /**
  * Страница сегмента: условия, предпросмотр состава и архив.
@@ -29,6 +27,9 @@ import type { SurveyListResponse } from '#shared/types/survey';
  * обязан показать, кого тогда звали.
  *
  * Демо-сегмент правит только владелец (issue #212): у остальных условия на чтение, архива нет.
+ *
+ * Сегмент-список (issue #356): условий нет — правятся имя и описание, предпросмотр идёт
+ * по сохранённому составу.
  */
 
 definePageMeta({
@@ -47,6 +48,7 @@ useHead({ title: () => `${data.value?.segment.name ?? 'Сегмент'} — Xalq
 const state = computed(() => toLoadState(status.value));
 const segment = computed(() => data.value?.segment ?? null);
 const archived = computed(() => segment.value?.archivedAt !== null);
+const isList = computed(() => segment.value?.kind === 'list');
 
 const { canEdit } = useDemoEditor();
 const editable = computed(() => canEdit(segment.value?.isDemo ?? false));
@@ -69,17 +71,6 @@ watch(
   { immediate: true },
 );
 
-/** Опросы для условия (issue #324) — того же мира, что сегмент, и уже выбранный. */
-const { data: surveys } = await useFetch<SurveyListResponse>('/api/surveys');
-
-const surveyOptions = computed(() =>
-  segmentSurveyOptions(
-    surveys.value?.surveys ?? [],
-    segment.value?.isDemo ?? false,
-    conditions.value.surveyId,
-  ),
-);
-
 const draftConditions = computed(() => fromConditionsDraft(conditions.value));
 
 /** Условия формы совпадают с сохранёнными — предпросмотр идёт по сохранённому сегменту. */
@@ -90,7 +81,8 @@ const matchesSaved = computed(
 const preview = useSegmentPreview(() => ({
   conditions: draftConditions.value,
   isDemo: segment.value?.isDemo ?? false,
-  savedSegmentId: matchesSaved.value ? segmentId.value : null,
+  listSegmentId: isList.value ? segmentId.value : null,
+  savedSegmentId: matchesSaved.value || isList.value ? segmentId.value : null,
 }));
 
 const saving = ref(false);
@@ -157,7 +149,11 @@ const toggleArchive = async (): Promise<void> => {
           {{ segment.description }}
         </p>
         <p class="mt-1 text-xs text-slate-500">
-          {{ describeSegmentConditions(segment.conditions, segment.surveyTitle).join(' · ') || 'все демо-водители' }}
+          {{
+            segment.kind === 'list'
+              ? 'список'
+              : describeSegmentConditions(segment.conditions).join(' · ') || 'все демо-водители'
+          }}
         </p>
         <p class="mt-1 text-xs text-slate-400">
           Завёл {{ segment.createdByName }} {{ formatDateTime(segment.createdAt) }} · изменён
@@ -181,13 +177,13 @@ const toggleArchive = async (): Promise<void> => {
         v-model:name="name"
         v-model:description="description"
         v-model:conditions="conditions"
-        title="Условия"
+        :title="isList ? 'Сегмент-список' : 'Условия'"
         submit-label="Сохранить"
         :saving="saving"
         :error="saveError"
         :demo="segment.isDemo"
         :readonly="!editable"
-        :survey-options="surveyOptions"
+        :list="isList"
         @submit="save"
       />
 

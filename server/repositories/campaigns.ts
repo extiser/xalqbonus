@@ -9,7 +9,7 @@ import type {
 import { segmentMembersSql } from '#server/repositories/segments';
 import { promoDaySql, promoDayStartSql } from '#server/utils/parkDaySql';
 import { COMPLETED_TRIP_STATUS } from '#server/utils/tripStatus';
-import type { SegmentConditions } from '#shared/types/segment';
+import type { SegmentBasis } from '#shared/types/segment';
 
 /**
  * Акции, окна их половин и снимок участников (issue #166).
@@ -370,8 +370,7 @@ export const setCampaignSecondHalfWindow = async (
  */
 export const insertCampaignParticipants = async (
   campaignId: string,
-  conditions: SegmentConditions,
-  segmentIsDemo: boolean,
+  segment: SegmentBasis,
   splitEnabled: boolean,
   client: Executor,
 ): Promise<number> => {
@@ -388,7 +387,7 @@ export const insertCampaignParticipants = async (
            member."personId",
            ${halfSql},
            'invited'::xb.campaign_participant_state
-      FROM (${segmentMembersSql(conditions, segmentIsDemo)}) AS member
+      FROM (${segmentMembersSql(segment)}) AS member
     ON CONFLICT ("campaign_id", "person_id") DO NOTHING
   `;
 };

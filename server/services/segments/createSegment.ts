@@ -1,6 +1,5 @@
 import { consola } from 'consola';
 import { findSegment, insertSegment } from '#server/repositories/segments';
-import { checkSegmentSurvey } from '#server/services/segments/checkSegmentSurvey';
 import {
   assertSegmentBounded,
   toSegment,
@@ -13,7 +12,8 @@ import type { Segment } from '#shared/types/segment';
  * у демо-сегмента (`assertSegmentBounded`), и то же держит база проверкой
  * `segments_has_condition_check`.
  *
- * Опрос условия (issue #324) — замороженный и того же мира: `checkSegmentSurvey`.
+ * Здесь заводится только сегмент условиями: список заводится из итогов опроса
+ * (`services/surveys/createSurveySegment.ts`, issue #356), вручную — никогда.
  *
  * Уникальности имени нет, как у офисов: два одинаковых имени — состояние, а не ошибка ввода.
  *
@@ -27,10 +27,14 @@ export const createSegment = async (
   employeeId: string,
   isDemo: boolean,
 ): Promise<Segment> => {
-  assertSegmentBounded(fields.conditions, isDemo);
-  await checkSegmentSurvey(fields.conditions, isDemo);
+  assertSegmentBounded({ conditions: fields.conditions, isDemo, listSegmentId: null });
 
-  const segmentId = await insertSegment({ ...fields, createdById: employeeId, isDemo });
+  const segmentId = await insertSegment({
+    ...fields,
+    createdById: employeeId,
+    isDemo,
+    kind: 'conditions',
+  });
   const row = await findSegment(segmentId);
 
   if (!row) {

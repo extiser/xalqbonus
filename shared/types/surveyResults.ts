@@ -125,9 +125,29 @@ export type SurveyMailingItem = {
   completed: number;
 };
 
+/**
+ * Группа итогов опроса, из которой заводится сегмент-список (issue #356). Круг — сводный,
+ * только доставленные; группа — по строке `survey_responses` человека:
+ *
+ * - `not_completed` — строки нет, или нет ни прохождения, ни отказа
+ * - `declined` — отказался и после отказа не прошёл
+ * - `completed` — прошёл, в том числе после отказа
+ *
+ * С воронкой числа сознательно не совпадают: в строке «Отказался» воронки есть и прошедшие
+ * после отказа, а в группе «отказались» их нет.
+ */
+export type SurveyGroup = 'not_completed' | 'declined' | 'completed';
+
 /** Итоги у опроса: его рассылки и сводная воронка по ним, люди без повторов. */
 export type SurveyResultsResponse = {
   /** Запущенные, по порядку запуска. */
   mailings: SurveyMailingItem[];
   summary: SurveyFunnelResults;
+  /** Людей в группах — те же определения, что у снимка в сегмент-список. */
+  groups: Record<SurveyGroup, number>;
+};
+
+/** Тело заведения сегмента-списка из итогов опроса. */
+export type SurveySegmentRequestBody = {
+  group: SurveyGroup;
 };

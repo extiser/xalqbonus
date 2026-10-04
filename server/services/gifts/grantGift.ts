@@ -20,7 +20,7 @@ import {
   type CoverPaths,
   type GiftCoverUpload,
 } from '#server/services/gifts/giftMessage';
-import { toSegmentConditions } from '#server/services/segments/fields';
+import { toSegmentBasis } from '#server/services/segments/fields';
 import { formatDayKey, shiftDayKey } from '#server/utils/parkTime';
 import { isCalendarDay } from '#shared/campaign';
 import { GIFT_REASON_MAX_LENGTH } from '#shared/gift';
@@ -200,11 +200,7 @@ const writeGrant = async (
         throw new GiftRecipientError('segment_archived');
       }
 
-      const audience = await listSegmentPersonIds(
-        toSegmentConditions(segment),
-        segment.isDemo,
-        transaction,
-      );
+      const audience = await listSegmentPersonIds(toSegmentBasis(segment), transaction);
 
       personIds = await listProgramMemberIds(audience, transaction);
       skipped = audience.length - personIds.length;

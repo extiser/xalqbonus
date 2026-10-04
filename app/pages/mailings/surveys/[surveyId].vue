@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import { useCurrentEmployee } from '~/composables/useCurrentEmployee';
 import { useDemoEditor } from '~/composables/useDemoEditor';
 import { useDraftAutosave } from '~/composables/useDraftAutosave';
 import type { SurveyFormFields } from '~/types/surveyForm';
@@ -9,6 +10,8 @@ import { surveyClosedLabel } from '~/utils/labels';
 import { failureField, failureMessage, failureText } from '~/utils/requestError';
 import { toLoadState } from '~/utils/loadState';
 import { toSurveyContentInput, toSurveyFormFields } from '~/utils/surveyForm';
+import { SEGMENT_ROLES } from '#shared/access';
+import type { SegmentResponse } from '#shared/types/segment';
 import { surveyFreezeProblems, surveyFreezeProblemText } from '#shared/survey';
 import type {
   Survey,
@@ -16,7 +19,11 @@ import type {
   SurveyRequestBody,
   SurveyResponse,
 } from '#shared/types/survey';
-import type { SurveyResultsResponse } from '#shared/types/surveyResults';
+import type {
+  SurveyGroup,
+  SurveyResultsResponse,
+  SurveySegmentRequestBody,
+} from '#shared/types/surveyResults';
 
 /**
  * Экран опроса (issue #320). Что на нём можно, решает заморозка:
@@ -32,7 +39,8 @@ import type { SurveyResultsResponse } from '#shared/types/surveyResults';
  *
  * Опрос прикрепляется на экране рассылки (issue #321), а прикреплённый к черновику рассылки
  * черновик опроса не удаляется — отказ ручки говорит, где открепить. Здесь — рассылки, которыми
- * опрос уже ушёл, и сводная воронка по ним (issue #325).
+ * опрос уже ушёл, и сводная воронка по ним (issue #325). Под ней — сегмент-список из группы
+ * итогов (issue #356): после заведения — переход на его страницу.
  *
  * **Демо** (issue #212): поле «Демо» нового опроса видит только тот, кто правит демо.
  * Демо-опрос у остальных открыт на чтение — без автосохранения и кнопок.
@@ -336,6 +344,44 @@ const finishSurvey = (): Promise<void> =>
     setSurvey(updated.survey);
   });
 
+/**
+ * «Сегмент из итогов» (issue #356) — тем, кто заводит сегменты, и, у демо-опроса, только тому,
+ * кто правит демо: из него выходит демо-сегмент. Решает всё равно ручка.
+ */
+const employee = useCurrentEmployee();
+
+const canCreateSegment = computed(
+  () =>
+    employee.value !== null && SEGMENT_ROLES.includes(employee.value.role) && editable.value,
+);
+
+const creatingGroup = ref<SurveyGroup | null>(null);
+const segmentError = ref<string | null>(null);
+
+const createSegment = async (group: SurveyGroup): Promise<void> => {
+  const current = survey.value;
+
+  if (!current) {
+    return;
+  }
+
+  creatingGroup.value = group;
+  segmentError.value = null;
+
+  try {
+    const created = await $fetch<SegmentResponse>(`/api/surveys/${current.surveyId}/segments`, {
+      method: 'POST',
+      body: { group } satisfies SurveySegmentRequestBody,
+    });
+
+    await navigateTo(`/segments/${created.segment.segmentId}`);
+  } catch (error) {
+    segmentError.value = failureText(error);
+  } finally {
+    creatingGroup.value = null;
+  }
+};
+
 // Ушли со страницы с открытым вопросом — это отказ: действие не должно ждать ответа вечно.
 onBeforeUnmount(() => {
   resolveDelete(false);
@@ -438,6 +484,10 @@ onBeforeUnmount(() => {
         v-if="frozen"
         :state="toLoadState(resultsStatus)"
         :results="resultsData ?? null"
+        :can-create-segment="canCreateSegment"
+        :creating-group="creatingGroup"
+        :segment-error="segmentError"
+        @create-segment="createSegment"
       />
 
       <MoleculesAutosaveStatus

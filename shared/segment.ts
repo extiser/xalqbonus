@@ -1,4 +1,4 @@
-import type { SegmentConditions } from './types/segment';
+import type { SegmentBasis, SegmentConditions } from './types/segment';
 
 /**
  * Правила сегмента, общие для сервера и экрана.
@@ -21,15 +21,16 @@ export const hasSegmentConditions = (conditions: SegmentConditions): boolean =>
   Object.values(conditions).some((value) => value !== null);
 
 /**
- * Ограничен ли отбор: условием или признаком демо (issue #212).
+ * Ограничен ли отбор: условием, признаком демо (issue #212) или списком (issue #356).
  *
  * Демо-сегменту условия необязательны: признак сам сужает отбор до демо-водителей, и пустые
- * условия у него — «все демо-водители», а не весь реестр парка. Живому без условий по-прежнему
- * нельзя. Правило одно на форму, предпросмотр, сохранение и построитель состава; в базе его
- * держит `segments_has_condition_check`.
+ * условия у него — «все демо-водители», а не весь реестр парка. Список ограничен всегда:
+ * состав — его строки. Живому условному без условий по-прежнему нельзя. Правило одно на форму,
+ * предпросмотр, сохранение и построитель состава; в базе его держит
+ * `segments_has_condition_check`.
  */
-export const isSegmentBounded = (conditions: SegmentConditions, isDemo: boolean): boolean =>
-  isDemo || hasSegmentConditions(conditions);
+export const isSegmentBounded = (basis: SegmentBasis): boolean =>
+  basis.listSegmentId !== null || basis.isDemo || hasSegmentConditions(basis.conditions);
 
 /** Пустые условия — стартовое значение формы нового сегмента. */
 export const EMPTY_SEGMENT_CONDITIONS: SegmentConditions = {
@@ -39,8 +40,6 @@ export const EMPTY_SEGMENT_CONDITIONS: SegmentConditions = {
   telegramLinked: null,
   balanceMin: null,
   balanceMax: null,
-  surveyId: null,
-  surveyState: null,
 };
 
 export const SEGMENT_EMPTY_CONDITIONS_TEXT =

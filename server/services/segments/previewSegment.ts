@@ -3,11 +3,11 @@ import {
   findSegment,
   listSegmentMembersPage,
 } from '#server/repositories/segments';
-import { checkSegmentSurvey } from '#server/services/segments/checkSegmentSurvey';
 import { UnknownSegmentError } from '#server/services/segments/errors';
-import { assertSegmentBounded, toSegmentConditions } from '#server/services/segments/fields';
+import { assertSegmentBounded, toSegmentBasis } from '#server/services/segments/fields';
 import { SEGMENT_PREVIEW_LIMIT } from '#shared/segment';
 import type {
+  SegmentBasis,
   SegmentConditions,
   SegmentMember,
   SegmentPreviewResponse,
@@ -24,14 +24,10 @@ import type {
  * взявший «20–90» там, где нужно «30–120», получит свежий и неверный состав.
  */
 
-const previewConditions = async (
-  conditions: SegmentConditions,
-  isDemo: boolean,
-  offset: number,
-): Promise<SegmentPreviewResponse> => {
+const previewBasis = async (basis: SegmentBasis, offset: number): Promise<SegmentPreviewResponse> => {
   const [count, rows] = await Promise.all([
-    countSegmentMembers(conditions, isDemo),
-    listSegmentMembersPage(conditions, isDemo, SEGMENT_PREVIEW_LIMIT, Math.max(offset, 0)),
+    countSegmentMembers(basis),
+    listSegmentMembersPage(basis, SEGMENT_PREVIEW_LIMIT, Math.max(offset, 0)),
   ]);
 
   return {
@@ -55,7 +51,10 @@ const previewConditions = async (
   };
 };
 
-/** Состав сохранённого сегмента — и архивного тоже: по ссылке он открывается целиком. */
+/**
+ * Состав сохранённого сегмента — и архивного тоже: по ссылке он открывается целиком. Список
+ * (issue #356) — тем же путём: своими строками, через тот же построитель.
+ */
 export const previewSavedSegment = async (
   segmentId: string,
   offset: number,
@@ -66,22 +65,23 @@ export const previewSavedSegment = async (
     throw new UnknownSegmentError(segmentId);
   }
 
-  return previewConditions(toSegmentConditions(row), row.isDemo, offset);
+  return previewBasis(toSegmentBasis(row), offset);
 };
 
 /**
  * Состав по условиям формы, ничего не сохраняя. Условия уже разобраны. Признак демо — тоже
  * из формы (issue #212): несохранённый сегмент сохранится с ним же, и пустые условия у него —
- * все демо-водители. Живому без условий — отказ, как при сохранении; опросу условия
- * не того мира или не замороженному — тоже (issue #324).
+ * все демо-водители. Живому без условий — отказ, как при сохранении. Несохранённый всегда
+ * условный: список заводится только из итогов опроса.
  */
 export const previewSegmentConditions = async (
   conditions: SegmentConditions,
   isDemo: boolean,
   offset: number,
 ): Promise<SegmentPreviewResponse> => {
-  assertSegmentBounded(conditions, isDemo);
-  await checkSegmentSurvey(conditions, isDemo);
+  const basis: SegmentBasis = { conditions, isDemo, listSegmentId: null };
 
-  return previewConditions(conditions, isDemo, offset);
+  assertSegmentBounded(basis);
+
+  return previewBasis(basis, offset);
 };

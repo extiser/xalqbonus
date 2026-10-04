@@ -3,7 +3,7 @@ import { failureText } from '~/utils/requestError';
 import type { LoadState } from '~/types/loadState';
 import { isSegmentBounded } from '#shared/segment';
 import type {
-  SegmentConditions,
+  SegmentBasis,
   SegmentPreviewRequestBody,
   SegmentPreviewResponse,
 } from '#shared/types/segment';
@@ -21,10 +21,11 @@ import type {
 /** Пауза после правки поля: число набирают по цифре, и считать каждую незачем. */
 const PREVIEW_DELAY_MS = 400;
 
-export type SegmentPreviewSource = {
-  conditions: SegmentConditions;
-  /** Сегмент демо: отбирает только демо-водителей (issue #212). */
-  isDemo: boolean;
+/**
+ * Основа отбора по форме — условия, признак демо (issue #212) и список (issue #356) — и куда
+ * идти за числом.
+ */
+export type SegmentPreviewSource = SegmentBasis & {
   /** Сохранённый сегмент, если условия формы совпадают с его. `null` — считать по форме. */
   savedSegmentId: string | null;
 };
@@ -43,9 +44,10 @@ export const useSegmentPreview = (readSource: () => SegmentPreviewSource) => {
 
   /**
    * Условий нет — считать нечего, и экран говорит об этом словами, а не пустотой. У демо-сегмента
-   * считать есть что всегда: без условий это все демо-водители (issue #212).
+   * считать есть что всегда: без условий это все демо-водители (issue #212); у списка — тоже:
+   * состав — его строки (issue #356).
    */
-  const hasConditions = ref(isSegmentBounded(readSource().conditions, readSource().isDemo));
+  const hasConditions = ref(isSegmentBounded(readSource()));
 
   /**
    * Номер последнего запроса. Ответы приходят не по порядку: число по «20–9» может приехать
@@ -74,7 +76,7 @@ export const useSegmentPreview = (readSource: () => SegmentPreviewSource) => {
     const source = readSource();
     const current = ++sequence;
 
-    hasConditions.value = isSegmentBounded(source.conditions, source.isDemo);
+    hasConditions.value = isSegmentBounded(source);
 
     if (!hasConditions.value) {
       data.value = null;

@@ -23,7 +23,7 @@ const driversLabel = (total: number): string =>
 <template>
   <MoleculesSectionPanel
     title="Сегменты"
-    note="Сегмент хранит условия, а не людей: число водителей посчитано на момент открытия страницы и завтра будет другим."
+    note="Сегмент хранит условия, а не людей: число водителей посчитано на момент открытия страницы и завтра будет другим. Исключение — списки из итогов опроса: их люди зафиксированы при создании."
   >
     <MoleculesStateNotice v-if="state === 'loading'" state="loading" message="Читаем сегменты…" />
     <MoleculesStateNotice
@@ -61,7 +61,11 @@ const driversLabel = (total: number): string =>
               {{ segment.description }}
             </p>
             <p class="mt-0.5 text-xs text-slate-500">
-              {{ describeSegmentConditions(segment.conditions, segment.surveyTitle).join(' · ') || 'все демо-водители' }}
+              {{
+                segment.kind === 'list'
+                  ? 'список'
+                  : describeSegmentConditions(segment.conditions).join(' · ') || 'все демо-водители'
+              }}
             </p>
           </div>
           <p class="font-mono text-sm text-slate-900 tabular-nums">

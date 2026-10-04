@@ -3,7 +3,8 @@ import { Prisma } from '#server/generated/prisma/client';
 import type { Language } from '#server/generated/prisma/enums';
 import { parkDaySql, parkDayStartSql } from '#server/utils/parkDaySql';
 import { COMPLETED_TRIP_STATUS } from '#server/utils/tripStatus';
-import type { SegmentConditions } from '#shared/types/segment';
+import type { SegmentBasis } from '#shared/types/segment';
+import type { SurveyGroup } from '#shared/types/surveyResults';
 import { segmentMembersSql } from '#server/repositories/segments';
 
 /**
@@ -34,7 +35,7 @@ export type SurveyCohort = { kind: 'mailing'; mailingId: string } | { kind: 'sur
  * одной поездкой в окне.
  */
 export type SurveySlice =
-  | { kind: 'segment'; conditions: SegmentConditions; isDemo: boolean }
+  | { kind: 'segment'; basis: SegmentBasis }
   | { kind: 'activity'; launchedAt: Date; isDemo: boolean };
 
 /** Сутки окна активности: столько полных календарных суток перед сутками запуска. */
@@ -110,7 +111,7 @@ const sliceSql = (slice: SurveySlice): Prisma.Sql => {
   if (slice.kind === 'segment') {
     return Prisma.sql`
       SELECT segment_member."personId"
-        FROM (${segmentMembersSql(slice.conditions, slice.isDemo)}) AS segment_member
+        FROM (${segmentMembersSql(slice.basis)}) AS segment_member
     `;
   }
 
@@ -480,6 +481,66 @@ export const listExportAnswers = async (
         ON answer."survey_id" = ${scope.surveyId}::uuid
        AND answer."person_id" = member."personId"
   `;
+
+// ---------------------------------------------------------------------------
+// Группы итогов — для сегмента-списка
+// ---------------------------------------------------------------------------
+
+/**
+ * Группа человека по его строке `survey_responses` — одно выражение на снимок и на число
+ * (issue #356). Строки нет — опрос он не открывал: `not_completed`. Прохождение важнее
+ * отказа: отказавшийся и потом прошедший — в `completed`.
+ */
+const surveyGroupSql = Prisma.sql`
+  CASE
+    WHEN response."completed_at" IS NOT NULL THEN 'completed'
+    WHEN response."declined_at" IS NOT NULL THEN 'declined'
+    ELSE 'not_completed'
+  END
+`;
+
+/**
+ * Люди группы с её признаком: круг — сводный (`cohortSql`, человек один, сколько бы рассылок
+ * его ни захватило), только доставленные — до недоставленного опрос не дошёл, и ни в одну
+ * группу он не входит.
+ */
+const surveyGroupedSql = (surveyId: string): Prisma.Sql => Prisma.sql`
+  SELECT cohort."personId",
+         ${surveyGroupSql} AS "group"
+    FROM (${cohortSql({ kind: 'survey', surveyId })}) AS cohort
+    LEFT JOIN xb.survey_responses AS response
+           ON response."survey_id" = ${surveyId}::uuid
+          AND response."person_id" = cohort."personId"
+   WHERE cohort."delivered"
+`;
+
+/** Множество `personId` группы — то, что ложится в сегмент-список. */
+export const surveyGroupMembersSql = (surveyId: string, group: SurveyGroup): Prisma.Sql => Prisma.sql`
+  SELECT grouped."personId"
+    FROM (${surveyGroupedSql(surveyId)}) AS grouped
+   WHERE grouped."group" = ${group}::text
+`;
+
+/** Людей в каждой группе — одним запросом, по тем же определениям, что снимок. */
+export const countSurveyGroups = async (
+  surveyId: string,
+  client: Executor = db,
+): Promise<Record<SurveyGroup, number>> => {
+  const rows = await client.$queryRaw<Record<SurveyGroup, number>[]>`
+    SELECT count(*) FILTER (WHERE grouped."group" = 'not_completed')::int AS "not_completed",
+           count(*) FILTER (WHERE grouped."group" = 'declined')::int      AS "declined",
+           count(*) FILTER (WHERE grouped."group" = 'completed')::int     AS "completed"
+      FROM (${surveyGroupedSql(surveyId)}) AS grouped
+  `;
+
+  const row = rows[0];
+
+  if (!row) {
+    throw new Error('подсчёт групп опроса не вернул строку');
+  }
+
+  return row;
+};
 
 export type SurveyMailingRow = {
   mailingId: string;

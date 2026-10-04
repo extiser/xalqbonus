@@ -7,7 +7,7 @@ import {
   MailingSurveySliceInvalidError,
   UnknownMailingError,
 } from '#server/services/mailings/errors';
-import { toSegmentConditions } from '#server/services/segments/fields';
+import { toSegmentBasis } from '#server/services/segments/fields';
 import { readUuid } from '#server/utils/query';
 import type { SurveyResultsSlice } from '#shared/types/surveyResults';
 
@@ -127,7 +127,7 @@ export const resolveMailingSurveyScope = async (
     scope: {
       surveyId: mailing.surveyId,
       cohort,
-      slice: { kind: 'segment', conditions: toSegmentConditions(segment), isDemo: segment.isDemo },
+      slice: { kind: 'segment', basis: toSegmentBasis(segment) },
     },
     slice: { kind: 'segment', segmentId: segment.id, name: segment.name },
   };
