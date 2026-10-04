@@ -3,7 +3,8 @@
   "type": "module",
   "private": true,
   "imports": {
-    "#server/*": "./server/*.ts"
+    "#server/*": "./server/*.ts",
+    "#shared/*": "./shared/*.ts"
   },
   "scripts": {
     "dev": "nuxt dev",

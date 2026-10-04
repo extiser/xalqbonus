@@ -45,8 +45,8 @@ export const listReportOffices = async (client: Executor = db): Promise<ReportOf
 /**
  * Строка продаж — офис × товар × способ оплаты за период.
  *
- * Себестоимость приезжает ценой из каталога, а не суммой: в `order_items` её снимка нет,
- * и умножает её сервис, который же решает, что делать с её отсутствием.
+ * Себестоимость — по снимку в строке заказа (`order_items.unit_cost`, issue #372), а не
+ * по текущему каталогу: правка цены товара прошлые продажи не переписывает.
  */
 export type SalesLineRow = {
   officeId: string;
@@ -65,7 +65,11 @@ export type SalesLineRow = {
    * строках, и итог по офису считает различные заказы, а не складывает строки.
    */
   orderIds: string[];
-  priceCost: number | null;
+  /**
+   * Сумма `quantity × unit_cost`. Пусто, если снимка нет хоть у одной строки группы:
+   * частичная сумма выдала бы себестоимость меньше настоящей.
+   */
+  cost: bigint | null;
 };
 
 /**
@@ -90,7 +94,9 @@ export const listSalesLines = async (
            SUM(item."quantity" * item."unit_points")::bigint AS "points",
            SUM(item."quantity" * item."unit_retail")::bigint AS "retail",
            array_agg(DISTINCT "order"."id")                 AS "orderIds",
-           product."price_cost"                   AS "priceCost"
+           CASE WHEN bool_and(item."unit_cost" IS NOT NULL)
+                THEN SUM(item."quantity" * item."unit_cost")::bigint
+           END                                              AS "cost"
       FROM xb.orders AS "order"
       JOIN xb.order_items AS item    ON item."order_id" = "order"."id"
       JOIN xb.offices     AS office  ON office."id" = "order"."office_id"
@@ -356,8 +362,11 @@ export type RewardLineRow = {
   customTitle: string | null;
   source: RewardSource;
   quantity: bigint;
-  /** Текущая себестоимость товара. Пусто у произвольной и у товара без неё. */
-  priceCost: number | null;
+  /**
+   * Сумма снимков `rewards.cost` по группе (issue #372). Пусто у произвольной и у группы,
+   * где снимка нет хоть у одной награды-товара.
+   */
+  cost: bigint | null;
 };
 
 export const listRewardLines = async (
@@ -375,7 +384,9 @@ export const listRewardLines = async (
            CASE WHEN reward."kind" = 'custom' THEN reward."title" END AS "customTitle",
            reward."source",
            COUNT(*)::bigint                  AS "quantity",
-           product."price_cost"              AS "priceCost"
+           CASE WHEN reward."kind" = 'product' AND bool_and(reward."cost" IS NOT NULL)
+                THEN SUM(reward."cost")::bigint
+           END                               AS "cost"
       FROM xb.rewards AS reward
       JOIN xb.offices AS office  ON office."id" = reward."office_id"
       JOIN xb.persons AS person  ON person."id" = reward."person_id"

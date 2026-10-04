@@ -369,6 +369,7 @@ export type OrderItemSnapshot = {
   quantity: number;
   unitPoints: number | null;
   unitRetail: number | null;
+  unitCost: number | null;
 };
 
 /** Позиции заказа в порядке товаров. */
@@ -377,11 +378,30 @@ export const listOrderItemSnapshots = async (orderId: string): Promise<OrderItem
     SELECT "product_id"  AS "productId",
            "quantity",
            "unit_points" AS "unitPoints",
-           "unit_retail" AS "unitRetail"
+           "unit_retail" AS "unitRetail",
+           "unit_cost"   AS "unitCost"
       FROM xb.order_items
      WHERE "order_id" = ${orderId}::uuid
      ORDER BY "product_id"
   `;
+
+/** Правка себестоимости товара в каталоге — то, от чего снимок в заказе и награде не меняется. */
+export const setTestProductCost = async (productId: string, priceCost: number): Promise<void> => {
+  await db.$executeRaw`
+    UPDATE xb.products SET "price_cost" = ${priceCost}::int WHERE "id" = ${productId}::uuid
+  `;
+};
+
+/**
+ * Стирает снимок себестоимости у позиций заказа — так выглядит строка, которую миграция
+ * снимка заполнила по товару без себестоимости (issue #372). Новым заказом её не получить:
+ * у опубликованного товара себестоимость есть всегда.
+ */
+export const clearTestOrderItemCost = async (orderId: string): Promise<void> => {
+  await db.$executeRaw`
+    UPDATE xb.order_items SET "unit_cost" = NULL WHERE "order_id" = ${orderId}::uuid
+  `;
+};
 
 /**
  * Увольняет человека в реестре: все его профили — `fired`. Так выглядит водитель, которого

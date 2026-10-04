@@ -201,21 +201,33 @@ export type OrderItemInput = {
   unitRetail: number | null;
 };
 
-/** Позиции заказа, одним запросом: `unnest` разворачивает массивы в строки. */
+/**
+ * Позиции заказа, одним запросом: `unnest` разворачивает массивы в строки.
+ *
+ * Себестоимость берётся здесь же, соединением с каталогом, а не от вызывающего (issue #372):
+ * снимок — ровно цена на момент вставки, и сервису передавать её неоткуда. Дальше она живёт
+ * своей жизнью от каталога, как `unit_points` и `unit_retail`.
+ */
 export const insertOrderItems = async (
   client: Prisma.TransactionClient,
   orderId: string,
   items: OrderItemInput[],
 ): Promise<void> => {
   await client.$executeRaw`
-    INSERT INTO xb.order_items ("order_id", "product_id", "quantity", "unit_points", "unit_retail")
-    SELECT ${orderId}::uuid, "productId", "quantity", "unitPoints", "unitRetail"
+    INSERT INTO xb.order_items (
+      "order_id", "product_id", "quantity", "unit_points", "unit_retail", "unit_cost"
+    )
+    SELECT ${orderId}::uuid, item."productId", item."quantity", item."unitPoints", item."unitRetail",
+           product."price_cost"
       FROM unnest(
              ${items.map((item) => item.productId)}::uuid[],
              ${items.map((item) => item.quantity)}::int[],
              ${items.map((item) => item.unitPoints)}::int[],
              ${items.map((item) => item.unitRetail)}::int[]
            ) AS item("productId", "quantity", "unitPoints", "unitRetail")
+      -- Левое соединение: несуществующий товар роняет вставку внешним ключом, как прежде,
+      -- а не выпадает из заказа молча.
+      LEFT JOIN xb.products AS product ON product."id" = item."productId"
   `;
 };
 
