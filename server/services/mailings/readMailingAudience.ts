@@ -1,7 +1,7 @@
 import { countMailingAudience } from '#server/repositories/mailings';
 import { findSegment } from '#server/repositories/segments';
 import { MailingSegmentUnknownError } from '#server/services/mailings/errors';
-import { toSegmentConditions } from '#server/services/segments/fields';
+import { toSegmentBasis } from '#server/services/segments/fields';
 import type { MailingAudienceResponse } from '#shared/types/mailing';
 
 /**
@@ -30,8 +30,5 @@ export const readMailingAudience = async (
     throw new MailingSegmentUnknownError(segmentId);
   }
 
-  return countMailingAudience(isDemo, {
-    conditions: toSegmentConditions(segment),
-    isDemo: segment.isDemo,
-  });
+  return countMailingAudience(isDemo, toSegmentBasis(segment));
 };

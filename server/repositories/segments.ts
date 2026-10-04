@@ -6,14 +6,15 @@ import { COMPLETED_TRIP_STATUS } from '#server/utils/tripStatus';
 // собираются в воркер, бандл которого знает только псевдоним `#server` (package.json →
 // build:worker).
 import { isSegmentBounded } from '../../shared/segment';
-import type { SegmentConditions, SegmentSurveyState } from '../../shared/types/segment';
+import type { SegmentBasis, SegmentConditions, SegmentKind } from '../../shared/types/segment';
 
 /**
  * Сегменты водителей и их состав.
  *
  * Сегмент хранит условия, а не людей: состав берётся запросом в тот момент, когда понадобился
- * (issue #165). Поэтому главное в файле — `segmentMembersSql`, единственное место, где условия
- * превращаются в отбор. Счётчик, страница предпросмотра и выдача состава потребителю
+ * (issue #165). Исключение — сегмент-список из итогов опроса (issue #356): его люди лежат
+ * строками `segment_members`. Главное в файле — `segmentMembersSql`, единственное место, где
+ * основа сегмента превращается в отбор. Счётчик, страница предпросмотра и выдача состава потребителю
  * оборачивают его и своего `WHERE` не заводят: два места, строящие запрос по одним и тем же
  * условиям, разошлись бы на первой правке, и разошлись бы тихо — экран показал бы одно
  * число, а рассылка ушла бы другому составу.
@@ -34,10 +35,8 @@ export type SegmentRow = {
   telegramLinked: boolean | null;
   balanceMin: bigint | null;
   balanceMax: bigint | null;
-  /** Опрос условия (issue #324). Заданы оба или ни одного — `segments_survey_condition_check`. */
-  surveyId: string | null;
-  surveyState: SegmentSurveyState | null;
-  surveyTitle: string | null;
+  /** Список (issue #356): условия пусты — `segments_list_without_conditions_check`. */
+  kind: SegmentKind;
   /** Демо-сегмент (issue #212): отбирает только демо-водителей, живой — только живых. */
   isDemo: boolean;
   createdByName: string;
@@ -56,9 +55,7 @@ const SEGMENT_SELECT = Prisma.sql`
          segment."telegram_linked"     AS "telegramLinked",
          segment."balance_min"         AS "balanceMin",
          segment."balance_max"         AS "balanceMax",
-         segment."survey_id"           AS "surveyId",
-         segment."survey_state"::text  AS "surveyState",
-         survey."title"                AS "surveyTitle",
+         segment."kind"::text          AS "kind",
          segment."is_demo"             AS "isDemo",
          author."full_name"            AS "createdByName",
          segment."created_at"          AS "createdAt",
@@ -66,7 +63,6 @@ const SEGMENT_SELECT = Prisma.sql`
          segment."archived_at"         AS "archivedAt"
     FROM xb.segments AS segment
     JOIN xb.employees AS author ON author."id" = segment."created_by_id"
-    LEFT JOIN xb.surveys AS survey ON survey."id" = segment."survey_id"
 `;
 
 /**
@@ -101,10 +97,11 @@ export type SegmentInput = {
 /**
  * Заводит сегмент. Возвращает идентификатор: строку с автором читает сервис.
  *
- * Признак демо ставится только здесь: правка его не трогает (issue #212).
+ * Признак демо и вид ставятся только здесь: правка их не трогает (issue #212, #356). Список
+ * заводится с пустыми условиями, людей в него кладёт `insertSegmentMembers` той же транзакцией.
  */
 export const insertSegment = async (
-  input: SegmentInput & { createdById: string; isDemo: boolean },
+  input: SegmentInput & { createdById: string; isDemo: boolean; kind: SegmentKind },
   client: Executor = db,
 ): Promise<string> => {
   const { conditions } = input;
@@ -115,8 +112,7 @@ export const insertSegment = async (
       "days_since_trip_min", "days_since_trip_max",
       "program_member", "telegram_linked",
       "balance_min", "balance_max",
-      "survey_id", "survey_state",
-      "created_by_id", "is_demo"
+      "kind", "created_by_id", "is_demo"
     )
     VALUES (
       ${input.name},
@@ -127,8 +123,7 @@ export const insertSegment = async (
       ${conditions.telegramLinked}::boolean,
       ${conditions.balanceMin}::bigint,
       ${conditions.balanceMax}::bigint,
-      ${conditions.surveyId}::uuid,
-      ${conditions.surveyState}::xb.segment_survey_state,
+      ${input.kind}::xb.segment_kind,
       ${input.createdById}::uuid,
       ${input.isDemo}
     )
@@ -165,8 +160,6 @@ export const updateSegmentFields = async (
            "telegram_linked"     = ${conditions.telegramLinked}::boolean,
            "balance_min"         = ${conditions.balanceMin}::bigint,
            "balance_max"         = ${conditions.balanceMax}::bigint,
-           "survey_id"           = ${conditions.surveyId}::uuid,
-           "survey_state"        = ${conditions.surveyState}::xb.segment_survey_state,
            "updated_at"          = now()
      WHERE "id" = ${segmentId}::uuid
   `;
@@ -196,12 +189,30 @@ export const updateSegmentArchived = async (
   return updated > 0;
 };
 
+/**
+ * Люди сегмента-списка (issue #356) — одним `INSERT … SELECT` из множества `personId`, которое
+ * собрал другой построитель (группа итогов опроса). Людей не перекладываем через приложение:
+ * состав фиксируется на момент запроса, а не на момент, когда список доехал до сервера.
+ * Сколько легло — столько и людей в списке.
+ */
+export const insertSegmentMembers = async (
+  segmentId: string,
+  peopleSql: Prisma.Sql,
+  client: Executor,
+): Promise<number> =>
+  client.$executeRaw`
+    INSERT INTO xb.segment_members ("segment_id", "person_id")
+    SELECT ${segmentId}::uuid, people."personId"
+      FROM (${peopleSql}) AS people
+    ON CONFLICT ("segment_id", "person_id") DO NOTHING
+  `;
+
 // ---------------------------------------------------------------------------
 // Состав
 // ---------------------------------------------------------------------------
 
 /**
- * Построитель отбора — единственный. Принимает условия, отдаёт SQL множества людей
+ * Построитель отбора — единственный. Принимает основу сегмента, отдаёт SQL множества людей
  * с тем, по чему отбирали: `personId`, `daysSinceTrip`, `telegramLinked`, `balance`.
  *
  * Отбирает по реестру парка (`persons`), а не по участникам: участие — одно из условий,
@@ -230,17 +241,17 @@ export const updateSegmentArchived = async (
  * Поэтому живой срез демо-водителя не возьмёт никогда, и демо-акция живого — тоже. Демо-сегменту
  * условия необязательны: без них он отдаёт всех демо-водителей (`isSegmentBounded`).
  *
- * Условие по опросу (issue #324) берёт только получивших опрос: человек есть в снимке хотя бы
- * одной рассылки с этим опросом с исходом `sent`. Выключившие уведомления, неотправленные
- * и с мёртвым каналом опроса не получали. Из получивших `not_completed` — те, у кого
- * в `survey_responses` нет ни прохождения, ни отказа (нет строки — не открывал вовсе),
- * `declined` — отказавшиеся и не прошедшие после отказа. Прошедший выпадает из обоих сам:
- * сегмент живой, а замораживает состав снимок рассылки.
+ * Сегмент-список (issue #356) отбирает по тому же реестру, но только своих людей —
+ * `segment_members`. Признак демо и спрятанный демо-водитель действуют и на него: спрятанный
+ * после заведения списка из его состава выпадает. Условий у списка нет, и отключается
+ * его отбор так же, как условие, — сравнением параметра с `NULL`.
  */
-export const segmentMembersSql = (conditions: SegmentConditions, isDemo: boolean): Prisma.Sql => {
-  if (!isSegmentBounded(conditions, isDemo)) {
+export const segmentMembersSql = (basis: SegmentBasis): Prisma.Sql => {
+  if (!isSegmentBounded(basis)) {
     throw new Error('живой сегмент без условий состава не отдаёт');
   }
+
+  const { conditions, isDemo, listSegmentId } = basis;
 
   return Prisma.sql`
     SELECT candidate."personId",
@@ -253,10 +264,7 @@ export const segmentMembersSql = (conditions: SegmentConditions, isDemo: boolean
                                                                   AS "daysSinceTrip",
                    (settings."person_id" IS NOT NULL)             AS "programMember",
                    (link."person_id" IS NOT NULL)                 AS "telegramLinked",
-                   account."balance",
-                   (received."person_id" IS NOT NULL)             AS "surveyReceived",
-                   response."declined_at"                         AS "surveyDeclinedAt",
-                   response."completed_at"                        AS "surveyCompletedAt"
+                   account."balance"
               FROM xb.persons AS person
               -- Последняя завершённая поездка — одним проходом по поездкам на весь реестр,
               -- а не подзапросом на каждого человека: счётчику нужен весь реестр целиком.
@@ -275,23 +283,17 @@ export const segmentMembersSql = (conditions: SegmentConditions, isDemo: boolean
                      ON link."person_id" = person."id" AND link."closed_at" IS NULL
               LEFT JOIN xb.accounts AS account
                      ON account."person_id" = person."id" AND account."type" = 'driver'
-              -- Получившие опрос условия — множеством людей: человек бывает в снимках
-              -- нескольких рассылок одного опроса, и строк соединение не множит. Условия
-              -- по опросу нет — множество пустое.
-              LEFT JOIN (
-                   SELECT DISTINCT recipient."person_id"
-                     FROM xb.mailing_recipients AS recipient
-                     JOIN xb.mailings AS mailing ON mailing."id" = recipient."mailing_id"
-                    WHERE mailing."survey_id" = ${conditions.surveyId}::uuid
-                      AND recipient."outcome" = 'sent'
-              ) AS received ON received."person_id" = person."id"
-              -- Прохождение у человека по опросу одно — первичным ключом пары.
-              LEFT JOIN xb.survey_responses AS response
-                     ON response."survey_id" = ${conditions.surveyId}::uuid
-                    AND response."person_id" = person."id"
              WHERE person."is_demo" = ${isDemo}::boolean
                -- Спрятанный демо-водитель в срез не попадает (issue #252); у живого пусто всегда.
                AND person."demo_hidden_at" IS NULL
+               -- Сегмент-список — только его люди (issue #356).
+               AND (${listSegmentId}::uuid IS NULL
+                    OR EXISTS (
+                         SELECT 1
+                           FROM xb.segment_members AS listed
+                          WHERE listed."segment_id" = ${listSegmentId}::uuid
+                            AND listed."person_id" = person."id"
+                       ))
            ) AS candidate
      WHERE (${conditions.daysSinceTripMin}::int IS NULL
             OR candidate."daysSinceTrip" >= ${conditions.daysSinceTripMin}::int)
@@ -305,14 +307,6 @@ export const segmentMembersSql = (conditions: SegmentConditions, isDemo: boolean
             OR candidate."balance" >= ${conditions.balanceMin}::bigint)
        AND (${conditions.balanceMax}::bigint IS NULL
             OR candidate."balance" <= ${conditions.balanceMax}::bigint)
-       AND (${conditions.surveyId}::uuid IS NULL
-            OR (candidate."surveyReceived"
-                AND candidate."surveyCompletedAt" IS NULL
-                AND CASE ${conditions.surveyState}::text
-                      WHEN 'not_completed' THEN candidate."surveyDeclinedAt" IS NULL
-                      WHEN 'declined' THEN candidate."surveyDeclinedAt" IS NOT NULL
-                      ELSE FALSE
-                    END))
   `;
 };
 
@@ -323,14 +317,13 @@ export type SegmentCountRow = {
 };
 
 export const countSegmentMembers = async (
-  conditions: SegmentConditions,
-  isDemo: boolean,
+  basis: SegmentBasis,
   client: Executor = db,
 ): Promise<SegmentCountRow> => {
   const rows = await client.$queryRaw<SegmentCountRow[]>`
     SELECT count(*)::int AS "total",
            now()         AS "calculatedAt"
-      FROM (${segmentMembersSql(conditions, isDemo)}) AS member
+      FROM (${segmentMembersSql(basis)}) AS member
   `;
 
   const row = rows[0];
@@ -362,14 +355,13 @@ export type SegmentMemberRow = {
  * по значению (`xb.natural_sort`, issue #257): «ВОДИТЕЛЬ 2» раньше «ВОДИТЕЛЬ 10».
  */
 export const listSegmentMembersPage = async (
-  conditions: SegmentConditions,
-  isDemo: boolean,
+  basis: SegmentBasis,
   limit: number,
   offset: number,
   client: Executor = db,
 ): Promise<SegmentMemberRow[]> =>
   client.$queryRaw<SegmentMemberRow[]>`
-    WITH member AS (${segmentMembersSql(conditions, isDemo)})
+    WITH member AS (${segmentMembersSql(basis)})
     SELECT member."personId",
            profile."lastName",
            profile."firstName",
@@ -411,13 +403,12 @@ export const listSegmentMembersPage = async (
  * на тот же момент.
  */
 export const listSegmentPersonIds = async (
-  conditions: SegmentConditions,
-  isDemo: boolean,
+  basis: SegmentBasis,
   client: Executor = db,
 ): Promise<string[]> => {
   const rows = await client.$queryRaw<{ personId: string }[]>`
     SELECT member."personId"
-      FROM (${segmentMembersSql(conditions, isDemo)}) AS member
+      FROM (${segmentMembersSql(basis)}) AS member
      ORDER BY member."personId"
   `;
 

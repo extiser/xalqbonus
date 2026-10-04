@@ -42,47 +42,11 @@ export type SegmentFieldProblem =
   | 'balance_reversed'
   /** Признак участия или привязки — не «да», не «нет» и не «не важно». */
   | 'flag_invalid'
-  /** Опрос условия — не uuid. */
-  | 'survey_invalid'
-  /** Состояние по опросу — не «получил, но не прошёл» и не «отказался». */
-  | 'survey_state_invalid'
-  /** Задан опрос без состояния или состояние без опроса. */
-  | 'survey_incomplete';
+  /** У сегмента-списка задано условие: его состав зафиксирован (issue #356). */
+  | 'list_conditions_locked';
 
 export class InvalidSegmentFieldsError extends SegmentError {
   constructor(public readonly problem: SegmentFieldProblem) {
     super(`поля сегмента не годятся: ${problem}`);
-  }
-}
-
-/** Опроса условия нет (issue #324). */
-export class SegmentSurveyUnknownError extends SegmentError {
-  constructor(public readonly surveyId: string) {
-    super(`опроса ${surveyId} нет`);
-  }
-}
-
-/**
- * Опрос условия не того мира (issue #324): демо-сегмент — только с демо-опросом, живой —
- * только с живым, как у рассылки и акции.
- */
-export class SegmentSurveyDemoMismatchError extends SegmentError {
-  constructor(
-    public readonly surveyId: string,
-    public readonly segmentIsDemo: boolean,
-  ) {
-    super(
-      `опрос ${surveyId} ${segmentIsDemo ? 'живой, а сегмент демо' : 'демо, а сегмент живой'}`,
-    );
-  }
-}
-
-/**
- * Опрос условия не заморожен (issue #324): незамороженный ни разу не уходил рассылкой,
- * и состав по нему был бы пуст по построению.
- */
-export class SegmentSurveyNotFrozenError extends SegmentError {
-  constructor(public readonly surveyId: string) {
-    super(`опрос ${surveyId} не заморожен`);
   }
 }

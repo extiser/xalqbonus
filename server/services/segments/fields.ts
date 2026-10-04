@@ -3,9 +3,8 @@ import {
   EmptySegmentConditionsError,
   InvalidSegmentFieldsError,
 } from '#server/services/segments/errors';
-import { readUuid } from '#server/utils/query';
-import { isSegmentBounded } from '#shared/segment';
-import type { Segment, SegmentConditions, SegmentSurveyState } from '#shared/types/segment';
+import { hasSegmentConditions, isSegmentBounded } from '#shared/segment';
+import type { Segment, SegmentBasis, SegmentConditions } from '#shared/types/segment';
 
 /**
  * Перевод между строкой базы, контрактом ручки и телом запроса.
@@ -31,16 +30,24 @@ export const toSegmentConditions = (row: SegmentRow): SegmentConditions => ({
   telegramLinked: row.telegramLinked,
   balanceMin: row.balanceMin === null ? null : Number(row.balanceMin),
   balanceMax: row.balanceMax === null ? null : Number(row.balanceMax),
-  surveyId: row.surveyId,
-  surveyState: row.surveyState,
+});
+
+/**
+ * Строка базы → основа отбора (`segmentMembersSql`). У списка (issue #356) основа — его
+ * собственные строки `segment_members`, условия у него пусты.
+ */
+export const toSegmentBasis = (row: SegmentRow): SegmentBasis => ({
+  conditions: toSegmentConditions(row),
+  isDemo: row.isDemo,
+  listSegmentId: row.kind === 'list' ? row.id : null,
 });
 
 export const toSegment = (row: SegmentRow): Segment => ({
   segmentId: row.id,
   name: row.name,
   description: row.description,
+  kind: row.kind,
   conditions: toSegmentConditions(row),
-  surveyTitle: row.surveyTitle,
   isDemo: row.isDemo,
   createdByName: row.createdByName,
   createdAt: row.createdAt.toISOString(),
@@ -67,8 +74,6 @@ export type SegmentConditionsRequest = {
   telegramLinked?: unknown;
   balanceMin?: unknown;
   balanceMax?: unknown;
-  surveyId?: unknown;
-  surveyState?: unknown;
 };
 
 export type SegmentRequestFields = {
@@ -113,37 +118,6 @@ const readFlag = (value: unknown): boolean | null => {
   return value;
 };
 
-const SURVEY_STATES: readonly SegmentSurveyState[] = ['not_completed', 'declined'];
-
-/** Опрос условия: пусто — не задан, иначе uuid. Не uuid — отказ, а не «не задан». */
-const readSurveyId = (value: unknown): string | null => {
-  if (value === null || value === undefined || value === '') {
-    return null;
-  }
-
-  const id = readUuid(value);
-
-  if (id === null) {
-    throw new InvalidSegmentFieldsError('survey_invalid');
-  }
-
-  return id;
-};
-
-const readSurveyState = (value: unknown): SegmentSurveyState | null => {
-  if (value === null || value === undefined || value === '') {
-    return null;
-  }
-
-  const state = SURVEY_STATES.find((candidate) => candidate === value);
-
-  if (state === undefined) {
-    throw new InvalidSegmentFieldsError('survey_state_invalid');
-  }
-
-  return state;
-};
-
 /**
  * Условия из тела запроса. Проверяет то же, что проверки базы (`segments_*_check`), —
  * чтобы предпросмотр несохранённого отвечал на перевёрнутые границы тем же отказом,
@@ -162,16 +136,7 @@ export const readSegmentConditions = (value: unknown): SegmentConditions => {
     telegramLinked: readFlag(request.telegramLinked),
     balanceMin: readBound(request.balanceMin),
     balanceMax: readBound(request.balanceMax),
-    surveyId: readSurveyId(request.surveyId),
-    surveyState: readSurveyState(request.surveyState),
   };
-
-  // Опрос без состояния не говорит, кого брать, состояние без опроса — по какому опросу
-  // (`segments_survey_condition_check`). Годится ли сам опрос, решает `checkSegmentSurvey`:
-  // разбору в базу ходить незачем.
-  if ((conditions.surveyId === null) !== (conditions.surveyState === null)) {
-    throw new InvalidSegmentFieldsError('survey_incomplete');
-  }
 
   if (
     (conditions.daysSinceTripMin !== null && conditions.daysSinceTripMin < 0) ||
@@ -200,14 +165,25 @@ export const readSegmentConditions = (value: unknown): SegmentConditions => {
 };
 
 /**
- * Без условий — только демо-сегмент (issue #212): живой без условий — весь реестр парка.
+ * Без условий — только демо-сегмент (issue #212) и список (issue #356): живой условный без
+ * условий — весь реестр парка.
  *
  * Отдельно от разбора, потому что признак у правки берётся не из тела, а из записи: зовут
- * это сервисы заведения, правки и предпросмотра, каждый со своим признаком.
+ * это сервисы заведения, правки и предпросмотра, каждый со своей основой.
  */
-export const assertSegmentBounded = (conditions: SegmentConditions, isDemo: boolean): void => {
-  if (!isSegmentBounded(conditions, isDemo)) {
+export const assertSegmentBounded = (basis: SegmentBasis): void => {
+  if (!isSegmentBounded(basis)) {
     throw new EmptySegmentConditionsError();
+  }
+};
+
+/**
+ * У списка условий нет (issue #356): состав зафиксирован при заведении, и условие поверх него
+ * молча сузило бы список. Пустые условия — норма: форма шлёт их всегда.
+ */
+export const assertListWithoutConditions = (conditions: SegmentConditions): void => {
+  if (hasSegmentConditions(conditions)) {
+    throw new InvalidSegmentFieldsError('list_conditions_locked');
   }
 };
 

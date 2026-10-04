@@ -90,6 +90,29 @@ export class SurveyNotFinishableError extends SurveyError {
   }
 }
 
+/**
+ * Сегмент из итогов просят у незамороженного опроса (issue #356): он ни разу не уходил
+ * рассылкой, и итогов у него нет.
+ */
+export class SurveyNotFrozenForSegmentError extends SurveyError {
+  constructor(public readonly surveyId: string) {
+    super(`опрос ${surveyId} не заморожен, сегмента из итогов нет`);
+  }
+}
+
+/**
+ * Группа итогов пуста (issue #356): сегмент-список без людей не заводится — он ничего бы
+ * не отбирал, а выглядел бы как срез.
+ */
+export class SurveySegmentEmptyError extends SurveyError {
+  constructor(
+    public readonly surveyId: string,
+    public readonly group: string,
+  ) {
+    super(`в группе ${group} опроса ${surveyId} никого нет`);
+  }
+}
+
 /** Тело запроса не разобрать: не тот тип вопроса, не дата, не целое число баллов. */
 export class SurveyRequestInvalidError extends SurveyError {
   constructor(public readonly reason: SurveyRequestInvalidReason) {
@@ -104,7 +127,9 @@ export type SurveyRequestInvalidReason =
   | 'question_type'
   | 'question_options'
   | 'question_own_answer'
-  | 'option_exclusive';
+  | 'option_exclusive'
+  /** Группа итогов — не «не прошли», не «отказались» и не «прошли» (issue #356). */
+  | 'survey_group';
 
 /**
  * Ответ водителя не разобран (issue #323): не тот вопрос, вариант чужого вопроса, значение

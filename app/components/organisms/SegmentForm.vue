@@ -1,16 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { SelectOption } from '~/types/selectOption';
 import {
   fromConditionsDraft,
   PROGRAM_MEMBER_OPTIONS,
-  SURVEY_STATE_OPTIONS,
   TELEGRAM_LINKED_OPTIONS,
   type SegmentConditionsDraft,
   type SegmentFlagChoice,
 } from '~/utils/segmentConditions';
 import { isSegmentBounded, SEGMENT_EMPTY_CONDITIONS_TEXT } from '#shared/segment';
-import type { SegmentSurveyState } from '#shared/types/segment';
 
 /**
  * Форма сегмента — одна на заведение и правку: имя, описание и условия отбора.
@@ -27,8 +24,8 @@ import type { SegmentSurveyState } from '#shared/types/segment';
  * Поле «Демо» нового сегмента ставит страница слотом. Демо-сегменту условия необязательны:
  * без них он берёт всех демо-водителей, и кнопка не закрывается.
  *
- * Опросы для условия (issue #324) собирает страница (`segmentSurveyOptions`): список — запрос,
- * а в компоненты данные не ходят (docs/frontend.md → «Данные в компоненты не ходят»).
+ * `list` — сегмент-список из итогов опроса (issue #356): условий у него нет и не задаётся,
+ * правятся только имя и описание. Состав зафиксирован при заведении.
  */
 const props = defineProps<{
   title: string;
@@ -39,8 +36,8 @@ const props = defineProps<{
   /** Что ответил сервер на последнюю попытку. `null` — ответа ждать нечего. */
   error: string | null;
   readonly?: boolean;
-  /** Опросы, годные в условие: замороженные того же мира и уже выбранный. */
-  surveyOptions: SelectOption[];
+  /** Сегмент-список: вместо условий — строка о зафиксированном составе. */
+  list?: boolean;
 }>();
 
 const emit = defineEmits<{ submit: [] }>();
@@ -71,20 +68,6 @@ const flagField = (key: 'programMember' | 'telegramLinked') =>
     },
   });
 
-const surveyId = computed({
-  get: () => conditions.value.surveyId,
-  set: (value: string) => {
-    conditions.value = { ...conditions.value, surveyId: value };
-  },
-});
-
-const surveyState = computed({
-  get: (): string => conditions.value.surveyState,
-  set: (value: string) => {
-    conditions.value = { ...conditions.value, surveyState: value as SegmentSurveyState };
-  },
-});
-
 const daysSinceTripMin = boundField('daysSinceTripMin');
 const daysSinceTripMax = boundField('daysSinceTripMax');
 const balanceMin = boundField('balanceMin');
@@ -92,15 +75,26 @@ const balanceMax = boundField('balanceMax');
 const programMember = flagField('programMember');
 const telegramLinked = flagField('telegramLinked');
 
-const hasConditions = computed(() =>
-  isSegmentBounded(fromConditionsDraft(conditions.value), props.demo),
+// Список ограничен всегда: состав — его строки, условия у него пусты по построению.
+const hasConditions = computed(
+  () =>
+    props.list ||
+    isSegmentBounded({
+      conditions: fromConditionsDraft(conditions.value),
+      isDemo: props.demo,
+      listSegmentId: null,
+    }),
 );
 </script>
 
 <template>
   <MoleculesSectionPanel
     :title="title"
-    note="Условия склеиваются через «и». Пустое поле — условие не задано и в отбор не входит."
+    :note="
+      list
+        ? undefined
+        : 'Условия склеиваются через «и». Пустое поле — условие не задано и в отбор не входит.'
+    "
   >
     <form @submit.prevent="emit('submit')">
       <fieldset :disabled="readonly" class="min-w-0 space-y-5">
@@ -114,73 +108,53 @@ const hasConditions = computed(() =>
           />
         </div>
 
-        <fieldset class="space-y-3">
-          <legend class="text-sm font-semibold text-slate-900">Последняя завершённая поездка</legend>
-          <div class="grid gap-4 sm:grid-cols-2">
-            <MoleculesNumberField
-              v-model="daysSinceTripMin"
-              label="Не меньше, дней назад"
-              :min="0"
-            />
-            <MoleculesNumberField
-              v-model="daysSinceTripMax"
-              label="Не больше, дней назад"
-              :min="0"
-            />
-          </div>
-          <p class="text-sm text-slate-500">
-            Сутки — календарные, по Ташкенту. Кто не ездил ни разу, под это условие не подходит:
-            «не ездил» — не «давно ездил».
-          </p>
-        </fieldset>
+        <p v-if="list" class="text-sm text-slate-700">
+          Список: состав зафиксирован при создании, условия не задаются.
+        </p>
 
-        <div class="grid gap-4 sm:grid-cols-2">
-          <label class="block">
-            <span class="mb-1 block text-sm font-medium text-slate-700">Участие в программе</span>
-            <AtomsSelectInput v-model="programMember" :options="PROGRAM_MEMBER_OPTIONS" />
-          </label>
-          <label class="block">
-            <span class="mb-1 block text-sm font-medium text-slate-700">Привязка Telegram</span>
-            <AtomsSelectInput v-model="telegramLinked" :options="TELEGRAM_LINKED_OPTIONS" />
-          </label>
-        </div>
-
-        <fieldset class="space-y-3">
-          <legend class="text-sm font-semibold text-slate-900">Баланс</legend>
-          <div class="grid gap-4 sm:grid-cols-2">
-            <MoleculesNumberField v-model="balanceMin" label="От, баллов" :min="null" />
-            <MoleculesNumberField v-model="balanceMax" label="До, баллов" :min="null" />
-          </div>
-          <p class="text-sm text-slate-500">
-            Считается по водительскому счёту. Без счёта человек под это условие не подходит.
-          </p>
-        </fieldset>
-
-        <fieldset class="space-y-3">
-          <legend class="text-sm font-semibold text-slate-900">Опрос</legend>
-          <div class="grid gap-4 sm:grid-cols-2">
-            <label class="block">
-              <span class="mb-1 block text-sm font-medium text-slate-700">Опрос</span>
-              <AtomsSelectInput v-model="surveyId" :options="surveyOptions">
-                <option value="">Не важно</option>
-              </AtomsSelectInput>
-            </label>
-            <label class="block">
-              <span class="mb-1 block text-sm font-medium text-slate-700">Кто из получивших</span>
-              <AtomsSelectInput
-                v-model="surveyState"
-                :options="SURVEY_STATE_OPTIONS"
-                :disabled="surveyId === ''"
+        <template v-else>
+          <fieldset class="space-y-3">
+            <legend class="text-sm font-semibold text-slate-900">Последняя завершённая поездка</legend>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <MoleculesNumberField
+                v-model="daysSinceTripMin"
+                label="Не меньше, дней назад"
+                :min="0"
               />
+              <MoleculesNumberField
+                v-model="daysSinceTripMax"
+                label="Не больше, дней назад"
+                :min="0"
+              />
+            </div>
+            <p class="text-sm text-slate-500">
+              Сутки — календарные, по Ташкенту. Кто не ездил ни разу, под это условие не подходит:
+              «не ездил» — не «давно ездил».
+            </p>
+          </fieldset>
+
+          <div class="grid gap-4 sm:grid-cols-2">
+            <label class="block">
+              <span class="mb-1 block text-sm font-medium text-slate-700">Участие в программе</span>
+              <AtomsSelectInput v-model="programMember" :options="PROGRAM_MEMBER_OPTIONS" />
+            </label>
+            <label class="block">
+              <span class="mb-1 block text-sm font-medium text-slate-700">Привязка Telegram</span>
+              <AtomsSelectInput v-model="telegramLinked" :options="TELEGRAM_LINKED_OPTIONS" />
             </label>
           </div>
-          <p class="text-sm text-slate-500">
-            Получил — рассылка с этим опросом ушла человеку. Выключившие уведомления
-            и те, до кого сообщение не дошло, опроса не получали. Прошедший опрос выпадает
-            из сегмента сам; отказавшийся в «не прошёл» не входит. В списке — опросы, уже
-            уходившие рассылкой.
-          </p>
-        </fieldset>
+
+          <fieldset class="space-y-3">
+            <legend class="text-sm font-semibold text-slate-900">Баланс</legend>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <MoleculesNumberField v-model="balanceMin" label="От, баллов" :min="null" />
+              <MoleculesNumberField v-model="balanceMax" label="До, баллов" :min="null" />
+            </div>
+            <p class="text-sm text-slate-500">
+              Считается по водительскому счёту. Без счёта человек под это условие не подходит.
+            </p>
+          </fieldset>
+        </template>
 
         <slot />
 

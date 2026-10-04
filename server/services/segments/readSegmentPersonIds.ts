@@ -1,6 +1,6 @@
 import { findSegment, listSegmentPersonIds } from '#server/repositories/segments';
 import { UnknownSegmentError } from '#server/services/segments/errors';
-import { toSegmentConditions } from '#server/services/segments/fields';
+import { toSegmentBasis } from '#server/services/segments/fields';
 
 /**
  * Состав сегмента на сейчас — для потребителя: рассылки, акции.
@@ -19,5 +19,5 @@ export const readSegmentPersonIds = async (segmentId: string): Promise<string[]>
     throw new UnknownSegmentError(segmentId);
   }
 
-  return listSegmentPersonIds(toSegmentConditions(row), row.isDemo);
+  return listSegmentPersonIds(toSegmentBasis(row));
 };

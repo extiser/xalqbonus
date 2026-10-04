@@ -29,7 +29,7 @@ import {
 } from '#server/services/mailings/errors';
 import { assertMailingLaunchable } from '#server/services/mailings/fields';
 import { readMailing } from '#server/services/mailings/readMailing';
-import { toSegmentConditions } from '#server/services/segments/fields';
+import { toSegmentBasis } from '#server/services/segments/fields';
 import { toSurvey } from '#server/services/surveys/fields';
 import { surveyFreezeProblems } from '#shared/survey';
 import type { Mailing } from '#shared/types/mailing';
@@ -137,7 +137,7 @@ export const launchMailing = async (mailingId: string): Promise<Mailing> => {
           row.isDemo,
         );
 
-        segment = { conditions: toSegmentConditions(segmentRow), isDemo: segmentRow.isDemo };
+        segment = toSegmentBasis(segmentRow);
       }
 
       if (row.surveyId !== null) {

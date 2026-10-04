@@ -4,7 +4,7 @@ import type { MailingRecipientOutcome, MailingStatus } from '#server/generated/p
 // Относительным путём, а не через `#shared`: модуль собирается в воркер, а бандл воркера
 // знает только псевдоним `#server` (package.json → build:worker).
 import { MAILING_RECALL_WINDOW_HOURS } from '../../shared/mailing';
-import type { SegmentConditions } from '../../shared/types/segment';
+import type { SegmentBasis } from '../../shared/types/segment';
 import { segmentMembersSql } from './segments';
 
 /**
@@ -267,11 +267,8 @@ export const deleteDraftMailing = async (
   return rows[0] ?? null;
 };
 
-/** Сегмент, которым режется аудитория: его условия и признак — то, из чего строится состав. */
-export type MailingAudienceSegment = {
-  conditions: SegmentConditions;
-  isDemo: boolean;
-};
+/** Сегмент, которым режется аудитория: его основа — то, из чего строится состав. */
+export type MailingAudienceSegment = SegmentBasis;
 
 /**
  * Участники программы, которых возьмёт рассылка: строка `person_settings` и активная
@@ -296,7 +293,7 @@ const audienceSql = (isDemo: boolean, segment: MailingAudienceSegment | null): P
       : Prisma.sql`
      AND settings."person_id" IN (
            SELECT member."personId"
-             FROM (${segmentMembersSql(segment.conditions, segment.isDemo)}) AS member
+             FROM (${segmentMembersSql(segment)}) AS member
          )`;
 
   return Prisma.sql`

@@ -7,7 +7,9 @@ import {
   SurveyFrozenError,
   SurveyFrozenFieldRequiredError,
   SurveyNotFinishableError,
+  SurveyNotFrozenForSegmentError,
   SurveyRequestInvalidError,
+  SurveySegmentEmptyError,
   UnknownSurveyError,
   type SurveyRequestInvalidReason,
 } from '#server/services/surveys/errors';
@@ -51,6 +53,7 @@ const INVALID_TEXT: Record<SurveyRequestInvalidReason, string> = {
   question_options: 'Варианты бывают только у вопросов с одним или несколькими ответами.',
   question_own_answer: '«Свой вариант» бывает только у вопросов с одним или несколькими ответами.',
   option_exclusive: 'Исключающий вариант бывает только у вопроса с несколькими ответами.',
+  survey_group: 'Группа итогов — «не прошли», «отказались» или «прошли».',
 };
 
 /** `field` — поле формы, у которого встаёт текст отказа (`failureField` на клиенте). */
@@ -103,6 +106,14 @@ export const explainSurveyFailure = (error: unknown): H3Error | null => {
 
   if (error instanceof SurveyNotFinishableError) {
     return reject(409, 'Conflict', NOT_FINISHABLE_TEXT[error.reason]);
+  }
+
+  if (error instanceof SurveyNotFrozenForSegmentError) {
+    return reject(409, 'Conflict', 'Опрос ещё не уходил рассылкой — итогов нет.');
+  }
+
+  if (error instanceof SurveySegmentEmptyError) {
+    return reject(409, 'Conflict', 'В этой группе никого нет — сегмент не заведён.');
   }
 
   if (error instanceof SurveyRequestInvalidError) {

@@ -1,15 +1,7 @@
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
-import { db } from '#server/db';
-import { recordRecipientOutcome } from '#server/repositories/mailings';
-import { createMailing } from '#server/services/mailings/createMailing';
-import { launchMailing } from '#server/services/mailings/launchMailing';
 import { ensureDriverAccount } from '#server/services/points/ensureDriverAccount';
 import { createSegment } from '#server/services/segments/createSegment';
-import {
-  SegmentSurveyDemoMismatchError,
-  SegmentSurveyNotFrozenError,
-} from '#server/services/segments/errors';
 import {
   previewSavedSegment,
   previewSegmentConditions,
@@ -19,7 +11,7 @@ import { readSegmentPersonIds } from '#server/services/segments/readSegmentPerso
 import { setSegmentArchived } from '#server/services/segments/setSegmentArchived';
 import { COMPLETED_TRIP_STATUS } from '#server/utils/tripStatus';
 import { EMPTY_SEGMENT_CONDITIONS, SEGMENT_PREVIEW_LIMIT } from '#shared/segment';
-import type { SegmentConditions, SegmentSurveyState } from '#shared/types/segment';
+import type { SegmentConditions } from '#shared/types/segment';
 import {
   cleanupTestData,
   createTestPerson,
@@ -32,24 +24,15 @@ import {
   linkTestDriver,
   nextTestTelegramUserId,
 } from '../support/employees';
-import {
-  cleanupTestMailings,
-  readTestRecipients,
-  setTestNotificationsEnabled,
-  trackTestMailing,
-} from '../support/mailings';
 import { grantPoints } from '../support/points';
-import { disconnectQueues } from '../support/queues';
 import { cleanupTestSegments, trackTestSegment } from '../support/segments';
-import { cleanupTestSurveys, createFrozenTestSurvey, createTestSurvey } from '../support/surveys';
 
 /**
  * Сегменты: список с числом состава, предпросмотр сохранённого и несохранённого, выдача
  * состава потребителю.
  *
  * Все запросы здесь сырые и читают чужие таблицы — `persons`, `trips`, `park_profiles`,
- * `person_settings`, `telegram_links`, `accounts`, условие по опросу (issue #324) ещё
- * `mailing_recipients`, `mailings` и `survey_responses`, а список — `employees` и `surveys`. Миграция
+ * `person_settings`, `telegram_links`, `accounts`, а список — `employees`. Миграция
  * в любой из них ломает сегменты молча: типы расхождения со схемой не ловят (docs/infra.md →
  * «Тесты», третье исключение). Тест гоняет их через сервисы — тем путём, которым их зовут
  * ручки и потребитель.
@@ -124,62 +107,6 @@ const createDriver = async (input: TestDriverInput): Promise<string> => {
   return personId;
 };
 
-/** Демо-водитель под сценарий опроса: участник с привязкой — тот, кому уходит рассылка. */
-const createDemoDriver = async (): Promise<string> => {
-  const personId = await createDriver({ balance: null, linked: true });
-
-  await db.person.update({ where: { id: personId }, data: { isDemo: true } });
-
-  return personId;
-};
-
-/** Замороженный опрос — такой, какой уходит рассылкой. */
-const createSurvey = async (createdById: string, isDemo: boolean): Promise<string> => {
-  const { surveyId } = await createFrozenTestSurvey({
-    createdById,
-    points: 0,
-    endsOn: '2099-12-31',
-    questions: [{ type: 'text', required: false }],
-  });
-
-  await db.survey.update({ where: { id: surveyId }, data: { isDemo } });
-
-  return surveyId;
-};
-
-/**
- * Демо-рассылка с опросом, запущенная настоящим запуском: снимок и исход `skipped_disabled`
- * у выключивших уведомления пишет он.
- */
-const launchSurveyMailing = async (createdById: string, surveyId: string): Promise<string> => {
-  const mailing = await createMailing(
-    { title: 'Тестовая рассылка с опросом', textRu: 'Привет', textUz: 'Salom', segmentId: null, surveyId },
-    createdById,
-    true,
-  );
-
-  trackTestMailing(mailing.mailingId);
-  await launchMailing(mailing.mailingId);
-
-  return mailing.mailingId;
-};
-
-const markSent = (mailingId: string, personId: string): Promise<boolean> =>
-  recordRecipientOutcome(mailingId, personId, { outcome: 'sent', messageId: 1 });
-
-const surveyConditions = (surveyId: string, surveyState: SegmentSurveyState): SegmentConditions => ({
-  ...EMPTY_SEGMENT_CONDITIONS,
-  surveyId,
-  surveyState,
-});
-
-/** Состав демо-сегмента по условию опроса — идентификаторами, по порядку. */
-const surveyMembers = async (surveyId: string, surveyState: SegmentSurveyState): Promise<string[]> => {
-  const preview = await previewSegmentConditions(surveyConditions(surveyId, surveyState), true, 0);
-
-  return preview.rows.map((row) => row.personId).sort();
-};
-
 const createTestSegment = async (conditions: SegmentConditions): Promise<string> => {
   const { employeeId } = await createTestEmployee({ role: 'owner' });
   const segment = await createSegment(
@@ -196,17 +123,13 @@ const createTestSegment = async (conditions: SegmentConditions): Promise<string>
 describe('сегменты', () => {
   afterEach(async () => {
     // Сегмент ссылается на автора, привязки — на людей: сегменты первыми, люди последними.
-    // Рассылки — раньше сегментов, опросы — после: на опрос ссылаются и рассылка, и сегмент.
-    await cleanupTestMailings();
     await cleanupTestSegments();
-    await cleanupTestSurveys();
     await cleanupTestEmployees();
     await cleanupTestData();
   });
 
   afterAll(async () => {
     await disconnectDatabase();
-    await disconnectQueues();
   });
 
   it('список отдаёт сегмент с числом состава на сейчас', async () => {
@@ -367,103 +290,5 @@ describe('сегменты', () => {
     // Повтор архива время не двигает, возврат снимает отметку.
     expect((await setSegmentArchived(segmentId, true)).archivedAt).toBe(archived.archivedAt);
     expect((await setSegmentArchived(segmentId, false)).archivedAt).toBeNull();
-  });
-
-  it('условие по опросу: получил — исход sent, дальше отказ и прохождение', async () => {
-    const { employeeId } = await createTestEmployee({ role: 'owner' });
-    const surveyId = await createSurvey(employeeId, true);
-
-    const receivedId = await createDemoDriver();
-    const declinerId = await createDemoDriver();
-    const mutedId = await createDemoDriver();
-    await setTestNotificationsEnabled(mutedId, false);
-
-    // Две рассылки одного опроса: получивший обе в составе один раз.
-    const firstMailingId = await launchSurveyMailing(employeeId, surveyId);
-    const secondMailingId = await launchSurveyMailing(employeeId, surveyId);
-
-    const [mutedOutcome] = await readTestRecipients(firstMailingId, [mutedId]);
-    expect(mutedOutcome?.outcome).toBe('skipped_disabled');
-
-    // Пока исход `pending`, опрос не получен.
-    expect(await surveyMembers(surveyId, 'not_completed')).toEqual([]);
-
-    await markSent(firstMailingId, receivedId);
-    await markSent(secondMailingId, receivedId);
-    await markSent(firstMailingId, declinerId);
-
-    // Получили и не открывали: строки в `survey_responses` нет. Выключивший уведомления
-    // опроса не получал.
-    const notCompleted = await previewSegmentConditions(surveyConditions(surveyId, 'not_completed'), true, 0);
-
-    expect(notCompleted.total).toBe(2);
-    expect(notCompleted.rows.map((row) => row.personId).sort()).toEqual([receivedId, declinerId].sort());
-    expect(await surveyMembers(surveyId, 'declined')).toEqual([]);
-
-    // Сохранённый сегмент и выдача потребителю — тот же состав.
-    const segment = await createSegment(
-      { name: 'Не прошли опрос', description: null, conditions: surveyConditions(surveyId, 'not_completed') },
-      employeeId,
-      true,
-    );
-    trackTestSegment(segment.segmentId);
-
-    expect((await previewSavedSegment(segment.segmentId, 0)).total).toBe(2);
-    expect((await readSegmentPersonIds(segment.segmentId)).sort()).toEqual([receivedId, declinerId].sort());
-
-    // Отказ: из «не прошёл» уходит, в «отказался» входит.
-    await db.surveyResponse.create({ data: { surveyId, personId: declinerId, declinedAt: new Date() } });
-
-    expect(await surveyMembers(surveyId, 'not_completed')).toEqual([receivedId]);
-    expect(await surveyMembers(surveyId, 'declined')).toEqual([declinerId]);
-
-    // Прошёл после отказа — уже не отказавшийся. Прошедший без отказа — тоже ни в одном.
-    const finishedAt = new Date();
-
-    await db.surveyResponse.update({
-      where: { surveyId_personId: { surveyId, personId: declinerId } },
-      data: { startedAt: finishedAt, completedAt: finishedAt },
-    });
-    await db.surveyResponse.create({
-      data: { surveyId, personId: receivedId, startedAt: finishedAt, completedAt: finishedAt },
-    });
-
-    expect(await surveyMembers(surveyId, 'not_completed')).toEqual([]);
-    expect(await surveyMembers(surveyId, 'declined')).toEqual([]);
-    expect((await previewSavedSegment(segment.segmentId, 0)).total).toBe(0);
-  });
-
-  it('в условие не выбирается незамороженный опрос и опрос другого мира', async () => {
-    const { employeeId } = await createTestEmployee({ role: 'owner' });
-
-    const draftId = await createTestSurvey({ createdById: employeeId, points: 0 });
-    await db.survey.update({ where: { id: draftId }, data: { isDemo: true } });
-    const liveId = await createSurvey(employeeId, false);
-    const demoId = await createSurvey(employeeId, true);
-
-    await expect(
-      previewSegmentConditions(surveyConditions(draftId, 'not_completed'), true, 0),
-    ).rejects.toBeInstanceOf(SegmentSurveyNotFrozenError);
-    await expect(
-      createSegment(
-        { name: 'Черновик', description: null, conditions: surveyConditions(draftId, 'not_completed') },
-        employeeId,
-        true,
-      ),
-    ).rejects.toBeInstanceOf(SegmentSurveyNotFrozenError);
-
-    await expect(
-      previewSegmentConditions(surveyConditions(liveId, 'declined'), true, 0),
-    ).rejects.toBeInstanceOf(SegmentSurveyDemoMismatchError);
-    await expect(
-      createSegment(
-        { name: 'Демо с живым', description: null, conditions: surveyConditions(liveId, 'declined') },
-        employeeId,
-        true,
-      ),
-    ).rejects.toBeInstanceOf(SegmentSurveyDemoMismatchError);
-    await expect(
-      previewSegmentConditions(surveyConditions(demoId, 'declined'), false, 0),
-    ).rejects.toBeInstanceOf(SegmentSurveyDemoMismatchError);
   });
 });

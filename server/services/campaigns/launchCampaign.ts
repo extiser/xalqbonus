@@ -22,7 +22,7 @@ import {
 } from '#server/services/campaigns/errors';
 import { filledChestsOf, unavailablePrizeChestsOf } from '#server/services/campaigns/prizeFields';
 import { readCampaign } from '#server/services/campaigns/readCampaign';
-import { toSegmentConditions } from '#server/services/segments/fields';
+import { toSegmentBasis } from '#server/services/segments/fields';
 import { campaignLaunchProblems } from '#shared/campaign';
 import type { CampaignResponse } from '#shared/types/campaign';
 
@@ -112,8 +112,7 @@ export const launchCampaign = async (campaignId: string): Promise<CampaignRespon
 
     const audienceSize = await insertCampaignParticipants(
       campaignId,
-      toSegmentConditions(segment),
-      segment.isDemo,
+      toSegmentBasis(segment),
       campaign.splitEnabled,
       transaction,
     );
