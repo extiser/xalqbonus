@@ -2,6 +2,7 @@ import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
 import { db } from '#server/db';
 import { Prisma } from '#server/generated/prisma/client';
+import { countSegmentMembers, findSegment } from '#server/repositories/segments';
 import { countSurveyGroups, surveyGroupMembersSql } from '#server/repositories/surveyResults';
 import { createCampaign } from '#server/services/campaigns/createCampaign';
 import { launchCampaign } from '#server/services/campaigns/launchCampaign';
@@ -10,6 +11,7 @@ import { createMailing } from '#server/services/mailings/createMailing';
 import { launchMailing } from '#server/services/mailings/launchMailing';
 import { readMailingAudience } from '#server/services/mailings/readMailingAudience';
 import { InvalidSegmentFieldsError } from '#server/services/segments/errors';
+import { toSegmentBasis } from '#server/services/segments/fields';
 import { previewSavedSegment } from '#server/services/segments/previewSegment';
 import { readSegmentPersonIds } from '#server/services/segments/readSegmentPersonIds';
 import { setSegmentArchived } from '#server/services/segments/setSegmentArchived';
@@ -314,7 +316,7 @@ describe('сегмент-список из итогов опроса', () => {
     expect(await countSegmentsBy(employeeId)).toBe(0);
   });
 
-  it('демо-опрос даёт демо-сегмент; спрятанный и чужого мира водитель из состава выпадает', async () => {
+  it('демо-опрос даёт демо-сегмент; спрятанный водитель выпадает из состава и из группы', async () => {
     const { employeeId } = await createTestEmployee({ role: 'owner' });
 
     const demoSurveyId = await createSurvey(employeeId, true);
@@ -337,20 +339,49 @@ describe('сегмент-список из итогов опроса', () => {
     expect(await readSegmentPersonIds(demoSegment.segmentId)).toEqual([demoKept]);
     expect(await listedPersonIds(demoSegment.segmentId)).toEqual(sorted([demoKept, demoHidden]));
 
-    // Живая рассылка доходит и до демо-водителя, но живой список его не отдаёт.
-    const liveSurveyId = await createSurvey(employeeId, false);
+    // И из группы: число на кнопке и следующий список его уже не берут.
+    expect((await countSurveyGroups(demoSurveyId)).not_completed).toBe(1);
+    expect(await groupMembers(demoSurveyId, 'not_completed')).toEqual([demoKept]);
+  });
+
+  it('группа живого опроса — только живые: число на кнопке равно составу сегмента', async () => {
+    const { employeeId } = await createTestEmployee({ role: 'owner' });
+
+    // Живая рассылка доходит и до демо-водителя (`audienceSql`).
+    const surveyId = await createSurvey(employeeId, false);
     const live = await createParticipant();
     const demoInLive = await createParticipant(true);
 
-    await createLaunchedMailing(employeeId, liveSurveyId, false, [
+    await createLaunchedMailing(employeeId, surveyId, false, [
       { personId: live, delivered: true },
       { personId: demoInLive, delivered: true },
     ]);
 
-    const liveSegment = await createListSegment(liveSurveyId, 'not_completed', employeeId);
+    expect((await countSurveyGroups(surveyId)).not_completed).toBe(1);
 
-    expect(liveSegment.isDemo).toBe(false);
-    expect(await readSegmentPersonIds(liveSegment.segmentId)).toEqual([live]);
+    const segment = await createListSegment(surveyId, 'not_completed', employeeId);
+    const row = await findSegment(segment.segmentId);
+
+    if (!row) {
+      throw new Error('заведённый сегмент не прочитался');
+    }
+
+    expect(segment.isDemo).toBe(false);
+    expect(await listedPersonIds(segment.segmentId)).toEqual([live]);
+    expect((await countSegmentMembers(toSegmentBasis(row))).total).toBe(1);
+
+    // Группа из одного демо-водителя у живого опроса пуста: живой сегмент из неё был бы пуст
+    // всегда, и он не заводится.
+    const demoOnlySurveyId = await createSurvey(employeeId, false);
+    const demoOnly = await createParticipant(true);
+
+    await createLaunchedMailing(employeeId, demoOnlySurveyId, false, [{ personId: demoOnly, delivered: true }]);
+
+    expect((await countSurveyGroups(demoOnlySurveyId)).not_completed).toBe(0);
+    await expect(createSurveySegment(demoOnlySurveyId, 'not_completed', employeeId)).rejects.toBeInstanceOf(
+      SurveySegmentEmptyError,
+    );
+    expect(await countSegmentsBy(employeeId)).toBe(1);
   });
 
   it('рассылка, акция и подарок берут ровно состав списка', async () => {

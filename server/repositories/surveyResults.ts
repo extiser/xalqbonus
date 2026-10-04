@@ -503,15 +503,28 @@ const surveyGroupSql = Prisma.sql`
  * Люди группы с её признаком: круг — сводный (`cohortSql`, человек один, сколько бы рассылок
  * его ни захватило), только доставленные — до недоставленного опрос не дошёл, и ни в одну
  * группу он не входит.
+ *
+ * Только люди мира опроса и не спрятанные — те же два правила, что у отбора сегмента
+ * (`segmentMembersSql`). Живая рассылка доходит и до демо-водителей (`audienceSql`
+ * в `repositories/mailings.ts`), а живой сегмент их не отдаёт: без этого отсева число
+ * на кнопке было бы больше состава заведённого по ней сегмента, а группа из одних
+ * демо-водителей дала бы живой сегмент, пустой всегда. Отсекается здесь, а не в сервисе:
+ * число и снимок стоят на этом запросе оба. Признак опроса читается из `surveys` тем же
+ * запросом, а не приходит параметром — запросу не на что сверяться, кроме самой строки.
  */
 const surveyGroupedSql = (surveyId: string): Prisma.Sql => Prisma.sql`
   SELECT cohort."personId",
          ${surveyGroupSql} AS "group"
     FROM (${cohortSql({ kind: 'survey', surveyId })}) AS cohort
+    JOIN xb.persons AS person ON person."id" = cohort."personId"
+    JOIN xb.surveys AS survey ON survey."id" = ${surveyId}::uuid
     LEFT JOIN xb.survey_responses AS response
            ON response."survey_id" = ${surveyId}::uuid
           AND response."person_id" = cohort."personId"
    WHERE cohort."delivered"
+     AND person."is_demo" = survey."is_demo"
+     -- Спрятанный демо-водитель в срез не попадает (issue #252); у живого пусто всегда.
+     AND person."demo_hidden_at" IS NULL
 `;
 
 /** Множество `personId` группы — то, что ложится в сегмент-список. */
