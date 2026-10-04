@@ -300,17 +300,19 @@ test: test-db ## Прогнать тесты (vitest внутри app-конте
 
 # Копия боевой базы (issue #365). Цифры дашборда смотрятся на настоящих данных без выката:
 # ночная копия `pg-backup.sh daily` приезжает на Мак в `_backup/prod-daily/`, заливается
-# в отдельную базу локального стека, и приложение с воркером поднимаются на ней.
+# в отдельную базу локального стека, и приложение поднимается на ней.
 #
 # Копия всегда одна и называется одинаково. Имя зашито `override`-ом, а не передаётся:
 # `make copy-restore COPY_DB=...` его не подменит, и рабочую базу заливка не тронет ни при каких
 # аргументах — сверх того цель сверяет имя с POSTGRES_DB внутри контейнера.
 #
-# Режим копии — `docker/compose.copy.yml` поверх локального: своя база, своя база Redis
-# под очереди, выключенная синхронизация и недостижимый адрес Fleet — копия не тратит квоту
-# ключа парка ни расписанием, ни разовым прогоном. Писать водителям ей не даёт
-# TG_OUTGOING_ALLOWLIST из `.env`, он не переопределяется. Обратно на рабочую базу — `make up-d`,
-# в каком режиме стек — `make copy-status`.
+# Режим копии — `docker/compose.copy.yml` поверх локального, только для приложения: своя база,
+# своя база Redis под очереди, выключенная синхронизация и недостижимый адрес Fleet — копия
+# не тратит квоту ключа парка ни расписанием, ни разовым прогоном. Писать водителям ей не даёт
+# TG_OUTGOING_ALLOWLIST из `.env`, он не переопределяется. Воркер в режиме копии остановлен:
+# его расписания — просрочка заказов, сгорание наград, подарки, итоги кампаний — пишут в базу,
+# и копия перестала бы быть снимком ночи. Обратно на рабочую базу вместе с воркером —
+# `make up-d`, в каком режиме стек — `make copy-status`.
 #
 # Копия снята без `--clean` и поверх таблиц не ложится, поэтому база копии каждый раз
 # удаляется и создаётся заново (`--force` рвёт соединения поднятого на ней приложения).
@@ -332,21 +334,24 @@ copy-restore: ## Залить копию pg-backup.sh в базу копии в�
 	$(COMPOSE) exec -T app sh -c 'DATABASE_URL="postgresql://$$POSTGRES_USER:$$POSTGRES_PASSWORD@postgres:5432/$(COPY_DB)?schema=xb" npx prisma migrate deploy'
 	@$(COMPOSE) exec -T postgres sh -c 'psql -X -q -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$(COPY_DB)"' < scripts/copy-summary.sql
 
-copy-up: ## Поднять app и worker на копии боевой базы, в фоне. Обратно на рабочую базу — make up-d
+copy-up: ## Поднять app на копии боевой базы, в фоне, и остановить worker. Обратно на рабочую базу — make up-d
 	@exists=$$($(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -tAc "SELECT 1 FROM pg_database WHERE datname = '"'"'$(COPY_DB)'"'"'"') \
 		|| { echo "база стека не отвечает — поднимите стек: make up-d"; exit 1; }; \
 	test "$$exists" = "1" || { echo "копии $(COPY_DB) нет — сначала make copy-restore dump=_backup/prod-daily/<файл>.sql.gz"; exit 1; }
-	$(COMPOSE_COPY) up -d app worker
-	@echo "стек на копии $(COPY_DB): make copy-status; обратно на рабочую базу — make up-d"
+	$(COMPOSE_COPY) up -d app
+	$(COMPOSE) stop worker
+	@echo "app на копии $(COPY_DB), worker остановлен: make copy-status; обратно на рабочую базу — make up-d"
 
 copy-psql: ## Войти в psql копии боевой базы
 	$(COMPOSE) exec postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$(COPY_DB)"'
 
 # Смотрит в окружение работающих контейнеров, а не в файлы: режим определяет то, с чем
 # контейнер создан. Из строки подключения печатается только имя базы — пароль в ней тот же,
-# что в `.env`.
+# что в `.env`. Остановленный контейнер — штатное состояние воркера в режиме копии, и `exec`
+# в него не ходит: цель печатает «остановлен» и идёт дальше.
 copy-status: ## Режим стека: на какую базу и какой адрес Fleet смотрят app и worker
 	@for service in app worker; do \
+		if [ -z "$$($(COMPOSE) ps -q --status running $$service)" ]; then echo "$$service: остановлен"; continue; fi; \
 		$(COMPOSE) exec -T $$service sh -c '\
 			database=$${DATABASE_URL##*/}; database=$${database%%\?*}; \
 			if [ "$$database" = "$$2" ]; then mode="копия"; else mode="рабочая"; fi; \
