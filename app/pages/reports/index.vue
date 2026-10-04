@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue';
 import { useReports, type ReportQuery } from '~/composables/useReports';
 import type { SelectOption } from '~/types/selectOption';
-import { PARK_WIDE_REPORTS, REPORT_TITLES, reportDayKey, type ReportKey } from '#shared/reports';
+import { PARK_WIDE_REPORTS, REPORT_TITLES, reportDayKey, type ReportKey, type SectionReportKey } from '#shared/reports';
 
 /**
  * Раздел «Отчёты» (issue #308): клиент сам выбирает и выгружает отчёт по товару, без просьб
@@ -26,11 +26,13 @@ useHead({ title: 'Отчёты — Xalq Taxi Bonus' });
 
 const reports = useReports();
 
-const REPORT_OPTIONS: SelectOption[] = (Object.keys(REPORT_TITLES) as ReportKey[]).map((key) => ({
+const REPORT_OPTIONS: SelectOption[] = (Object.keys(REPORT_TITLES) as SectionReportKey[]).map((key) => ({
   value: key,
   label: REPORT_TITLES[key],
 }));
 
+// Полным `ReportKey`, а не списком раздела: экран рисует любой `ReportResult`, и выгрузка
+// дашборда (issue #373) обязана иметь свою строку, даже если в выборе раздела её нет.
 const EMPTY_MESSAGES: Record<ReportKey, string> = {
   sales: 'За период продаж нет.',
   stock: 'На эту дату остатков нет.',
@@ -40,12 +42,13 @@ const EMPTY_MESSAGES: Record<ReportKey, string> = {
   order_outcomes: 'За период заказов из бота не было.',
   staff: 'За период сотрудники ничего не оформляли.',
   points_economy: 'За период движения баллов не было.',
+  outside_program: 'За месяц водителей вне программы нет.',
 };
 
 /** Сегодня — календарный день по Ташкенту. */
 const today = reportDayKey(new Date());
 
-const report = ref<ReportKey>('sales');
+const report = ref<SectionReportKey>('sales');
 const from = ref(`${today.slice(0, 8)}01`);
 const to = ref(today);
 const date = ref(today);
@@ -69,7 +72,7 @@ const officeValue = computed({
 const reportValue = computed({
   get: () => report.value,
   set: (value: string) => {
-    report.value = value as ReportKey;
+    report.value = value as SectionReportKey;
   },
 });
 

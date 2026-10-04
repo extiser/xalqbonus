@@ -83,3 +83,76 @@ export const cleanupTestMetrics = async (
     DELETE FROM xb.fleet_order_history_days WHERE "park_day" = ANY(${[...historyDays]}::date[])
   `;
 };
+
+/**
+ * Привязки Telegram, телефоны и карточки профилей для тестов вкладки «Глубина» (issue #373).
+ * Привязки убираются своей уборкой — до `cleanupTestData`: они ссылаются на человека.
+ */
+const createdLinkIds = new Set<string>();
+
+/** Отдельный диапазон чатов: активный чат уникален, а чаты других тестов — мелкие числа. */
+let nextChatId = 7_373_000_000n;
+
+export const linkTestPersonAt = async (
+  personId: string,
+  linkedAt: Date,
+  closedAt: Date | null = null,
+): Promise<void> => {
+  nextChatId += 1n;
+
+  const link = await db.telegramLink.create({
+    data: {
+      personId,
+      telegramChatId: nextChatId,
+      linkedAt,
+      closedAt,
+      closeReason: closedAt === null ? null : 'operator',
+      confirmedBy: 'phone_auto',
+    },
+  });
+
+  createdLinkIds.add(link.id);
+};
+
+export const cleanupTestLinks = async (): Promise<void> => {
+  const linkIds = [...createdLinkIds];
+  createdLinkIds.clear();
+
+  await db.$executeRaw`DELETE FROM xb.telegram_links WHERE "id" = ANY(${linkIds}::uuid[])`;
+};
+
+export type TestProfilePhoneInput = {
+  phoneRaw: string;
+  phoneE164: string | null;
+  closedAt?: Date | null;
+};
+
+/** Телефон профиля. Убирается `cleanupTestData` вместе с профилем. */
+export const addTestProfilePhone = async (profileId: string, input: TestProfilePhoneInput): Promise<void> => {
+  await db.profilePhone.create({
+    data: {
+      profileId,
+      phoneRaw: input.phoneRaw,
+      phoneE164: input.phoneE164,
+      closedAt: input.closedAt ?? null,
+    },
+  });
+};
+
+/** Позывной и имя профиля — чтобы различить профили одного человека в выгрузке. */
+export const setTestProfileCard = async (
+  profileId: string,
+  card: { callsign: string; firstName: string; lastName: string },
+): Promise<void> => {
+  await db.parkProfile.update({ where: { profileId }, data: card });
+};
+
+/**
+ * Переносит выдачу заказа в прошлое. Заказ у стойки выдаётся «сейчас», а цена балла считается
+ * на конец месяца: так заказ ложится в месяц теста, где чужих заказов нет.
+ */
+export const backdateTestOrderIssue = async (orderId: string, issuedAt: Date): Promise<void> => {
+  await db.$executeRaw`
+    UPDATE xb.orders SET "issued_at" = ${issuedAt} WHERE "id" = ${orderId}::uuid
+  `;
+};
