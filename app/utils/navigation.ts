@@ -1,3 +1,18 @@
+import type { Component } from 'vue';
+import {
+  PhArrowsClockwise,
+  PhChartBar,
+  PhFunnel,
+  PhGift,
+  PhIdentificationCard,
+  PhMegaphone,
+  PhPackage,
+  PhPaperPlaneTilt,
+  PhPresentation,
+  PhShoppingBag,
+  PhStorefront,
+  PhUsers,
+} from '@phosphor-icons/vue';
 import {
   ALL_EMPLOYEE_ROLES,
   CAMPAIGN_ROLES,
@@ -22,36 +37,52 @@ import type { EmployeeIdentity } from '#shared/types/employee';
  * У каждого пункта записано, чьим ролям он открыт, и списки те же, по которым отказывают
  * ручки (`shared/access.ts`). Прячет шапка пункт не ради защиты — защищает сервер, —
  * а ради того, чтобы человек не выбирал из того, что ему откажут.
+ *
+ * Значок — свойство пункта, а не разметка меню (`_reference/design/web/icons-compare.md`):
+ * меню веба рисует его, шапка светлой раскладки — нет. Набор — Phosphor, импорт поимённый,
+ * чтобы сборка брала только эти двенадцать (`docs/decisions.md` → «Веб в стиле бенто»).
+ * Пункт «Дашборд» (`PhSquaresFour`) появится вместе со страницей дашборда.
  */
 export type NavigationItem = {
   title: string;
   path: string;
+  icon: Component;
   roles: readonly EmployeeIdentity['role'][];
 };
 
 const SERVICE_NAVIGATION: NavigationItem[] = [
-  { title: 'Водители', path: '/drivers', roles: ALL_EMPLOYEE_ROLES },
-  { title: 'Заказы', path: '/orders', roles: ORDER_ROLES },
-  { title: 'Офисы', path: '/offices', roles: CATALOG_ROLES },
+  { title: 'Водители', path: '/drivers', icon: PhUsers, roles: ALL_EMPLOYEE_ROLES },
+  { title: 'Заказы', path: '/orders', icon: PhShoppingBag, roles: ORDER_ROLES },
+  { title: 'Офисы', path: '/offices', icon: PhStorefront, roles: CATALOG_ROLES },
   // Раздел называется «Каталог», а адрес — по сущности, которой он управляет: страница
   // и ручка под ней читаются одним словом (`/products` ↔ `/api/products`), как у водителей.
-  { title: 'Каталог', path: '/products', roles: CATALOG_ROLES },
+  { title: 'Каталог', path: '/products', icon: PhPackage, roles: CATALOG_ROLES },
   // Продажи, остатки и дальше — другие отчёты по товару; выгрузка в Excel там же (issue #308).
-  { title: 'Отчёты', path: '/reports', roles: REPORT_ROLES },
+  { title: 'Отчёты', path: '/reports', icon: PhChartBar, roles: REPORT_ROLES },
   // Вручение наград и подарков — одному водителю и сегменту, со списком раздач (issue #219).
-  { title: 'Награды', path: '/rewards', roles: REWARD_GRANT_ROLES },
+  { title: 'Награды', path: '/rewards', icon: PhGift, roles: REWARD_GRANT_ROLES },
   // Свой раздел, а не блок у водителей: экран водителей — поиск человека, а срез парка —
   // другая работа, и следом за ним идёт рассылка (issue #165).
-  { title: 'Сегменты', path: '/segments', roles: SEGMENT_ROLES },
-  { title: 'Рассылки', path: '/mailings', roles: MAILING_ROLES },
-  { title: 'Акции', path: '/campaigns', roles: CAMPAIGN_ROLES },
-  { title: 'Сотрудники', path: '/employees', roles: STAFF_ROLES },
-  { title: 'Синхронизация', path: '/sync', roles: SYNC_ROLES },
+  { title: 'Сегменты', path: '/segments', icon: PhFunnel, roles: SEGMENT_ROLES },
+  { title: 'Рассылки', path: '/mailings', icon: PhPaperPlaneTilt, roles: MAILING_ROLES },
+  { title: 'Акции', path: '/campaigns', icon: PhMegaphone, roles: CAMPAIGN_ROLES },
+  { title: 'Сотрудники', path: '/employees', icon: PhIdentificationCard, roles: STAFF_ROLES },
+  { title: 'Синхронизация', path: '/sync', icon: PhArrowsClockwise, roles: SYNC_ROLES },
   // Пульт демо — зрители, демо-водители, генератор, демо-менеджер (issue #252). Последним:
   // это не работа парка, а витрина, которую показывает владелец.
-  { title: 'Демо', path: '/demo', roles: DEMO_EDITOR_ROLES },
+  { title: 'Демо', path: '/demo', icon: PhPresentation, roles: DEMO_EDITOR_ROLES },
 ];
 
 /** Что показать этой роли. Не вошедшему — ничего: переходить ему некуда. */
 export const navigationFor = (role: EmployeeIdentity['role'] | null): NavigationItem[] =>
   role === null ? [] : SERVICE_NAVIGATION.filter((item) => item.roles.includes(role));
+
+/**
+ * Пункт считается текущим и на вложенных страницах: карточка водителя живёт по адресу
+ * `/drivers/<id>`, и меню, гаснущее при переходе в неё, теряет ответ на вопрос «где я сейчас».
+ *
+ * Одно правило на шапку светлой раскладки и меню веба: раздел, переехавший на новую раскладку,
+ * подсвечивается так же, как подсвечивался в старой.
+ */
+export const isCurrentPath = (currentPath: string, itemPath: string): boolean =>
+  currentPath === itemPath || currentPath.startsWith(`${itemPath}/`);
