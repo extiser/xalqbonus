@@ -1,7 +1,7 @@
 import { onMounted, ref } from 'vue';
 import { failureText } from '~/utils/requestError';
 import type { LoadState } from '~/types/loadState';
-import { reportPath, type ReportKey } from '#shared/reports';
+import { reportPath, type SectionReportKey } from '#shared/reports';
 import type { ReportOffice, ReportOptionsResponse, ReportResult } from '#shared/types/reports';
 
 /**
@@ -47,7 +47,7 @@ export const useReports = () => {
     }
   };
 
-  const show = async (report: ReportKey, query: ReportQuery): Promise<void> => {
+  const show = async (report: SectionReportKey, query: ReportQuery): Promise<void> => {
     const current = ++sequence;
 
     state.value = 'loading';

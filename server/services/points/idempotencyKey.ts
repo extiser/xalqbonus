@@ -98,6 +98,16 @@ export const buildOrderSpendIdempotencyKey = (orderId: string): IdempotencyKey =
   buildKey('order_spend', orderId);
 
 /**
+ * Объединение двойников: `merge:<persons.id источника>` — баллы со счёта склеиваемого человека
+ * на счёт того, с кем его склеивают, один раз за всё время (docs/points.md).
+ *
+ * Операции склейки в ядре пока нет — построитель заведён под тест метрик (issue #373):
+ * перевод склейки не выдача, и тест обязан это проверить настоящим переводом.
+ */
+export const buildMergeIdempotencyKey = (sourcePersonId: string): IdempotencyKey =>
+  buildKey('merge', sourcePersonId);
+
+/**
  * Ручная правка: `manual:<uuid>`.
  *
  * Идентификатор здесь не производный от чего-либо в базе, а выданный на саму правку:

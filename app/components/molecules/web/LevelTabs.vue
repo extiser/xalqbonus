@@ -7,12 +7,17 @@
  * Уровень ведёт на свою страницу `/dashboard/{уровень}`, если он уже сделан (`available`);
  * несделанный виден и не нажимается — дашборд строится срезами (issue #371). На телефоне
  * вкладки прокручиваются вбок.
+ *
+ * Выбранный месяц (`month`) переходит со вкладки на вкладку в адресе (issue #373): уровни —
+ * разные взгляды на один месяц, и смена вкладки его не сбрасывает.
  */
 export type DashboardLevel = 'money' | 'levers' | 'depth';
 
 defineProps<{
   current: DashboardLevel;
   available: readonly DashboardLevel[];
+  /** Месяц `YYYY-MM` из адреса; пусто — вкладка откроется на последнем доступном. */
+  month?: string;
 }>();
 
 const LEVELS: readonly { key: DashboardLevel; label: string }[] = [
@@ -36,7 +41,7 @@ const TAB_CLASSES =
       >{{ level.label }}</span>
       <NuxtLink
         v-else-if="available.includes(level.key)"
-        :to="`/dashboard/${level.key}`"
+        :to="{ path: `/dashboard/${level.key}`, query: month ? { month } : {} }"
         class="bg-web-tile text-web-title hover:text-web-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-web-cyan"
         :class="TAB_CLASSES"
       >{{ level.label }}</NuxtLink>

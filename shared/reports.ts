@@ -6,7 +6,8 @@
  * выгрузка: и экран, и Excel рисуют любой `ReportResult` одинаково.
  */
 
-export type ReportKey =
+/** Отчёты раздела «Отчёты» — их выбирают на экране раздела. */
+export type SectionReportKey =
   | 'sales'
   | 'stock'
   | 'turnover'
@@ -16,7 +17,14 @@ export type ReportKey =
   | 'staff'
   | 'points_economy';
 
-export const REPORT_TITLES: Record<ReportKey, string> = {
+/**
+ * Любой отчёт, собранный в `ReportResult`: отчёты раздела и выгрузки дашборда — «Вне программы»
+ * (issue #373). Выгрузка дашборда рисуется в Excel той же книгой, но в выборе раздела её нет:
+ * её скачивают с плитки за месяц плитки.
+ */
+export type ReportKey = SectionReportKey | 'outside_program';
+
+export const REPORT_TITLES: Record<SectionReportKey, string> = {
   sales: 'Продажи за период',
   stock: 'Остатки на дату',
   turnover: 'Движение товара',
@@ -37,7 +45,7 @@ export const reportPath = (key: ReportKey): string => key.replaceAll('_', '-');
  * Отчёты по всему парку: офиса у них нет (issue #310). Баллы офису не принадлежат — поле
  * `Офис` на экране погашено, а ручка офис не принимает.
  */
-export const PARK_WIDE_REPORTS: readonly ReportKey[] = ['points_economy'];
+export const PARK_WIDE_REPORTS: readonly SectionReportKey[] = ['points_economy'];
 
 /**
  * День перехода на новую систему. Продаж старого бота в нашей базе нет: период, начатый
