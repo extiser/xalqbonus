@@ -87,7 +87,9 @@ const cards = computed(() => {
     {
       key: 'tripsPerDay',
       variant: 'factor',
-      label: 'Поездок в день на водителя',
+      // Короче подписи макета (Руслан, 04-10-2026): на 390 «… на водителя» шла в три строки
+      // и разводила значения по высоте; «на водителя» сказано в подсказке.
+      label: 'Поездок в день',
       metric: 'tripsPerDay',
       value: formatTenths(current.tripsPerDay),
       was: base ? `было ${formatTenths(base.tripsPerDay)}` : null,
