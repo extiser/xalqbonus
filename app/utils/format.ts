@@ -314,3 +314,19 @@ export const formatRewardDeadline = (expiresAt: string, source: RewardSource): s
 
   return `${day}.${month}`;
 };
+
+/**
+ * Число до десятой, всегда с ней: «17,4», «11,0» — множитель дашборда (issue #371). Десятая
+ * не пропадает у круглого числа: в ряду множителей «17» рядом с «17,1» читалось бы иначе.
+ */
+export const formatTenths = (value: number): string =>
+  value.toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+/** Время суток момента по Ташкенту: «03:00». */
+export const formatClock = (value: string): string =>
+  new Date(value).toLocaleString('ru-RU', {
+    timeZone: DISPLAY_TIME_ZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  });

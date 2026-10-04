@@ -7,6 +7,7 @@ import {
 } from '#server/queues/campaigns';
 import { closeQueueConnection, getQueueConnection } from '#server/queues/connection';
 import { closeMailingQueue, createMailingWorker, getMailingQueue } from '#server/queues/mailing';
+import { applyMetricsSchedule, createMetricsQueue, createMetricsWorker } from '#server/queues/metrics';
 import {
   closeNotificationsQueue,
   createNotificationsWorker,
@@ -169,6 +170,21 @@ campaignsWorker.on('error', (error: Error) => {
   log.warn('очередь акций сообщила об ошибке', { error: error.message });
 });
 
+// Ночной пересчёт метрик дашборда — пятая очередь, своя: пересчёт идёт минуты, и просрочка
+// заказов за ним стоять не должна (server/queues/metrics.ts).
+const metricsQueue = createMetricsQueue();
+const metricsWorker = createMetricsWorker();
+
+metricsWorker.on('failed', (job, error) => {
+  // Прогон уже закрыт в `metric_recompute_runs` текстом ошибки, таблица осталась прежней:
+  // пересчёт пишет её одной транзакцией. Повторит следующая ночь.
+  log.error('пересчёт метрик упал', { kind: job?.data.kind, error: error.message });
+});
+
+metricsWorker.on('error', (error: Error) => {
+  log.warn('очередь метрик сообщила об ошибке', { error: error.message });
+});
+
 // Прошлый процесс мог уйти по SIGKILL, не закрыв свою строку прогона: `syncWorker.close()`
 // на SIGTERM дожидается прогона, а `docker stop` по таймауту и убийство по памяти такой
 // возможности не дают. Подбираем брошенное — иначе журнал прогонов копит вечно бегущие строки.
@@ -186,6 +202,7 @@ if (abandoned > 0) {
 await applySyncSchedule(syncQueue, config);
 await applyOrdersSchedule(ordersQueue);
 await applyCampaignsSchedule(campaignsQueue);
+await applyMetricsSchedule(metricsQueue);
 
 log.info('воркер запущен', {
   liveEnabled: config.liveEnabled,
@@ -212,6 +229,10 @@ const shutdown = async (signal: string): Promise<void> => {
   // без исхода или с неоткрытыми сундуками, и их возьмёт следующий.
   await campaignsWorker.close();
   await campaignsQueue.close();
+  // Пересчёт дожидается конца, а убитый по таймауту откатывается: таблица пишется одной
+  // транзакцией, и прежняя остаётся целой.
+  await metricsWorker.close();
+  await metricsQueue.close();
   // Воркер уведомлений дожидается отправок, которые уже в руках: оборванная на середине
   // отправка — это сообщение, про которое неизвестно, ушло оно или нет.
   await notificationsWorker.close();
