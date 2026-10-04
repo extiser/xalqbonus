@@ -43,7 +43,7 @@ withDefaults(
     {{ title }}
     <span
       v-if="count !== undefined"
-      class="ml-auto rounded-full bg-web-cyan px-2 py-0.5 text-[11px] leading-[1.45] font-semibold text-web-page max-web:absolute max-web:top-[3px] max-web:left-[calc(50%+6px)] max-web:ml-0 max-web:px-1.5 max-web:py-px"
+      class="ml-auto rounded-full bg-web-cyan px-2 py-0.5 text-[11px] leading-[1.45] font-semibold text-web-page max-web:absolute max-web:top-[3px] max-web:left-[calc(50%+6px)] max-web:ml-0 max-web:px-1.5 max-web:py-px max-web:text-[10px]"
     >
       {{ count }}
     </span>
