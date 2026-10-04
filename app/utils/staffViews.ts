@@ -11,7 +11,7 @@ import type {
   StaffOutcomeView,
   StaffRewardView,
 } from '~/types/staffView';
-import { DISPLAY_TIME_ZONE, formatDate, formatNumber, pluralize } from '~/utils/format';
+import { DISPLAY_TIME_ZONE, formatDate, formatNumber, formatRewardDeadline, pluralize } from '~/utils/format';
 import { formatPoints, photoUrl } from '~/utils/memberViews';
 import { orderLinePrice, orderTotal } from '~/utils/orderAmount';
 
@@ -224,7 +224,7 @@ export const staffRewardView = (reward: OfficeReward): StaffRewardView => ({
   },
   dates: [
     { label: 'Вручена', value: formatDate(reward.createdAt) },
-    { label: 'Забрать до', value: formatDate(reward.expiresAt) },
+    { label: 'Забрать до', value: formatRewardDeadline(reward.expiresAt, reward.source) },
   ],
   issueSubtitle: [sheetDriverLine(reward.driverName, reward.callsign), reward.title],
 });

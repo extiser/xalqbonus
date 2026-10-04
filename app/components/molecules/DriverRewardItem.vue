@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { DASH, formatDateTime, formatMomentDate, formatNumber, pluralize } from '~/utils/format';
+import { rewardDeadlineDay } from '#shared/reward';
+import { DASH, formatCalendarDate, formatDateTime, formatNumber, pluralize } from '~/utils/format';
 import { driverRewardStatusLabel } from '~/utils/labels';
 import type { DriverReward } from '#shared/types/rewards';
 
@@ -47,6 +48,16 @@ const origin = computed(() => {
   }
 });
 
+/**
+ * День «Забрать до» у ждущей — тот, что выбрал сотрудник, а не день метки срока: правило одно
+ * с экраном водителя (`rewardDeadlineDay`, issue #354).
+ */
+const deadlineDay = computed(() =>
+  props.reward.expiresAt === null
+    ? DASH
+    : formatCalendarDate(rewardDeadlineDay(new Date(props.reward.expiresAt), props.reward.source)),
+);
+
 /** Как подарок лёг на баланс — сотрудник отвечает водителю «вы забрали его сами». */
 const claimText = computed(() =>
   props.reward.claimMode === 'driver' ? 'забрал сам' : 'зачислено по сроку',
@@ -70,7 +81,7 @@ const claimText = computed(() =>
     </div>
 
     <p v-if="reward.status === 'awaiting'" class="mt-1 text-sm text-slate-700">
-      {{ reward.officeName ?? DASH }} · до {{ formatMomentDate(reward.expiresAt) }}
+      {{ reward.officeName ?? DASH }} · до {{ deadlineDay }}
     </p>
     <p v-else-if="reward.status === 'issued'" class="mt-1 text-sm text-slate-700">
       Получена {{ formatDateTime(reward.issuedAt) }} · {{ reward.officeName ?? DASH }} · выдал

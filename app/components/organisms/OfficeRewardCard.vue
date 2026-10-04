@@ -2,7 +2,7 @@
 import { ref, watch } from 'vue';
 import type { OfficeReward } from '#shared/types/rewards';
 import { deskIssueQuestion } from '~/utils/deskQuestion';
-import { formatDate } from '~/utils/format';
+import { formatDate, formatRewardDeadline } from '~/utils/format';
 import { rewardStatusLabel } from '~/utils/labels';
 
 /**
@@ -41,7 +41,7 @@ watch(
       <MoleculesFactRow
         v-if="reward.status === 'awaiting'"
         label="Забрать до"
-        :value="formatDate(reward.expiresAt)"
+        :value="formatRewardDeadline(reward.expiresAt, reward.source)"
       />
       <MoleculesFactRow v-if="reward.issuedAt" label="Выдана" :value="formatDate(reward.issuedAt)" />
       <MoleculesFactRow v-if="reward.expiredAt" label="Сгорела" :value="formatDate(reward.expiredAt)" />
