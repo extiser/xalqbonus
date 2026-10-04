@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useRoute } from 'vue-router';
-import type { NavigationItem } from '~/utils/navigation';
+import { isCurrentPath, type NavigationItem } from '~/utils/navigation';
 import type { EmployeeIdentity } from '#shared/types/employee';
 
 /**
@@ -21,13 +21,7 @@ const emit = defineEmits<{ signOut: [] }>();
 
 const route = useRoute();
 
-/**
- * Пункт считается текущим и на вложенных страницах: карточка водителя живёт по адресу
- * `/drivers/<id>`, и шапка, гаснущая при переходе в неё, теряет ответ на вопрос
- * «где я сейчас».
- */
-const isCurrent = (path: string): boolean =>
-  route.path === path || route.path.startsWith(`${path}/`);
+const isCurrent = (path: string): boolean => isCurrentPath(route.path, path);
 </script>
 
 <template>

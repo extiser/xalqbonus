@@ -30,6 +30,13 @@ useHead({ title: 'Макеты Mini App' });
           <span class="text-[15px] font-semibold text-xb-text">Основа веба — токены, шрифты, сетка, плитки</span>
           <span class="text-[12px] font-light text-xb-grey">/design/web · web/codex.html</span>
         </NuxtLink>
+        <NuxtLink
+          to="/design/web/menu"
+          class="flex flex-col gap-0.5 rounded-[16px] border border-white/9 bg-xb-card px-4 py-3 no-underline"
+        >
+          <span class="text-[15px] font-semibold text-xb-text">Меню веба — колонка слева, панель внизу на телефоне</span>
+          <span class="text-[12px] font-light text-xb-grey">/design/web/menu · web/codex.html, web/dashboard/01-money.html</span>
+        </NuxtLink>
       </section>
 
       <section v-for="group in DESIGN_GROUPS" :key="group.title" class="flex flex-col gap-2">

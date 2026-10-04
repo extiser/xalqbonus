@@ -37,3 +37,6 @@ _reference/legacy/import-report-*.md
 
 # байт-код питоновских скриптов разведки
 __pycache__/
+
+# локальные разрешения Claude Code — браузер на localhost и прочее, у каждого свои
+.claude/settings.json

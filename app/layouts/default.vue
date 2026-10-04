@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useCurrentEmployee } from '~/composables/useCurrentEmployee';
+import { useSignOut } from '~/composables/useSignOut';
 import { navigationFor } from '~/utils/navigation';
 
 /**
@@ -15,25 +16,7 @@ const employee = useCurrentEmployee();
 
 const items = computed(() => navigationFor(employee.value?.role ?? null));
 
-/**
- * Выход. Ручка гасит сессию на сервере и удаляет cookie; отказ ручки выходу не мешает —
- * сессии, которую не приняли, уже нет, и держать человека в приложении из-за этого незачем.
- *
- * Сообщения о случившемся нет намеренно: нажавший «Выйти» видит форму входа, и это
- * исчерпывающий ответ. Строка про закрытую на сервере сессию рассказывала бы про наше
- * устройство, до которого вышедшему человеку дела нет.
- */
-const signOut = async (): Promise<void> => {
-  try {
-    await $fetch('/api/auth/logout', { method: 'POST' });
-  } catch {
-    // Разбирать нечего: дальше в любом случае форма входа.
-  }
-
-  employee.value = null;
-
-  await navigateTo('/login');
-};
+const signOut = useSignOut();
 </script>
 
 <template>
