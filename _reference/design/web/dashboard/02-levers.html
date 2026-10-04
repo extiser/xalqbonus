@@ -121,12 +121,22 @@ body { color: var(--text); font: 400 15px/1.45 Manrope, system-ui, sans-serif; }
   .chart-desk { display: none; } .chart-mob { display: block; flex: none; height: auto; }
 }
 
+/* Подсказка метрики (сессия 86): значок (i) у подписи, нажатие — определение простым языком.
+   Подсказка висит поверх страницы (position: fixed), плитка с overflow: hidden её не обрезает */
+.info { display: inline-grid; place-items: center; width: 28px; height: 28px; margin: -6px 0 -6px 2px; vertical-align: middle; border: 0; border-radius: 50%; background: none; color: var(--axis); cursor: pointer; padding: 0; }
+.info svg { width: 18px; height: 18px; }
+.glue { white-space: nowrap; } /* значок держится за последнее слово подписи и не уходит на строку один */
+.info:hover, .info[aria-expanded="true"] { color: var(--cyan); background: var(--raised); }
+.tip { position: fixed; z-index: 50; width: max-content; max-width: 300px; background: var(--raised); border-radius: 16px; padding: 14px 16px; font: 400 13px/1.45 Manrope; color: var(--title); box-shadow: 0 16px 40px rgba(0,0,0,.5), inset 0 0 0 1px var(--line); display: none; }
+.tip.on { display: block; }
+.tip b { display: block; color: var(--text); font: 600 14px/1.3 Manrope; margin-bottom: 4px; }
+.tip .how { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); color: var(--grey); font-size: 12px; }
 /* Уравнение множителей */
 .eq { display: grid; grid-template-columns: 1.15fr auto 1fr auto 1fr auto 1fr; align-items: stretch; gap: 14px; margin-top: 18px; }
 .eq .op { align-self: center; font: 600 26px Manrope; color: var(--axis); }
 .factor { background: var(--raised); border-radius: 22px; padding: 18px 20px; display: flex; flex-direction: column; }
 .factor.result { background: rgba(156,238,255,.08); }
-.factor .name { font: 500 14px/1.3 Manrope; color: var(--title); }
+.factor .name { font: 500 14px/1.3 Manrope; color: var(--title); min-height: 2.6em; } /* две строки под подпись у всех множителей: значения стоят на одной высоте */
 .factor .val { font: 700 30px/1.05 Unbounded; letter-spacing: -1px; margin-top: 10px; }
 .factor .was { font: 400 13px Manrope; color: var(--grey); margin-top: 6px; }
 .factor .contrib { margin-top: auto; padding-top: 12px; font: 600 14px Manrope; color: var(--title); }
@@ -196,15 +206,15 @@ body { color: var(--text); font: 400 15px/1.45 Manrope, system-ui, sans-serif; }
 
       <!-- Множители -->
       <section class="tile c12 r2">
-        <div class="head"><span class="t-title">За счёт чего изменились поездки · к сентябрю</span><span class="go"><svg viewBox="0 0 16 16" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg></span></div>
+        <div class="head"><span class="t-title">За счёт чего изменились поездки · к <span class="glue">сентябрю<button class="info" type="button" aria-label="Что это: За счёт чего изменились поездки" aria-expanded="false" data-tip-title="За счёт чего изменились поездки" data-tip-text="Поездки — это водители на линии × дни на линии × поездки в день. Под каждым множителем — сколько поездок прибавил или отнял именно он. Вместе они дают всё изменение поездок." data-tip-how="Вклад множителя = изменение поездок × ln(новое ÷ прошлое значение множителя) ÷ ln(новые ÷ прошлые поездки). Порядок множителей на результат не влияет."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span><span class="go"><svg viewBox="0 0 16 16" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg></span></div>
         <div class="eq">
-          <div class="factor result"><span class="name">Поездок</span><span class="val">83 120</span><span class="was">в сентябре 79 400</span><span class="contrib"><b class="pos">+3 720</b> всего</span></div>
+          <div class="factor result"><span class="name"><span class="glue">Поездок<button class="info" type="button" aria-label="Что это: Поездки" aria-expanded="false" data-tip-title="Поездки" data-tip-text="Сколько поездок завершено за месяц." data-tip-how="Завершённые поездки за месяц по Ташкенту. Отменённые и демо не входят."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span><span class="val">83 120</span><span class="was">в сентябре 79 400</span><span class="contrib"><b class="pos">+3 720</b> всего</span></div>
           <span class="op">=</span>
-          <div class="factor"><span class="name">Водителей на линии</span><span class="val">431</span><span class="was">было 413</span><span class="contrib"><b class="pos">+3 466</b> поездок</span></div>
+          <div class="factor"><span class="name">Водителей на <span class="glue">линии<button class="info" type="button" aria-label="Что это: Водителей на линии" aria-expanded="false" data-tip-title="Водителей на линии" data-tip-text="Сколько разных водителей сделали хотя бы одну поездку за месяц. Водитель — человек: если у него несколько учётных записей в парке, он считается один раз." data-tip-how="Считаются только завершённые поездки. Демо не входит."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span><span class="val">431</span><span class="was">было 413</span><span class="contrib"><b class="pos">+3 466</b> поездок</span></div>
           <span class="op">×</span>
-          <div class="factor"><span class="name">Дней на линии из 30</span><span class="val">17,4</span><span class="was">было 17,1</span><span class="contrib"><b class="pos">+1 413</b> поездок</span></div>
+          <div class="factor"><span class="name">Дней на линии из <span class="glue">30<button class="info" type="button" aria-label="Что это: Дней на линии" aria-expanded="false" data-tip-title="Дней на линии" data-tip-text="Сколько дней за месяц в среднем выходил на линию один водитель. День засчитывается, если в эти сутки по Ташкенту у него была хотя бы одна поездка." data-tip-how="Сумма дней на линии всех водителей ÷ водителей на линии"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span><span class="val">17,4</span><span class="was">было 17,1</span><span class="contrib"><b class="pos">+1 413</b> поездок</span></div>
           <span class="op">×</span>
-          <div class="factor"><span class="name">Поездок в день на водителя</span><span class="val">11,1</span><span class="was">было 11,2</span><span class="contrib"><b class="neg">−1 159</b> поездок</span></div>
+          <div class="factor"><span class="name">Поездок в день на <span class="glue">водителя<button class="info" type="button" aria-label="Что это: Поездок в день" aria-expanded="false" data-tip-title="Поездок в день" data-tip-text="Сколько поездок водитель делает за день, когда выходит на линию." data-tip-how="Все поездки месяца ÷ сумма дней на линии всех водителей"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span><span class="val">11,1</span><span class="was">было 11,2</span><span class="contrib"><b class="neg">−1 159</b> поездок</span></div>
         </div>
         <div class="t-sub">Рост дали новые и вернувшиеся водители и то, что ездят чаще по дням. В день каждый делает чуть меньше — смотреть на тяжёлых ниже.</div>
       </section>
@@ -299,6 +309,35 @@ document.querySelectorAll('.side').forEach(function (side) {
 document.addEventListener('click', function () {
   document.querySelectorAll('.side.open').forEach(function (side) { side.classList.remove('open'); });
 });
+/* Подсказка метрики: одна на страницу, ставится под значком и не выходит за край окна */
+var tip = document.createElement('div'); tip.className = 'tip'; tip.setAttribute('role', 'tooltip'); document.body.appendChild(tip);
+var openInfo = null;
+function closeTip() { tip.classList.remove('on'); if (openInfo) openInfo.setAttribute('aria-expanded', 'false'); openInfo = null; }
+function openTip(btn) {
+  tip.innerHTML = '';
+  var title = document.createElement('b'); title.textContent = btn.dataset.tipTitle; tip.appendChild(title);
+  tip.appendChild(document.createTextNode(btn.dataset.tipText));
+  if (btn.dataset.tipHow) { var how = document.createElement('div'); how.className = 'how'; how.textContent = btn.dataset.tipHow; tip.appendChild(how); }
+  tip.classList.add('on');
+  btn.setAttribute('aria-expanded', 'true'); openInfo = btn;
+  placeTip();
+}
+/* Под значком; не влезает снизу — над ним; у края окна сдвигается внутрь */
+function placeTip() {
+  if (!openInfo) return;
+  var box = openInfo.getBoundingClientRect(), width = tip.offsetWidth, height = tip.offsetHeight;
+  var left = Math.min(Math.max(12, box.left + box.width / 2 - 24), window.innerWidth - width - 12);
+  var top = box.bottom + 8; if (top + height > window.innerHeight - 12) top = box.top - height - 8;
+  tip.style.left = left + 'px'; tip.style.top = top + 'px';
+}
+document.querySelectorAll('.info').forEach(function (btn) {
+  btn.addEventListener('click', function (event) { event.stopPropagation(); if (openInfo === btn) closeTip(); else { closeTip(); openTip(btn); } });
+});
+tip.addEventListener('click', function (event) { event.stopPropagation(); });
+document.addEventListener('click', closeTip);
+document.addEventListener('keydown', function (event) { if (event.key === 'Escape') closeTip(); });
+/* Прокрутка и смена размера окна подсказку не закрывают, а двигают за значком: на телефоне окно меняет высоту, когда прячется строка адреса */
+window.addEventListener('scroll', placeTip, true); window.addEventListener('resize', placeTip);
 </script>
 </body>
 </html>
