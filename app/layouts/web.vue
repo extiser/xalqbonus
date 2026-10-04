@@ -17,6 +17,10 @@ import { navigationFor } from '~/utils/navigation';
  * и занимает его высоту, на телефоне, ниже 900, — панель у нижнего края над домашней полосой
  * iPhone. Содержимое на телефоне получает снизу запас, чтобы последняя плитка не уходила
  * под панель.
+ *
+ * На широком мониторе меню остаётся у левого края, а содержимое тянется на свободное место
+ * до 1600 и дальше встаёт по центру места справа от меню (Руслан, 04-10-2026): прижатое влево
+ * содержимое оставляло справа пустоту.
  */
 
 const employee = useCurrentEmployee();
@@ -44,7 +48,7 @@ useHead({
       >
         <OrganismsWebSideMenu :items="items" :employee="employee" @sign-out="signOut" />
       </div>
-      <main class="w-full max-w-[1240px] min-w-0 px-2 pt-2 pb-12 max-web:p-0 max-web:pb-[calc(110px+env(safe-area-inset-bottom))]">
+      <main class="mx-auto w-full max-w-[1600px] min-w-0 px-2 pt-2 pb-12 max-web:p-0 max-web:pb-[calc(110px+env(safe-area-inset-bottom))]">
         <slot />
       </main>
     </div>
