@@ -45,7 +45,8 @@ body { color: var(--text); font: 400 15px/1.45 Manrope, system-ui, sans-serif; }
 .acct-menu .item:hover { background: var(--tile); }
 
 /* Рабочая область */
-.main { max-width: 1240px; width: 100%; padding: 8px 8px 48px; }
+/* Широкий экран: содержимое тянется до 1600 и дальше встаёт по центру места справа от меню; меню у левого края (сессия 85) */
+.main { max-width: 1600px; width: 100%; margin: 0 auto; padding: 8px 8px 48px; }
 .top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 6px 4px 20px; }
 .page-title { font: 700 26px/1.1 Unbounded; }
 .levels { display: flex; gap: 6px; margin-top: 14px; }
