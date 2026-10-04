@@ -11,6 +11,7 @@ import {
   PhPresentation,
   PhQrCode,
   PhShoppingBag,
+  PhSquaresFour,
   PhStorefront,
   PhUsers,
 } from '@phosphor-icons/vue';
@@ -20,6 +21,7 @@ import {
   CATALOG_ROLES,
   DEMO_EDITOR_ROLES,
   MAILING_ROLES,
+  METRICS_ROLES,
   ORDER_ROLES,
   PROMO_ROLES,
   REPORT_ROLES,
@@ -43,7 +45,6 @@ import type { EmployeeIdentity } from '#shared/types/employee';
  * Значок — свойство пункта, а не разметка меню (`_reference/design/web/icons-compare.md`):
  * меню веба рисует его, шапка светлой раскладки — нет. Набор — Phosphor, импорт поимённый,
  * чтобы сборка брала только используемые (`docs/decisions.md` → «Веб в стиле бенто»).
- * Пункт «Дашборд» (`PhSquaresFour`) появится вместе со страницей дашборда.
  */
 export type NavigationItem = {
   title: string;
@@ -53,6 +54,9 @@ export type NavigationItem = {
 };
 
 const SERVICE_NAVIGATION: NavigationItem[] = [
+  // Первым: дашборд — первый экран владельца (issue #371). Вкладки
+  // `/dashboard/levers` и `/dashboard/depth` подсвечивают этот же пункт — они вложены в его адрес.
+  { title: 'Дашборд', path: '/dashboard', icon: PhSquaresFour, roles: METRICS_ROLES },
   { title: 'Водители', path: '/drivers', icon: PhUsers, roles: ALL_EMPLOYEE_ROLES },
   { title: 'Заказы', path: '/orders', icon: PhShoppingBag, roles: ORDER_ROLES },
   { title: 'Офисы', path: '/offices', icon: PhStorefront, roles: CATALOG_ROLES },
