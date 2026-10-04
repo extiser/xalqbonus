@@ -4,14 +4,8 @@ import type { Language } from '#server/generated/prisma/enums';
 import type { MemberGiftRow } from '#server/repositories/gifts';
 import type { PersonRewardRow, SheetRewardRow } from '#server/repositories/rewards';
 import { toMemberOffice } from '#server/services/offices/readMemberOffices';
-import {
-  calendarDayMoment,
-  DAY_MS,
-  formatCalendarDate,
-  formatClockTime,
-  formatDayKey,
-  formatDayMonthWord,
-} from '#server/utils/parkTime';
+import { calendarDayMoment, formatCalendarDate, formatClockTime, formatDayMonthWord } from '#server/utils/parkTime';
+import { rewardDeadlineDay } from '#shared/reward';
 import type { MemberGift, MemberReward, MemberRewardTexts, MemberSheetReward } from '#shared/types/rewards';
 
 /**
@@ -24,29 +18,16 @@ const formatMoment = (moment: Date): string =>
   `${formatCalendarDate(moment)}, ${formatClockTime(moment)}`;
 
 /**
- * День, до которого забрать ручную награду. Срок ручной выдачи — граница суток после дня
- * «Забрать до» (issue #266), и календарный день самого срока назвал бы следующее число, а не то,
- * что выбрал сотрудник и написано в сообщении.
- *
- * Граница — 00:00 следующего дня по Ташкенту (docs/decisions.md → «Сутки — с 00:00 до 00:00
- * по Ташкенту; у акции — свои, с 05:00»), а у выданных до перехода на календарные сутки —
- * 05:00: их срок хранится меткой и не пересчитывается (issue #352). Полсуток назад от любой
- * из двух — внутри выбранного дня.
- */
-const manualDeadlineDay = (expiresAt: Date): Date =>
-  calendarDayMoment(formatDayKey(new Date(expiresAt.getTime() - DAY_MS / 2)));
-
-/**
  * Срок ждущей словом месяца: «5 октября». Пустого срока у ждущей не бывает — у баллов его нет,
- * но баллы и не ждут; пустая строка здесь лучше выдуманной даты. Приз акции называет
- * календарный день срока, как до #266.
+ * но баллы и не ждут; пустая строка здесь лучше выдуманной даты. День — по правилу
+ * `rewardDeadlineDay`, общему со служебными экранами.
  */
 const deadline = (row: Pick<PersonRewardRow, 'expiresAt' | 'source'>, language: Language): string => {
   if (!row.expiresAt) {
     return '';
   }
 
-  return formatDayMonthWord(row.source === 'manual' ? manualDeadlineDay(row.expiresAt) : row.expiresAt, language);
+  return formatDayMonthWord(calendarDayMoment(rewardDeadlineDay(row.expiresAt, row.source)), language);
 };
 
 /**

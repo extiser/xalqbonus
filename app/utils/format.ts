@@ -1,3 +1,6 @@
+import { rewardDeadlineDay } from '#shared/reward';
+import type { RewardSource } from '#shared/types/rewards';
+
 /**
  * Форматирование чисел и времени для служебных экранов.
  *
@@ -295,3 +298,19 @@ const DAY_KEY = new Intl.DateTimeFormat('en-CA', {
  * полю даты: значение `<input type="date">` и его `min` — день в этом же виде.
  */
 export const formatDayKey = (moment: Date): string => DAY_KEY.format(moment);
+
+/**
+ * «Забрать до» у награды на служебных экранах (issue #354). У ручной награды и подарка — день,
+ * который выбрал сотрудник: «10.10». Время у их срока — служебная метка границы суток, и рядом
+ * с выбранным днём оно бы врало. У приза акции — момент до минуты, как раньше: «17.10, 14:32»,
+ * срок у него настоящий, и в 14:32 приз сгорит.
+ */
+export const formatRewardDeadline = (expiresAt: string, source: RewardSource): string => {
+  if (source === 'campaign') {
+    return formatDate(expiresAt);
+  }
+
+  const [, month, day] = rewardDeadlineDay(new Date(expiresAt), source).split('-');
+
+  return `${day}.${month}`;
+};
