@@ -3,6 +3,7 @@
 COMPOSE = docker compose -f docker/compose.local.yml --env-file .env
 COMPOSE_PROD = docker compose -f docker/compose.prod.yml --env-file .env
 COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
+COMPOSE_COPY = docker compose -f docker/compose.local.yml -f docker/compose.copy.yml --env-file .env
 
 .DEFAULT_GOAL := help
 
@@ -10,6 +11,7 @@ COMPOSE_PROXY = docker compose -f docker/compose.proxy.yml --env-file .env
         db-restore db-drop db-schema invariants license-collisions legacy-vs-api import-legacy import-legacy-awarded-trips \
         employee-owner prod-employee-owner \
         import-legacy-dump \
+        copy-restore copy-up copy-psql copy-status \
         sync-orders sync-registry sync-state fleet-history fleet-history-status \
         prod-up prod-down prod-restart prod-logs prod-ps prod-shell prod-psql prod-invariants prod-migrate prod-migrate-rolled-back \
         prod-stop prod-start prod-sql prod-db-restore prod-uploads-restore \
@@ -295,6 +297,61 @@ test-db: ## Завести базу xalqbonus_test и накатить на не
 # упавший посередине, оставил бы счёт неверным (docs/infra.md → «Тесты»).
 test: test-db ## Прогнать тесты (vitest внутри app-контейнера, база xalqbonus_test)
 	$(COMPOSE) exec -T app npm run test
+
+# Копия боевой базы (issue #365). Цифры дашборда смотрятся на настоящих данных без выката:
+# ночная копия `pg-backup.sh daily` приезжает на Мак в `_backup/prod-daily/`, заливается
+# в отдельную базу локального стека, и приложение с воркером поднимаются на ней.
+#
+# Копия всегда одна и называется одинаково. Имя зашито `override`-ом, а не передаётся:
+# `make copy-restore COPY_DB=...` его не подменит, и рабочую базу заливка не тронет ни при каких
+# аргументах — сверх того цель сверяет имя с POSTGRES_DB внутри контейнера.
+#
+# Режим копии — `docker/compose.copy.yml` поверх локального: своя база, своя база Redis
+# под очереди, выключенная синхронизация и недостижимый адрес Fleet — копия не тратит квоту
+# ключа парка ни расписанием, ни разовым прогоном. Писать водителям ей не даёт
+# TG_OUTGOING_ALLOWLIST из `.env`, он не переопределяется. Обратно на рабочую базу — `make up-d`,
+# в каком режиме стек — `make copy-status`.
+#
+# Копия снята без `--clean` и поверх таблиц не ложится, поэтому база копии каждый раз
+# удаляется и создаётся заново (`--force` рвёт соединения поднятого на ней приложения).
+# Обычный вывод заливки — результаты `setval` по каждой последовательности — уходит
+# в /dev/null, ошибки под `ON_ERROR_STOP` идут в stderr и остаются на экране. Затем схема
+# копии догоняет код ветки той же миграцией, что и рабочая база.
+override COPY_DB := xalqbonus_prod_copy
+
+copy-restore: ## Залить копию pg-backup.sh в базу копии вместо прежней. make copy-restore dump=_backup/prod-daily/<файл>.sql.gz
+	@test -n "$(dump)" || { echo "укажите копию: make copy-restore dump=_backup/prod-daily/<файл>.sql.gz"; exit 1; }
+	@test -f "$(dump)" || { echo "файла нет: $(dump)"; exit 1; }
+	@case "$(dump)" in *.sql.gz) ;; *) echo "копия базы — файл .sql.gz от pg-backup.sh, а не $(dump)"; exit 1;; esac
+	@gzip -t "$(dump)" || { echo "копия не проходит проверку gzip: $(dump)"; exit 1; }
+	@$(COMPOSE) exec -T postgres sh -c '\
+		test "$$1" != "$$POSTGRES_DB" || { echo "$$1 — рабочая база, копия в неё не заливается"; exit 1; }; \
+		dropdb --if-exists --force -U "$$POSTGRES_USER" "$$1" && \
+		createdb -U "$$POSTGRES_USER" "$$1" && echo "база $$1 создана заново"' sh "$(COPY_DB)"
+	gunzip < "$(dump)" | $(COMPOSE) exec -T postgres sh -c 'psql -X -q -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$(COPY_DB)"' >/dev/null
+	$(COMPOSE) exec -T app sh -c 'DATABASE_URL="postgresql://$$POSTGRES_USER:$$POSTGRES_PASSWORD@postgres:5432/$(COPY_DB)?schema=xb" npx prisma migrate deploy'
+	@$(COMPOSE) exec -T postgres sh -c 'psql -X -q -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$(COPY_DB)"' < scripts/copy-summary.sql
+
+copy-up: ## Поднять app и worker на копии боевой базы, в фоне. Обратно на рабочую базу — make up-d
+	@exists=$$($(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -tAc "SELECT 1 FROM pg_database WHERE datname = '"'"'$(COPY_DB)'"'"'"') \
+		|| { echo "база стека не отвечает — поднимите стек: make up-d"; exit 1; }; \
+	test "$$exists" = "1" || { echo "копии $(COPY_DB) нет — сначала make copy-restore dump=_backup/prod-daily/<файл>.sql.gz"; exit 1; }
+	$(COMPOSE_COPY) up -d app worker
+	@echo "стек на копии $(COPY_DB): make copy-status; обратно на рабочую базу — make up-d"
+
+copy-psql: ## Войти в psql копии боевой базы
+	$(COMPOSE) exec postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$(COPY_DB)"'
+
+# Смотрит в окружение работающих контейнеров, а не в файлы: режим определяет то, с чем
+# контейнер создан. Из строки подключения печатается только имя базы — пароль в ней тот же,
+# что в `.env`.
+copy-status: ## Режим стека: на какую базу и какой адрес Fleet смотрят app и worker
+	@for service in app worker; do \
+		$(COMPOSE) exec -T $$service sh -c '\
+			database=$${DATABASE_URL##*/}; database=$${database%%\?*}; \
+			if [ "$$database" = "$$2" ]; then mode="копия"; else mode="рабочая"; fi; \
+			echo "$$1: $$mode — база $$database, Fleet $$YANDEX_BASE_URL"' sh "$$service" "$(COPY_DB)" || exit 1; \
+	done
 
 # Боевой набор. Сборка образа входит в подъём: отдельной цели build нет, как и цели
 # с созданием миграций — на проде миграции только применяются.
