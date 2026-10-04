@@ -49,6 +49,48 @@
 }
 
 /*
+ * Токены веба в стиле бенто — `:root` кодекса `_reference/design/web/codex.html`.
+ *
+ * Приставка `web-`: палитра веба своя, тёмный сине-зелёный с циановыми данными, и с `xb-*`
+ * Mini App она не смешивается (`codex.md`, «Палитра веба принята»). Общие только смысловые
+ * цвета — алый, золото и гранат: значения у них совпадают с Mini App, поэтому веб ссылается
+ * на его токены, а не повторяет их. Зелёный у веба свой, сдвинутый к референсу.
+ *
+ * Шрифты те же, что у Mini App: Unbounded — числа и заголовок страницы, Manrope — остальное.
+ * Роли шрифтов живут в компонентах `app/components/{atoms,molecules}/web/`, а не здесь.
+ *
+ * Граница телефона — 900: телефонный вид пишется вариантом `max-web:`.
+ */
+@theme static {
+  /* поверхности */
+  --color-web-page: #081114;
+  --color-web-tile: #0E1B1F;
+  --color-web-raised: #142429;
+  --color-web-line: rgba(156, 238, 255, 0.07);
+  /* текст */
+  --color-web-text: #F4F9FA;
+  --color-web-title: #9DB1B5;
+  --color-web-grey: #7E9399;
+  --color-web-axis: #566E74;
+  /* данные */
+  --color-web-cyan: #9CEEFF;
+  --color-web-teal: #1C4A58;
+  --color-web-teal-mid: #137B9C;
+  --color-web-compare: #4F6C73;
+  /* смысл */
+  --color-web-green: #47CB4A;
+  --color-web-scarlet: var(--color-xb-scarlet);
+  --color-web-gold: var(--color-xb-gold);
+  --color-web-garnet: var(--color-xb-garnet);
+
+  --radius-web-tile: 32px;
+  --spacing-web-gap: 16px;
+  --spacing-web-pad: 28px;
+
+  --breakpoint-web: 900px;
+}
+
+/*
  * Сдвиг липких элементов экранов под полосу «Демо-аккаунт» — одна переменная на корне.
  * У не-демо она ноль, и шапки липнут к верху, как липли. У демо-зрителя страница ставит
  * корню класс `xb-demo`, и шапка главной, шапка разделов и строка офиса в каталоге встают

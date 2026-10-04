@@ -21,6 +21,17 @@ useHead({ title: 'Макеты Mini App' });
     <main class="mx-auto flex w-full max-w-[520px] flex-col gap-8 px-4 py-8">
       <h1 class="m-0 font-unbounded text-[22px] font-semibold tracking-[-0.5px]">Макеты Mini App водителя</h1>
 
+      <section class="flex flex-col gap-2">
+        <h2 class="m-0 text-[12px] font-semibold uppercase tracking-[1.2px] text-xb-grey">Веб</h2>
+        <NuxtLink
+          to="/design/web"
+          class="flex flex-col gap-0.5 rounded-[16px] border border-white/9 bg-xb-card px-4 py-3 no-underline"
+        >
+          <span class="text-[15px] font-semibold text-xb-text">Основа веба — токены, шрифты, сетка, плитки</span>
+          <span class="text-[12px] font-light text-xb-grey">/design/web · web/codex.html</span>
+        </NuxtLink>
+      </section>
+
       <section v-for="group in DESIGN_GROUPS" :key="group.title" class="flex flex-col gap-2">
         <h2 class="m-0 text-[12px] font-semibold uppercase tracking-[1.2px] text-xb-grey">{{ group.title }}</h2>
         <NuxtLink
