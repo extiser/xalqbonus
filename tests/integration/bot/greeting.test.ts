@@ -25,6 +25,7 @@ import {
   nextTestTelegramUserId,
   readTestEmployee,
 } from '../support/employees';
+import { cleanupTestPromoTouches, readTestPromoTouches } from '../support/promo';
 
 /**
  * Ответ бота на входящее сообщение: приветствие всем, привязка Telegram — сотруднику со ссылкой.
@@ -83,6 +84,7 @@ describe('ответ бота на входящее сообщение', () => {
   });
 
   afterEach(async () => {
+    await cleanupTestPromoTouches();
     await cleanupTestEmployees();
     await cleanupTestData();
   });
@@ -189,6 +191,40 @@ describe('ответ бота на входящее сообщение', () => {
     // Ответ сразу, без запроса контакта: зритель входит по `from.id` (issue #252).
     expect(bot.sent.map((message) => message.text)).toEqual([text('demo_invite_unknown', 'ru')]);
     expect(await findTestEmployeeByTelegram(telegramUserId)).toBeNull();
+  });
+
+  it('промо-метка `p_` пишет касание, а ответ — обычное приветствие', async () => {
+    const bot = createBotDouble();
+    const telegramUserId = nextTestTelegramUserId();
+
+    await bot.handleUpdate(privateMessageUpdate(telegramUserId, commandContent('/start', 'p_poster1')));
+
+    // Касание ответа не меняет ничем: водитель с плаката видит то же, что без метки (issue #377).
+    expect(screensOf(bot)).toEqual([text('start_greeting', 'ru')]);
+    expect(await readTestPromoTouches(telegramUserId)).toMatchObject([
+      { code: 'p_poster1', telegramUserId, telegramChatId: telegramUserId },
+    ]);
+  });
+
+  it('ссылки `demo_`, `emp_` и `/start` без параметра касания не пишут', async () => {
+    const bot = createBotDouble();
+    const employee = await createTestEmployee({ role: 'admin', telegramUserId: null });
+    const token = await issueTestAccessLink(employee.employeeId, 'telegram', TELEGRAM_LINK_LIFETIME_MS);
+    const demoTelegramUserId = nextTestTelegramUserId();
+    const employeeTelegramUserId = nextTestTelegramUserId();
+    const plainTelegramUserId = nextTestTelegramUserId();
+
+    await bot.handleUpdate(
+      privateMessageUpdate(demoTelegramUserId, commandContent('/start', 'demo_нет-такого')),
+    );
+    await bot.handleUpdate(
+      privateMessageUpdate(employeeTelegramUserId, commandContent('/start', `emp_${token}`)),
+    );
+    await bot.handleUpdate(privateMessageUpdate(plainTelegramUserId, commandContent('/start')));
+
+    expect(await readTestPromoTouches(demoTelegramUserId)).toEqual([]);
+    expect(await readTestPromoTouches(employeeTelegramUserId)).toEqual([]);
+    expect(await readTestPromoTouches(plainTelegramUserId)).toEqual([]);
   });
 
   it('сотрудник получает своё приветствие, а не водительское', async () => {

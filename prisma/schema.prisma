@@ -570,6 +570,7 @@ model Person {
   surveys       SurveyResponse[]
   segmentMemberships SegmentMember[]
   metricDays    MetricPersonDay[]
+  promoTouches  PromoTouch[]
 
   @@map("persons")
   @@schema("xb")
@@ -2576,5 +2577,43 @@ model MetricRecomputeRun {
 
   @@index([finishedAt])
   @@map("metric_recompute_runs")
+  @@schema("xb")
+}
+
+// ---------------------------------------------------------------------------
+// Промо-метки
+// ---------------------------------------------------------------------------
+
+/// Переход по промо-метке (issue #377): строка на каждый `/start p_<код>` — плакат, листовка,
+/// QR в офисе. Пишется каждое касание, а не первое, и касание участника программы тоже:
+/// уникальности нет, повторное нажатие того же QR — своя строка.
+///
+/// Справочника меток пока нет: код пишется как пришёл, связь со справочником появится
+/// с разделом «Промо».
+model PromoTouch {
+  /// Журнальная таблица, на которую никто не ссылается, — bigint identity вместо uuid,
+  /// как у `telegram_link_attempts`.
+  id             BigInt   @id @default(autoincrement())
+  /// Код метки целиком, с префиксом: `p_poster1`.
+  code           String
+  /// `from.id` апдейта.
+  telegramUserId BigInt   @map("telegram_user_id")
+  /// `chat.id` апдейта.
+  telegramChatId BigInt   @map("telegram_chat_id")
+  /// Человек с живой привязкой этого Telegram на момент касания. Пусто — живой привязки не было.
+  personId       String?  @map("person_id") @db.Uuid
+  /// У этого Telegram на момент касания была хоть одна привязка, живая или закрытая:
+  /// участник программы — хоть раз привязал Telegram (docs/decisions.md → «Баллы в метриках
+  /// дашборда»).
+  wasParticipant Boolean  @map("was_participant")
+  touchedAt      DateTime @default(now()) @map("touched_at") @db.Timestamptz(6)
+
+  person Person? @relation(fields: [personId], references: [id])
+
+  /// «Сколько переходов по метке за период» — вопрос воронки раздела «Промо».
+  @@index([code, touchedAt])
+  /// «Что было с этим человеком» — от перехода до регистрации.
+  @@index([telegramUserId, touchedAt])
+  @@map("promo_touches")
   @@schema("xb")
 }

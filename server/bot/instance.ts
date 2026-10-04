@@ -5,6 +5,7 @@ import type { BotConfig } from '#server/bot/config';
 import { registerDemoInviteHandlers } from '#server/bot/demoInvite';
 import { registerEmployeeTelegramHandlers } from '#server/bot/employeeTelegram';
 import { registerGreetingHandlers } from '#server/bot/greeting';
+import { registerPromoTouchHandlers } from '#server/bot/promoTouch';
 
 const log = consola.withTag('bot');
 
@@ -58,6 +59,11 @@ export const registerBotHandlers = (bot: Bot): void => {
   // сотрудника бот больше не принимает — оно принимается в вебе, — и `/start inv_<токен>`
   // уходит в приветствие.
   registerEmployeeTelegramHandlers(bot);
+
+  // Переход по промо-метке: `/start p_<код>` — строка в `promo_touches` (issue #377). Ответа
+  // своего нет — уступает дальше всё, и метку тоже: водитель с плаката получает то же
+  // приветствие, что и без неё (server/bot/promoTouch.ts).
+  registerPromoTouchHandlers(bot);
 
   // Всё, что осталось от водительской части: приветствие с кнопкой запуска приложения —
   // ответ на любое сообщение в личном чате и на нажатие любой кнопки, в том числе кнопок
