@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Дашборд — рычаги</title>
+<!-- Дашборд T99, экран 2: уровень 2 «рычаги». Сессия 83, 04-10-2026. Скопирован с 01-money.html (каркас, токены).
+     Объяснение — 02-levers.md рядом. Все цифры и позывные условные, согласованы с экраном 1. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Unbounded:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --page: #081114; --tile: #0E1B1F; --raised: #142429; --line: rgba(156,238,255,.07);
+  --text: #F4F9FA; --title: #9DB1B5; --grey: #7E9399; --axis: #566E74;
+  --cyan: #9CEEFF; --teal: #1C4A58; --teal-mid: #137B9C; --compare: #4F6C73;
+  --green: #47CB4A; --scarlet: #FF5C78; --gold: #F7BC3E; --garnet: #E8365D;
+  --gap: 16px; --radius: 32px; --pad: 28px;
+}
+* { box-sizing: border-box; margin: 0; }
+html, body { background: var(--page); }
+body { color: var(--text); font: 400 15px/1.45 Manrope, system-ui, sans-serif; }
+
+/* Каркас: меню слева */
+.app { display: grid; grid-template-columns: 240px 1fr; gap: 16px; padding: 16px; min-height: 100vh; }
+.side { background: var(--tile); border-radius: 24px; padding: 22px 14px; display: flex; flex-direction: column; gap: 4px; position: sticky; top: 16px; height: calc(100vh - 32px); }
+.brand { font: 700 15px Unbounded; padding: 0 10px 18px; } .brand span { color: var(--cyan); }
+.nav { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 14px; font: 500 14px Manrope; color: var(--title); white-space: nowrap; }
+.nav svg { flex: none; width: 20px; height: 20px; color: var(--grey); }
+.nav.on { background: var(--raised); color: var(--text); } .nav.on svg { color: var(--cyan); }
+.nav .cnt { margin-left: auto; font: 600 11px Manrope; color: var(--page); background: var(--cyan); border-radius: 999px; padding: 2px 8px; }
+.navs { display: flex; flex-direction: column; gap: 4px; flex: 1; min-height: 0; overflow-y: auto; }
+/* Меню аккаунта: имя и роль, «Сменить пароль», «Выйти». На ноутбуке открывается над блоком «кто вошёл», на телефоне — под круглой кнопкой справа от строки меню */
+.who { margin-top: 8px; padding: 12px; border-radius: 16px; background: var(--raised); font: 400 13px Manrope; color: var(--title); display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 0; width: 100%; text-align: left; cursor: pointer; }
+.who b { color: var(--text); font-weight: 600; }
+.who svg { flex: none; width: 20px; height: 20px; color: var(--grey); }
+.acct { display: none; flex: none; width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--raised); color: var(--grey); place-items: center; cursor: pointer; }
+.acct svg { width: 24px; height: 24px; }
+.side.open .acct, .side.open .who svg { color: var(--cyan); }
+.acct-menu { display: none; position: absolute; z-index: 20; left: 14px; right: 14px; bottom: 84px; background: var(--raised); border-radius: 16px; padding: 6px; box-shadow: 0 16px 40px rgba(0,0,0,.5), inset 0 0 0 1px var(--line); }
+.side.open .acct-menu { display: block; }
+.acct-menu .me { padding: 10px 12px 8px; font-size: 13px; color: var(--title); border-bottom: 1px solid var(--line); margin-bottom: 4px; display: none; }
+.acct-menu .me b { color: var(--text); font-weight: 600; }
+.acct-menu .item { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 12px; font: 500 14px Manrope; color: var(--text); cursor: pointer; }
+.acct-menu .item svg { flex: none; width: 20px; height: 20px; color: var(--grey); }
+.acct-menu .item:hover { background: var(--tile); }
+
+/* Рабочая область */
+.main { max-width: 1240px; width: 100%; padding: 8px 8px 48px; }
+.top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 6px 4px 20px; }
+.page-title { font: 700 26px/1.1 Unbounded; }
+.levels { display: flex; gap: 6px; margin-top: 14px; }
+.lvl { font: 600 14px Manrope; color: var(--title); padding: 9px 16px; border-radius: 999px; background: var(--tile); }
+.lvl.on { background: var(--raised); color: var(--text); box-shadow: inset 0 0 0 1px rgba(156,238,255,.18); }
+.period { display: flex; align-items: center; gap: 10px; background: var(--tile); border-radius: 999px; padding: 6px 6px 6px 18px; font: 600 14px Manrope; }
+.period .arr { width: 34px; height: 34px; border-radius: 50%; background: var(--raised); display: grid; place-items: center; }
+.period .arr svg { width: 14px; height: 14px; stroke: var(--text); }
+.badge { display: inline-block; font: 600 11px Manrope; color: var(--grey); background: var(--raised); border-radius: 999px; padding: 4px 10px; }
+
+/* Сетка и плитки */
+.bento { display: grid; grid-template-columns: repeat(12, 1fr); grid-auto-rows: 120px; gap: var(--gap); }
+.tile { background: var(--tile); border-radius: var(--radius); padding: var(--pad); display: flex; flex-direction: column; min-width: 0; position: relative; overflow: hidden; }
+.c3 { grid-column: span 3; } .c4 { grid-column: span 4; } .c8 { grid-column: span 8; } .c12 { grid-column: span 12; }
+.r1 { grid-row: span 1; } .r2 { grid-row: span 2; } .r3 { grid-row: span 3; }
+.head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.t-title { font: 500 18px/1.25 Manrope; color: var(--title); }
+.go { flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--raised); display: grid; place-items: center; }
+.go svg { width: 16px; height: 16px; stroke: var(--text); }
+.t-hero { font: 700 60px/1 Unbounded; letter-spacing: -3px; margin-top: 18px; }
+.t-big { font: 700 34px/1.05 Unbounded; letter-spacing: -1px; margin-top: 12px; }
+.t-unit { font: 500 16px Manrope; color: var(--title); letter-spacing: 0; margin-left: 8px; }
+.t-sub { font: 300 13px/1.4 Manrope; color: var(--grey); margin-top: auto; padding-top: 10px; }
+.deltas { display: flex; gap: 6px 28px; flex-wrap: wrap; margin-top: 12px; }
+.delta { display: inline-flex; align-items: baseline; gap: 6px; font: 600 15px Manrope; color: var(--title); }
+.delta b { font-weight: 700; } .up b { color: var(--green); } .down b { color: var(--scarlet); }
+.delta svg { width: 18px; height: 12px; align-self: center; }
+.verdict { display: inline-flex; align-items: center; gap: 10px; margin-top: 18px; font: 600 15px Manrope; color: var(--text); background: rgba(71,203,74,.10); border-radius: 999px; padding: 8px 16px 8px 10px; align-self: flex-start; }
+.verdict i { width: 22px; height: 22px; border-radius: 50%; background: var(--green); display: grid; place-items: center; }
+.verdict i svg { width: 12px; height: 12px; stroke: var(--page); }
+.small-delta { font: 600 14px Manrope; color: var(--title); margin-top: 6px; } .small-delta b { font-weight: 700; }
+
+/* Разбор */
+.why { display: flex; flex-direction: column; gap: 12px; margin-top: 18px; }
+.why-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; font: 500 15px Manrope; color: var(--title); }
+.why-row b { font-weight: 700; text-align: right; } .pos { color: var(--green); } .neg { color: var(--scarlet); }
+.why-row .hint { display: block; font: 300 12px Manrope; color: var(--grey); margin-top: 2px; }
+.why-row.total { border-top: 1px solid var(--line); padding-top: 12px; color: var(--text); }
+.why-row .gold-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--gold); margin-right: 8px; vertical-align: 1px; }
+
+/* График */
+.legend { display: flex; gap: 18px; flex-wrap: wrap; font: 500 13px Manrope; color: var(--title); margin-top: 8px; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 4px; vertical-align: -1px; margin-right: 6px; }
+.chart { flex: 1; min-height: 0; margin-top: 12px; width: 100%; }
+.chart-mob { display: none; }
+
+@media (max-width: 900px) {
+  .app { grid-template-columns: 1fr; padding: 12px; gap: 12px; }
+  /* Телефон: меню — панелью внизу, как у iPhone, в зоне большого пальца; пункты прокручиваются вбок, кнопка аккаунта справа */
+  .side { position: fixed; left: 0; right: 0; bottom: 0; top: auto; padding: 0 12px calc(12px + env(safe-area-inset-bottom)); height: auto; min-height: 0; z-index: 30; flex-direction: row; align-items: stretch; gap: 8px; background: none; border-radius: 0; box-shadow: none; overflow: visible; pointer-events: none; }
+  .side > * { pointer-events: auto; }
+  .side .brand, .side .who { display: none; }
+  .side .navs { flex: 1; min-width: 0; flex-direction: row; gap: 2px; overflow-x: auto; overflow-y: hidden; padding: 6px; border-radius: 26px; scrollbar-width: none; background: rgba(14,27,31,.94); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); box-shadow: 0 10px 30px rgba(0,0,0,.45), inset 0 0 0 1px var(--line); }
+  .side .navs::-webkit-scrollbar { display: none; }
+  .side .navs::after { content: ""; position: sticky; right: -6px; flex: none; width: 32px; margin-left: -32px; background: linear-gradient(to right, transparent, rgba(14,27,31,.94)); pointer-events: none; }
+  .side .nav { position: relative; flex: none; flex-direction: column; gap: 4px; min-width: 68px; padding: 8px 6px 6px; border-radius: 18px; font: 500 11px Manrope; white-space: nowrap; }
+  .side .nav svg { width: 24px; height: 24px; }
+  .side .nav.on { background: none; color: var(--cyan); }
+  .side .nav .cnt { position: absolute; top: 3px; left: calc(50% + 6px); margin: 0; font-size: 10px; padding: 1px 6px; }
+  .side .acct { display: grid; flex: none; align-self: center; width: 66px; height: 66px; border-radius: 50%; color: var(--grey); background: rgba(14,27,31,.94); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); box-shadow: 0 10px 30px rgba(0,0,0,.45), inset 0 0 0 1px var(--line); }
+  .side .acct svg { width: 26px; height: 26px; }
+  .side .acct-menu { left: auto; right: 12px; top: auto; bottom: calc(100% + 8px); min-width: 220px; }
+  .side .acct-menu .me { display: block; }
+  .main { padding: 0 0 calc(110px + env(safe-area-inset-bottom)); }
+  .top { padding: 4px 2px 14px; }
+  .bento { grid-template-columns: 1fr 1fr; grid-auto-rows: auto; gap: 12px; }
+  .tile { grid-column: span 2 !important; grid-row: auto !important; min-height: 120px; padding: 24px; }
+  .tile.c3 { grid-column: span 1 !important; padding: 18px; min-height: 104px; }
+  .tile.c3 .t-title { font-size: 14px; } .tile.c3 .t-big { font-size: 24px; letter-spacing: -.5px; } .tile.c3 .t-unit { font-size: 13px; margin-left: 4px; }
+  .t-hero { font-size: 44px; letter-spacing: -2px; }
+  .chart-tile { min-height: 300px; }
+  .levels { overflow-x: auto; }
+  .chart-desk { display: none; } .chart-mob { display: block; flex: none; height: auto; }
+}
+
+/* Уравнение множителей */
+.eq { display: grid; grid-template-columns: 1.15fr auto 1fr auto 1fr auto 1fr; align-items: stretch; gap: 14px; margin-top: 18px; }
+.eq .op { align-self: center; font: 600 26px Manrope; color: var(--axis); }
+.factor { background: var(--raised); border-radius: 22px; padding: 18px 20px; display: flex; flex-direction: column; }
+.factor.result { background: rgba(156,238,255,.08); }
+.factor .name { font: 500 14px/1.3 Manrope; color: var(--title); }
+.factor .val { font: 700 30px/1.05 Unbounded; letter-spacing: -1px; margin-top: 10px; }
+.factor .was { font: 400 13px Manrope; color: var(--grey); margin-top: 6px; }
+.factor .contrib { margin-top: auto; padding-top: 12px; font: 600 14px Manrope; color: var(--title); }
+.factor .contrib b { font-weight: 700; }
+/* Таблица затухающих */
+.tbl { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 14px; }
+.tbl th { text-align: left; font: 500 12px Manrope; color: var(--axis); padding: 0 12px 10px 0; white-space: nowrap; }
+.tbl td { padding: 11px 12px 11px 0; border-top: 1px solid var(--line); white-space: nowrap; }
+.tbl td.num, .tbl th.num { text-align: right; }
+.tbl .muted { color: var(--grey); }
+.pill { display: inline-block; font: 600 12px Manrope; border-radius: 999px; padding: 3px 10px; }
+.pill.in { color: var(--gold); background: rgba(247,188,62,.10); } .pill.out { color: var(--grey); background: var(--raised); }
+.btn { white-space: nowrap; flex: none; display: inline-flex; align-items: center; height: 36px; font: 600 13px Manrope; color: var(--cyan); background: var(--raised); border-radius: 999px; padding: 0 16px; }
+.tbl-wrap { overflow-x: auto; margin: 0 -4px; padding: 0 4px; }
+.share { display: flex; height: 22px; gap: 4px; margin-top: auto; }
+.share i { border-radius: 8px; }
+.share-lbl { display: flex; justify-content: space-between; font: 600 14px Manrope; color: var(--title); margin: 0 0 8px; margin-top: auto; }
+.share-lbl span:first-child { color: var(--cyan); }
+@media (max-width: 900px) {
+  .eq { grid-template-columns: 1fr 1fr; } .eq .op { display: none; } .factor.result { grid-column: span 2; }
+  .factor .val { font-size: 24px; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <aside class="side">
+    <div class="brand">Xalq Taxi <span>Bonus</span></div>
+    <nav class="navs">
+      <div class="nav on"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M112,56v48a8,8,0,0,1-8,8H56a8,8,0,0,1-8-8V56a8,8,0,0,1,8-8h48A8,8,0,0,1,112,56Zm88-8H152a8,8,0,0,0-8,8v48a8,8,0,0,0,8,8h48a8,8,0,0,0,8-8V56A8,8,0,0,0,200,48Zm-96,96H56a8,8,0,0,0-8,8v48a8,8,0,0,0,8,8h48a8,8,0,0,0,8-8V152A8,8,0,0,0,104,144Zm96,0H152a8,8,0,0,0-8,8v48a8,8,0,0,0,8,8h48a8,8,0,0,0,8-8V152A8,8,0,0,0,200,144Z" opacity="0.2"/><path d="M200,136H152a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V152A16,16,0,0,0,200,136Zm0,64H152V152h48v48ZM104,40H56A16,16,0,0,0,40,56v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V56A16,16,0,0,0,104,40Zm0,64H56V56h48v48Zm96-64H152a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V56A16,16,0,0,0,200,40Zm0,64H152V56h48v48Zm-96,32H56a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V152A16,16,0,0,0,104,136Zm0,64H56V152h48v48Z"/></svg>Дашборд</div>
+      <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M136,108A52,52,0,1,1,84,56,52,52,0,0,1,136,108Z" opacity="0.2"/><path d="M117.25,157.92a60,60,0,1,0-66.5,0A95.83,95.83,0,0,0,3.53,195.63a8,8,0,1,0,13.4,8.74,80,80,0,0,1,134.14,0,8,8,0,0,0,13.4-8.74A95.83,95.83,0,0,0,117.25,157.92ZM40,108a44,44,0,1,1,44,44A44.05,44.05,0,0,1,40,108Zm210.14,98.7a8,8,0,0,1-11.07-2.33A79.83,79.83,0,0,0,172,168a8,8,0,0,1,0-16,44,44,0,1,0-16.34-84.87,8,8,0,1,1-5.94-14.85,60,60,0,0,1,55.53,105.64,95.83,95.83,0,0,1,47.22,37.71A8,8,0,0,1,250.14,206.7Z"/></svg>Водители</div>
+      <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,56V200a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V56a8,8,0,0,1,8-8H216A8,8,0,0,1,224,56Z" opacity="0.2"/><path d="M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,160H40V56H216V200ZM176,88a48,48,0,0,1-96,0,8,8,0,0,1,16,0,32,32,0,0,0,64,0,8,8,0,0,1,16,0Z"/></svg>Заказы<span class="cnt">3</span></div>
+      <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,96v16a32,32,0,0,1-64,0V96H96v16a32,32,0,0,1-64,0V96L46.34,45.8A8,8,0,0,1,54,40H202a8,8,0,0,1,7.69,5.8Z" opacity="0.2"/><path d="M231.69,93.81,217.35,43.6A16.07,16.07,0,0,0,202,32H54A16.07,16.07,0,0,0,38.65,43.6L24.31,93.81A7.94,7.94,0,0,0,24,96v16a40,40,0,0,0,16,32v72a8,8,0,0,0,8,8H208a8,8,0,0,0,8-8V144a40,40,0,0,0,16-32V96A7.94,7.94,0,0,0,231.69,93.81ZM54,48H202l11.42,40H42.61Zm98,56v8a24,24,0,0,1-48,0v-8ZM51.06,132.2A24,24,0,0,1,40,112v-8H88v8a24,24,0,0,1-35.12,21.26A7.88,7.88,0,0,0,51.06,132.2ZM200,208H56V151.2a40.57,40.57,0,0,0,8,.8,40,40,0,0,0,32-16,40,40,0,0,0,64,0,40,40,0,0,0,32,16,40.57,40.57,0,0,0,8-.8Zm16-96a24,24,0,0,1-11.07,20.2,8.08,8.08,0,0,0-1.8,1.05A24,24,0,0,1,168,112v-8h48Z"/></svg>Офисы</div>
+      <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M128,129.09V232a8,8,0,0,1-3.84-1l-88-48.18a8,8,0,0,1-4.16-7V80.18a8,8,0,0,1,.7-3.25Z" opacity="0.2"/><path d="M223.68,66.15,135.68,18a15.88,15.88,0,0,0-15.36,0l-88,48.17a16,16,0,0,0-8.32,14v95.64a16,16,0,0,0,8.32,14l88,48.17a15.88,15.88,0,0,0,15.36,0l88-48.17a16,16,0,0,0,8.32-14V80.18A16,16,0,0,0,223.68,66.15ZM128,32l80.34,44-29.77,16.3-80.35-44ZM128,120,47.66,76l33.9-18.56,80.34,44ZM40,90l80,43.78v85.79L40,175.82Zm176,85.78h0l-80,43.79V133.82l32-17.51V152a8,8,0,0,0,16,0V107.55L216,90v85.77Z"/></svg>Каталог</div>
+      <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M208,40V208H152V40Z" opacity="0.2"/><path d="M224,200h-8V40a8,8,0,0,0-8-8H152a8,8,0,0,0-8,8V80H96a8,8,0,0,0-8,8v40H48a8,8,0,0,0-8,8v64H32a8,8,0,0,0,0,16H224a8,8,0,0,0,0-16ZM160,48h40V200H160ZM104,96h40V200H104ZM56,144H88v56H56Z"/></svg>Отчёты</div>
+      <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M208,128v72a8,8,0,0,1-8,8H56a8,8,0,0,1-8-8V128Z" opacity="0.2"/><path d="M216,72H180.92c.39-.33.79-.65,1.17-1A29.53,29.53,0,0,0,192,49.57,32.62,32.62,0,0,0,158.44,16,29.53,29.53,0,0,0,137,25.91a54.94,54.94,0,0,0-9,14.48,54.94,54.94,0,0,0-9-14.48A29.53,29.53,0,0,0,97.56,16,32.62,32.62,0,0,0,64,49.57,29.53,29.53,0,0,0,73.91,71c.38.33.78.65,1.17,1H40A16,16,0,0,0,24,88v32a16,16,0,0,0,16,16v64a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V136a16,16,0,0,0,16-16V88A16,16,0,0,0,216,72ZM149,36.51a13.69,13.69,0,0,1,10-4.5h.49A16.62,16.62,0,0,1,176,49.08a13.69,13.69,0,0,1-4.5,10c-9.49,8.4-25.24,11.36-35,12.4C137.7,60.89,141,45.5,149,36.51Zm-64.09.36A16.63,16.63,0,0,1,96.59,32h.49a13.69,13.69,0,0,1,10,4.5c8.39,9.48,11.35,25.2,12.39,34.92-9.72-1-25.44-4-34.92-12.39a13.69,13.69,0,0,1-4.5-10A16.6,16.6,0,0,1,84.87,36.87ZM40,88h80v32H40Zm16,48h64v64H56Zm144,64H136V136h64Zm16-80H136V88h80v32Z"/></svg>Награды</div>
+      <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M221.9,61.38,152,136v58.65a8,8,0,0,1-3.56,6.66l-32,21.33A8,8,0,0,1,104,216V136L34.1,61.38A8,8,0,0,1,40,48H216A8,8,0,0,1,221.9,61.38Z" opacity="0.2"/><path d="M230.6,49.53A15.81,15.81,0,0,0,216,40H40A16,16,0,0,0,28.19,66.76l.08.09L96,139.17V216a16,16,0,0,0,24.87,13.32l32-21.34A16,16,0,0,0,160,194.66V139.17l67.74-72.32.08-.09A15.8,15.8,0,0,0,230.6,49.53ZM40,56h0Zm106.18,74.58A8,8,0,0,0,144,136v58.66L112,216V136a8,8,0,0,0-2.16-5.47L40,56H216Z"/></svg>Сегменты</div>
+      <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M223.69,42.18l-58.22,192a8,8,0,0,1-14.92,1.25L108,148,20.58,105.45a8,8,0,0,1,1.25-14.92l192-58.22A8,8,0,0,1,223.69,42.18Z" opacity="0.2"/><path d="M227.32,28.68a16,16,0,0,0-15.66-4.08l-.15,0L19.57,82.84a16,16,0,0,0-2.49,29.8L102,154l41.3,84.87A15.86,15.86,0,0,0,157.74,248q.69,0,1.38-.06a15.88,15.88,0,0,0,14-11.51l58.2-191.94c0-.05,0-.1,0-.15A16,16,0,0,0,227.32,28.68ZM157.83,231.85l-.05.14,0-.07-40.06-82.3,48-48a8,8,0,0,0-11.31-11.31l-48,48L24.08,98.25l-.07,0,.14,0L216,40Z"/></svg>Рассылки</div>
+      <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M240,120a40,40,0,0,1-40,40H160V80h40A40,40,0,0,1,240,120Z" opacity="0.2"/><path d="M248,120a48.05,48.05,0,0,0-48-48H160.2c-2.91-.17-53.62-3.74-101.91-44.24A16,16,0,0,0,32,40V200a16,16,0,0,0,26.29,12.25c37.77-31.68,77-40.76,93.71-43.3v31.72A16,16,0,0,0,159.12,214l11,7.33A16,16,0,0,0,194.5,212l11.77-44.36A48.07,48.07,0,0,0,248,120ZM48,199.93V40h0c42.81,35.91,86.63,45,104,47.24v65.48C134.65,155,90.84,164.07,48,199.93Zm131,8,0,.11-11-7.33V168h21.6ZM200,152H168V88h32a32,32,0,1,1,0,64Z"/></svg>Акции</div>
+      <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M216,48H40a8,8,0,0,0-8,8V200a8,8,0,0,0,8,8H216a8,8,0,0,0,8-8V56A8,8,0,0,0,216,48ZM96,144a24,24,0,1,1,24-24A24,24,0,0,1,96,144Z" opacity="0.2"/><path d="M200,112a8,8,0,0,1-8,8H152a8,8,0,0,1,0-16h40A8,8,0,0,1,200,112Zm-8,24H152a8,8,0,0,0,0,16h40a8,8,0,0,0,0-16Zm40-80V200a16,16,0,0,1-16,16H40a16,16,0,0,1-16-16V56A16,16,0,0,1,40,40H216A16,16,0,0,1,232,56ZM216,200V56H40V200H216Zm-80.26-34a8,8,0,1,1-15.5,4c-2.63-10.26-13.06-18-24.25-18s-21.61,7.74-24.25,18a8,8,0,1,1-15.5-4,39.84,39.84,0,0,1,17.19-23.34,32,32,0,1,1,45.12,0A39.76,39.76,0,0,1,135.75,166ZM96,136a16,16,0,1,0-16-16A16,16,0,0,0,96,136Z"/></svg>Сотрудники</div>
+      <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M216,128a88,88,0,1,1-88-88A88,88,0,0,1,216,128Z" opacity="0.2"/><path d="M224,48V96a8,8,0,0,1-8,8H168a8,8,0,0,1,0-16h28.69L182.06,73.37a79.56,79.56,0,0,0-56.13-23.43h-.45A79.52,79.52,0,0,0,69.59,72.71,8,8,0,0,1,58.41,61.27a96,96,0,0,1,135,.79L208,76.69V48a8,8,0,0,1,16,0ZM186.41,183.29a80,80,0,0,1-112.47-.66L59.31,168H88a8,8,0,0,0,0-16H40a8,8,0,0,0-8,8v48a8,8,0,0,0,16,0V179.31l14.63,14.63A95.43,95.43,0,0,0,130,222.06h.53a95.36,95.36,0,0,0,67.07-27.33,8,8,0,0,0-11.18-11.44Z"/></svg>Синхронизация</div>
+      <div class="nav"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,56V176a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V56a8,8,0,0,1,8-8H216A8,8,0,0,1,224,56Z" opacity="0.2"/><path d="M216,40H136V24a8,8,0,0,0-16,0V40H40A16,16,0,0,0,24,56V176a16,16,0,0,0,16,16H79.36L57.75,219a8,8,0,0,0,12.5,10l29.59-37h56.32l29.59,37a8,8,0,1,0,12.5-10l-21.61-27H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,136H40V56H216V176Z"/></svg>Демо</div>
+    </nav>
+    <button class="who" type="button"><span><b>Равшан</b><br>владелец</span><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M80,176h96l-48,48ZM128,32,80,80h96Z" opacity="0.2"/><path d="M176,168H80a8,8,0,0,0-5.66,13.66l48,48a8,8,0,0,0,11.32,0l48-48A8,8,0,0,0,176,168Zm-48,44.69L99.31,184h57.38ZM80,88h96a8,8,0,0,0,5.66-13.66l-48-48a8,8,0,0,0-11.32,0l-48,48A8,8,0,0,0,80,88Zm48-44.69L156.69,72H99.31Z"/></svg></button>
+    <button class="acct" type="button" aria-label="Аккаунт"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a95.76,95.76,0,0,1-31.8,71.37A72,72,0,0,0,128,160a40,40,0,1,0-40-40,40,40,0,0,0,40,40,72,72,0,0,0-64.2,39.37h0A96,96,0,1,1,224,128Z" opacity="0.2"/><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24ZM74.08,197.5a64,64,0,0,1,107.84,0,87.83,87.83,0,0,1-107.84,0ZM96,120a32,32,0,1,1,32,32A32,32,0,0,1,96,120Zm97.76,66.41a79.66,79.66,0,0,0-36.06-28.75,48,48,0,1,0-59.4,0,79.66,79.66,0,0,0-36.06,28.75,88,88,0,1,1,131.52,0Z"/></svg></button>
+    <div class="acct-menu"><div class="me"><b>Равшан</b><br>владелец</div><div class="item"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232,98.36C230.73,136.92,198.67,168,160.09,168a71.68,71.68,0,0,1-26.92-5.17h0L120,176H96v24H72v24H40a8,8,0,0,1-8-8V187.31a8,8,0,0,1,2.34-5.65l58.83-58.83h0A71.68,71.68,0,0,1,88,95.91c0-38.58,31.08-70.64,69.64-71.87A72,72,0,0,1,232,98.36Z" opacity="0.2"/><path d="M216.57,39.43A80,80,0,0,0,83.91,120.78L28.69,176A15.86,15.86,0,0,0,24,187.31V216a16,16,0,0,0,16,16H72a8,8,0,0,0,8-8V208H96a8,8,0,0,0,8-8V184h16a8,8,0,0,0,5.66-2.34l9.56-9.57A79.73,79.73,0,0,0,160,176h.1A80,80,0,0,0,216.57,39.43ZM224,98.1c-1.09,34.09-29.75,61.86-63.89,61.9H160a63.7,63.7,0,0,1-23.65-4.51,8,8,0,0,0-8.84,1.68L116.69,168H96a8,8,0,0,0-8,8v16H72a8,8,0,0,0-8,8v16H40V187.31l58.83-58.82a8,8,0,0,0,1.68-8.84A63.72,63.72,0,0,1,96,95.92c0-34.14,27.81-62.8,61.9-63.89A64,64,0,0,1,224,98.1ZM192,76a12,12,0,1,1-12-12A12,12,0,0,1,192,76Z"/></svg>Сменить пароль</div><div class="item"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,56V200a16,16,0,0,1-16,16H48V40H208A16,16,0,0,1,224,56Z" opacity="0.2"/><path d="M120,216a8,8,0,0,1-8,8H48a8,8,0,0,1-8-8V40a8,8,0,0,1,8-8h64a8,8,0,0,1,0,16H56V208h56A8,8,0,0,1,120,216Zm109.66-93.66-40-40a8,8,0,0,0-11.32,11.32L204.69,120H112a8,8,0,0,0,0,16h92.69l-26.35,26.34a8,8,0,0,0,11.32,11.32l40-40A8,8,0,0,0,229.66,122.34Z"/></svg>Выйти</div></div>
+  </aside>
+
+  <main class="main">
+    <div class="top">
+      <div>
+        <div class="page-title">Дашборд</div>
+        <div class="levels"><span class="lvl">Деньги</span><span class="lvl on">Рычаги</span><span class="lvl">Глубина</span></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <span class="badge">цифры условные</span>
+        <div class="period">
+          <span>Октябрь 2026</span>
+          <span class="arr"><svg viewBox="0 0 16 16" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8l5 5"/></svg></span>
+          <span class="arr" style="opacity:.4"><svg viewBox="0 0 16 16" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="bento">
+
+      <!-- Множители -->
+      <section class="tile c12 r2">
+        <div class="head"><span class="t-title">За счёт чего изменились поездки · к сентябрю</span><span class="go"><svg viewBox="0 0 16 16" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg></span></div>
+        <div class="eq">
+          <div class="factor result"><span class="name">Поездок</span><span class="val">83 120</span><span class="was">в сентябре 79 400</span><span class="contrib"><b class="pos">+3 720</b> всего</span></div>
+          <span class="op">=</span>
+          <div class="factor"><span class="name">Водителей на линии</span><span class="val">431</span><span class="was">было 413</span><span class="contrib"><b class="pos">+3 466</b> поездок</span></div>
+          <span class="op">×</span>
+          <div class="factor"><span class="name">Дней на линии из 30</span><span class="val">17,4</span><span class="was">было 17,1</span><span class="contrib"><b class="pos">+1 413</b> поездок</span></div>
+          <span class="op">×</span>
+          <div class="factor"><span class="name">Поездок в день на водителя</span><span class="val">11,1</span><span class="was">было 11,2</span><span class="contrib"><b class="neg">−1 159</b> поездок</span></div>
+        </div>
+        <div class="t-sub">Рост дали новые и вернувшиеся водители и то, что ездят чаще по дням. В день каждый делает чуть меньше — смотреть на тяжёлых ниже.</div>
+      </section>
+
+      <!-- Поток водителей -->
+      <section class="tile c8 r3 chart-tile">
+        <div class="head"><span class="t-title">Поток водителей по месяцам</span><span class="go"><svg viewBox="0 0 16 16" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg></span></div>
+        <div class="legend"><span><i style="background:#9CEEFF"></i>новые</span><span><i style="background:#137B9C"></i>вернулись</span><span><i style="background:#FF5C78"></i>ушли</span></div>
+        <svg class="chart" viewBox="0 0 700 240" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Поток водителей: новые, вернувшиеся, ушедшие по месяцам, май — октябрь">
+          <g stroke="rgba(156,238,255,.06)" stroke-width="1"><line x1="50" y1="20" x2="690" y2="20"/><line x1="50" y1="70" x2="690" y2="70"/><line x1="50" y1="170" x2="690" y2="170"/></g>
+          <line x1="50" y1="120" x2="690" y2="120" stroke="#566E74" stroke-width="1"/>
+          <g font-family="Manrope" font-size="12" font-weight="500" fill="#566E74" text-anchor="end"><text x="40" y="24">+80</text><text x="40" y="74">+40</text><text x="40" y="124">0</text><text x="40" y="174">−40</text></g>
+          <!-- 1 водитель = 1,25 px; столбец 40, шаг 106 -->
+          <g>
+            <rect x="80" y="86" width="40" height="34" fill="#9CEEFF" rx="4"/><rect x="80" y="66" width="40" height="18" fill="#137B9C" rx="4"/><rect x="80" y="122" width="40" height="55" fill="#FF5C78" rx="4"/>
+            <rect x="186" y="89" width="40" height="31" fill="#9CEEFF" rx="4"/><rect x="186" y="72" width="40" height="15" fill="#137B9C" rx="4"/><rect x="186" y="122" width="40" height="60" fill="#FF5C78" rx="4"/>
+            <rect x="292" y="84" width="40" height="36" fill="#9CEEFF" rx="4"/><rect x="292" y="63" width="40" height="19" fill="#137B9C" rx="4"/><rect x="292" y="122" width="40" height="52" fill="#FF5C78" rx="4"/>
+            <rect x="398" y="91" width="40" height="29" fill="#9CEEFF" rx="4"/><rect x="398" y="74" width="40" height="15" fill="#137B9C" rx="4"/><rect x="398" y="122" width="40" height="66" fill="#FF5C78" rx="4"/>
+            <rect x="504" y="80" width="40" height="40" fill="#9CEEFF" rx="4"/><rect x="504" y="57" width="40" height="21" fill="#137B9C" rx="4"/><rect x="504" y="122" width="40" height="56" fill="#FF5C78" rx="4"/>
+            <rect x="610" y="72" width="40" height="48" fill="#9CEEFF" rx="4"/><rect x="610" y="38" width="40" height="32" fill="#137B9C" rx="4"/><rect x="610" y="122" width="40" height="59" fill="#FF5C78" rx="4"/>
+          </g>
+          <line x1="577" y1="20" x2="577" y2="200" stroke="#E8365D" stroke-width="1.5"/>
+          <text x="571" y="34" text-anchor="end" font-family="Manrope" font-size="12" font-weight="600" fill="#9DB1B5">Новый бот</text>
+          <text x="630" y="30" text-anchor="middle" font-family="Manrope" font-size="13" font-weight="700" fill="#F4F9FA">+18</text>
+          <g font-family="Manrope" font-size="12" font-weight="500" fill="#566E74" text-anchor="middle">
+            <text x="100" y="222">май</text><text x="206" y="222">июн</text><text x="312" y="222">июл</text><text x="418" y="222">авг</text><text x="524" y="222">сен</text><text x="630" y="222" fill="#F4F9FA">окт</text>
+          </g>
+        </svg>
+      </section>
+
+      <section class="tile c4 r3">
+        <div class="head"><span class="t-title">Октябрь</span></div>
+        <div class="why">
+          <div class="why-row"><span>Новые<span class="hint">первая поездка в парке</span></span><b class="pos">+38</b></div>
+          <div class="why-row"><span>Вернулись<span class="hint">не ездили 30+ дней</span></span><b class="pos">+27</b></div>
+          <div class="why-row"><span>Ушли<span class="hint">нет поездок 30 дней</span></span><b class="neg">−47</b></div>
+          <div class="why-row total"><span>На линии</span><b class="pos">+18</b></div>
+        </div>
+        <div class="t-sub">Ушедших больше, чем новых. Рост держится на вернувшихся — их вдвое больше, чем в августе.</div>
+      </section>
+
+      <!-- Тяжёлые -->
+      <section class="tile c4 r2">
+        <div class="head"><span class="t-title">Тяжёлые · верхние 20 %</span><span class="go"><svg viewBox="0 0 16 16" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg></span></div>
+        <div class="t-big">86<span class="t-unit">водителей</span></div>
+        <div class="share-lbl" style="margin-top:auto"><span>Их поездки 47 %</span><span>Остальные 53 %</span></div>
+        <div class="share" style="margin-top:0"><i style="flex:47;background:#9CEEFF"></i><i style="flex:53;background:#1C4A58"></i></div>
+      </section>
+      <section class="tile c4 r2">
+        <div class="head"><span class="t-title">Тяжёлых ушло за месяц</span><span class="go"><svg viewBox="0 0 16 16" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg></span></div>
+        <div class="t-big">3<span class="t-unit">из 89</span></div>
+        <span class="small-delta"><b class="neg">−1 400</b> поездок в месяц вместе с ними</span>
+        <div class="t-sub">Ушёл — нет поездок 30 дней</div>
+      </section>
+      <section class="tile c4 r2">
+        <div class="head"><span class="t-title">Тяжёлых затухает</span><span class="go"><svg viewBox="0 0 16 16" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg></span></div>
+        <div class="t-big">7</div>
+        <span class="small-delta">ездят ниже своей обычной нормы <b>2+ недели</b></span>
+        <div class="t-sub">Список ниже — до того, как уйдут</div>
+      </section>
+
+      <!-- Список затухающих -->
+      <section class="tile c12 r3" style="grid-row:span 4">
+        <div class="head"><span class="t-title">Затухают — поимённо</span><span class="btn">Сделать сегмент</span></div>
+        <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr><th>Позывной</th><th>Водитель</th><th class="num">В неделю / его норма</th><th class="num">К своей норме</th><th class="num">Недель ниже</th><th>Программа</th><th class="num">Последняя поездка</th></tr></thead>
+          <tbody>
+            <tr><td>А-114</td><td>Водитель 1</td><td class="num">38 <span class="muted">/ 92</span></td><td class="num"><b class="neg">−59 %</b></td><td class="num">4</td><td><span class="pill in">участник</span></td><td class="num muted">вчера</td></tr>
+            <tr><td>К-207</td><td>Водитель 2</td><td class="num">41 <span class="muted">/ 85</span></td><td class="num"><b class="neg">−52 %</b></td><td class="num">3</td><td><span class="pill out">вне</span></td><td class="num muted">сегодня</td></tr>
+            <tr><td>М-033</td><td>Водитель 3</td><td class="num">22 <span class="muted">/ 78</span></td><td class="num"><b class="neg">−72 %</b></td><td class="num">3</td><td><span class="pill in">участник</span></td><td class="num muted">3 дня назад</td></tr>
+            <tr><td>Б-561</td><td>Водитель 4</td><td class="num">49 <span class="muted">/ 81</span></td><td class="num"><b class="neg">−40 %</b></td><td class="num">2</td><td><span class="pill out">вне</span></td><td class="num muted">сегодня</td></tr>
+            <tr><td>Т-090</td><td>Водитель 5</td><td class="num">35 <span class="muted">/ 74</span></td><td class="num"><b class="neg">−53 %</b></td><td class="num">2</td><td><span class="pill in">участник</span></td><td class="num muted">вчера</td></tr>
+            <tr><td>С-412</td><td>Водитель 6</td><td class="num">30 <span class="muted">/ 70</span></td><td class="num"><b class="neg">−57 %</b></td><td class="num">2</td><td><span class="pill out">вне</span></td><td class="num muted">2 дня назад</td></tr>
+            <tr><td>Д-278</td><td>Водитель 7</td><td class="num">44 <span class="muted">/ 72</span></td><td class="num"><b class="neg">−39 %</b></td><td class="num">2</td><td><span class="pill in">участник</span></td><td class="num muted">сегодня</td></tr>
+          </tbody>
+        </table>
+        </div>
+        <div class="t-sub">Нажатие на строку — карточка водителя. «Сделать сегмент» — список в рассылку или акцию (T107).</div>
+      </section>
+
+    </div>
+  </main>
+</div>
+<script>
+/* Меню аккаунта открывается кнопкой и закрывается щелчком мимо — только чтобы макет можно было потрогать */
+document.querySelectorAll('.side').forEach(function (side) {
+  side.querySelectorAll('.who, .acct').forEach(function (btn) {
+    btn.addEventListener('click', function (event) { event.stopPropagation(); side.classList.toggle('open'); });
+  });
+});
+document.addEventListener('click', function () {
+  document.querySelectorAll('.side.open').forEach(function (side) { side.classList.remove('open'); });
+});
+</script>
+</body>
+</html>
