@@ -86,6 +86,13 @@ export const formatShare = (part: number, total: number): string =>
     : DASH;
 
 /**
+ * Доля процентом до целого: `formatWholeShare(17, 64)` — «27 %» (issue #380, «до поездки»
+ * и шаги воронки). Целого нет — прочерк: делить не на что.
+ */
+export const formatWholeShare = (part: number, total: number): string =>
+  total > 0 ? `${Math.round((part / total) * 100)} %` : DASH;
+
+/**
  * Форма слова при числе: `pluralize(21, 'час', 'часа', 'часов')` — «час».
  *
  * Правило русского счёта: на 1 — первая форма, на 2–4 — вторая, остальное и 11–14 — третья.

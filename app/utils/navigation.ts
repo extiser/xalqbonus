@@ -9,7 +9,9 @@ import {
   PhPackage,
   PhPaperPlaneTilt,
   PhPresentation,
+  PhQrCode,
   PhShoppingBag,
+  PhSquaresFour,
   PhStorefront,
   PhUsers,
 } from '@phosphor-icons/vue';
@@ -19,7 +21,9 @@ import {
   CATALOG_ROLES,
   DEMO_EDITOR_ROLES,
   MAILING_ROLES,
+  METRICS_ROLES,
   ORDER_ROLES,
+  PROMO_ROLES,
   REPORT_ROLES,
   REWARD_GRANT_ROLES,
   SEGMENT_ROLES,
@@ -40,8 +44,7 @@ import type { EmployeeIdentity } from '#shared/types/employee';
  *
  * Значок — свойство пункта, а не разметка меню (`_reference/design/web/icons-compare.md`):
  * меню веба рисует его, шапка светлой раскладки — нет. Набор — Phosphor, импорт поимённый,
- * чтобы сборка брала только эти двенадцать (`docs/decisions.md` → «Веб в стиле бенто»).
- * Пункт «Дашборд» (`PhSquaresFour`) появится вместе со страницей дашборда.
+ * чтобы сборка брала только используемые (`docs/decisions.md` → «Веб в стиле бенто»).
  */
 export type NavigationItem = {
   title: string;
@@ -51,6 +54,9 @@ export type NavigationItem = {
 };
 
 const SERVICE_NAVIGATION: NavigationItem[] = [
+  // Первым: дашборд — первый экран владельца (issue #371). Вкладки
+  // `/dashboard/levers` и `/dashboard/depth` подсвечивают этот же пункт — они вложены в его адрес.
+  { title: 'Дашборд', path: '/dashboard', icon: PhSquaresFour, roles: METRICS_ROLES },
   { title: 'Водители', path: '/drivers', icon: PhUsers, roles: ALL_EMPLOYEE_ROLES },
   { title: 'Заказы', path: '/orders', icon: PhShoppingBag, roles: ORDER_ROLES },
   { title: 'Офисы', path: '/offices', icon: PhStorefront, roles: CATALOG_ROLES },
@@ -66,6 +72,9 @@ const SERVICE_NAVIGATION: NavigationItem[] = [
   { title: 'Сегменты', path: '/segments', icon: PhFunnel, roles: SEGMENT_ROLES },
   { title: 'Рассылки', path: '/mailings', icon: PhPaperPlaneTilt, roles: MAILING_ROLES },
   { title: 'Акции', path: '/campaigns', icon: PhMegaphone, roles: CAMPAIGN_ROLES },
+  // Ссылки в бота с меткой и QR для носителей, с воронкой переходов (issue #380). Рядом
+  // с акциями: и то и другое — привлечение водителей в программу.
+  { title: 'Промо', path: '/promo', icon: PhQrCode, roles: PROMO_ROLES },
   { title: 'Сотрудники', path: '/employees', icon: PhIdentificationCard, roles: STAFF_ROLES },
   { title: 'Синхронизация', path: '/sync', icon: PhArrowsClockwise, roles: SYNC_ROLES },
   // Пульт демо — зрители, демо-водители, генератор, демо-менеджер (issue #252). Последним:

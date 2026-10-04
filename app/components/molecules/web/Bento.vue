@@ -3,12 +3,17 @@
  * Сетка плиток веба — `.bento` кодекса `_reference/design/web/codex.html`: 12 колонок, ряд 120,
  * зазор 16. Плитки (`MoleculesWebTile`) встают в порядке разметки, место каждой задаёт её размер.
  *
+ * Ряд — от 120 и выше по содержимому (issue #380): плитка с `grow` — таблица, которой не хватило
+ * своих рядов, двенадцатая метка, «Показать всех», — растит ряд, а не обрезается. Растёт ряд
+ * целиком, поэтому соседние плитки ряда остаются одной высоты (`codex.md`, «Плитки одного
+ * ряда — одной высоты»). Остальные плитки ряд не растят — это решает плитка, а не сетка.
+ *
  * На телефоне, ниже 900, — одна колонка, ряды по содержимому, зазор 12 (кодекс, «Телефон»).
  */
 </script>
 
 <template>
-  <div class="grid grid-cols-12 auto-rows-[120px] gap-web-gap max-web:grid-cols-1 max-web:auto-rows-auto max-web:gap-3">
+  <div class="grid grid-cols-12 auto-rows-[minmax(120px,auto)] gap-web-gap max-web:grid-cols-1 max-web:auto-rows-auto max-web:gap-3">
     <slot />
   </div>
 </template>
