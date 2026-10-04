@@ -11,7 +11,8 @@ import type { DashboardProgramEconomy } from '#shared/types/dashboard';
  *
  * Строки разбора: выдано, потрачено с выкупом, цена балла с числом заказов, по которым она
  * посчитана, и итогом — долг по баллам, главным числом в баллах, в сумах — уточнением
- * (docs/decisions.md → «Баллы в метриках дашборда»). Под строками — на сколько долг изменился
+ * (docs/decisions.md → «Баллы в метриках дашборда»). Числа строк — цветом строки, белое одно —
+ * итог (`unsigned="row"`, как `.why-row` макета). Под строками — на сколько долг изменился
  * за месяц. Числа считает сервер, здесь только подписи.
  *
  * Данные — свойством: сама плитка в сеть не ходит (docs/frontend.md).
@@ -70,24 +71,28 @@ const changeText = computed(() => {
     <template v-else>
       <div class="mt-[18px] flex flex-col gap-3">
         <MoleculesWebBreakdownRow
+          unsigned="row"
           label="Выдано баллов"
           metric="pointsIssued"
           hint="за поездки, подарки, акции"
           :value="formatNumber(ready.issued)"
         />
         <MoleculesWebBreakdownRow
+          unsigned="row"
           label="Потрачено"
           metric="pointsSpent"
           :hint="spentHint(ready)"
           :value="formatNumber(ready.spent)"
         />
         <MoleculesWebBreakdownRow
+          unsigned="row"
           label="Цена балла"
           metric="pointCost"
           :hint="costHint(ready)"
           :value="ready.pointCost === null ? DASH : `${formatNumber(ready.pointCost)} сум`"
         />
         <MoleculesWebBreakdownRow
+          unsigned="row"
           label="Долг по баллам"
           metric="pointsDebt"
           marker="program"
