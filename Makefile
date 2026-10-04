@@ -32,6 +32,11 @@ up-d: ## Поднять local-стек в фоне (detached) — не зани�
 down: ## Остановить local-стек
 	$(COMPOSE) down
 
+# Воркер на рабочей базе ходит в Fleet API боевым ключом и тратит его лимиты: для работы
+# с ботом и вебом он не нужен. Обратно — make up-d.
+worker-stop: ## Остановить worker local-стека — не тратит лимиты ключа Fleet. Обратно — make up-d
+	$(COMPOSE) stop worker
+
 restart: ## Перезапустить процессы local-стека — .env не перечитывает, после правки .env: make up-d
 	$(COMPOSE) restart
 
