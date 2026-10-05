@@ -1,5 +1,5 @@
 /**
- * Ответы ручек дашборда метрик (issues #371, #373). Определения метрик — `shared/metrics.ts`.
+ * Ответы ручек дашборда метрик (issues #371, #373, #392). Определения метрик — `shared/metrics.ts`.
  *
  * Даты — строки `YYYY-MM-DD`, месяцы — `YYYY-MM`: сутки и месяц метрик календарные
  * по Ташкенту, и зона показа сдвигать их не должна.
@@ -55,6 +55,39 @@ export type DashboardLevers = {
   computedAt: string | null;
   /** Вывод словами под множителями (issue #383); `null` — вывода нет. */
   conclusion: string | null;
+  /** Поток водителей по месяцам и панель месяца (issue #392). */
+  flow: DashboardDriverFlow;
+};
+
+/**
+ * Поток водителей за закрытый месяц (issue #392): на линии(M) − на линии(M−1) =
+ * новые + вернулись − ушли. Определения — `shared/metrics.ts`.
+ */
+export type DashboardFlowMonth = {
+  /** `YYYY-MM`. */
+  month: string;
+  onLine: number;
+  newDrivers: number;
+  returned: number;
+  left: number;
+  onLineChange: number;
+  /** Месяц раньше FLOW_NEW_EXACT_FROM: часть вернувшихся посчитана как новые. */
+  earlyHistory: boolean;
+  /** Собраны не все сутки у месяца или у прошлого. */
+  incomplete: boolean;
+  /** Периоды M−1 и M с покрытием — те, по которым считается incomplete; из них экран собирает строку покрытия. */
+  coverage: DashboardPeriod[];
+};
+
+export type DashboardDriverFlow = {
+  /** До 6 закрытых месяцев от старых к новым, последний — выбранный или последний закрытый; не раньше ноября 2025. */
+  months: DashboardFlowMonth[];
+  /** Месяц панели: выбранный, если закрыт; если идёт — последний закрытый; null — выбран октябрь 2025. */
+  panel: DashboardFlowMonth | null;
+  /** Выбранный месяц ещё идёт. */
+  selectedOngoing: boolean;
+  /** Выбран первый месяц истории (октябрь 2025): водителей на линии в нём — для строки «На линии». */
+  firstMonthOnLine: number | null;
 };
 
 /**

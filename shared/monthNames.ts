@@ -46,6 +46,13 @@ export const monthForms = (value: string): MonthForms => {
   return forms;
 };
 
+/** Месяц, соседний с `YYYY-MM`, на `shift` месяцев. */
+export const shiftMonth = (month: string, shift: number): string => {
+  const [year, monthNumber] = month.split('-').map(Number);
+
+  return new Date(Date.UTC(year ?? 0, (monthNumber ?? 1) - 1 + shift, 1)).toISOString().slice(0, 7);
+};
+
 /** «Октябрь 2026» — месяц `YYYY-MM` с заглавной и годом. */
 export const formatMonthTitle = (month: string): string => {
   const { nominative } = monthForms(month);

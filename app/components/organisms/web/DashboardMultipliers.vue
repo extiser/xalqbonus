@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { formatClock, formatMomentDate, formatNumber, formatTenths } from '~/utils/format';
-import { monthForms, periodMonthWord } from '#shared/monthNames';
+import { monthForms, periodMonthWord, shiftMonth } from '#shared/monthNames';
 import type { LoadState } from '~/types/loadState';
 import type { DashboardLevers } from '#shared/types/dashboard';
 
@@ -22,6 +22,10 @@ import type { DashboardLevers } from '#shared/types/dashboard';
  * не все сутки, сколько. Вывод собирает сервер (`server/services/metrics/conclusions.ts`);
  * нет его — строки нет.
  *
+ * Первый месяц истории (issue #392) сравнивать не с чем по построению: строк прошлого и вкладов
+ * нет вовсе, а под уравнением сказано словами, за какой месяц данных нет и с какого будет
+ * сравнение (`02-levers-first-month.html`). Остальные месяцы без базы — с прочерками.
+ *
  * На телефоне, ниже 900, — две колонки по две карточки, знаки `=` и `×` скрыты.
  *
  * Данные — свойством: сама плитка в сеть не ходит (docs/frontend.md).
@@ -38,6 +42,26 @@ const ready = computed(() => (props.state === 'ready' ? props.levers : null));
 const title = computed(() =>
   ready.value?.base ? `${TITLE} · к ${periodMonthWord(ready.value.basePeriod, 'dative')}` : TITLE,
 );
+
+/** Выбран первый месяц истории: прошлого месяца в данных нет. */
+const firstMonth = computed(() => ready.value !== null && ready.value.month === ready.value.range.firstMonth);
+
+/** «сентябрь 2025» — месяц словом и годом. */
+const monthWithYear = (month: string, form: 'nominative' | 'genitive'): string =>
+  `${monthForms(month)[form]} ${month.slice(0, 4)}`;
+
+const firstMonthText = computed(() => {
+  const levers = ready.value;
+
+  if (!levers || !firstMonth.value) return null;
+
+  const { firstMonth: month } = levers.range;
+
+  return (
+    `За ${monthWithYear(shiftMonth(month, -1), 'nominative')} данных нет: история заказов — ` +
+    `с ${monthWithYear(month, 'genitive')}. Сравнение с прошлым месяцем — с ${monthWithYear(shiftMonth(month, 1), 'genitive')}.`
+  );
+});
 
 const cards = computed(() => {
   const levers = ready.value;
@@ -105,7 +129,8 @@ const coverageText = computed(() => {
 
   if (!levers) return null;
 
-  const periods = [levers.period, levers.basePeriod];
+  // У первого месяца истории база — месяц до истории: её суток нет по построению, а не недобраны.
+  const periods = firstMonth.value ? [levers.period] : [levers.period, levers.basePeriod];
 
   if (periods.every((period) => period.coveredDays >= period.days)) return null;
 
@@ -144,11 +169,13 @@ const coverageText = computed(() => {
               :contribution="card.contribution"
               :contribution-label="card.contributionLabel"
               :variant="card.variant"
+              :compare="!firstMonth"
             />
           </div>
         </template>
       </div>
       <div class="mt-auto flex flex-col gap-0.5 pt-2.5">
+        <AtomsWebHint v-if="firstMonthText" :text="firstMonthText" />
         <AtomsWebHint v-if="ready.conclusion" :text="ready.conclusion" />
         <AtomsWebHint :text="computedText" />
         <AtomsWebHint v-if="coverageText" :text="coverageText" />

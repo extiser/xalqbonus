@@ -14,6 +14,9 @@ import type { MetricKey } from '#shared/metrics';
  *
  * Вклад красится только по знаку: зелёный у плюса, алый у минуса, у нуля без цвета (`codex.md`,
  * «Алый и зелёный — только у числа со знаком»). Нет базы — прочерк вместо прошлого и вклада.
+ *
+ * Без сравнения (`compare: false`) строк прошлого и вклада нет вовсе — первый месяц истории,
+ * сравнивать которому не с чем по построению (`02-levers-first-month.html`, issue #392).
  */
 type FactorVariant = 'factor' | 'result';
 
@@ -30,8 +33,10 @@ const props = withDefaults(
     /** Подпись после вклада: «поездок», у результата — «всего». */
     contributionLabel: string;
     variant?: FactorVariant;
+    /** Показывать ли прошлое значение и вклад. */
+    compare?: boolean;
   }>(),
-  { variant: 'factor' },
+  { variant: 'factor', compare: true },
 );
 
 const VARIANT_CLASSES: Record<FactorVariant, string> = {
@@ -54,10 +59,12 @@ const contributionTone = computed(() => {
     <span class="mt-2.5 font-unbounded text-[30px] leading-[1.05] font-bold tracking-[-1px] text-web-text max-web:text-[24px]">
       {{ value }}
     </span>
-    <span class="mt-1.5 text-[13px] text-web-grey">{{ was ?? DASH }}</span>
-    <span class="mt-auto pt-3 text-[14px] font-semibold text-web-title">
-      <template v-if="contribution === null">{{ DASH }}</template>
-      <template v-else><b class="font-bold" :class="contributionTone">{{ formatSignedNumber(contribution) }}</b> {{ contributionLabel }}</template>
-    </span>
+    <template v-if="compare">
+      <span class="mt-1.5 text-[13px] text-web-grey">{{ was ?? DASH }}</span>
+      <span class="mt-auto pt-3 text-[14px] font-semibold text-web-title">
+        <template v-if="contribution === null">{{ DASH }}</template>
+        <template v-else><b class="font-bold" :class="contributionTone">{{ formatSignedNumber(contribution) }}</b> {{ contributionLabel }}</template>
+      </span>
+    </template>
   </div>
 </template>

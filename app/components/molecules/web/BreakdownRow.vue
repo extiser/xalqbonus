@@ -20,12 +20,15 @@ import type { MetricKey } from '#shared/metrics';
  * число идёт цветом строки (`unsigned: 'row'`): у обычной строки цветом названия плитки, у итога
  * белым. Тогда белое число одно — итог, и оно читается первым.
  *
+ * Прочерк там, где числа ещё нет, — серым и без жирности (`unsigned: 'muted'`, `b.muted`
+ * в `02-levers-first-month.html`, issue #392): у первого месяца истории потока нет.
+ *
  * Расстояние между строками ставит список, строка своего отступа снаружи не имеет.
  */
 type BreakdownTone = 'up' | 'down';
 type BreakdownVariant = 'row' | 'total';
-/** Цвет числа без знака: белый или цвет строки. */
-type BreakdownUnsigned = 'bright' | 'row';
+/** Цвет числа без знака: белый, цвет строки или серый прочерк. */
+type BreakdownUnsigned = 'bright' | 'row' | 'muted';
 
 const props = withDefaults(
   defineProps<{
@@ -46,8 +49,8 @@ const props = withDefaults(
 );
 
 const TONE_CLASSES: Record<BreakdownTone, string> = {
-  up: 'text-web-green',
-  down: 'text-web-scarlet',
+  up: 'font-bold text-web-green',
+  down: 'font-bold text-web-scarlet',
 };
 
 const VARIANT_CLASSES: Record<BreakdownVariant, string> = {
@@ -56,9 +59,10 @@ const VARIANT_CLASSES: Record<BreakdownVariant, string> = {
 };
 
 const UNSIGNED_CLASSES: Record<BreakdownUnsigned, string> = {
-  bright: 'text-web-text',
+  bright: 'font-bold text-web-text',
   // Без своего цвета: число наследует цвет строки из `VARIANT_CLASSES`.
-  row: '',
+  row: 'font-bold',
+  muted: 'font-medium text-web-grey',
 };
 
 const sign = computed(() => valueSign(props.value));
@@ -74,6 +78,6 @@ const valueClass = computed(() =>
       <AtomsWebProgramDot v-if="marker === 'program'" /><MoleculesWebMetricLabel :label="label" :metric="metric" />
       <span v-if="hint" class="mt-0.5 block text-[12px] font-light text-web-grey">{{ hint }}</span>
     </span>
-    <b class="text-right font-bold" :class="valueClass">{{ value }}</b>
+    <b class="text-right" :class="valueClass">{{ value }}</b>
   </div>
 </template>
