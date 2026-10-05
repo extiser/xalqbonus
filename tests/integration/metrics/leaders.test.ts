@@ -262,6 +262,18 @@ describe('лидеры по поездкам', () => {
     expect(rowOf(ongoing, people.resumed)).toBeUndefined();
   });
 
+  it('«ушли» проверяют и окно нормы до остановки, раньше месяца когорты', async () => {
+    // Закрытый ноябрь 2026: когорта — октябрь, он и ноябрь собраны (после TRIPS_COMPLETE_FROM),
+    // а окно нормы перед октябрём уходит в август и сентябрь, где журнала сбора истории нет.
+    const report = await readLeaders('2026-11', new Date('2027-03-05T12:00:00Z'));
+    const left = report.dashboard.left;
+    const months = left && !left.counted ? left.coverage.map((period) => period.from.slice(0, 7)) : [];
+
+    expect(left?.counted).toBe(false);
+    expect(months[0]).toBe('2026-08');
+    expect(months).toContain('2026-11');
+  });
+
   it('октябрь 2025 — лидеров нет', async () => {
     const report = await readLeaders('2025-10', new Date('2027-03-05T12:00:00Z'));
 

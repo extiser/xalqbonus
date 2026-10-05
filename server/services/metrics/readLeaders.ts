@@ -47,8 +47,9 @@ import type {
  * по последней поездке перед пустым месяцем (решение Руслана 05-10-2026).
  *
  * Собраны не все нужные сутки — элемент не считается: пропуск выглядит как неделя без поездок
- * и делает водителя «переставшим» с именем и телефоном. Сутки раньше `METRICS_FIRST_DAY` — не
- * пропуск, а отсутствие истории, и не проверяются.
+ * и делает водителя «переставшим» с именем и телефоном. У «ездят меньше» — от окна нормы самой
+ * ранней недели до конца W, у «ушли» — от окна нормы перед месяцем когорты до конца следующего
+ * за ним. Сутки раньше `METRICS_FIRST_DAY` — не пропуск, а отсутствие истории, и не проверяются.
  */
 
 const FIRST_MONTH = METRICS_FIRST_DAY.slice(0, 7);
@@ -257,8 +258,13 @@ export const readLeaders = async (month: string, now: Date = new Date()): Promis
   const [leadersCoverage, slippingCoverage, leftCoverage] = await Promise.all([
     coverageOf(leadersPeriod.from, leadersPeriod.to),
     coverageOf(normFrom, slippingTo),
+    // Месяц когорты и следующий, а перед ними — окно нормы до остановки: её недели уходят
+    // раньше месяца когорты.
     cohortAvailable
-      ? coverageOf(wholeMonthPeriod(cohortMonth).from, wholeMonthPeriod(emptyMonth).to)
+      ? coverageOf(
+          shiftDayKey(mondayOf(wholeMonthPeriod(cohortMonth).from), -NORM_WEEKS * WEEK_DAYS),
+          wholeMonthPeriod(emptyMonth).to,
+        )
       : Promise.resolve([]),
   ]);
 
