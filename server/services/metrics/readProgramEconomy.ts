@@ -3,6 +3,8 @@ import {
   readPointDebtBefore,
   sumPointFlows,
 } from '#server/repositories/metrics';
+import { programEconomyConclusion } from '#server/services/metrics/conclusions';
+import type { MonthPeriodDays } from '#server/services/metrics/monthPeriod';
 import { POINT_FLOW_REASONS } from '#server/services/metrics/pointFlows';
 import { shiftDayKey } from '#server/utils/parkTime';
 import type { DashboardProgramEconomy } from '#shared/types/dashboard';
@@ -22,11 +24,10 @@ import type { DashboardProgramEconomy } from '#shared/types/dashboard';
  * цена балла на тот же момент. Изменение — долг на конец минус долг на начало периода.
  *
  * Покрытие суток у баллов не считается: журнал полный по построению.
+ *
+ * Под строками — вывод словами (issue #383): у неполного месяца он говорит, за сколько суток.
  */
-export const readProgramEconomy = async (period: {
-  from: string;
-  to: string;
-}): Promise<DashboardProgramEconomy> => {
+export const readProgramEconomy = async (period: MonthPeriodDays): Promise<DashboardProgramEconomy> => {
   const periodEnd = shiftDayKey(period.to, 1);
   const [flows, cost, debtAtEnd, debtAtStart] = await Promise.all([
     sumPointFlows(POINT_FLOW_REASONS, period.from, period.to),
@@ -36,16 +37,27 @@ export const readProgramEconomy = async (period: {
   ]);
 
   const pointCost = cost.orders > 0 && cost.points > 0 ? Math.round(cost.cost / cost.points) : null;
+  const redemptionPercent = flows.issued > 0 ? Math.round((flows.spent / flows.issued) * 100) : null;
+  const debtPointsChange = debtAtEnd - debtAtStart;
 
   return {
     issued: flows.issued,
     spent: flows.spent,
-    redemptionPercent: flows.issued > 0 ? Math.round((flows.spent / flows.issued) * 100) : null,
+    redemptionPercent,
     pointCost,
     pointCostOrders: cost.orders,
     pointCostUnpricedLines: cost.unpricedLines,
     debtPoints: debtAtEnd,
-    debtPointsChange: debtAtEnd - debtAtStart,
+    debtPointsChange,
     debtSum: pointCost === null ? null : debtAtEnd * pointCost,
+    conclusion: programEconomyConclusion({
+      issued: flows.issued,
+      spent: flows.spent,
+      redemptionPercent,
+      debtPointsChange,
+      pointCostOrders: cost.orders,
+      days: period.days,
+      partial: period.partial,
+    }),
   };
 };

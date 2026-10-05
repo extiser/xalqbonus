@@ -53,6 +53,8 @@ export type DashboardLevers = {
   contributions: DashboardContributions | null;
   /** Когда кончился последний успешный пересчёт; `null` — ещё не считали. */
   computedAt: string | null;
+  /** Вывод словами под множителями (issue #383); `null` — вывода нет. */
+  conclusion: string | null;
 };
 
 /**
@@ -86,6 +88,8 @@ export type DashboardProgramEconomy = {
   debtPointsChange: number;
   /** Долг × цена балла; `null` — цены нет. */
   debtSum: number | null;
+  /** Вывод словами под плиткой (issue #383); `null` — вывода нет. */
+  conclusion: string | null;
 };
 
 /** Плитка «Вне программы» за месяц: водители на линии без единой привязки Telegram. */

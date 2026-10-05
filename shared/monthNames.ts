@@ -1,12 +1,15 @@
+import type { DashboardPeriod } from '#shared/types/dashboard';
+
 /**
  * Месяц словом в нужном падеже — для подписей дашборда (issue #371): «Октябрь 2026» в выборе
  * месяца, «к сентябрю» и «в сентябре» у базы сравнения, «сентябрь — 30 из 30» у покрытия.
+ * Общий с сервером (issue #383): подпись базы стоит и в выводе словами, который собирает он.
  *
  * Словарём, а не `Intl`: тот даёт именительный и родительный, а дательного и предложного
  * у него нет вовсе.
  */
 
-type MonthForms = {
+export type MonthForms = {
   /** «сентябрь» */
   nominative: string;
   /** «1–4 сентября» */
@@ -48,4 +51,16 @@ export const formatMonthTitle = (month: string): string => {
   const { nominative } = monthForms(month);
 
   return `${nominative.charAt(0).toUpperCase()}${nominative.slice(1)} ${month.slice(0, 4)}`;
+};
+
+/**
+ * Период словом в нужном падеже: у полного — месяц, «сентябрю», «сентябре»; у неполного —
+ * диапазон суток, «1–4 сентября», «1 сентября». Предлог ставит тот, кто собирает фразу.
+ */
+export const periodMonthWord = (period: DashboardPeriod, form: 'dative' | 'prepositional'): string => {
+  const forms = monthForms(period.from);
+
+  if (!period.partial) return forms[form];
+
+  return `${period.days === 1 ? '1' : `1–${period.days}`} ${forms.genitive}`;
 };

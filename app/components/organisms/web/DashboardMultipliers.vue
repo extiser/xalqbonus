@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { formatClock, formatMomentDate, formatNumber, formatTenths } from '~/utils/format';
-import { monthForms } from '~/utils/monthNames';
+import { monthForms, periodMonthWord } from '#shared/monthNames';
 import type { LoadState } from '~/types/loadState';
-import type { DashboardLevers, DashboardPeriod } from '#shared/types/dashboard';
+import type { DashboardLevers } from '#shared/types/dashboard';
 
 /**
  * Плитка «За счёт чего изменились поездки» вкладки «Рычаги» (issue #371) — экрана
@@ -18,7 +18,9 @@ import type { DashboardLevers, DashboardPeriod } from '#shared/types/dashboard';
  *
  * База сравнения в подписях — падежом месяца: «к сентябрю», «в сентябре»; неполный месяц —
  * диапазоном: «к 1–4 сентября». Нет базы — прочерки вместо прошлого и вкладов, а в названии
- * нет «· к …». Под уравнением — когда посчитано и, если собраны не все сутки, сколько.
+ * нет «· к …». Под уравнением — вывод словами (issue #383), когда посчитано и, если собраны
+ * не все сутки, сколько. Вывод собирает сервер (`server/services/metrics/conclusions.ts`);
+ * нет его — строки нет.
  *
  * На телефоне, ниже 900, — две колонки по две карточки, знаки `=` и `×` скрыты.
  *
@@ -31,19 +33,10 @@ const props = defineProps<{
 
 const TITLE = 'За счёт чего изменились поездки';
 
-/** «1–4 сентября», «1 сентября» у неполного периода; у полного — месяц нужным падежом. */
-const periodWord = (period: DashboardPeriod, form: 'dative' | 'prepositional'): string => {
-  const forms = monthForms(period.from);
-
-  if (!period.partial) return forms[form];
-
-  return `${period.days === 1 ? '1' : `1–${period.days}`} ${forms.genitive}`;
-};
-
 const ready = computed(() => (props.state === 'ready' ? props.levers : null));
 
 const title = computed(() =>
-  ready.value?.base ? `${TITLE} · к ${periodWord(ready.value.basePeriod, 'dative')}` : TITLE,
+  ready.value?.base ? `${TITLE} · к ${periodMonthWord(ready.value.basePeriod, 'dative')}` : TITLE,
 );
 
 const cards = computed(() => {
@@ -60,7 +53,7 @@ const cards = computed(() => {
       label: 'Поездок',
       metric: 'trips',
       value: formatNumber(current.trips),
-      was: base ? `в ${periodWord(basePeriod, 'prepositional')} ${formatNumber(base.trips)}` : null,
+      was: base ? `в ${periodMonthWord(basePeriod, 'prepositional')} ${formatNumber(base.trips)}` : null,
       contribution: contributions?.total ?? null,
       contributionLabel: 'всего',
     },
@@ -156,6 +149,7 @@ const coverageText = computed(() => {
         </template>
       </div>
       <div class="mt-auto flex flex-col gap-0.5 pt-2.5">
+        <AtomsWebHint v-if="ready.conclusion" :text="ready.conclusion" />
         <AtomsWebHint :text="computedText" />
         <AtomsWebHint v-if="coverageText" :text="coverageText" />
       </div>

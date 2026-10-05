@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { DASH, formatCompactSum, formatNumber, formatSignedNumber, pluralize } from '~/utils/format';
-import { monthForms } from '~/utils/monthNames';
+import { monthForms } from '#shared/monthNames';
 import type { LoadState } from '~/types/loadState';
 import type { DashboardProgramEconomy } from '#shared/types/dashboard';
 
@@ -12,8 +12,9 @@ import type { DashboardProgramEconomy } from '#shared/types/dashboard';
  * Строки разбора: выдано, потрачено с выкупом, цена балла с числом заказов, по которым она
  * посчитана, и итогом — долг по баллам, главным числом в баллах, в сумах — уточнением
  * (docs/decisions.md → «Баллы в метриках дашборда»). Числа строк — цветом строки, белое одно —
- * итог (`unsigned="row"`, как `.why-row` макета). Под строками — на сколько долг изменился
- * за месяц. Числа считает сервер, здесь только подписи.
+ * итог (`unsigned="row"`, как `.why-row` макета). Под строками — вывод словами (issue #383)
+ * и на сколько долг изменился за месяц. Числа и вывод собирает сервер, здесь только подписи;
+ * вывода нет — строки нет.
  *
  * Данные — свойством: сама плитка в сеть не ходит (docs/frontend.md).
  */
@@ -101,7 +102,8 @@ const changeText = computed(() => {
           :value="formatNumber(ready.debtPoints)"
         />
       </div>
-      <div class="mt-auto pt-2.5">
+      <div class="mt-auto flex flex-col gap-0.5 pt-2.5">
+        <AtomsWebHint v-if="ready.conclusion" :text="ready.conclusion" />
         <AtomsWebHint :text="changeText" />
       </div>
     </template>

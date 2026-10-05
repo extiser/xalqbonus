@@ -1,3 +1,4 @@
+import { formatNumber, formatTenths } from '#shared/numberFormat';
 import { rewardDeadlineDay } from '#shared/reward';
 import type { RewardSource } from '#shared/types/rewards';
 
@@ -7,6 +8,12 @@ import type { RewardSource } from '#shared/types/rewards';
  * Русский язык без обвязки локализации: водительские интерфейсы многоязычны, но они придут
  * своим этапом, и заводить обвязку заранее нечему.
  */
+
+/**
+ * Вид чисел — общий с сервером (issue #383): выводы словами собирает сервер, и число во фразе
+ * обязано выглядеть как на плитке.
+ */
+export { formatNumber, formatSignedNumber, formatTenths, pluralize } from '#shared/numberFormat';
 
 /** Прочерк вместо пустого места: «ничего нет» и «поле не нарисовалось» обязаны различаться. */
 export const DASH = '—';
@@ -69,14 +76,6 @@ export const DISPLAY_TIME_ZONE_LABEL = zoneOffset
   : DISPLAY_TIME_ZONE;
 
 /**
- * Число с разрядами: «1 844». Отрицательное — с типографским минусом, «−1 844», как
- * у `formatSignedNumber`: баланс водителя бывает долгом из старой базы (issue #276),
- * а дефис движка у разных локалей разный и в колонке чисел разъезжается.
- */
-export const formatNumber = (value: number): string =>
-  value < 0 ? `−${Math.abs(value).toLocaleString('ru-RU')}` : value.toLocaleString('ru-RU');
-
-/**
  * Доля от целого процентом, до десятой: `formatShare(8, 100)` — «8 %», `formatShare(1, 3)` —
  * «33,3 %». Целого нет — прочерк: делить не на что.
  */
@@ -91,26 +90,6 @@ export const formatShare = (part: number, total: number): string =>
  */
 export const formatWholeShare = (part: number, total: number): string =>
   total > 0 ? `${Math.round((part / total) * 100)} %` : DASH;
-
-/**
- * Форма слова при числе: `pluralize(21, 'час', 'часа', 'часов')` — «час».
- *
- * Правило русского счёта: на 1 — первая форма, на 2–4 — вторая, остальное и 11–14 — третья.
- */
-export const pluralize = (count: number, one: string, few: string, many: string): string => {
-  const lastTwo = Math.abs(count) % 100;
-  const last = lastTwo % 10;
-
-  if (lastTwo >= 11 && lastTwo <= 14) {
-    return many;
-  }
-
-  if (last === 1) {
-    return one;
-  }
-
-  return last >= 2 && last <= 4 ? few : many;
-};
 
 export const formatDateTime = (value: string | null): string => {
   if (!value) {
@@ -220,16 +199,6 @@ export const formatCalendarDayWord = (value: string | null): string => {
 };
 
 /**
- * Баллы со знаком: «+1», «−2 342».
- *
- * Знак обязателен у обоих направлений: в двусторонней записи «1» без знака не отвечает
- * на вопрос, пришёл балл или ушёл. Минус — типографский, а не дефис: у дефиса другая
- * ширина, и колонка чисел с ним разъезжается.
- */
-export const formatSignedNumber = (value: number): string =>
-  value < 0 ? formatNumber(value) : `+${formatNumber(value)}`;
-
-/**
  * Момент календарной датой: «29.08.2026».
  *
  * Отличается от `formatCalendarDate` входом, а не выходом: там приходит строка `YYYY-MM-DD`
@@ -321,13 +290,6 @@ export const formatRewardDeadline = (expiresAt: string, source: RewardSource): s
 
   return `${day}.${month}`;
 };
-
-/**
- * Число до десятой, всегда с ней: «17,4», «11,0» — множитель дашборда (issue #371). Десятая
- * не пропадает у круглого числа: в ряду множителей «17» рядом с «17,1» читалось бы иначе.
- */
-export const formatTenths = (value: number): string =>
-  value.toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 /** Время суток момента по Ташкенту: «03:00». */
 export const formatClock = (value: string): string =>
