@@ -39,7 +39,10 @@ import {
  * - `stopped` — 20 в неделю по первую неделю февраля, дальше ни одной: перестал, 3 недели
  * - `left` — 20 в неделю по январь, в феврале ни одной, в марте снова 7: ушёл, норма до остановки 20
  * - `noNorm` — 60 в неделю две недели января и больше ничего: ушёл, нормы нет
- * - 20 человек по одной поездке в январе — чтобы на линии было 25, а лидеров 5
+ * - `resumed` — 30 в неделю по вторую неделю февраля, три недели ни одной, 08.03 снова: в идущем
+ *   марте ноль в W (01–07.03), но поездка после неё — в «перестали» не попадает
+ * - 20 человек по одной поездке в январе — чтобы на линии было 26, а лидеров 6; двое по одной
+ *   в феврале — чтобы в идущем марте лидеров февраля было двое
  */
 
 const WEEKLY = 20;
@@ -58,8 +61,8 @@ const wednesdays = (from: string, to: string): string[] => {
 const NOVEMBER_FIRST_MONDAY = '2026-11-02';
 
 describe('лидеры по поездкам', () => {
-  const people: Record<'steady' | 'below' | 'stopped' | 'left' | 'noNorm', TestPerson> = {} as Record<
-    'steady' | 'below' | 'stopped' | 'left' | 'noNorm',
+  const people: Record<'steady' | 'below' | 'stopped' | 'left' | 'noNorm' | 'resumed', TestPerson> = {} as Record<
+    'steady' | 'below' | 'stopped' | 'left' | 'noNorm' | 'resumed',
     TestPerson
   >;
   let closed: LeadersReport;
@@ -67,7 +70,7 @@ describe('лидеры по поездкам', () => {
   beforeAll(async () => {
     await cleanupTestMetrics([], []);
 
-    for (const name of ['steady', 'below', 'stopped', 'left', 'noNorm'] as const) {
+    for (const name of ['steady', 'below', 'stopped', 'left', 'noNorm', 'resumed'] as const) {
       people[name] = await createTestPerson({ inProgram: true });
     }
 
@@ -83,10 +86,17 @@ describe('лидеры по поездкам', () => {
     add(people.left, wednesdays(NOVEMBER_FIRST_MONDAY, '2027-01-25'), WEEKLY);
     add(people.left, ['2027-03-03'], 7);
     add(people.noNorm, ['2027-01-06', '2027-01-13'], 60);
+    add(people.resumed, wednesdays(NOVEMBER_FIRST_MONDAY, '2027-02-08'), 30);
+    add(people.resumed, ['2027-03-08'], 5);
 
     for (let index = 0; index < 20; index += 1) {
       const filler = await createTestPerson({ inProgram: false });
       add(filler, ['2027-01-15'], 1);
+    }
+
+    for (let index = 0; index < 2; index += 1) {
+      const filler = await createTestPerson({ inProgram: false });
+      add(filler, ['2027-02-15'], 1);
     }
 
     await insertTestPersonDays(rows);
@@ -152,9 +162,9 @@ describe('лидеры по поездкам', () => {
       asOfDay: '2027-02-28',
       week: { from: '2027-02-22', to: '2027-02-28' },
       noLeaders: false,
-      leaders: { counted: true, leaders: 5, driversOnLine: 25, leaderTrips: 440, allTrips: 460 },
+      leaders: { counted: true, leaders: 6, driversOnLine: 26, leaderTrips: 560, allTrips: 580 },
       slipping: { counted: true, below: 1, stopped: 1 },
-      left: { counted: true, left: 2, leaders: 5, trips: 200 },
+      left: { counted: true, left: 2, leaders: 6, trips: 200 },
     });
   });
 
@@ -231,7 +241,7 @@ describe('лидеры по поездкам', () => {
       ongoing: true,
       asOfDay: '2027-03-08',
       week: { from: '2027-03-01', to: '2027-03-07' },
-      left: { counted: true, left: 2, leaders: 5 },
+      left: { counted: true, left: 2, leaders: 6 },
     });
     // Вернулся в марте: настоящая последняя поездка и поездки за неделю, норма — до остановки.
     expect(rowOf(ongoing, people.left)).toMatchObject({
@@ -241,6 +251,15 @@ describe('лидеры по поездкам', () => {
       idleDays: 5,
       lastTripDay: '2027-03-03',
     });
+  });
+
+  it('ноль в W, но поездка после неё — вернулся, в «перестали» нет', async () => {
+    // Лидеры февраля — steady и resumed; у resumed три недели без поездок до 07.03 и поездка 08.03.
+    const ongoing = await readLeaders('2027-03', new Date('2027-03-09T12:00:00Z'));
+
+    expect(ongoing.dashboard.leaders).toMatchObject({ counted: true, leaders: 2 });
+    expect(ongoing.dashboard.slipping).toEqual({ counted: true, below: 0, stopped: 0 });
+    expect(rowOf(ongoing, people.resumed)).toBeUndefined();
   });
 
   it('октябрь 2025 — лидеров нет', async () => {

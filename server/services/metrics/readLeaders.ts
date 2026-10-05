@@ -39,7 +39,7 @@ import type {
  * перед ней, если таких недель не меньше `NORM_MIN_WEEKS_WITH_TRIPS`. Неделя ниже нормы — поездок
  * меньше нормы × (1 − `BELOW_NORM_SHARE`), пустая тоже; неделя без нормы серию прерывает. Серия —
  * подряд недели ниже нормы, кончающиеся на W; недели считаются с той, в которую входит первый
- * день L.
+ * день L. Серия с нулём в W — «перестали», но не тот, кто ездил после W, до D: он вернулся.
  *
  * «Ушли» — когорта C: лидеры месяца когорты без единой поездки в следующем за ним. У закрытого M
  * месяц когорты — L, у идущего — M−2: идущий месяц показывает последний закрытый, как поток.
@@ -336,6 +336,10 @@ export const readLeaders = async (month: string, now: Date = new Date()): Promis
     if (streak < STREAK_MIN_WEEKS || lastTripDay === null) continue;
 
     const weekTrips = tripsIn(weeks, lastWeek);
+
+    // Ноль в W, но ездил после неё — вернулся, звонить незачем (решение Руслана 05-10-2026).
+    if (weekTrips === 0 && lastTripDay > weekTo) continue;
+
     // Серия кончается на W — норма на W есть.
     const norm = normAt(weeks, lastWeek) ?? 0;
     const ratio = weekTrips / norm;
