@@ -1,5 +1,6 @@
 import { METRICS_FIRST_DAY } from '#server/services/metrics/constants';
 import { formatDayKey, shiftDayKey } from '#server/utils/parkTime';
+import { shiftMonth } from '#shared/monthNames';
 
 /**
  * Месяц дашборда и его периоды сравнения (issue #371). Месяц — календарный, по Ташкенту.
@@ -40,14 +41,6 @@ const monthLength = (month: string): number => {
   return new Date(Date.UTC(year ?? 0, monthNumber ?? 0, 0)).getUTCDate();
 };
 
-/** Месяц, соседний с `YYYY-MM`, на `shift` месяцев. */
-const shiftMonth = (month: string, shift: number): string => {
-  const [year, monthNumber] = month.split('-').map(Number);
-  const moment = new Date(Date.UTC(year ?? 0, (monthNumber ?? 1) - 1 + shift, 1));
-
-  return moment.toISOString().slice(0, 7);
-};
-
 const dayOfMonth = (month: string, day: number): string => `${month}-${String(day).padStart(2, '0')}`;
 
 /** Вчерашние сутки по Ташкенту — последние посчитанные. */
@@ -81,6 +74,13 @@ export const readMetricsMonth = (value: unknown, now: Date): string => {
   }
 
   return value;
+};
+
+/** Месяц `YYYY-MM` целиком: поток водителей считается только по закрытым месяцам. */
+export const wholeMonthPeriod = (month: string): MonthPeriodDays => {
+  const days = monthLength(month);
+
+  return { from: dayOfMonth(month, 1), to: dayOfMonth(month, days), days, partial: false };
 };
 
 /** Период месяца и база сравнения. Месяц уже проверен `readMetricsMonth`. */

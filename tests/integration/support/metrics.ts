@@ -62,6 +62,16 @@ export const readTestPersonDays = async (personIds: readonly string[]): Promise<
      ORDER BY "day", "person_id"
   `;
 
+/**
+ * Строки таблицы метрик напрямую, мимо пересчёта, — фикстура потока водителей (issue #392):
+ * поток читает только таблицу, и строить её из поездок незачем.
+ */
+export const insertTestPersonDays = async (rows: readonly TestPersonDay[]): Promise<void> => {
+  await db.metricPersonDay.createMany({
+    data: rows.map((row) => ({ day: new Date(`${row.day}T00:00:00Z`), personId: row.personId, trips: row.trips })),
+  });
+};
+
 export const countMetricPersonDays = async (): Promise<number> => {
   const rows = await db.$queryRaw<{ total: number }[]>`
     SELECT count(*)::int AS "total" FROM xb.metric_person_days

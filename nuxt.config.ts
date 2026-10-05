@@ -20,7 +20,7 @@ export default defineNuxtConfig({
   echarts: {
     renderer: 'svg',
     charts: ['BarChart'],
-    components: ['GridComponent', 'TooltipComponent'],
+    components: ['GridComponent', 'TooltipComponent', 'MarkLineComponent'],
   },
 
   // Корень ведёт на список водителей — ежедневную работу всех трёх ролей, а не на экран

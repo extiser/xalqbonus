@@ -7,9 +7,10 @@ import { toLoadState } from '~/utils/loadState';
  * Дашборд, вкладка «Рычаги» (issue #371): за счёт чего изменились поездки — экран
  * `_reference/design/web/dashboard/02-levers.html`.
  *
- * Дашборд строится срезами, и это первый: на вкладке одна плитка множителей. «Глубина» сделана
- * вторым срезом (issue #373), «Деньги» видна и не нажимается. Пункта «Дашборд» в меню нет —
- * появится, когда дашборд будет готов, — страница открывается адресом.
+ * Дашборд строится срезами, и это первый: плитка множителей, под ней — поток водителей по месяцам
+ * и панель месяца (issue #392). «Глубина» сделана вторым срезом (issue #373), «Деньги» видна
+ * и не нажимается. Пункта «Дашборд» в меню нет — появится, когда дашборд будет готов, —
+ * страница открывается адресом.
  *
  * Месяц живёт в адресе (`?month=2026-10`): ссылку на месяц можно переслать. Без него ручка
  * отдаёт последний доступный — текущий, а первого числа прошлый.
@@ -58,6 +59,8 @@ const changeMonth = (month: string): void => {
 
     <MoleculesWebBento>
       <OrganismsWebDashboardMultipliers :state="state" :levers="levers ?? null" />
+      <OrganismsWebDashboardDriverFlow :state="state" :levers="levers ?? null" />
+      <OrganismsWebDashboardFlowMonth :state="state" :levers="levers ?? null" />
     </MoleculesWebBento>
   </div>
 </template>

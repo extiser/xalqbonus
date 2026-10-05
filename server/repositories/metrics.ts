@@ -172,6 +172,74 @@ export const readMetricPeriodTotals = async (from: string, to: string): Promise<
   return rows[0] ?? { trips: 0, drivers: 0, personDays: 0 };
 };
 
+/** Поток водителей за месяц `YYYY-MM` (issue #392) — люди, не учётные записи. */
+export type DriverFlowMonthRow = {
+  month: string;
+  /** Разных людей со строками в месяце. */
+  onLine: number;
+  /** На линии, и это первый месяц человека в таблице. */
+  newDrivers: number;
+  /** На линии, в прошлом месяце строк нет, раньше есть. */
+  returned: number;
+  /** На линии в прошлом месяце, в этом строк нет. */
+  left: number;
+};
+
+/**
+ * Поток водителей по каждому месяцу с `fromMonth` по `toMonth` включительно (`YYYY-MM`)
+ * из готовой таблицы (docs/decisions.md → «Поток водителей — по календарному месяцу»).
+ *
+ * Месяцы людей берутся по всей таблице до конца `toMonth`, а не только по диапазону: «новый»
+ * и «вернулся» смотрят всю историю до месяца. Соседние месяцы человека — `lag` и `lead`:
+ * нет прошлого — новый, прошлый раньше M−1 — вернулся, следующего после M−1 нет или он
+ * позже M — ушёл в M.
+ *
+ * Первое число месяца — вычитанием дня месяца, а месяцы ряда — от `timestamp` без зоны:
+ * у даты `date_trunc` и `generate_series` приводят её к моменту в зоне сеанса.
+ */
+export const readDriverFlowByMonth = async (fromMonth: string, toMonth: string): Promise<DriverFlowMonthRow[]> =>
+  db.$queryRaw<DriverFlowMonthRow[]>`
+    WITH person_months AS (
+           SELECT DISTINCT person_day."person_id",
+                  person_day."day" - (extract(day FROM person_day."day")::int - 1) AS "month"
+             FROM xb.metric_person_days AS person_day
+            WHERE person_day."day" < (${`${toMonth}-01`}::timestamp + interval '1 month')::date
+         ),
+         neighbours AS (
+           SELECT person_month."month",
+                  lag(person_month."month") OVER person_history  AS "previous",
+                  lead(person_month."month") OVER person_history AS "next"
+             FROM person_months AS person_month
+           WINDOW person_history AS (PARTITION BY person_month."person_id" ORDER BY person_month."month")
+         ),
+         months AS (
+           SELECT series."month"::date                              AS "month",
+                  (series."month" - interval '1 month')::date        AS "previous_month"
+             FROM generate_series(
+                    ${`${fromMonth}-01`}::timestamp,
+                    ${`${toMonth}-01`}::timestamp,
+                    interval '1 month'
+                  ) AS series("month")
+         )
+    SELECT to_char(months."month", 'YYYY-MM') AS "month",
+           count(*) FILTER (WHERE neighbour."month" = months."month")::int AS "onLine",
+           count(*) FILTER (
+             WHERE neighbour."month" = months."month" AND neighbour."previous" IS NULL
+           )::int AS "newDrivers",
+           count(*) FILTER (
+             WHERE neighbour."month" = months."month" AND neighbour."previous" < months."previous_month"
+           )::int AS "returned",
+           count(*) FILTER (
+             WHERE neighbour."month" = months."previous_month"
+               AND (neighbour."next" IS NULL OR neighbour."next" > months."month")
+           )::int AS "left"
+      FROM months
+      LEFT JOIN neighbours AS neighbour
+             ON neighbour."month" IN (months."month", months."previous_month")
+     GROUP BY months."month"
+     ORDER BY months."month"
+  `;
+
 /**
  * Закрытые порции сбора истории (`fleet_order_history_days`, сутки по UTC) с `from` по `to`
  * включительно — днями `YYYY-MM-DD`. Незакрытая порция — обход прервался, и её заказы неполны.
