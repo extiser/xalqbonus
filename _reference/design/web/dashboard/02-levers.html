@@ -142,7 +142,7 @@ body { color: var(--text); font: 400 15px/1.45 Manrope, system-ui, sans-serif; }
 .factor .was { font: 400 13px Manrope; color: var(--grey); margin-top: 6px; }
 .factor .contrib { margin-top: auto; padding-top: 12px; font: 600 14px Manrope; color: var(--title); }
 .factor .contrib b { font-weight: 700; }
-/* Таблица затухающих */
+/* Таблица: ездят меньше обычного */
 .tbl { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 14px; }
 .tbl th { text-align: left; font: 500 12px Manrope; color: var(--axis); padding: 0 12px 10px 0; white-space: nowrap; }
 .tbl td { padding: 11px 12px 11px 0; border-top: 1px solid var(--line); white-space: nowrap; }
@@ -217,7 +217,7 @@ body { color: var(--text); font: 400 15px/1.45 Manrope, system-ui, sans-serif; }
           <span class="op">×</span>
           <div class="factor"><span class="name">Поездок в <span class="glue">день<button class="info" type="button" aria-label="Что это: Поездок в день" aria-expanded="false" data-tip-title="Поездок в день" data-tip-text="Сколько поездок водитель делает за день, когда выходит на линию." data-tip-how="Все поездки месяца ÷ сумма дней на линии всех водителей"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span><span class="val">11,1</span><span class="was">было 11,2</span><span class="contrib"><b class="neg">−1 159</b> поездок</span></div>
         </div>
-        <div class="t-sub">Рост дали новые и вернувшиеся водители и то, что ездят чаще по дням. В день каждый делает чуть меньше — смотреть на тяжёлых ниже.</div>
+        <div class="t-sub">Поездок больше на 3 720 (+4,7 %) к сентябрю. Главное — на линию вышло больше водителей: 431 против 413; против — за день делают меньше поездок: −1 159 поездок.</div>
       </section>
 
       <!-- Поток водителей -->
@@ -256,35 +256,35 @@ body { color: var(--text); font: 400 15px/1.45 Manrope, system-ui, sans-serif; }
           <div class="why-row"><span><span class="glue">Ушли<button class="info" type="button" aria-label="Что это: Ушли" aria-expanded="false" data-tip-title="Ушли" data-tip-text="Водители, которые ездили в прошлом месяце, а в этом нет." data-tip-how="Есть поездки в прошлом месяце, нет ни одной в этом. Вернутся — попадут во «Вернулись» того месяца."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span><span class="hint">ездили в прошлом месяце, в этом нет</span></span><b class="neg">−47</b></div>
           <div class="why-row total"><span><span class="glue">На линии<button class="info" type="button" aria-label="Что это: На линии" aria-expanded="false" data-tip-title="На линии" data-tip-text="На сколько водителей на линии стало больше или меньше, чем в прошлом месяце." data-tip-how="Новые + вернулись − ушли. Сходится с «Водителями на линии» у множителей."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span><b class="pos">+18</b></div>
         </div>
-        <div class="t-sub">Ушедших больше, чем новых. Рост держится на вернувшихся — их вдвое больше, чем в августе.</div>
+        <div class="t-sub">На линии на 18 водителей больше: пришло 65, ушло 47. Новых меньше, чем ушедших: убыль закрыли вернувшиеся — 27.</div>
       </section>
 
-      <!-- Тяжёлые -->
+      <!-- Лидеры по поездкам -->
       <section class="tile c4 r2">
-        <div class="head"><span class="t-title">Тяжёлые · верхние 20 %</span></div>
+        <div class="head"><span class="t-title">Лидеры по поездкам · верхние <span class="glue">20 %<button class="info" type="button" aria-label="Что это: Лидеры по поездкам" aria-expanded="false" data-tip-title="Лидеры по поездкам" data-tip-text="Водители с наибольшим числом поездок за месяц — верхние 20 %. Плитка показывает, сколько их и какую долю поездок парка они делают." data-tip-how="Водители на линии за месяц по Ташкенту выстраиваются по числу завершённых поездок, лидеры — верхние 20 %. Водитель — человек: несколько его профилей в парке складываются. Демо не входит."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span></div>
         <div class="t-big">86<span class="t-unit">водителей</span></div>
         <div class="share-lbl" style="margin-top:auto"><span>Их поездки 47 %</span><span>Остальные 53 %</span></div>
         <div class="share" style="margin-top:0"><i style="flex:47;background:#9CEEFF"></i><i style="flex:53;background:#1C4A58"></i></div>
       </section>
       <section class="tile c4 r2">
-        <div class="head"><span class="t-title">Тяжёлых ушло за месяц</span></div>
+        <div class="head"><span class="t-title">Из лидеров <span class="glue">ушли<button class="info" type="button" aria-label="Что это: Из лидеров ушли" aria-expanded="false" data-tip-title="Из лидеров ушли" data-tip-text="Сколько лидеров прошлого месяца в этом месяце не сделали ни одной поездки — и сколько поездок в месяц делали они вместе." data-tip-how="Лидеры прошлого месяца без единой завершённой поездки в этом месяце по Ташкенту. Поездки с ними — их поездки за прошлый месяц. «Ушёл» — как в потоке водителей: ездил в прошлом месяце, в этом нет."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span></div>
         <div class="t-big">3<span class="t-unit">из 89</span></div>
         <span class="small-delta"><b class="neg">−1 400</b> поездок в месяц вместе с ними</span>
-        <div class="t-sub">Ушёл — нет поездок 30 дней</div>
+        <div class="t-sub">Лидеры прошлого месяца, в этом без поездок</div>
       </section>
       <section class="tile c4 r2">
-        <div class="head"><span class="t-title">Тяжёлых затухает</span></div>
+        <div class="head"><span class="t-title">Лидеры ездят меньше <span class="glue">обычного<button class="info" type="button" aria-label="Что это: Лидеры ездят меньше обычного" aria-expanded="false" data-tip-title="Лидеры ездят меньше обычного" data-tip-text="Сколько лидеров несколько недель подряд ездят меньше, чем обычно ездят сами. Сравнение — с собственной нормой водителя, а не с другими." data-tip-how="Норма — медиана поездок водителя в неделю. Ниже нормы 2 недели подряд и дольше — водитель попадает сюда."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span></div>
         <div class="t-big">7</div>
         <span class="small-delta">ездят ниже своей обычной нормы <b>2+ недели</b></span>
-        <div class="t-sub">Список ниже — до того, как уйдут</div>
+        <div class="t-sub">Поимённо — в списке ниже</div>
       </section>
 
-      <!-- Список затухающих -->
+      <!-- Список: ездят меньше обычного -->
       <section class="tile c12 r3" style="grid-row:span 4">
-        <div class="head"><span class="t-title">Затухают — поимённо</span><span class="btn">Сделать сегмент</span></div>
+        <div class="head"><span class="t-title">Ездят меньше обычного — <span class="glue">поимённо<button class="info" type="button" aria-label="Что это: Ездят меньше обычного" aria-expanded="false" data-tip-title="Ездят меньше обычного" data-tip-text="Лидеры, которые 2+ недели подряд ездят ниже своей нормы, — по именам. Из списка можно сделать сегмент для рассылки или акции."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span><span class="btn">Сделать сегмент</span></div>
         <div class="tbl-wrap">
         <table class="tbl">
-          <thead><tr><th>Позывной</th><th>Водитель</th><th class="num">В неделю / его норма</th><th class="num">К своей норме</th><th class="num">Недель ниже</th><th>Программа</th><th class="num">Последняя поездка</th></tr></thead>
+          <thead><tr><th>Позывной</th><th>Водитель</th><th class="num">В неделю / его <span class="glue">норма<button class="info" type="button" aria-label="Что это: В неделю / его норма" aria-expanded="false" data-tip-title="В неделю / его норма" data-tip-text="Поездок за последнюю неделю и его обычное число поездок в неделю." data-tip-how="Норма — медиана поездок водителя в неделю."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></th><th class="num">К своей <span class="glue">норме<button class="info" type="button" aria-label="Что это: К своей норме" aria-expanded="false" data-tip-title="К своей норме" data-tip-text="На сколько процентов последняя неделя ниже его нормы."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></th><th class="num">Недель ниже</th><th>Программа</th><th class="num">Последняя поездка</th></tr></thead>
           <tbody>
             <tr><td>А-114</td><td>Водитель 1</td><td class="num">38 <span class="muted">/ 92</span></td><td class="num"><b class="neg">−59 %</b></td><td class="num">4</td><td><span class="pill in">участник</span></td><td class="num muted">вчера</td></tr>
             <tr><td>К-207</td><td>Водитель 2</td><td class="num">41 <span class="muted">/ 85</span></td><td class="num"><b class="neg">−52 %</b></td><td class="num">3</td><td><span class="pill out">вне</span></td><td class="num muted">сегодня</td></tr>
