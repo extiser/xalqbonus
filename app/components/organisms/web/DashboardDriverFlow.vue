@@ -32,6 +32,12 @@ import type { DashboardFlowMonth, DashboardLevers } from '#shared/types/dashboar
  * при шести-семи месяцах он около 100, на широком мониторе линия отходит от столбика на десяток
  * пикселей.
  *
+ * Нажатие на стопку месяца или на рамку идущего открывает этот месяц страницы — событием
+ * `select`, тем же переходом, что выбор в переключателе месяца: своего состояния у графика нет.
+ * Уже выбранный месяц нажатием ничего не делает, и в его подсказке нет строки «Нажмите — открыть
+ * месяц». Контур неполного месяца и метка «Новый бот» нажатия не ловят — они пропускают его
+ * к столбикам под собой.
+ *
  * Выбран первый месяц истории — месяцев потока нет: вместо графика сказано словами, почему
  * и с какого месяца он начнётся (`02-levers-first-month.html`).
  *
@@ -42,6 +48,8 @@ const props = defineProps<{
   state: LoadState;
   levers: DashboardLevers | null;
 }>();
+
+const emit = defineEmits<{ select: [month: string] }>();
 
 /** Доля шага месяца под столбик. */
 const BAR_WIDTH = 0.4;
@@ -129,11 +137,17 @@ const signed = (value: number): string => (value === 0 ? '0' : formatSignedNumbe
 const legendDot = (color: string): string =>
   `<span style="display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;background:${color}"></span>`;
 
+/** Строка «открыть месяц» в подсказке — у всех месяцев, кроме выбранного. */
+const openHint = (month: string): string[] =>
+  month === ready.value?.month ? [] : [`<span style="color:${colors.value.grey}">Нажмите — открыть месяц</span>`];
+
 const tooltipText = (index: number): string => {
   const month = months.value[index];
 
   if (!month) {
-    return ongoingMonth.value ? `<b>${formatMonthTitle(ongoingMonth.value)}</b><br>идёт` : '';
+    const ongoing = ongoingMonth.value;
+
+    return ongoing ? [`<b>${formatMonthTitle(ongoing)}</b>`, 'идёт', ...openHint(ongoing)].join('<br>') : '';
   }
 
   return [
@@ -142,7 +156,20 @@ const tooltipText = (index: number): string => {
     `${legendDot(colors.value.returned)}вернулись ${formatNumber(month.returned)}`,
     `${legendDot(colors.value.left)}ушли ${formatNumber(month.left)}`,
     ...(month.incomplete ? ['Собраны не все сутки'] : []),
+    ...openHint(month.month),
   ].join('<br>');
+};
+
+/** Нажатие на столбик: месяц — категория столбика. Выбранный не открывается заново. */
+const openMonth = (params: unknown): void => {
+  const month =
+    typeof params === 'object' && params !== null && 'name' in params && typeof params.name === 'string'
+      ? params.name
+      : null;
+
+  if (month !== null && month !== ready.value?.month && /^\d{4}-\d{2}$/.test(month)) {
+    emit('select', month);
+  }
 };
 
 /** Номер месяца под курсором: у подсказки по оси приходит список рядов, у него один месяц. */
@@ -194,7 +221,6 @@ const option = computed<ECOption>(() => {
   const placeholder = {
     type: 'bar' as const,
     stack: 'flow',
-    silent: true,
     barWidth: `${BAR_WIDTH * 100}%`,
     barMaxWidth: BAR_MAX_WIDTH,
     barGap: '-100%',
@@ -386,7 +412,7 @@ const ariaLabel = computed(() => {
         <span><i class="mr-1.5 inline-block size-3 rounded align-[-1px] bg-web-scarlet" />ушли</span>
       </div>
       <div class="mt-3 min-h-0 flex-1 max-web:h-[220px] max-web:flex-none" role="img" :aria-label="ariaLabel">
-        <VChart v-if="mounted" :option="option" :theme="theme" autoresize />
+        <VChart v-if="mounted" :option="option" :theme="theme" autoresize @click="openMonth" />
       </div>
     </div>
   </MoleculesWebTile>

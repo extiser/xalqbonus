@@ -12,8 +12,9 @@ import { toLoadState } from '~/utils/loadState';
  * и не нажимается. Пункта «Дашборд» в меню нет — появится, когда дашборд будет готов, —
  * страница открывается адресом.
  *
- * Месяц живёт в адресе (`?month=2026-10`): ссылку на месяц можно переслать. Без него ручка
- * отдаёт последний доступный — текущий, а первого числа прошлый.
+ * Месяц живёт в адресе (`?month=2026-10`): ссылку на месяц можно переслать. Его меняют
+ * переключатель месяца и нажатие на месяц графика потока — одним переходом. Без месяца
+ * в адресе ручка отдаёт последний доступный — текущий, а первого числа прошлый.
  */
 
 definePageMeta({
@@ -59,7 +60,7 @@ const changeMonth = (month: string): void => {
 
     <MoleculesWebBento>
       <OrganismsWebDashboardMultipliers :state="state" :levers="levers ?? null" />
-      <OrganismsWebDashboardDriverFlow :state="state" :levers="levers ?? null" />
+      <OrganismsWebDashboardDriverFlow :state="state" :levers="levers ?? null" @select="changeMonth" />
       <OrganismsWebDashboardFlowMonth :state="state" :levers="levers ?? null" />
     </MoleculesWebBento>
   </div>
