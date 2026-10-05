@@ -231,3 +231,69 @@ export const programEconomyConclusion = (input: ProgramEconomyConclusionInput): 
 
   return sentences.length > 0 ? sentences.join(' ') : null;
 };
+
+/**
+ * Изменение на линии меньше этой доли водителей на линии в прошлом месяце, в процентах, —
+ * «почти столько же». Таблица «Первое предложение — итог», раздел «Поток водителей — панель
+ * месяца» в `_reference/design/web/dashboard/conclusions.md`.
+ */
+export const FLOW_FLAT_PERCENT = 2;
+
+export type DriverFlowConclusionInput = {
+  newDrivers: number;
+  returned: number;
+  left: number;
+  /** Водителей на линии в прошлом месяце — только для порога, в текст не попадает. */
+  previousOnLine: number;
+  /** Месяц раньше FLOW_NEW_EXACT_FROM: точна только сумма новых и вернувшихся. */
+  earlyHistory: boolean;
+  /** Собраны не все сутки у месяца или у прошлого. */
+  incomplete: boolean;
+};
+
+/** Первое предложение — итог. При `D₀ = 0` порог не применяется: Δ = 0 — «почти столько же». */
+const flowTotalSentence = (input: DriverFlowConclusionInput): string => {
+  const came = input.newDrivers + input.returned;
+  const change = came - input.left;
+  const flat = input.previousOnLine > 0 ? Math.abs(change) * 100 < FLOW_FLAT_PERCENT * input.previousOnLine : change === 0;
+
+  if (flat) {
+    return `Водителей на линии почти столько же: пришло ${formatNumber(came)}, ушло ${formatNumber(input.left)}.`;
+  }
+
+  const drivers = pluralize(change, 'водителя', 'водителей', 'водителей');
+
+  return change > 0
+    ? `На линии на ${formatNumber(change)} ${drivers} больше: пришло ${formatNumber(came)}, ушло ${formatNumber(input.left)}.`
+    : `На линии на ${formatNumber(Math.abs(change))} ${drivers} меньше: ушло ${formatNumber(input.left)}, пришло ${formatNumber(came)}.`;
+};
+
+/** Второе — за счёт кого. Ранней истории и при `N + R < L` его нет. */
+const flowSourceSentence = (input: DriverFlowConclusionInput): string | null => {
+  if (input.earlyHistory) {
+    return null;
+  }
+
+  if (input.newDrivers >= input.left) {
+    return `Одни новые перекрывают ушедших: ${formatNumber(input.newDrivers)} против ${formatNumber(input.left)}.`;
+  }
+
+  return input.left <= input.newDrivers + input.returned
+    ? `Новых меньше, чем ушедших: убыль закрыли вернувшиеся — ${formatNumber(input.returned)}.`
+    : null;
+};
+
+/**
+ * Вывод под панелью месяца «Потока водителей» (issue #398). `null` — вывода нет: у месяца
+ * или у прошлого собраны не все сутки. Панели нет вовсе (октябрь 2025) — функция не зовётся.
+ */
+export const driverFlowConclusion = (input: DriverFlowConclusionInput): string | null => {
+  if (input.incomplete) {
+    return null;
+  }
+
+  const source = flowSourceSentence(input);
+  const total = flowTotalSentence(input);
+
+  return source === null ? total : `${total} ${source}`;
+};

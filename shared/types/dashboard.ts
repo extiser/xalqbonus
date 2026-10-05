@@ -88,6 +88,8 @@ export type DashboardDriverFlow = {
   selectedOngoing: boolean;
   /** Выбран первый месяц истории (октябрь 2025): водителей на линии в нём — для строки «На линии». */
   firstMonthOnLine: number | null;
+  /** Вывод словами о месяце панели (issue #398); `null` — вывода нет. */
+  conclusion: string | null;
 };
 
 /**

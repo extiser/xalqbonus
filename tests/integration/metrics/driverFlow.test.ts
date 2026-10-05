@@ -139,7 +139,7 @@ describe('поток водителей по месяцам', () => {
   it('октябрь 2025 — потока нет, «на линии» — его водители', async () => {
     const flow = await readDriverFlow('2025-10', NOW);
 
-    expect(flow).toEqual({ months: [], panel: null, selectedOngoing: false, firstMonthOnLine: 2 });
+    expect(flow).toEqual({ months: [], panel: null, selectedOngoing: false, firstMonthOnLine: 2, conclusion: null });
   });
 
   it('ранняя история — у марта 2026 есть, у апреля нет', async () => {
