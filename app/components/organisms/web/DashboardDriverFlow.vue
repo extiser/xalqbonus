@@ -368,7 +368,12 @@ const option = computed<ECOption>(() => {
                   formatter: switchoverLabel,
                   position: 'end',
                   align: 'left',
-                  distance: [6, -14],
+                  // У `end` ECharts сдвигает подпись вдоль линии: у вертикальной горизонтальная
+                  // часть `distance` умножается на ноль. Зазор до линии — отступ слева: он считается
+                  // от середины линии, и от её края до текста остаётся ~7 px. По вертикали —
+                  // на 14 px ниже верхнего конца линии.
+                  distance: [0, -14],
+                  padding: [0, 0, 0, 8],
                   color: colors.value.title,
                   fontSize: 12,
                   fontWeight: 600,
