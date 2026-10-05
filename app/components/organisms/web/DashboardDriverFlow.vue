@@ -18,6 +18,14 @@ import type { DashboardFlowMonth, DashboardLevers } from '#shared/types/dashboar
  * подписи. Рамка — пара пустых столбиков той же стопки, вверх и вниз: так она встаёт ровно
  * на место столбика, без своего сдвига.
  *
+ * Неполный месяц — собраны не все сутки у него или у прошлого (`incomplete`): столбики
+ * полупрозрачные — цветом с прозрачностью, а не `opacity` элемента: та бледнила бы и изменение
+ * над месяцем панели, вокруг стопки — пунктирный контур серым, под подписью «неполн.», в подсказке —
+ * строка об этом. Иначе дыра в истории читалась бы как настоящий отток. Контур — своя стопка
+ * поверх стопки месяца (`barGap: '-100%'`): невидимый столбик вниз на «ушли» и на нём контур
+ * на всю высоту, стопкой без учёта знака (`stackStrategy: 'all'`) — одна рамка, а не две
+ * половины, сходящиеся у нуля. Изменение над месяцем панели не меняется.
+ *
  * Метка «Новый бот» — линия у правого края столбика месяца переключения, если он на графике.
  * Столбик — доля шага месяца (`BAR_WIDTH`), поэтому его край — та же доля в долях шага.
  * Предел ширины (`BAR_MAX_WIDTH`) ломает эту долю, только когда шаг шире 100: на ноутбуке
@@ -46,6 +54,8 @@ const SWITCHOVER_GAP = 0.05;
  * вправо от линии, как в макете, и без поля обрезалась бы краем графика.
  */
 const SWITCHOVER_LABEL_ROOM = 110;
+/** Прозрачность столбиков неполного месяца. */
+const INCOMPLETE_OPACITY = 0.35;
 /** Высота пустой рамки идущего месяца вверх и вниз — доля самого высокого столбика. */
 const ONGOING_SHARE = 0.3;
 const BAR_RADIUS = 4;
@@ -55,7 +65,16 @@ const ready = computed(() => (props.state === 'ready' ? props.levers : null));
 
 const mounted = ref(false);
 const theme = shallowRef<WebChartTheme>({});
-const colors = shallowRef({ newDrivers: '', returned: '', left: '', switchover: '', text: '', title: '', axis: '' });
+const colors = shallowRef({
+  newDrivers: '',
+  returned: '',
+  left: '',
+  switchover: '',
+  text: '',
+  title: '',
+  axis: '',
+  grey: '',
+});
 
 onMounted(() => {
   theme.value = webChartTheme();
@@ -67,6 +86,7 @@ onMounted(() => {
     text: readWebToken('color-web-text'),
     title: readWebToken('color-web-title'),
     axis: readWebToken('color-web-axis'),
+    grey: readWebToken('color-web-grey'),
   };
   mounted.value = true;
 });
@@ -93,6 +113,17 @@ const emptyText = computed(() => {
 /** «ноя», «дек» — первые три буквы месяца. */
 const shortMonth = (month: string): string => monthForms(month).nominative.slice(0, 3);
 
+/** `#9CEEFF` → `rgba(156, 238, 255, 0.35)`. Токены веба — шестнадцатеричные; иное — как есть. */
+const withAlpha = (color: string, alpha: number): string => {
+  const hex = /^#([0-9a-f]{6})$/i.exec(color)?.[1];
+
+  if (!hex) return color;
+
+  const value = Number.parseInt(hex, 16);
+
+  return `rgba(${value >> 16}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
+};
+
 const signed = (value: number): string => (value === 0 ? '0' : formatSignedNumber(value));
 
 const legendDot = (color: string): string =>
@@ -110,6 +141,7 @@ const tooltipText = (index: number): string => {
     `${legendDot(colors.value.newDrivers)}новые ${formatNumber(month.newDrivers)}`,
     `${legendDot(colors.value.returned)}вернулись ${formatNumber(month.returned)}`,
     `${legendDot(colors.value.left)}ушли ${formatNumber(month.left)}`,
+    ...(month.incomplete ? ['Собраны не все сутки'] : []),
   ].join('<br>');
 };
 
@@ -135,12 +167,28 @@ const option = computed<ECOption>(() => {
   const ongoingHeight = Math.max(1, Math.round(tallest * ONGOING_SHARE));
   const switchoverIndex = closed.findIndex((month) => month.month === BOT_SWITCHOVER_DAY.slice(0, 7));
   const switchoverLabel = `Новый бот · ${BOT_SWITCHOVER_DAY.slice(8, 10)}.${BOT_SWITCHOVER_DAY.slice(5, 7)}`;
-  const onlyClosed = (value: (month: DashboardFlowMonth) => number): (number | null)[] =>
+  const incompleteMonths = new Set(closed.filter((month) => month.incomplete).map((month) => month.month));
+  const faded = (color: string) => ({ color: withAlpha(color, INCOMPLETE_OPACITY) });
+  const onlyClosed = (value: (month: DashboardFlowMonth) => number, color: string) =>
     categories.map((_month, index) => {
       const month = closed[index];
 
-      return month ? value(month) : null;
+      if (!month) return null;
+
+      return month.incomplete ? { value: value(month), itemStyle: faded(color) } : value(month);
     });
+  const onlyIncomplete = (value: (month: DashboardFlowMonth) => number): (number | null)[] =>
+    categories.map((_month, index) => {
+      const month = closed[index];
+
+      return month?.incomplete ? value(month) : null;
+    });
+  const monthLabel = (value: string): string => {
+    if (value === ongoing) return `${shortMonth(value)}\n{note|идёт}`;
+    if (incompleteMonths.has(value)) return `${shortMonth(value)}\n{note|неполн.}`;
+
+    return shortMonth(value);
+  };
   const onlyOngoing = (value: number): (number | null)[] =>
     categories.map((_month, index) => (index === ongoingIndex ? value : null));
   const placeholder = {
@@ -149,6 +197,7 @@ const option = computed<ECOption>(() => {
     silent: true,
     barWidth: `${BAR_WIDTH * 100}%`,
     barMaxWidth: BAR_MAX_WIDTH,
+    barGap: '-100%',
     itemStyle: {
       color: 'transparent',
       borderColor: colors.value.axis,
@@ -173,8 +222,7 @@ const option = computed<ECOption>(() => {
         data: categories,
         axisLabel: {
           interval: 0,
-          formatter: (value: string) =>
-            value === ongoing ? `${shortMonth(value)}\n{note|идёт}` : shortMonth(value),
+          formatter: monthLabel,
           color: (_value?: string | number, index?: number) =>
             index === panelIndex ? colors.value.text : colors.value.axis,
           rich: { note: { fontSize: 11, color: colors.value.axis } },
@@ -200,7 +248,8 @@ const option = computed<ECOption>(() => {
         stack: 'flow',
         barWidth: `${BAR_WIDTH * 100}%`,
         barMaxWidth: BAR_MAX_WIDTH,
-        data: onlyClosed((month) => month.newDrivers),
+        barGap: '-100%',
+        data: onlyClosed((month) => month.newDrivers, colors.value.newDrivers),
         itemStyle: { color: colors.value.newDrivers, borderRadius: BAR_RADIUS },
       },
       {
@@ -209,14 +258,19 @@ const option = computed<ECOption>(() => {
         stack: 'flow',
         barWidth: `${BAR_WIDTH * 100}%`,
         barMaxWidth: BAR_MAX_WIDTH,
+        barGap: '-100%',
         data: categories.map((_month, index) => {
           const month = closed[index];
 
           if (!month) return null;
-          if (index !== panelIndex) return month.returned;
+
+          const itemStyle = month.incomplete ? faded(colors.value.returned) : undefined;
+
+          if (index !== panelIndex) return { value: month.returned, itemStyle };
 
           return {
             value: month.returned,
+            itemStyle,
             label: {
               show: true,
               position: 'top',
@@ -235,11 +289,42 @@ const option = computed<ECOption>(() => {
         stack: 'flow',
         barWidth: `${BAR_WIDTH * 100}%`,
         barMaxWidth: BAR_MAX_WIDTH,
-        data: onlyClosed((month) => -month.left),
+        barGap: '-100%',
+        data: onlyClosed((month) => -month.left, colors.value.left),
         itemStyle: { color: colors.value.left, borderRadius: BAR_RADIUS },
       },
       { ...placeholder, name: 'идёт', data: onlyOngoing(ongoingHeight) },
       { ...placeholder, name: 'идёт вниз', data: onlyOngoing(-ongoingHeight) },
+      {
+        type: 'bar',
+        name: 'неполный, низ',
+        stack: 'incomplete',
+        stackStrategy: 'all',
+        silent: true,
+        barWidth: `${BAR_WIDTH * 100}%`,
+        barMaxWidth: BAR_MAX_WIDTH,
+        barGap: '-100%',
+        data: onlyIncomplete((month) => -month.left),
+        itemStyle: { color: 'transparent' },
+      },
+      {
+        type: 'bar',
+        name: 'неполный',
+        stack: 'incomplete',
+        stackStrategy: 'all',
+        silent: true,
+        barWidth: `${BAR_WIDTH * 100}%`,
+        barMaxWidth: BAR_MAX_WIDTH,
+        barGap: '-100%',
+        data: onlyIncomplete((month) => month.left + month.newDrivers + month.returned),
+        itemStyle: {
+          color: 'transparent',
+          borderColor: colors.value.grey,
+          borderWidth: 1,
+          borderType: [4, 4],
+          borderRadius: BAR_RADIUS,
+        },
+      },
       {
         type: 'bar',
         name: 'Новый бот',
