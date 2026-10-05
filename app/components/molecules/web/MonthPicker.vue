@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { formatMonthTitle } from '~/utils/monthNames';
+import { formatMonthTitle } from '#shared/monthNames';
 
 /**
  * Выбор месяца дашборда — `.period` в `_reference/design/web/dashboard/02-levers.html`:

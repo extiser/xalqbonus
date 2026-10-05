@@ -53,7 +53,7 @@ import { disconnectQueues } from '../support/queues';
 
 const NOW = new Date('2026-10-05T12:00:00Z');
 
-const DECEMBER = { from: '2025-12-01', to: '2025-12-31' };
+const DECEMBER = { from: '2025-12-01', to: '2025-12-31', days: 31, partial: false };
 
 /** 11:00 по Ташкенту дня `day` — далеко от границы суток. */
 const at = (day: string): Date => new Date(`${day}T06:00:00Z`);
