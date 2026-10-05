@@ -10,7 +10,7 @@ import { requireEmployeeRole } from '#server/utils/employeeAuth';
 import { sendReportFile } from '#server/utils/reportDownload';
 import { METRICS_ROLES } from '#shared/access';
 
-// Водители вне программы за месяц файлом `.xlsx` (issue #373) — кнопка «Скачать список»
+// Водители вне программы за месяц файлом `.xlsx` (issue #373) — кнопка «Выгрузить в Excel»
 // плитки «Вне программы». Доступ — как у вкладки, негодный месяц — `400`, как у неё же.
 export default defineEventHandler(async (event): Promise<Buffer> => {
   await requireEmployeeRole(event, METRICS_ROLES);

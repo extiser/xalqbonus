@@ -14,8 +14,10 @@ import { computed, type Component } from 'vue';
  * Значок (`icon`) — Phosphor duotone слева от подписи; `title` — подсказка при наведении.
  *
  * Ведёт адресом (`to`) — тогда это ссылка, иначе кнопка с событием `click`. Файл — `download`:
- * простая ссылка на ручку выгрузки, без перехода внутри приложения («Скачать список», issue #373).
- * `submit` — кнопка отправляет свою форму. В плитке со входом (`to` у плитки) её не ставят:
+ * простая ссылка на ручку выгрузки, без перехода внутри приложения («Выгрузить в Excel», issues #373, #402).
+ * `submit` — кнопка отправляет свою форму. `disabled` — погашенная (issue #402): прозрачность 40 %,
+ * не нажимается и никуда не ведёт. Это не `<button disabled>`, а `span`: у погашенного элемента
+ * браузер не всегда показывает подсказку при наведении, а она объясняет, почему кнопка погашена. В плитке со входом (`to` у плитки) её не ставят:
  * плитка нажимается целиком, и кнопка в ссылке — ошибка разметки.
  */
 type ActionButtonSize = 'tile' | 'page';
@@ -34,6 +36,8 @@ const props = withDefaults(
     title?: string;
     /** Отправляет форму, в которой стоит. */
     submit?: boolean;
+    /** Погашена: видна, не нажимается. */
+    disabled?: boolean;
   }>(),
   { to: undefined, download: undefined, size: 'tile', variant: 'action', icon: undefined, title: undefined },
 );
@@ -41,7 +45,7 @@ const props = withDefaults(
 defineEmits<{ click: [] }>();
 
 const BASE_CLASSES =
-  'inline-flex shrink-0 cursor-pointer items-center rounded-full font-manrope font-semibold whitespace-nowrap no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-web-cyan';
+  'inline-flex shrink-0 items-center rounded-full font-manrope font-semibold whitespace-nowrap no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-web-cyan';
 
 const SIZE_CLASSES: Record<ActionButtonSize, string> = {
   tile: 'h-9 gap-1.5 px-4 text-[13px]',
@@ -58,11 +62,21 @@ const ICON_CLASSES: Record<ActionButtonSize, string> = {
   page: 'size-[18px]',
 };
 
-const classes = computed(() => [BASE_CLASSES, SIZE_CLASSES[props.size], VARIANT_CLASSES[props.variant]]);
+const DISABLED_CLASSES = 'cursor-default opacity-40';
+
+const classes = computed(() => [
+  BASE_CLASSES,
+  SIZE_CLASSES[props.size],
+  VARIANT_CLASSES[props.variant],
+  props.disabled ? DISABLED_CLASSES : 'cursor-pointer',
+]);
 </script>
 
 <template>
-  <NuxtLink v-if="to" :to="to" :title="title" :class="classes">
+  <span v-if="disabled" role="button" aria-disabled="true" :title="title" :class="classes">
+    <component :is="icon" v-if="icon" weight="duotone" aria-hidden="true" :class="ICON_CLASSES[size]" />{{ label }}
+  </span>
+  <NuxtLink v-else-if="to" :to="to" :title="title" :class="classes">
     <component :is="icon" v-if="icon" weight="duotone" aria-hidden="true" :class="ICON_CLASSES[size]" />{{ label }}
   </NuxtLink>
   <a v-else-if="download" :href="download" download :title="title" :class="classes">

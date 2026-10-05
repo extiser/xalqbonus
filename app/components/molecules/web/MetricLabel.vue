@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { MetricKey } from '#shared/metrics';
+import type { MetricKey, MetricValues } from '#shared/metrics';
 
 /**
  * Подпись метрики со значком подсказки после неё (`codex.md`, «Подсказка метрики»): значок
@@ -12,6 +12,8 @@ import type { MetricKey } from '#shared/metrics';
 const props = defineProps<{
   label: string;
   metric?: MetricKey;
+  /** Значения подстановок в тексте подсказки. */
+  metricValues?: MetricValues;
 }>();
 
 /** Всё до последнего слова — с пробелом на конце — и последнее слово. */
@@ -23,6 +25,6 @@ const parts = computed(() => {
 </script>
 
 <template>
-  <template v-if="metric">{{ parts.head }}<span class="whitespace-nowrap">{{ parts.last }}<MoleculesWebMetricInfo :metric="metric" /></span></template>
+  <template v-if="metric">{{ parts.head }}<span class="whitespace-nowrap">{{ parts.last }}<MoleculesWebMetricInfo :metric="metric" :values="metricValues" /></span></template>
   <template v-else>{{ label }}</template>
 </template>

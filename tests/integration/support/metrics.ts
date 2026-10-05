@@ -149,10 +149,10 @@ export const addTestProfilePhone = async (profileId: string, input: TestProfileP
   });
 };
 
-/** Позывной и имя профиля — чтобы различить профили одного человека в выгрузке. */
+/** Позывной и имя профиля — чтобы различить профили одного человека в выгрузке; отчество — у лидеров (issue #402). */
 export const setTestProfileCard = async (
   profileId: string,
-  card: { callsign: string; firstName: string; lastName: string },
+  card: { callsign: string; firstName: string; lastName: string; middleName?: string },
 ): Promise<void> => {
   await db.parkProfile.update({ where: { profileId }, data: card });
 };
