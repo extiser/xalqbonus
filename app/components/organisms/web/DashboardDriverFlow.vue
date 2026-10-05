@@ -20,6 +20,9 @@ import type { DashboardFlowMonth, DashboardLevers } from '#shared/types/dashboar
  *
  * Метка «Новый бот» — линия у правого края столбика месяца переключения, если он на графике.
  * Столбик — доля шага месяца (`BAR_WIDTH`), поэтому его край — та же доля в долях шага.
+ * Предел ширины (`BAR_MAX_WIDTH`) ломает эту долю, только когда шаг шире 100: на ноутбуке
+ * при шести-семи месяцах он около 100, на широком мониторе линия отходит от столбика на десяток
+ * пикселей.
  *
  * Выбран первый месяц истории — месяцев потока нет: вместо графика сказано словами, почему
  * и с какого месяца он начнётся (`02-levers-first-month.html`).
@@ -34,8 +37,15 @@ const props = defineProps<{
 
 /** Доля шага месяца под столбик. */
 const BAR_WIDTH = 0.4;
+/** Столбик не шире макета: когда месяцев два-три, доля шага растянула бы его на полплитки. */
+const BAR_MAX_WIDTH = 40;
 /** Метка «Новый бот» — чуть правее края столбика, чтобы не легла на него. */
 const SWITCHOVER_GAP = 0.05;
+/**
+ * Поле справа под подпись метки, когда месяц переключения — последний столбик: подпись идёт
+ * вправо от линии, как в макете, и без поля обрезалась бы краем графика.
+ */
+const SWITCHOVER_LABEL_ROOM = 110;
 /** Высота пустой рамки идущего месяца вверх и вниз — доля самого высокого столбика. */
 const ONGOING_SHARE = 0.3;
 const BAR_RADIUS = 4;
@@ -138,6 +148,7 @@ const option = computed<ECOption>(() => {
     stack: 'flow',
     silent: true,
     barWidth: `${BAR_WIDTH * 100}%`,
+    barMaxWidth: BAR_MAX_WIDTH,
     itemStyle: {
       color: 'transparent',
       borderColor: colors.value.axis,
@@ -148,18 +159,31 @@ const option = computed<ECOption>(() => {
   };
 
   return {
-    grid: { left: 0, right: 0, top: 28, bottom: 0, outerBoundsMode: 'same', outerBoundsContain: 'axisLabel' },
-    xAxis: {
-      type: 'category',
-      data: categories,
-      axisLabel: {
-        interval: 0,
-        formatter: (value: string) => (value === ongoing ? `${shortMonth(value)}\n{note|идёт}` : shortMonth(value)),
-        color: (_value?: string | number, index?: number) =>
-          index === panelIndex ? colors.value.text : colors.value.axis,
-        rich: { note: { fontSize: 11, color: colors.value.axis } },
-      },
+    grid: {
+      left: 0,
+      right: switchoverIndex !== -1 && switchoverIndex === categories.length - 1 ? SWITCHOVER_LABEL_ROOM : 0,
+      top: 28,
+      bottom: 0,
+      outerBoundsMode: 'same',
+      outerBoundsContain: 'axisLabel',
     },
+    xAxis: [
+      {
+        type: 'category',
+        data: categories,
+        axisLabel: {
+          interval: 0,
+          formatter: (value: string) =>
+            value === ongoing ? `${shortMonth(value)}\n{note|идёт}` : shortMonth(value),
+          color: (_value?: string | number, index?: number) =>
+            index === panelIndex ? colors.value.text : colors.value.axis,
+          rich: { note: { fontSize: 11, color: colors.value.axis } },
+        },
+      },
+      // Скрытая числовая ось под метку «Новый бот»: на категориальной оси метка встаёт только
+      // в центр месяца. Полоса месяца `i` здесь — от `i − 0,5` до `i + 0,5`, как у категорий.
+      { type: 'value', show: false, min: -0.5, max: categories.length - 0.5 },
+    ],
     yAxis: {
       type: 'value',
       splitNumber: VALUE_SPLITS,
@@ -175,30 +199,16 @@ const option = computed<ECOption>(() => {
         name: 'новые',
         stack: 'flow',
         barWidth: `${BAR_WIDTH * 100}%`,
+        barMaxWidth: BAR_MAX_WIDTH,
         data: onlyClosed((month) => month.newDrivers),
         itemStyle: { color: colors.value.newDrivers, borderRadius: BAR_RADIUS },
-        markLine:
-          switchoverIndex === -1
-            ? undefined
-            : {
-                silent: true,
-                symbol: 'none',
-                lineStyle: { color: colors.value.switchover, width: 1.5, type: 'solid' },
-                label: {
-                  formatter: switchoverLabel,
-                  position: 'insideEndTop',
-                  rotate: 0,
-                  color: colors.value.title,
-                  fontWeight: 600,
-                },
-                data: [{ xAxis: switchoverIndex + BAR_WIDTH / 2 + SWITCHOVER_GAP }],
-              },
       },
       {
         type: 'bar',
         name: 'вернулись',
         stack: 'flow',
         barWidth: `${BAR_WIDTH * 100}%`,
+        barMaxWidth: BAR_MAX_WIDTH,
         data: categories.map((_month, index) => {
           const month = closed[index];
 
@@ -224,11 +234,37 @@ const option = computed<ECOption>(() => {
         name: 'ушли',
         stack: 'flow',
         barWidth: `${BAR_WIDTH * 100}%`,
+        barMaxWidth: BAR_MAX_WIDTH,
         data: onlyClosed((month) => -month.left),
         itemStyle: { color: colors.value.left, borderRadius: BAR_RADIUS },
       },
       { ...placeholder, name: 'идёт', data: onlyOngoing(ongoingHeight) },
       { ...placeholder, name: 'идёт вниз', data: onlyOngoing(-ongoingHeight) },
+      {
+        type: 'bar',
+        name: 'Новый бот',
+        xAxisIndex: 1,
+        silent: true,
+        data: [],
+        markLine:
+          switchoverIndex === -1
+            ? undefined
+            : {
+                silent: true,
+                symbol: 'none',
+                lineStyle: { color: colors.value.switchover, width: 1.5, type: 'solid' },
+                label: {
+                  formatter: switchoverLabel,
+                  position: 'end',
+                  align: 'left',
+                  distance: [6, -14],
+                  color: colors.value.title,
+                  fontSize: 12,
+                  fontWeight: 600,
+                },
+                data: [{ xAxis: switchoverIndex + BAR_WIDTH / 2 + SWITCHOVER_GAP }],
+              },
+      },
     ],
   };
 });
