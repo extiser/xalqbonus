@@ -14,6 +14,7 @@
     "build:create-owner": "esbuild scripts/create-owner.ts --bundle --platform=node --format=esm --packages=external --alias:#server=./server --outfile=.output/create-owner.mjs",
     "build:import-legacy": "esbuild scripts/import-legacy.ts --bundle --platform=node --format=esm --packages=external --alias:#server=./server --outfile=.output/import-legacy.mjs",
     "build:fleet-history": "esbuild scripts/fleet-history.ts --bundle --platform=node --format=esm --packages=external --alias:#server=./server --outfile=.output/fleet-history.mjs",
+    "build:metrics-recompute": "esbuild scripts/metrics-recompute.ts --bundle --platform=node --format=esm --packages=external --alias:#server=./server --outfile=.output/metrics-recompute.mjs",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare && prisma generate",
     "typecheck": "nuxt typecheck && vue-tsc --noEmit -p tsconfig.tests.json",

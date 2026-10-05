@@ -17,6 +17,7 @@ COMPOSE_COPY = docker compose -f docker/compose.local.yml -f docker/compose.copy
         prod-stop prod-start prod-sql prod-db-restore prod-uploads-restore \
         prod-import-legacy prod-import-legacy-check prod-import-legacy-awarded-trips \
         prod-fleet-history prod-fleet-history-logs prod-fleet-history-stop prod-fleet-history-status \
+        prod-metrics-recompute \
         prod-deploy prod-rollback \
         proxy-up proxy-down proxy-ps proxy-logs proxy-validate proxy-reload
 
@@ -351,8 +352,7 @@ copy-up: ## Поднять app на копии боевой базы, в фон�
 
 # Разовый пересчёт таблицы метрик дашборда (issue #371) мимо очереди — тем же сервисом, что
 # ночная задача воркера. Идёт в базу, на которой стоит app: в режиме копии (`make copy-up`) —
-# в копию, где воркер остановлен и таблицу наполняет только эта цель. Боевой цели нет:
-# на проде таблицу наполнит первая ночь.
+# в копию, где воркер остановлен и таблицу наполняет только эта цель. Боевая — `prod-metrics-recompute`.
 metrics-recompute: ## Пересчитать таблицу метрик дашборда разово, в базу app (на копии — в копию)
 	$(COMPOSE) exec -T app npx tsx scripts/metrics-recompute.ts
 
@@ -545,6 +545,14 @@ prod-fleet-history-stop: ## Остановить прогон истории (pr
 prod-fleet-history-status: ## Сводка прогона истории по журналу суток (prod). make prod-fleet-history-status [from=2025-08-01] [to=2026-09-30]
 	$(COMPOSE_PROD) exec -T postgres sh -c 'PGPASSWORD="$$POSTGRES_PASSWORD" psql -X -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -q -v from="$$1" -v to="$$2"' \
 		sh "$(or $(from),$(FLEET_HISTORY_FROM))" "$(or $(to),$(FLEET_HISTORY_TO))" < scripts/fleet-history-status.sql
+
+# Разовый пересчёт метрик дашборда на боевой машине (issue #387) — бандлом из образа,
+# одноразовым контейнером `app`, тем же сервисом, что ночная задача воркера. Идёт секунды
+# или минуты, поэтому не в фоне: сводка печатается в терминал.
+# Запускается на самой машине, руками, внутри `tmux`: CLI на серверы не ходит (CLAUDE.md →
+# «Важные ограничения»). Когда и зачем — docker/DEPLOY-MANUAL.md → «Разовый пересчёт метрик дашборда».
+prod-metrics-recompute: ## Пересчитать таблицу метрик дашборда разово (prod), не дожидаясь ночи — внутри tmux
+	$(COMPOSE_PROD) run --rm -T app node .output/metrics-recompute.mjs
 
 # Обе прод-цели миграций идут одноразовым контейнером, а не `exec`: так же мигрирует сам выкат
 # (`docker/scripts/deploy-manual.sh`, шаг 4), и работающий `app` для них не нужен. Образ берётся
