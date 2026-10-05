@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { resolveComponent } from 'vue';
-import type { MetricKey } from '#shared/metrics';
+import type { MetricKey, MetricValues } from '#shared/metrics';
 
 /**
  * Плитка веба — `.tile` кодекса `_reference/design/web/codex.html`: фон плитки без контура,
@@ -40,6 +40,8 @@ defineProps<{
   marker?: 'program';
   /** Ключ метрики: после названия встаёт значок подсказки (`AtomsWebTileTitle`). */
   metric?: MetricKey;
+  /** Значения подстановок в тексте подсказки — пороги, которые приносит ручка. */
+  metricValues?: MetricValues;
   /** Куда ведёт плитка: появляется кнопка-вход, и нажимается вся плитка. */
   to?: string;
   /** Плитка растит ряд по содержимому, а не обрезает его: таблица с неизвестным числом строк. */
@@ -77,7 +79,7 @@ const ROWS_CLASSES: Record<TileRows, string> = {
     ]"
   >
     <div class="flex items-center justify-between gap-3">
-      <AtomsWebTileTitle :label="title" :marker="marker" :metric="metric" />
+      <AtomsWebTileTitle :label="title" :marker="marker" :metric="metric" :metric-values="metricValues" />
       <span v-if="to" class="grid size-10 shrink-0 place-items-center rounded-full bg-web-raised" aria-hidden="true">
         <svg
           viewBox="0 0 16 16"

@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
 import { useMetricInfo } from '~/composables/useMetricInfo';
-import { METRICS, type MetricKey } from '#shared/metrics';
+import { fillMetricText, METRICS, type MetricKey, type MetricValues } from '#shared/metrics';
 
 /**
  * Подсказка метрики — значок (i) и пояснение по нажатию (`codex.md`, «Подсказка метрики»;
  * `.tip` в `_reference/design/web/dashboard/02-levers.html`). Один компонент на весь веб.
  *
  * Текст — определение из общего словаря `shared/metrics.ts` по ключу: название, что это
- * простым языком и под чертой — как считается.
+ * простым языком и под чертой — как считается. Подсказка из равных частей (issue #402) — без
+ * «как считается»: части идут абзацами через пустую строку, черты нет. Пороги в тексте — подстановки,
+ * их значения приносит тот, кто ставит значок (`values`).
  *
  * Подсказка висит поверх страницы (`Teleport` в `body`, `position: fixed`): плитка
  * с `overflow: hidden` её не обрезает. Встаёт под значком; не влезает снизу — над ним; у края
@@ -18,6 +20,8 @@ import { METRICS, type MetricKey } from '#shared/metrics';
  */
 const props = defineProps<{
   metric: MetricKey;
+  /** Значения подстановок `{имя}` в тексте определения. */
+  values?: MetricValues;
 }>();
 
 /** Поле от края окна и зазор до значка. */
@@ -26,7 +30,15 @@ const ANCHOR_GAP = 8;
 /** На сколько левее середины значка встаёт левый край подсказки — как в макете. */
 const ANCHOR_INSET = 24;
 
-const definition = computed(() => METRICS[props.metric]);
+const definition = computed(() => {
+  const { title, text, how } = METRICS[props.metric];
+
+  return {
+    title,
+    paragraphs: fillMetricText(text, props.values).split('\n\n'),
+    how: how === undefined ? null : fillMetricText(how, props.values),
+  };
+});
 
 const { open, toggle, close } = useMetricInfo(useId());
 
@@ -108,8 +120,12 @@ onBeforeUnmount(() => {
         @click.stop
       >
         <b class="mb-1 block text-[14px] leading-[1.3] font-semibold text-web-text">{{ definition.title }}</b>
-        {{ definition.text }}
-        <div class="mt-2.5 border-t border-web-line pt-2.5 text-[12px] text-web-grey">{{ definition.how }}</div>
+        <p v-for="(paragraph, index) in definition.paragraphs" :key="index" class="m-0" :class="index > 0 ? 'mt-2.5' : ''">
+          {{ paragraph }}
+        </p>
+        <div v-if="definition.how" class="mt-2.5 border-t border-web-line pt-2.5 text-[12px] text-web-grey">
+          {{ definition.how }}
+        </div>
       </div>
     </Teleport>
   </span>

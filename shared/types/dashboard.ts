@@ -1,5 +1,5 @@
 /**
- * Ответы ручек дашборда метрик (issues #371, #373, #392). Определения метрик — `shared/metrics.ts`.
+ * Ответы ручек дашборда метрик (issues #371, #373, #392, #402). Определения метрик — `shared/metrics.ts`.
  *
  * Даты — строки `YYYY-MM-DD`, месяцы — `YYYY-MM`: сутки и месяц метрик календарные
  * по Ташкенту, и зона показа сдвигать их не должна.
@@ -57,6 +57,94 @@ export type DashboardLevers = {
   conclusion: string | null;
   /** Поток водителей по месяцам и панель месяца (issue #392). */
   flow: DashboardDriverFlow;
+  /** Лидеры по поездкам и список тех, кого парк может потерять (issue #402). */
+  leaders: DashboardLeaders;
+};
+
+/**
+ * Пороги блока лидеров — значения констант сервера (`server/services/metrics/constants.ts`):
+ * экран подставляет их в подписи и подсказки, а не держит свою копию.
+ */
+export type DashboardLeadersThresholds = {
+  /** Лидеры — верхние N % водителей на линии. */
+  leadersPercent: number;
+  /** Окно нормы, недель. */
+  normWeeks: number;
+  /** Неделя ниже нормы — на N % и больше. */
+  belowNormPercent: number;
+  /** В список — с N недель подряд ниже нормы. */
+  streakMinWeeks: number;
+};
+
+/**
+ * Элемент блока лидеров: посчитан или «не считаем» — собраны не все нужные сутки. Тогда данных
+ * нет, а `coverage` — нужные сутки по месяцам и сколько из них собрано.
+ */
+export type DashboardLeadersPart<T> =
+  | ({ counted: true } & T)
+  | { counted: false; coverage: DashboardPeriod[] };
+
+export type DashboardLeaderGroup = 'below' | 'stopped' | 'left';
+
+/** Строка списка: человек. Телефонов здесь нет — они только в выгрузке. */
+export type DashboardLeaderRow = {
+  personId: string;
+  group: DashboardLeaderGroup;
+  callsign: string | null;
+  /** Фамилия, имя, отчество через пробел, как в базе. */
+  name: string | null;
+  /** Привязка Telegram открыта сейчас. */
+  inProgram: boolean;
+  /** Поездок за последнюю полную неделю. */
+  weekTrips: number;
+  /** Норма целым; у ушедших — до остановки; `null` — нормы нет. */
+  norm: number | null;
+  /** Поездки недели к норме − 1, целым процентом; только у «ездят меньше». */
+  deviationPercent: number | null;
+  /** Сколько суток не ездит к опорному дню; у «перестали» и «ушли». */
+  idleDays: number | null;
+  /** Недель подряд ниже нормы; у ушедших — `null`. */
+  weeksBelow: number | null;
+  /** Последние сутки с поездкой не позже опорного дня. */
+  lastTripDay: string;
+};
+
+/**
+ * Блок лидеров на «Рычагах» (issue #402) за выбранный месяц M. Лидеры — месяца M−1, их состояние —
+ * по последней полной неделе на опорный день; «ушли» — лидеры месяца `cohortMonth` без поездок
+ * в следующем за ним (docs/decisions.md → «Лидеры по поездкам и список тех, кого парк может
+ * потерять»).
+ */
+export type DashboardLeaders = {
+  thresholds: DashboardLeadersThresholds;
+  /** Месяц лидеров `YYYY-MM` — M−1. */
+  leadersMonth: string;
+  /** Месяц лидеров когорты «ушли»: M−1 у закрытого M, M−2 у идущего. */
+  cohortMonth: string;
+  /** Выбранный месяц идёт. */
+  ongoing: boolean;
+  /** Опорный день: последний день закрытого M, вчера у идущего. */
+  asOfDay: string;
+  /** Последняя полная неделя пн–вс, кончающаяся не позже опорного дня. */
+  week: { from: string; to: string };
+  /** Месяц лидеров раньше истории заказов (выбран октябрь 2025): лидеров нет, частей ниже нет. */
+  noLeaders: boolean;
+  leaders: DashboardLeadersPart<{
+    leaders: number;
+    driversOnLine: number;
+    leaderTrips: number;
+    allTrips: number;
+  }> | null;
+  slipping: DashboardLeadersPart<{ below: number; stopped: number }> | null;
+  left: DashboardLeadersPart<{
+    left: number;
+    /** Лидеров месяца когорты. */
+    leaders: number;
+    /** Поездки ушедших за месяц когорты. */
+    trips: number;
+  }> | null;
+  /** Строки трёх групп в порядке экрана; `counted: false` — список не строится. */
+  list: DashboardLeadersPart<{ rows: DashboardLeaderRow[] }> | null;
 };
 
 /**

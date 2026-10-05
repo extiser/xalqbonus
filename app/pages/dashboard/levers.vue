@@ -8,7 +8,8 @@ import { toLoadState } from '~/utils/loadState';
  * `_reference/design/web/dashboard/02-levers.html`.
  *
  * Дашборд строится срезами, и это первый: плитка множителей, под ней — поток водителей по месяцам
- * и панель месяца (issue #392). «Глубина» сделана вторым срезом (issue #373), «Деньги» видна
+ * и панель месяца (issue #392), под потоком — три плитки лидеров и список тех, кого парк может
+ * потерять (issue #402). «Глубина» сделана вторым срезом (issue #373), «Деньги» видна
  * и не нажимается. Пункта «Дашборд» в меню нет — появится, когда дашборд будет готов, —
  * страница открывается адресом.
  *
@@ -62,6 +63,8 @@ const changeMonth = (month: string): void => {
       <OrganismsWebDashboardMultipliers :state="state" :levers="levers ?? null" />
       <OrganismsWebDashboardDriverFlow :state="state" :levers="levers ?? null" @select="changeMonth" />
       <OrganismsWebDashboardFlowMonth :state="state" :levers="levers ?? null" />
+      <OrganismsWebDashboardLeaders :state="state" :levers="levers ?? null" />
+      <OrganismsWebDashboardLeadersList :state="state" :levers="levers ?? null" />
     </MoleculesWebBento>
   </div>
 </template>

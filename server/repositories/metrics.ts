@@ -558,3 +558,125 @@ export const listOutsideProgramPeople = async (from: string, to: string): Promis
      ORDER BY outside."trips" DESC, last_trip."ended_at" DESC NULLS LAST, outside."person_id"
   `;
 };
+
+/**
+ * Лидеры по поездкам и список тех, кого парк может потерять (issue #402). Всё — из готовой
+ * таблицы `metric_person_days`; кто лидер, где норма и кто в какой группе, решает сервис
+ * (`server/services/metrics/readLeaders.ts`), здесь только выборки.
+ */
+
+export type PersonTripsRow = { personId: string; trips: number };
+
+/** Люди на линии за сутки `from`–`to` включительно и их поездки. */
+export const listPersonTrips = async (from: string, to: string): Promise<PersonTripsRow[]> =>
+  db.$queryRaw<PersonTripsRow[]>`
+    SELECT person_day."person_id"          AS "personId",
+           sum(person_day."trips")::int     AS "trips"
+      FROM xb.metric_person_days AS person_day
+     WHERE person_day."day" BETWEEN ${from}::date AND ${to}::date
+     GROUP BY person_day."person_id"
+  `;
+
+export type PersonWeekTripsRow = {
+  personId: string;
+  /** Понедельник недели, `YYYY-MM-DD`. */
+  weekStart: string;
+  trips: number;
+  /** Последние сутки недели с поездкой. */
+  lastDay: string;
+};
+
+/**
+ * Поездки этих людей по неделям с понедельника по воскресенье, сутки `from`–`to` включительно.
+ * Неделя без поездок строки не даёт — её дополняет нулём сервис.
+ *
+ * Понедельник — вычитанием дня недели, как у `sumPointFlowsByWeek`: `date_trunc('week', …)`
+ * у даты зависел бы от зоны сеанса.
+ */
+export const listPersonWeekTrips = async (
+  personIds: readonly string[],
+  from: string,
+  to: string,
+): Promise<PersonWeekTripsRow[]> =>
+  db.$queryRaw<PersonWeekTripsRow[]>`
+    SELECT person_day."person_id" AS "personId",
+           to_char(person_day."day" - (extract(isodow FROM person_day."day")::int - 1), 'YYYY-MM-DD') AS "weekStart",
+           sum(person_day."trips")::int                   AS "trips",
+           to_char(max(person_day."day"), 'YYYY-MM-DD')   AS "lastDay"
+      FROM xb.metric_person_days AS person_day
+     WHERE person_day."person_id" = ANY(${[...personIds]}::uuid[])
+       AND person_day."day" BETWEEN ${from}::date AND ${to}::date
+     GROUP BY 1, 2
+  `;
+
+export type LeaderPersonRow = {
+  personId: string;
+  callsign: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  middleName: string | null;
+  /** Незакрытые номера всех профилей человека через запятую; пустой E.164 — сырой номер. */
+  phones: string | null;
+  /** Есть привязка Telegram, открытая сейчас. */
+  inProgram: boolean;
+};
+
+/**
+ * Карточки людей списка лидеров: позывной и ФИО — из профиля с последней поездкой не позже
+ * суток `lastDay` человека, как у `listOutsideProgramPeople`; телефоны — так же. Программа —
+ * привязка Telegram, открытая сейчас, а не на выбранный месяц (docs/decisions.md → «Лидеры
+ * по поездкам и список тех, кого парк может потерять»).
+ */
+export const listLeaderPeople = async (
+  people: readonly { personId: string; lastDay: string }[],
+): Promise<LeaderPersonRow[]> => {
+  if (people.length === 0) {
+    return [];
+  }
+
+  const days = people.map((person) => person.lastDay).sort();
+  const windowStart = parkDayStartSql(Prisma.sql`${days[0]}`);
+  const windowEnd = parkDayStartSql(Prisma.sql`${days.at(-1)}::date + 1`);
+
+  return db.$queryRaw<LeaderPersonRow[]>`
+    WITH people AS (
+           SELECT entry."person_id", entry."last_day"
+             FROM unnest(
+                    ${people.map((person) => person.personId)}::uuid[],
+                    ${people.map((person) => person.lastDay)}::date[]
+                  ) AS entry("person_id", "last_day")
+         ),
+         last_trip AS (
+           SELECT DISTINCT ON (profile."person_id")
+                  profile."person_id", profile."profile_id"
+             FROM ${completedTripsSql(windowStart, windowEnd)} AS completed
+             JOIN xb.park_profiles AS profile ON profile."profile_id" = completed."profile_id"
+             JOIN people ON people."person_id" = profile."person_id"
+            WHERE completed."ended_at" < ${parkDayStartSql(Prisma.sql`people."last_day" + 1`)}
+            ORDER BY profile."person_id", completed."ended_at" DESC, profile."profile_id"
+         )
+    SELECT people."person_id"    AS "personId",
+           profile."callsign",
+           profile."first_name"  AS "firstName",
+           profile."last_name"   AS "lastName",
+           profile."middle_name" AS "middleName",
+           (
+             -- Порядок побайтный: от сортировки базы он зависеть не должен.
+             SELECT string_agg(
+                      DISTINCT coalesce(nullif(phone."phone_e164", ''), phone."phone_raw") COLLATE "C", ', '
+                      ORDER BY coalesce(nullif(phone."phone_e164", ''), phone."phone_raw") COLLATE "C"
+                    )
+               FROM xb.profile_phones AS phone
+               JOIN xb.park_profiles AS owned ON owned."profile_id" = phone."profile_id"
+              WHERE owned."person_id" = people."person_id"
+                AND phone."closed_at" IS NULL
+           ) AS "phones",
+           EXISTS (
+             SELECT 1 FROM xb.telegram_links AS link
+              WHERE link."person_id" = people."person_id" AND link."closed_at" IS NULL
+           ) AS "inProgram"
+      FROM people
+      LEFT JOIN last_trip ON last_trip."person_id" = people."person_id"
+      LEFT JOIN xb.park_profiles AS profile ON profile."profile_id" = last_trip."profile_id"
+  `;
+};

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { MetricKey } from '#shared/metrics';
+import type { MetricKey, MetricValues } from '#shared/metrics';
 
 /**
  * Название плитки веба — роль «Название плитки» кодекса: Manrope 18 / 500, высота строки 1,25,
@@ -17,11 +17,13 @@ defineProps<{
   /** Золотая точка программы перед названием — «Цена программы». */
   marker?: 'program';
   metric?: MetricKey;
+  /** Значения подстановок в тексте подсказки. */
+  metricValues?: MetricValues;
 }>();
 </script>
 
 <template>
   <span class="min-w-0 font-manrope text-[18px] leading-[1.25] font-medium text-web-title">
-    <AtomsWebProgramDot v-if="marker === 'program'" /><MoleculesWebMetricLabel :label="label" :metric="metric" />
+    <AtomsWebProgramDot v-if="marker === 'program'" /><MoleculesWebMetricLabel :label="label" :metric="metric" :metric-values="metricValues" />
   </span>
 </template>

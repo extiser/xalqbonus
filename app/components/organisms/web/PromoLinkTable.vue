@@ -11,8 +11,9 @@ import type { PromoLinkRow } from '#shared/types/promo';
  * по числу меток (`grow`): двенадцатая метка не обрезается, а растит ряд.
  *
  * Текст — по левому краю, числа — по правому; в шапке числовой колонки значок подсказки стоит
- * перед подписью — правый край подписи совпадает с правым краем чисел (`codex.md`, «Подсказка
- * метрики»). Строка открывает карточку метки; название — ссылка туда же, для клавиатуры.
+ * после подписи и вынесен за её правый край — правый край подписи совпадает с правым краем чисел
+ * (`codex.md`, «Подсказка метрики», `MoleculesWebColumnLabel`). У последней колонки значок выходит
+ * за таблицу — прокрутке оставлено место справа, иначе он сам давал бы прокрутку вбок. Строка открывает карточку метки; название — ссылка туда же, для клавиатуры.
  *
  * Данные — свойством: сама плитка в сеть не ходит.
  */
@@ -49,7 +50,7 @@ const CELL_CLASSES = 'border-t border-web-line py-[11px] pr-3 whitespace-nowrap 
       <AtomsWebHint text="Меток пока нет — заведите первую кнопкой «Новая метка»" />
     </div>
     <template v-else>
-      <div class="-mx-1 mt-3.5 overflow-x-auto px-1">
+      <div class="mt-3.5 -mr-5 -ml-1 overflow-x-auto pr-5 pl-1">
         <table class="w-full border-collapse font-manrope text-[14px]">
           <thead>
             <tr>
@@ -57,7 +58,7 @@ const CELL_CLASSES = 'border-t border-web-line py-[11px] pr-3 whitespace-nowrap 
               <th :class="HEAD_CLASSES" class="text-left">Носитель</th>
               <th :class="HEAD_CLASSES" class="text-left">Место</th>
               <th v-for="column in NUMBER_COLUMNS" :key="column.metric" :class="HEAD_CLASSES" class="text-right">
-                <span class="whitespace-nowrap"><MoleculesWebMetricInfo :metric="column.metric" />{{ column.label }}</span>
+                <MoleculesWebColumnLabel :label="column.label" :metric="column.metric" />
               </th>
             </tr>
           </thead>
