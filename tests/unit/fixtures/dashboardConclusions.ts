@@ -1,4 +1,5 @@
 import type {
+  DriverFlowConclusionInput,
   MultipliersConclusionInput,
   ProgramEconomyConclusionInput,
 } from '#server/services/metrics/conclusions';
@@ -15,6 +16,8 @@ import type {
  *
  * Кроме строк таблиц — решения Руслана, принятые в pre-flight #383, 05-10-2026: склонение
  * при числе, один довесок «против», 0 заказов в цене балла, выдано ≤ 0, поездок в базе ноль.
+ * У потока водителей (issue #398) — границы из issue: ровно 2 %, `L = N + R`, `N = L`, `D₀ = 0`,
+ * склонение при 1 и 21.
  */
 
 export type ConclusionCase<Input> = {
@@ -322,5 +325,137 @@ export const PROGRAM_ECONOMY_CASES: readonly ConclusionCase<ProgramEconomyConclu
     rule: 'вывода нет: выдано < 0, потрачено не ноль, заказов достаточно',
     input: { ...MONTH, issued: -50, spent: 300, redemptionPercent: null, debtPointsChange: 0, pointCostOrders: 40 },
     expected: null,
+  },
+];
+
+/** Закрытый полный месяц с апреля 2026, 1 000 водителей на линии в прошлом: 1 водитель — 0,1 %. */
+const FLOW: DriverFlowConclusionInput = {
+  newDrivers: 50,
+  returned: 20,
+  left: 30,
+  previousOnLine: 1_000,
+  earlyHistory: false,
+  incomplete: false,
+};
+
+export const DRIVER_FLOW_CASES: readonly ConclusionCase<DriverFlowConclusionInput>[] = [
+  // Примеры документа и макетов — отдельными случаями, текст до символа.
+  {
+    rule: 'пример на цифрах эталона: 38 / 27 / 47',
+    input: { ...FLOW, newDrivers: 38, returned: 27, left: 47, previousOnLine: 413 },
+    expected:
+      'На линии на 18 водителей больше: пришло 65, ушло 47. Новых меньше, чем ушедших: убыль закрыли вернувшиеся — 27.',
+  },
+  {
+    rule: 'пример декабря 2025: 70 / 25 / 106 при D₀ = 806, ранняя история',
+    input: { newDrivers: 70, returned: 25, left: 106, previousOnLine: 806, earlyHistory: true, incomplete: false },
+    expected: 'Водителей на линии почти столько же: пришло 95, ушло 106.',
+  },
+
+  // Первая таблица — итог.
+  {
+    rule: '|Δ| < 2 % от D₀',
+    input: { ...FLOW, newDrivers: 30, returned: 10, left: 50 },
+    expected: 'Водителей на линии почти столько же: пришло 40, ушло 50.',
+  },
+  {
+    rule: 'Δ > 0',
+    input: FLOW,
+    expected: 'На линии на 40 водителей больше: пришло 70, ушло 30. Одни новые перекрывают ушедших: 50 против 30.',
+  },
+  {
+    rule: 'Δ < 0',
+    input: { ...FLOW, newDrivers: 10, returned: 10, left: 60 },
+    expected: 'На линии на 40 водителей меньше: ушло 60, пришло 20.',
+  },
+
+  // Вторая таблица — за счёт кого.
+  {
+    rule: 'N ≥ L',
+    input: { ...FLOW, newDrivers: 45, returned: 5, left: 10 },
+    expected: 'На линии на 40 водителей больше: пришло 50, ушло 10. Одни новые перекрывают ушедших: 45 против 10.',
+  },
+  {
+    rule: 'N < L ≤ N + R',
+    input: { ...FLOW, newDrivers: 20, returned: 40, left: 30 },
+    expected:
+      'На линии на 30 водителей больше: пришло 60, ушло 30. Новых меньше, чем ушедших: убыль закрыли вернувшиеся — 40.',
+  },
+  {
+    rule: 'N + R < L — второго предложения нет',
+    input: { ...FLOW, newDrivers: 20, returned: 10, left: 70 },
+    expected: 'На линии на 40 водителей меньше: ушло 70, пришло 30.',
+  },
+  {
+    rule: 'ранняя история — второго предложения нет',
+    input: { ...FLOW, earlyHistory: true },
+    expected: 'На линии на 40 водителей больше: пришло 70, ушло 30.',
+  },
+  {
+    rule: '«почти столько же» со вторым предложением',
+    input: { ...FLOW, newDrivers: 20, returned: 25, left: 40 },
+    expected:
+      'Водителей на линии почти столько же: пришло 45, ушло 40. Новых меньше, чем ушедших: убыль закрыли вернувшиеся — 25.',
+  },
+
+  // Вывода нет. Панели нет (октябрь 2025) — функция не зовётся: `tests/integration/metrics/driverFlow.test.ts`.
+  {
+    rule: 'вывода нет: у месяца или у прошлого собраны не все сутки',
+    input: { ...FLOW, incomplete: true },
+    expected: null,
+  },
+
+  // Границы.
+  {
+    rule: 'граница: |Δ| ровно 2 % от D₀ — уже «больше»',
+    input: { ...FLOW, newDrivers: 50, returned: 10, left: 40 },
+    expected: 'На линии на 20 водителей больше: пришло 60, ушло 40. Одни новые перекрывают ушедших: 50 против 40.',
+  },
+  {
+    rule: 'граница: |Δ| ровно 2 % от D₀ — уже «меньше»',
+    input: { ...FLOW, newDrivers: 10, returned: 20, left: 50 },
+    expected: 'На линии на 20 водителей меньше: ушло 50, пришло 30.',
+  },
+  {
+    rule: 'граница: L = N + R — убыль закрыли вернувшиеся',
+    input: { ...FLOW, newDrivers: 20, returned: 30, left: 50 },
+    expected:
+      'Водителей на линии почти столько же: пришло 50, ушло 50. Новых меньше, чем ушедших: убыль закрыли вернувшиеся — 30.',
+  },
+  {
+    rule: 'граница: N = L — одни новые перекрывают',
+    input: { ...FLOW, newDrivers: 40, returned: 10, left: 40, previousOnLine: 200 },
+    expected: 'На линии на 10 водителей больше: пришло 50, ушло 40. Одни новые перекрывают ушедших: 40 против 40.',
+  },
+  {
+    rule: 'граница: D₀ = 0 — порог не применяется, фраза по знаку Δ',
+    input: { ...FLOW, newDrivers: 3, returned: 0, left: 0, previousOnLine: 0 },
+    expected: 'На линии на 3 водителей больше: пришло 3, ушло 0. Одни новые перекрывают ушедших: 3 против 0.',
+  },
+  {
+    rule: 'граница: D₀ = 0 и Δ = 0 — знака нет, «почти столько же»',
+    input: { ...FLOW, newDrivers: 0, returned: 0, left: 0, previousOnLine: 0 },
+    expected: 'Водителей на линии почти столько же: пришло 0, ушло 0. Одни новые перекрывают ушедших: 0 против 0.',
+  },
+  {
+    rule: 'склонение: «на 1 водителя»',
+    input: { ...FLOW, newDrivers: 2, returned: 1, left: 2, previousOnLine: 10 },
+    expected: 'На линии на 1 водителя больше: пришло 3, ушло 2. Одни новые перекрывают ушедших: 2 против 2.',
+  },
+  {
+    rule: 'склонение: «на 21 водителя»',
+    input: { ...FLOW, newDrivers: 30, returned: 11, left: 20, previousOnLine: 500 },
+    expected: 'На линии на 21 водителя больше: пришло 41, ушло 20. Одни новые перекрывают ушедших: 30 против 20.',
+  },
+  {
+    rule: 'склонение: «на 11 водителей»',
+    input: { ...FLOW, newDrivers: 5, returned: 5, left: 21, previousOnLine: 100 },
+    expected: 'На линии на 11 водителей меньше: ушло 21, пришло 10.',
+  },
+  {
+    rule: 'разряды — неразрывным пробелом',
+    input: { ...FLOW, newDrivers: 900, returned: 400, left: 1_050, previousOnLine: 10_000 },
+    expected:
+      'На линии на 250 водителей больше: пришло 1\u00a0300, ушло 1\u00a0050. Новых меньше, чем ушедших: убыль закрыли вернувшиеся — 400.',
   },
 ];

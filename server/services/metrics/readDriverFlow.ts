@@ -1,4 +1,5 @@
 import { readDriverFlowByMonth } from '#server/repositories/metrics';
+import { driverFlowConclusion } from '#server/services/metrics/conclusions';
 import { FLOW_NEW_EXACT_FROM, METRICS_FIRST_DAY } from '#server/services/metrics/constants';
 import { wholeMonthPeriod } from '#server/services/metrics/monthPeriod';
 import { withCoverage } from '#server/services/metrics/periodCoverage';
@@ -15,6 +16,8 @@ import type { DashboardDriverFlow, DashboardFlowMonth, DashboardPeriod } from '#
  * месяца метрик потока нет: прошлого месяца нет; вместо потока — его водители на линии.
  *
  * Месяц неполный, если не все сутки собраны у него или у прошлого: «ушли» смотрят оба.
+ *
+ * Вывод словами (issue #398) — о месяце панели: в идущем — о последнем закрытом.
  */
 
 /** Сколько месяцев на графике. */
@@ -54,7 +57,7 @@ export const readDriverFlow = async (month: string, now: Date = new Date()): Pro
   if (panelMonth < FIRST_FLOW_MONTH) {
     const [first] = month === FIRST_MONTH ? await readDriverFlowByMonth(FIRST_MONTH, FIRST_MONTH) : [];
 
-    return { months: [], panel: null, selectedOngoing, firstMonthOnLine: first?.onLine ?? null };
+    return { months: [], panel: null, selectedOngoing, firstMonthOnLine: first?.onLine ?? null, conclusion: null };
   }
 
   const chartStart = shiftMonth(panelMonth, 1 - CHART_MONTHS);
@@ -84,5 +87,18 @@ export const readDriverFlow = async (month: string, now: Date = new Date()): Pro
     };
   });
 
-  return { months, panel: months.at(-1) ?? null, selectedOngoing, firstMonthOnLine: null };
+  const panel = months.at(-1) ?? null;
+  const conclusion =
+    panel === null
+      ? null
+      : driverFlowConclusion({
+          newDrivers: panel.newDrivers,
+          returned: panel.returned,
+          left: panel.left,
+          previousOnLine: panel.onLine - panel.onLineChange,
+          earlyHistory: panel.earlyHistory,
+          incomplete: panel.incomplete,
+        });
+
+  return { months, panel, selectedOngoing, firstMonthOnLine: null, conclusion };
 };

@@ -16,8 +16,9 @@ import type { DashboardLevers } from '#shared/types/dashboard';
  * считает часть вернувшихся новыми; у первого месяца истории потока нет вовсе — тогда у трёх
  * строк прочерк, а «На линии» — его водители без знака (`02-levers-first-month.html`).
  *
- * Собраны не все сутки у месяца или у прошлого — под строками строка покрытия, как у множителей.
- * Вывода словами нет: правил для него ещё нет (T113).
+ * Под строками — вывод словами о месяце панели, его собирает сервер (issue #398,
+ * `server/services/metrics/conclusions.ts`). Собраны не все сутки у месяца или у прошлого —
+ * вывода нет, вместо него строка покрытия, как у множителей.
  */
 const props = defineProps<{
   state: LoadState;
@@ -170,8 +171,9 @@ const coverageText = computed(() => {
           :unsigned="total.muted ? 'muted' : 'bright'"
         />
       </div>
-      <div v-if="coverageText" class="mt-auto pt-2.5">
-        <AtomsWebHint :text="coverageText" />
+      <div v-if="ready.flow.conclusion || coverageText" class="mt-auto flex flex-col gap-0.5 pt-2.5">
+        <AtomsWebHint v-if="ready.flow.conclusion" :text="ready.flow.conclusion" />
+        <AtomsWebHint v-if="coverageText" :text="coverageText" />
       </div>
     </template>
   </MoleculesWebTile>
