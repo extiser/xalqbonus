@@ -42,6 +42,9 @@ RUN npm run build:import-legacy
 # Прогон истории заказов парка (issue #317) — тем же бандлом и по той же причине: на машине
 # нет ни исходников, ни tsx. Запуск — docker/DEPLOY-MANUAL.md → «Прогон истории заказов парка».
 RUN npm run build:fleet-history
+# Прогон истории транзакций парка (issue #358) — тем же бандлом и по той же причине: на машине
+# нет ни исходников, ни tsx. Запуск — docker/DEPLOY-MANUAL.md → «Транзакции парка».
+RUN npm run build:fleet-transactions
 # Разовый пересчёт метрик дашборда (issue #387) — тем же бандлом и по той же причине: на машине
 # нет ни исходников, ни tsx. Запуск — docker/DEPLOY-MANUAL.md → «Разовый пересчёт метрик дашборда».
 RUN npm run build:metrics-recompute
@@ -172,6 +175,17 @@ RUN out="$(DATABASE_URL='postgresql://smoke:smoke@127.0.0.1:1/smoke?schema=xb' \
       echo 'бандл истории заказов поднялся: граф модулей разрешился'; \
     else \
       echo 'бандл истории заказов не поднялся:'; \
+      echo "$out" | head -c 2000; \
+      exit 1; \
+    fi
+# Проверка бандла истории транзакций — тем же способом, что истории заказов: без аргументов
+# скрипт печатает подсказку по вызову и выходит с единицей, не доходя ни до базы, ни до Fleet API.
+RUN out="$(DATABASE_URL='postgresql://smoke:smoke@127.0.0.1:1/smoke?schema=xb' \
+           node .output/fleet-transactions.mjs 2>&1 || true)"; \
+    if echo "$out" | grep -q 'fleet-transactions: укажите'; then \
+      echo 'бандл истории транзакций поднялся: граф модулей разрешился'; \
+    else \
+      echo 'бандл истории транзакций не поднялся:'; \
       echo "$out" | head -c 2000; \
       exit 1; \
     fi

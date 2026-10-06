@@ -21,6 +21,7 @@ const KIND_LABELS: Record<SyncWatermark['kind'], string> = {
   orders: 'Заказы',
   orders_catchup: 'Заказы, догоняющий',
   registry: 'Реестр',
+  transactions: 'Транзакции',
 };
 
 const STATE_TONES: Record<SyncWatermark['state'], 'ok' | 'warn' | 'alarm' | 'muted'> = {

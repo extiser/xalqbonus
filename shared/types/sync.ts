@@ -12,8 +12,11 @@
 // с первым молча. Импорт только типов — в сборку не попадает ни байта.
 import type { SyncKind, SyncSkipReason, SyncStatus } from '../../server/generated/prisma/enums';
 
-/** Виды прогона, у которых бывает расписание. Полный обход реестра сюда не входит. */
-export type ScheduledKind = 'orders' | 'orders_catchup' | 'registry';
+/**
+ * Виды прогона, у которых бывает расписание и отметка. Полный обход реестра сюда не входит,
+ * ночное перечитывание транзакций — тоже: отметки у него нет.
+ */
+export type ScheduledKind = 'orders' | 'orders_catchup' | 'registry' | 'transactions';
 
 /**
  * Состояние вида прогона. Три, а не два (issue #29, правило 2).

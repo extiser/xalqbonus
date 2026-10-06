@@ -1,5 +1,5 @@
 /**
- * Параметры синхронизации — заказов и профилей парка.
+ * Параметры синхронизации — заказов, профилей и транзакций парка.
  *
  * Все значения читаются из окружения и имеют умолчание: прогон обязан быть запускаемым
  * на чистом `.env.example`, а не только у того, кто помнит список переменных.
@@ -195,6 +195,74 @@ export const readSyncConfig = (): SyncConfig => {
   return config;
 };
 
+/**
+ * Виды прогона, собирающие транзакции парка (issue #358).
+ *
+ * `transactions` — живой сбор окном по `event_at` от своей отметки, по образцу `orders`.
+ * `transactions_recheck` — ночное перечитывание последних суток целиком, раз в сутки
+ * по `pattern`, без отметки.
+ */
+export type TransactionsSyncKind = 'transactions' | 'transactions_recheck';
+
+/**
+ * Параметры сбора транзакций. Отдельно от `SyncConfig`: у транзакций свои выключатели,
+ * интервал и окно, а общие с заказами — только порог брошенного прогона и пол порога отметки.
+ */
+export type TransactionsSyncConfig = {
+  /** Выключатель живого сбора. Разовый прогон командой работает и при `false`. */
+  enabled: boolean;
+  intervalSec: number;
+  /** Перекрытие окна назад от отметки. Безопасно: повтор отсекается ключом `id`. */
+  overlapMinutes: number;
+  /** Отставание верхней границы окна от текущего момента. Меньше перекрытия — иначе дыра. */
+  lagSeconds: number;
+  /** Потолок ширины окна за один прогон: остаток догоняют следующие прогоны. */
+  maxWindowMinutes: number;
+  /** Выключатель ночного перечитывания. */
+  recheckEnabled: boolean;
+  /** Сколько последних закрытых суток UTC перечитывается, включая вчерашние. */
+  recheckDays: number;
+};
+
+export const readTransactionsSyncConfig = (): TransactionsSyncConfig => {
+  const config: TransactionsSyncConfig = {
+    enabled: readFlag('SYNC_TRANSACTIONS_ENABLED', false),
+    intervalSec: readInteger('SYNC_TRANSACTIONS_INTERVAL_SEC', 300),
+    overlapMinutes: readInteger('SYNC_TRANSACTIONS_OVERLAP_MIN', 10),
+    lagSeconds: readInteger('SYNC_TRANSACTIONS_LAG_SEC', 60),
+    maxWindowMinutes: readInteger('SYNC_TRANSACTIONS_MAX_WINDOW_MIN', 360),
+    recheckEnabled: readFlag('SYNC_TRANSACTIONS_RECHECK_ENABLED', false),
+    recheckDays: readInteger('SYNC_TRANSACTIONS_RECHECK_DAYS', 3),
+  };
+
+  // Та же дыра, что у заказов: транзакция, доехавшая до API позже, чем через `lag` после
+  // события, не попадёт ни в это окно, ни в следующее.
+  if (config.lagSeconds >= config.overlapMinutes * 60) {
+    throw new Error(
+      `SYNC_TRANSACTIONS_LAG_SEC (${config.lagSeconds} c) должен быть меньше SYNC_TRANSACTIONS_OVERLAP_MIN (${config.overlapMinutes} мин): иначе окна не перекрываются и между ними остаётся дыра`,
+    );
+  }
+
+  if (config.maxWindowMinutes <= config.overlapMinutes) {
+    throw new Error(
+      `SYNC_TRANSACTIONS_MAX_WINDOW_MIN (${config.maxWindowMinutes}) должен быть больше SYNC_TRANSACTIONS_OVERLAP_MIN (${config.overlapMinutes}): иначе окно не сдвигается вперёд и прогон топчется на месте`,
+    );
+  }
+
+  return config;
+};
+
+const DAY_MS = 86_400_000;
+
+/**
+ * Сколько миллисекунд между запусками у вида прогона транзакций. Перечитывание ходит раз
+ * в сутки по `pattern`, и для проверки просрочки его интервал — сутки.
+ */
+export const transactionsIntervalMs = (
+  kind: TransactionsSyncKind,
+  config: TransactionsSyncConfig,
+): number => (kind === 'transactions_recheck' ? DAY_MS : config.intervalSec * 1_000);
+
 /** Сколько миллисекунд между запусками у этого вида прогона. */
 export const syncIntervalMs = (kind: ScheduledSyncKind, config: SyncConfig): number => {
   if (kind === 'orders_catchup') {
@@ -228,4 +296,8 @@ const STALE_WATERMARK_INTERVALS = 3;
  * выглядит работающей.
  */
 export const staleWatermarkThresholdMs = (kind: ScheduledSyncKind, config: SyncConfig): number =>
-  Math.max(syncIntervalMs(kind, config) * STALE_WATERMARK_INTERVALS, config.staleFloorMinutes * 60_000);
+  staleThresholdFromIntervalMs(syncIntervalMs(kind, config), config);
+
+/** Порог отставания по интервалу прогона: общий для всех видов с отметкой. */
+export const staleThresholdFromIntervalMs = (intervalMs: number, config: SyncConfig): number =>
+  Math.max(intervalMs * STALE_WATERMARK_INTERVALS, config.staleFloorMinutes * 60_000);

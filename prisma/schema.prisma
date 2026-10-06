@@ -198,6 +198,11 @@ enum SyncKind {
   registry_profile
   orders
   orders_catchup
+  /// Живой сбор транзакций парка: окно по `event_at` от своей отметки (issue #358).
+  transactions
+  /// Ночное перечитывание последних суток транзакций целиком. Отметки не имеет: сутки
+  /// проходятся заново с первой страницы, а журнал суток истории не трогается.
+  transactions_recheck
 
   @@map("sync_kind")
   @@schema("xb")
@@ -2549,6 +2554,79 @@ model FleetOrderHistoryDay {
   nextCursor  String?   @map("next_cursor")
 
   @@map("fleet_order_history_days")
+  @@schema("xb")
+}
+
+/// Справочник категорий транзакций парка из Fleet (issue #358).
+///
+/// Обновляется целиком в начале каждого прогона истории транзакций и каждого ночного
+/// перечитывания. Словарь чужой, поэтому таблица, а не перечисление (docs/decisions.md →
+/// «Перечисления заводим только на свои словари»).
+model FleetTransactionCategory {
+  id                       String   @id
+  name                     String
+  groupId                  String   @map("group_id")
+  groupName                String   @map("group_name")
+  isEnabled                Boolean  @map("is_enabled")
+  isAffectingDriverBalance Boolean  @map("is_affecting_driver_balance")
+  updatedAt                DateTime @map("updated_at") @db.Timestamptz(6)
+
+  @@map("fleet_transaction_categories")
+  @@schema("xb")
+}
+
+/// Транзакция парка из Fleet — все категории, без фильтра (issue #358): деньги парка
+/// и деньги платформы. Повтор той же транзакции обновляет строку по `id`, а не дублирует её.
+///
+/// Внешнего ключа на справочник категорий нет: категория может прийти раньше, чем справочник
+/// её узнает. На `park_profiles` и заказы — тоже нет: транзакции лежат и за профили, и за заказы,
+/// которых у нас нет.
+model FleetTransaction {
+  id                  String   @id
+  eventAt             DateTime @map("event_at") @db.Timestamptz(6)
+  categoryId          String   @map("category_id")
+  /// Со знаком, как в Fleet: комиссия парка отрицательная.
+  amount              Decimal  @db.Decimal(18, 4)
+  /// Пусто, если Fleet его не прислал: транзакция с деньгами пишется и без служебного поля.
+  currencyCode        String?  @map("currency_code")
+  driverProfileId     String?  @map("driver_profile_id")
+  orderId             String?  @map("order_id")
+  /// Поле `external_event_id` ответа. В документации Fleet описано `event_id`, но в живых
+  /// ответах его нет ни разу — приходит `external_event_id` (проба 04-10-2026).
+  externalEventId     String?  @map("external_event_id")
+  description         String?
+  /// `identity` из `created_by`: `platform`, `dispatcher`, `tech-support`, `fleet-api`.
+  /// Пусто, если Fleet его не прислал.
+  createdBy           String?  @map("created_by")
+  /// `dispatcher_name`, когда транзакцию создал диспетчер.
+  createdByDispatcher String?  @map("created_by_dispatcher")
+  fetchedAt           DateTime @default(now()) @map("fetched_at") @db.Timestamptz(6)
+
+  @@index([orderId])
+  @@index([eventAt])
+  @@index([driverProfileId, eventAt])
+  @@index([categoryId, eventAt])
+  @@map("fleet_transactions")
+  @@schema("xb")
+}
+
+/// Журнал сборщика истории транзакций: строка на обойдённые сутки сбора — как
+/// `fleet_order_history_days`. Живой сбор и ночное перечитывание его не трогают.
+model FleetTransactionDay {
+  /// Сутки сбора по UTC `D`: `event_at` с `D 00:00:00Z` по `D+1 00:00:00Z` — порция загрузки,
+  /// а не сутки метрик.
+  parkDay      DateTime  @id @map("park_day") @db.Date
+  transactions Int
+  malformed    Int
+  pages        Int
+  rateLimited  Int       @map("rate_limited")
+  startedAt    DateTime  @map("started_at") @db.Timestamptz(6)
+  finishedAt   DateTime? @map("finished_at") @db.Timestamptz(6)
+  /// Курсор Fleet API на страницу, следующую за последней записанной: с него оборванные
+  /// сутки продолжаются. Пуст у закрытых суток и у суток, не прошедших ни одной страницы.
+  nextCursor   String?   @map("next_cursor")
+
+  @@map("fleet_transaction_days")
   @@schema("xb")
 }
 

@@ -2,12 +2,15 @@ import { readAllSyncStates, type SyncStateRow } from '#server/repositories/syncS
 import { isCatchupPassComplete } from '#server/services/sync/buildOrdersWindow';
 import {
   readSyncConfig,
+  readTransactionsSyncConfig,
+  staleThresholdFromIntervalMs,
   staleWatermarkThresholdMs,
   syncIntervalMs,
-  type ScheduledSyncKind,
+  transactionsIntervalMs,
   type SyncConfig,
+  type TransactionsSyncConfig,
 } from '#server/services/sync/config';
-import type { SyncStateResponse, SyncWatermark, WatermarkState } from '#shared/types/sync';
+import type { ScheduledKind, SyncStateResponse, SyncWatermark, WatermarkState } from '#shared/types/sync';
 
 /**
  * Отметки синхронизации с состоянием по каждому виду прогона.
@@ -24,13 +27,20 @@ import type { SyncStateResponse, SyncWatermark, WatermarkState } from '#shared/t
  * У догона отметка — позиция прохода, и стоит она на неделю в прошлом штатно. Тревога
  * у него — проход, который начат и не двигается; пройденный проход, ждущий следующего,
  * спокоен, как бы давно ни стояла позиция.
+ *
+ * Ночное перечитывание транзакций (`transactions_recheck`) отметки не имеет — окно у него
+ * задаётся часами, — и карточки у него нет: его прогоны видны в журнале.
  */
 
-/** Виды прогона, у которых бывает расписание, в порядке показа. */
-const SCHEDULED_KINDS: ScheduledSyncKind[] = ['orders', 'orders_catchup', 'registry'];
+/** Виды прогона с расписанием и отметкой, в порядке показа. */
+const SCHEDULED_KINDS: ScheduledKind[] = ['orders', 'orders_catchup', 'registry', 'transactions'];
 
 /** Стоит ли расписание этого вида прогона на очереди. */
-const isScheduled = (kind: ScheduledSyncKind, config: SyncConfig): boolean => {
+const isScheduled = (
+  kind: ScheduledKind,
+  config: SyncConfig,
+  transactionsConfig: TransactionsSyncConfig,
+): boolean => {
   if (kind === 'orders_catchup') {
     return config.catchupEnabled;
   }
@@ -39,8 +49,25 @@ const isScheduled = (kind: ScheduledSyncKind, config: SyncConfig): boolean => {
     return config.registryEnabled;
   }
 
+  if (kind === 'transactions') {
+    return transactionsConfig.enabled;
+  }
+
   return config.liveEnabled;
 };
+
+/** Интервал вида прогона: у транзакций свои настройки. */
+const intervalMs = (kind: ScheduledKind, config: SyncConfig, transactionsConfig: TransactionsSyncConfig): number =>
+  kind === 'transactions' ? transactionsIntervalMs(kind, transactionsConfig) : syncIntervalMs(kind, config);
+
+const staleThresholdMs = (
+  kind: ScheduledKind,
+  config: SyncConfig,
+  transactionsConfig: TransactionsSyncConfig,
+): number =>
+  kind === 'transactions'
+    ? staleThresholdFromIntervalMs(intervalMs(kind, config, transactionsConfig), config)
+    : staleWatermarkThresholdMs(kind, config);
 
 const decideState = (
   scheduled: boolean,
@@ -87,6 +114,7 @@ const decideCatchupState = (
 
 export const readSyncWatermarks = async (): Promise<SyncStateResponse> => {
   const config = readSyncConfig();
+  const transactionsConfig = readTransactionsSyncConfig();
   const states = await readAllSyncStates();
   const now = new Date();
 
@@ -96,8 +124,8 @@ export const readSyncWatermarks = async (): Promise<SyncStateResponse> => {
     // Отставание считается и у выключенного вида прогона: видеть его полезно — по нему
     // понятно, сколько догонять после включения. Тревогой оно при этом не становится.
     const lagMs = watermark ? now.getTime() - watermark.getTime() : null;
-    const scheduled = isScheduled(kind, config);
-    const staleThresholdMs = staleWatermarkThresholdMs(kind, config);
+    const scheduled = isScheduled(kind, config, transactionsConfig);
+    const kindStaleThresholdMs = staleThresholdMs(kind, config, transactionsConfig);
     const isCatchup = kind === 'orders_catchup';
 
     return {
@@ -106,11 +134,11 @@ export const readSyncWatermarks = async (): Promise<SyncStateResponse> => {
       lagMs,
       updatedAt: state?.updatedAt.toISOString() ?? null,
       state: isCatchup
-        ? decideCatchupState(scheduled, state, now, staleThresholdMs)
-        : decideState(scheduled, lagMs, staleThresholdMs),
+        ? decideCatchupState(scheduled, state, now, kindStaleThresholdMs)
+        : decideState(scheduled, lagMs, kindStaleThresholdMs),
       scheduled,
-      intervalSec: Math.round(syncIntervalMs(kind, config) / 1_000),
-      staleThresholdMs,
+      intervalSec: Math.round(intervalMs(kind, config, transactionsConfig) / 1_000),
+      staleThresholdMs: kindStaleThresholdMs,
       passFrom: isCatchup ? (state?.passFrom?.toISOString() ?? null) : null,
       passTo: isCatchup ? (state?.passTo?.toISOString() ?? null) : null,
     };
