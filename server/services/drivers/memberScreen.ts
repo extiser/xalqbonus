@@ -164,11 +164,13 @@ const welcomeTexts = (bonus: MemberWelcomeBonus, language: Language): MemberWelc
   title: plainText('welcome_slide_title', language),
   left: welcomeLeftParts(bonus, language),
   counted: plainText('welcome_slide_counted', language, { date: bonus.joinedAt }),
+  cheer: plainText('welcome_slide_cheer', language),
+  thanks: plainText('welcome_slide_thanks', language),
 });
 
 /**
- * Тексты экрана участника на его языке. Тексты слайда бонуса — только при счёте:
- * без него слайда нет, и подписывать нечего.
+ * Тексты экрана участника на его языке. Тексты слайда бонуса — только когда слайд есть:
+ * без него подписывать нечего.
  */
 export const memberScreenTexts = (
   language: Language,

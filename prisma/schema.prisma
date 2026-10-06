@@ -755,6 +755,9 @@ model PersonSettings {
   joinedAt             DateTime @default(now()) @map("joined_at") @db.Timestamptz(6)
   /// Откуда пришло участие: `telegram`, `legacy_import`, `operator`.
   joinedSource         String   @map("joined_source")
+  /// Когда водитель нажал «Спасибо» на слайде выданного приветственного бонуса (issue #421).
+  /// Пусто — не нажимал, и слайд «Ура! Бонус зачислен!» встречает его первым экраном.
+  welcomeBonusSeenAt   DateTime? @map("welcome_bonus_seen_at") @db.Timestamptz(6)
 
   person Person @relation(fields: [personId], references: [id])
 

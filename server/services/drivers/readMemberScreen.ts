@@ -5,7 +5,7 @@ import { memberProfileTexts, readMemberProfile } from '#server/services/drivers/
 import { memberScreenTexts } from '#server/services/drivers/memberScreen';
 import type { LinkedDriver } from '#server/services/drivers/readLinkedDriver';
 import { memberOrderTexts } from '#server/services/orders/memberOrderScreen';
-import { WELCOME_BONUS_POINTS } from '#server/services/points/awardWelcomeBonus';
+import { WELCOME_BONUS_POINTS, WELCOME_TRIPS_REQUIRED } from '#server/services/points/awardWelcomeBonus';
 import { readWelcomeBonus } from '#server/services/points/readWelcomeBonus';
 import { memberRewardTexts } from '#server/services/rewards/memberRewardScreen';
 import { readMemberSurveyBanner } from '#server/services/surveys/readMemberSurveyBanner';
@@ -51,22 +51,35 @@ const tripsNote = (syncedAt: Date, language: Language, now: Date): TripsNote => 
 });
 
 /**
- * Счёт до бонуса для слайда «+300» — только пока бонус положен и не выдан. Выдан — слайд
- * просто уходит, о выдаче говорит уведомление; перенесённому из старой базы бонус не положен.
+ * Слайд «+300»: счёт, пока бонус положен и не выдан, и праздник «Ура! Бонус зачислен!» после
+ * выдачи — пока водитель не нажал «Спасибо» (issue #421): без него о выдаче говорило бы одно
+ * уведомление, и слайд исчезал бы в тот миг, когда бонус дали. Нажал «Спасибо» — слайда нет;
+ * перенесённому из старой базы бонус не положен.
  */
 const memberWelcomeBonus = async (personId: string): Promise<MemberWelcomeBonus | null> => {
   const bonus = await readWelcomeBonus(personId);
 
-  if (bonus?.state !== 'progress') {
-    return null;
+  if (bonus?.state === 'progress') {
+    return {
+      awarded: false,
+      done: bonus.done,
+      total: bonus.total,
+      points: WELCOME_BONUS_POINTS,
+      joinedAt: formatDayMonth(bonus.joinedAt),
+    };
   }
 
-  return {
-    done: bonus.done,
-    total: bonus.total,
-    points: WELCOME_BONUS_POINTS,
-    joinedAt: formatDayMonth(bonus.joinedAt),
-  };
+  if (bonus?.state === 'awarded' && bonus.seenAt === null) {
+    return {
+      awarded: true,
+      done: WELCOME_TRIPS_REQUIRED,
+      total: WELCOME_TRIPS_REQUIRED,
+      points: WELCOME_BONUS_POINTS,
+      joinedAt: formatDayMonth(bonus.joinedAt),
+    };
+  }
+
+  return null;
 };
 
 /**

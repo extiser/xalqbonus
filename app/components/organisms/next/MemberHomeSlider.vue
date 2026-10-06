@@ -15,12 +15,18 @@ import { onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue';
  * Подсказка свайпа играет при каждом показе главной, отметки «видел» нет ни в базе, ни в браузере:
  * над точками уезжают две стрелки, центр дважды подаётся влево. Гаснет сама через 4,3 с, сразу —
  * на первом касании окна и на любой смене слайда (точка, пилюля в шапке).
+ *
+ * Без подсказки (`hint`) — ни стрелок, ни подачи центра: на слайде «Ура! Бонус зачислен!» внимание
+ * на празднике и «Спасибо» (`main-screen-welcome-awarded.html`, issue #421). Листать свайпом
+ * и точками можно и тогда. Подсказка снята на ходу — гаснет сразу.
  */
 const props = defineProps<{
   /** Сколько слайдов в слоте. */
   count: number;
   /** Подписи точек для экранного чтеца, по слайду. */
   labels: string[];
+  /** Играть подсказку свайпа при показе. */
+  hint: boolean;
 }>();
 
 /** Номер показанного слайда, с нуля. Держит владелец: пилюля в шапке листает тот же слайдер. */
@@ -37,7 +43,7 @@ const HINT_DURATION_MS = 4300;
 
 const viewport = useTemplateRef<HTMLElement>('viewport');
 
-const hinting = ref(true);
+const hinting = ref(props.hint);
 const dragOffset = ref(0);
 const dragging = ref(false);
 
@@ -58,6 +64,14 @@ const go = (next: number): void => {
 // Слайд сменился откуда угодно — точкой, свайпом или пилюлей шапки: подсказка гаснет.
 // Подача центра держит `transform` анимацией и иначе не дала бы слайду уехать.
 watch(index, hideHint);
+
+// Счёт перешёл в праздник при открытой главной: подсказка гаснет, не доиграв.
+watch(
+  () => props.hint,
+  (hint) => {
+    if (!hint) hideHint();
+  },
+);
 
 /**
  * Палец отпустил слайд после горизонтального жеста — нажатие, которое браузер следом
@@ -132,7 +146,9 @@ const onPointerDown = (event: PointerEvent): void => {
 };
 
 onMounted(() => {
-  hintTimer = setTimeout(hideHint, HINT_DURATION_MS);
+  if (hinting.value) {
+    hintTimer = setTimeout(hideHint, HINT_DURATION_MS);
+  }
 });
 
 onBeforeUnmount(() => {

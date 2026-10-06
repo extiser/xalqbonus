@@ -102,3 +102,13 @@ export class IdempotencyKeyConflictError extends PointsError {
     super(`ключ ${idempotencyKey} уже занят другой операцией: ${difference}`);
   }
 }
+
+/**
+ * «Спасибо» на слайде приветственного бонуса, который ещё не выдан (issue #421): отметку
+ * «видел праздник» ставить не за что.
+ */
+export class WelcomeBonusNotAwardedError extends PointsError {
+  constructor(public readonly personId: string) {
+    super(`приветственный бонус человеку ${personId} ещё не выдан`);
+  }
+}

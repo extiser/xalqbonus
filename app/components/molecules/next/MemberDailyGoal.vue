@@ -9,9 +9,8 @@ import type { MemberHeatStage } from '~/types/memberView';
  * Цвет шкалы — от ступени накала, той же, что греет фон: холодный синий, гранат, огонь.
  * Следующее деление дышит — туда ляжет следующая поездка.
  *
- * Цель взята — фраза радуется, появляется «Открыть сундук» и два прохода конфетти.
- * Праздник должен кончиться: экран водитель держит всю смену, и бесконечный салют
- * через минуту раздражает.
+ * Цель взята — фраза радуется, появляется «Открыть сундук» и два прохода конфетти
+ * (`AtomsNextMemberConfetti`).
  */
 const props = defineProps<{
   done: number;
@@ -29,32 +28,13 @@ const props = defineProps<{
 defineEmits<{ take: [] }>();
 
 const complete = computed(() => props.done >= props.target);
-
-/** Конфетти раскладывается по порядку, а не случайно: сервер и браузер должны нарисовать одно. */
-const CONFETTI_COLORS = ['#E8365D', '#F7BC3E', '#FAA02C', '#F4F6F8'] as const;
-const CONFETTI = Array.from({ length: 24 }, (_, index) => ({
-  left: `${(index * 4.1 + 2.7) % 100}%`,
-  background: CONFETTI_COLORS[index % CONFETTI_COLORS.length],
-  animationDelay: `${((index * 37) % 90) / 100}s`,
-  animationDuration: `${2.3 + ((index * 53) % 70) / 100}s`,
-  small: index % 3 === 0,
-}));
 </script>
 
 <template>
   <div class="relative flex flex-col items-center gap-4" :class="`goal-s${stage}`">
-    <div v-if="complete" class="goal-confetti" aria-hidden="true">
-      <i
-        v-for="(piece, index) in CONFETTI"
-        :key="index"
-        :class="piece.small ? 'goal-confetti-small' : ''"
-        :style="{
-          left: piece.left,
-          background: piece.background,
-          animationDelay: piece.animationDelay,
-          animationDuration: piece.animationDuration,
-        }"
-      />
+    <!-- Конфетти свисает над целью и по бокам: падать ему есть откуда -->
+    <div v-if="complete" class="goal-confetti">
+      <AtomsNextMemberConfetti />
     </div>
 
     <div class="flex flex-col items-center gap-2.5">
@@ -125,39 +105,12 @@ const CONFETTI = Array.from({ length: 24 }, (_, index) => ({
   position: absolute;
   inset: -40px -20px 0;
   z-index: 2;
-  overflow: hidden;
   pointer-events: none;
-}
-
-.goal-confetti i {
-  position: absolute;
-  top: -16px;
-  width: 7px;
-  height: 11px;
-  border-radius: 1px;
-  opacity: 0;
-  animation: goal-fall 2.6s ease-in 2 forwards;
-}
-
-.goal-confetti i.goal-confetti-small {
-  width: 5px;
-  height: 9px;
-}
-
-@keyframes goal-fall {
-  0% { opacity: 0; transform: translateY(-20px) rotate(0deg); }
-  8% { opacity: 1; }
-  78% { opacity: 1; }
-  100% { opacity: 0; transform: translateY(300px) rotate(540deg); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .goal-pip-next::after {
     animation: none;
-  }
-
-  .goal-confetti {
-    display: none;
   }
 }
 </style>

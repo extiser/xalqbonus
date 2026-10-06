@@ -14,7 +14,9 @@ import {
   homeSurveyStartMock,
   homeWelcomeAlmostMock,
   homeWelcomeAwardedMock,
+  homeWelcomeAwardedUzMock,
   homeWelcomeMock,
+  homeWelcomeThankedMock,
   homeWelcomeUzMock,
   surveyMock,
   historyEmptyMock,
@@ -141,6 +143,8 @@ const home = computed(() =>
     'home-welcome-almost': homeWelcomeAlmostMock,
     'home-welcome-uz': homeWelcomeUzMock,
     'home-welcome-awarded': homeWelcomeAwardedMock,
+    'home-welcome-awarded-uz': homeWelcomeAwardedUzMock,
+    'home-welcome-thanked': homeWelcomeThankedMock,
     'home-loading': homeLoadingMock,
     'home-errors': homeErrorsMock,
   }),
@@ -1014,6 +1018,7 @@ const surveyView = computed(() => surveyDesign.view.value);
         @invite="go('promo')"
         @survey="go(slug === 'home-survey' ? 'survey-single' : 'survey-intro')"
         @promo="go('campaign')"
+        @welcome-thanks="go('home-welcome-thanked')"
       />
 
       <OrganismsNextMemberHistoryScreen v-else-if="history" v-bind="history" @back="go('home')" />

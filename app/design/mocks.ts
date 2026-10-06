@@ -352,7 +352,12 @@ export const homeNewcomerMock = {
  * Счёт до приветственного бонуса — `_reference/design/home/main-screen-welcome.html` (issue #410).
  * Строка «Ещё N поездок» приходит с сервера кусками; здесь собрана так же — число и слово жирным.
  */
-function welcomeMock(done: number, left: { count: string; word: string }, language: 'ru' | 'uz' = 'ru') {
+function welcomeMock(
+  done: number,
+  left: { count: string; word: string },
+  language: 'ru' | 'uz' = 'ru',
+  awarded = false,
+) {
   const texts =
     language === 'ru'
       ? {
@@ -365,6 +370,8 @@ function welcomeMock(done: number, left: { count: string; word: string }, langua
             { text: ' — и 300 баллов ваши', strong: false },
           ],
           counted: 'Считаются поездки после вступления 05.10',
+          cheer: 'Ура! Бонус зачислен!',
+          thanks: 'Спасибо',
         }
       : {
           title: 'Xush kelish bonusi',
@@ -374,9 +381,11 @@ function welcomeMock(done: number, left: { count: string; word: string }, langua
             { text: ' ta safar — va 300 ball sizniki', strong: false },
           ],
           counted: "Dasturga qo'shilgandan keyingi safarlar hisoblanadi: 05.10",
+          cheer: 'Hurra! Bonus hisobingizga tushdi!',
+          thanks: 'Rahmat',
         };
 
-  return { done, total: 5, amount: '+300', texts };
+  return { awarded, done, total: 5, amount: '+300', texts };
 }
 
 /** Новичок до бонуса: шесть баллов — пять за поездки до вступления, в счёт бонуса идёт одна. */
@@ -423,11 +432,32 @@ export const homeWelcomeUzMock = {
   welcome: welcomeMock(1, { count: '4', word: 'safar' }, 'uz'),
 };
 
-/** Бонус выдан: слайда нет, главная как без него — без точек. */
+/**
+ * Бонус выдан пятой поездкой, «Спасибо» не нажато: слайд празднует (`main-screen-welcome-awarded.html`).
+ * Баланс уже с бонусом: 10 за поездки и 300.
+ */
+const AWARDED_POINTS = 310;
+
 export const homeWelcomeAwardedMock = {
   ...homeNewcomerMock,
-  points: WELCOME_POINTS + 300,
-  texts: { ...HOME_TEXTS, balanceUnit: balanceUnit(WELCOME_POINTS + 300) },
+  points: AWARDED_POINTS,
+  texts: { ...HOME_TEXTS, balanceUnit: balanceUnit(AWARDED_POINTS) },
+  history: { state: 'ready' as const, days: WELCOME_HISTORY },
+  welcome: welcomeMock(5, { count: '0', word: 'поездок' }, 'ru', true),
+};
+
+/** Праздник по-узбекски. Остальной экран — заглушкой по-русски. */
+export const homeWelcomeAwardedUzMock = {
+  ...homeWelcomeAwardedMock,
+  texts: { ...homeWelcomeAwardedMock.texts, balanceUnit: 'ball' },
+  welcome: welcomeMock(5, { count: '0', word: 'safar' }, 'uz', true),
+};
+
+/** «Спасибо» нажато: слайда нет, главная как без него — баллы в центре, без точек. */
+export const homeWelcomeThankedMock = {
+  ...homeNewcomerMock,
+  points: AWARDED_POINTS,
+  texts: { ...HOME_TEXTS, balanceUnit: balanceUnit(AWARDED_POINTS) },
   history: { state: 'ready' as const, days: WELCOME_HISTORY },
 };
 

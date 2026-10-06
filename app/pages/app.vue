@@ -263,6 +263,13 @@ const onLoadingLeft = (): void => {
 const member = ref<MiniAppMemberScreen | null>(null);
 
 /**
+ * «Спасибо» на слайде выданного бонуса нажато в этом открытии (issue #421). Слайд уходит сразу,
+ * не дожидаясь ответа, и не возвращается ни перечитыванием, ни отказом запроса: отметки
+ * на сервере тогда нет, и слайд придёт при следующем открытии приложения.
+ */
+const welcomeThanked = ref(false);
+
+/**
  * Баланс в шапках разделов — тем же набором, что крупное число главной: ключ общий, и число
  * меняется набором от показанного, а без изменения стоит как есть.
  */
@@ -1507,7 +1514,7 @@ watch(
 );
 
 // Экран ждущего заказа и ждущей награды перечитывает себя сам: выдали у стойки — код исчезает
-// без касаний (issue #237). На остальных экранах опроса нет (issue #210).
+// без касаний (issue #237). Главная — своим шагом, ниже; на остальных экранах опроса нет (issue #210).
 useLiveScreenPoll(
   computed(
     () => stage.value === 'member' && currentScreen.value === 'order' && currentOrder.value?.status === 'pending',
@@ -1522,6 +1529,24 @@ useLiveScreenPoll(
       memberRewards.rewards.value.find((entry) => entry.rewardId === currentRewardId.value)?.status === 'awaiting',
   ),
   memberRewards.reload,
+);
+
+/**
+ * Шаг перечитывания главной (issue #421). Без него новые поездки при открытом приложении не видны:
+ * главная перечитывается только при возврате из фона и на главную, а водитель держит её открытой
+ * подолгу — и праздника выданного бонуса не увидел бы до переоткрытия. Реже, чем экран с кодом:
+ * здесь ждут не выдачи у стойки, а поездку.
+ */
+const HOME_POLL_MS = 30_000;
+
+// Шагом перечитываются экран участника и история — то, что меняет поездка. Заказы, награды
+// и каталог меняются действием водителя или у стойки, и их перечитывает возврат из фона.
+useLiveScreenPoll(
+  computed(() => stage.value === 'member' && currentScreen.value === 'home' && member.value !== null),
+  async () => {
+    await Promise.all([reloadMember(), memberHistory.reloadFirstPage()]);
+  },
+  HOME_POLL_MS,
 );
 
 /** Баланс в шапке разделов: число в наборе и слово при нём. */
@@ -1547,10 +1572,12 @@ const homeView = computed(() => {
     name: current.name,
     callsign: current.callsign ?? undefined,
     points: current.balancePoints,
-    // Слайд «+300» — пока бонус не выдан; счёт и тексты приходят с сервера готовыми (issue #410).
+    // Слайд «+300» — пока бонус не выдан, и праздник после выдачи, пока не нажато «Спасибо»;
+    // счёт и тексты приходят с сервера готовыми (issue #410, #421).
     welcome:
-      current.welcomeBonus && texts.welcome
+      current.welcomeBonus && texts.welcome && !welcomeThanked.value
         ? {
+            awarded: current.welcomeBonus.awarded,
             done: current.welcomeBonus.done,
             total: current.welcomeBonus.total,
             amount: formatSignedNumber(current.welcomeBonus.points),
@@ -2250,7 +2277,8 @@ const reportDoorDenial = (error: unknown): boolean => {
  * Перечитывает экран участника тихо: баланс, имя и отметки свежести.
  *
  * Кнопки обновления нет (issue #210): экран перечитывается сам —
- * при возврате на главную, при возврате в приложение из фона и после отмены заказа. Отдельно
+ * при возврате на главную, при возврате в приложение из фона, шагом на открытой главной
+ * (issue #421) и после отмены заказа. Отдельно
  * от `loadState`, потому что отказ здесь значит другое: на экране уже стоит прочитанный баланс,
  * и увести его в заглушку значило бы стереть верные данные в ответ на перечитывание, которого
  * водитель не просил. Отказ остаётся в консоли, экран — прежним.
@@ -2261,6 +2289,28 @@ const reloadMember = async (): Promise<void> => {
   } catch (error) {
     console.error('[miniapp] не удалось перечитать экран участника', error);
   }
+};
+
+/**
+ * «Спасибо» на слайде «Ура! Бонус зачислен!» (issue #421): слайд уходит с главной сразу, отметка
+ * уезжает на сервер. Отказ — в консоль, слайд на экран не возвращается. После ответа экран
+ * участника перечитывается: сервер слайда больше не отдаёт.
+ */
+const thankWelcomeBonus = async (): Promise<void> => {
+  welcomeThanked.value = true;
+
+  try {
+    await $fetch('/api/miniapp/welcome-bonus/seen', {
+      method: 'POST',
+      headers: { [INIT_DATA_HEADER]: initData },
+    });
+  } catch (error) {
+    console.error('[miniapp] не удалось отметить «Спасибо» на слайде бонуса', error);
+
+    return;
+  }
+
+  await reloadMember();
 };
 
 /** Главная целиком и тихо: экран участника и четыре блока — заказы, награды, каталог, первая страница истории. */
@@ -2730,6 +2780,7 @@ const openMap = (office: MemberOfficeView): void => {
           @catalog="openCatalog()"
           @product="openCatalog"
           @history="openHistory"
+          @welcome-thanks="thankWelcomeBonus"
           @survey="homeView.survey && openSurvey(homeView.survey.surveyId)"
           @retry-orders="memberOrders.loadOrders()"
           @retry-rewards="memberRewards.load()"

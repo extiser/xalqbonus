@@ -168,6 +168,11 @@ export type MemberScreenTexts = {
  * вступления, по всем профилям человека.
  */
 export type MemberWelcomeBonus = {
+  /**
+   * Бонус выдан, а «Спасибо» не нажато — слайд «Ура! Бонус зачислен!» (issue #421). Тогда
+   * `done = total`.
+   */
+  awarded: boolean;
   /** Зачётных поездок, не больше `total`. */
   done: number;
   total: number;
@@ -185,7 +190,19 @@ export type MemberWelcomeTexts = {
   left: MemberSurveyTextPart[];
   /** «Считаются поездки после вступления 05.10» — на месте «Обновлено в». */
   counted: string;
+  /** «Ура! Бонус зачислен!» — на месте `left`, когда бонус выдан. */
+  cheer: string;
+  /** «Спасибо» — кнопка на месте `counted`, когда бонус выдан: убирает слайд насовсем. */
+  thanks: string;
 };
+
+/**
+ * Отказ «Спасибо» на слайде бонуса (issue #421): `welcome_not_awarded` — бонус ещё не выдан
+ * (`409`). Экран отказ не показывает — пишет в консоль.
+ */
+export type MemberWelcomeDenialCode = 'welcome_not_awarded';
+
+export type MemberWelcomeDenialPayload = { code: MemberWelcomeDenialCode };
 
 /**
  * Одна строка истории, какой её видит водитель: когда, за что и на сколько.
@@ -276,9 +293,10 @@ export type MiniAppMemberScreen = {
    */
   tripsNote: TripsNote;
   /**
-   * Счёт до приветственного бонуса — слайд «+300» на главной (issue #410). Заполнен, только
-   * пока бонус положен и не выдан; у выданного, перенесённого из старой базы — `null`,
-   * и главная без слайдера. Тексты слайда — в `texts.welcome`.
+   * Счёт до приветственного бонуса — слайд «+300» на главной (issue #410). Заполнен, пока бонус
+   * положен и не выдан, и после выдачи, пока водитель не нажал «Спасибо» (`awarded`, issue #421).
+   * У отметившего «Спасибо» и у перенесённого из старой базы — `null`, и главная без слайдера.
+   * Тексты слайда — в `texts.welcome`.
    */
   welcomeBonus: MemberWelcomeBonus | null;
   texts: MemberScreenTexts;
