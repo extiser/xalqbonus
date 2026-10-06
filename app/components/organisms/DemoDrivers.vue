@@ -164,7 +164,7 @@ const submit = (personId: string): void => {
             <div class="flex flex-wrap gap-3">
               <AtomsActionButton
                 :label="tripsOpenFor(driver.personId) ? 'Скрыть поездки' : 'Поездки'"
-                :disabled="driver.tripsCount === 0"
+                :disabled="driver.tripsCount === 0 && !tripsOpenFor(driver.personId)"
                 @click="emit('toggleTrips', driver.personId)"
               />
               <AtomsActionButton
