@@ -79,6 +79,18 @@ export type DemoDriverTripsResponse = {
   trips: DemoDriverTrip[];
 };
 
+/**
+ * Итог удаления поездок демо-водителя (issue #422) — одной или всех.
+ * Удаляются поездки, баллы за них и приветственный бонус, если поездок после вступления
+ * стало меньше пяти.
+ */
+export type DemoTripsDeleteResponse = {
+  deletedTrips: number;
+  /** Сколько баллов снято со счёта водителя всего — приветственный бонус включительно. */
+  deletedPoints: number;
+  welcomeBonusRemoved: boolean;
+};
+
 export type DemoDriverHideResponse = {
   personId: string;
   hidden: true;
