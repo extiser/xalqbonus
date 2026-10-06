@@ -1,0 +1,1278 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Пилюля баланса — длина числа</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&family=Unbounded:wght@200;300;600;700&display=swap">
+<style>
+/* ВАРИАЦИЯ ЭТАЛОНА — главная новичка до приветственного бонуса (T119, сессия 90, 06-10-2026).
+   Собрана копией из main-screen.html. Отличия от эталона: в шапке пилюля акции «3/5» со звездой заменена пилюлей
+   приветственного бонуса «1/5» с подарком, баланс 6; центр — слайдер из двух слайдов с точками. Остальное — эталон как есть.
+   Объяснение — main-screen-welcome.md рядом. */
+/* ЭТАЛОН ГЛАВНОГО ЭКРАНА — обычный ежедневный экран водителя.
+   Любая правка дизайна главного экрана идёт сначала сюда, вариации собираются копированием
+   отсюда, синхронизация от эталона к вариации и никогда обратно (CLAUDE.md → «Дизайн приложения»).
+
+   История файла. До 22-09-2026 эталоном был ../artboard/header-daily-goal.html — шапка и дневная
+   цель; дневная цель жила под акцию, и состав главного экрана вне акции не был определён.
+   22-09-2026, сессия 51, по задаче T51 экран собран заново: в центре баллы и обмен, в шапке
+   вместо пилюли баланса пилюля акции. Решением Руслана результат перенесён в эталон, эталон
+   переименован в main-screen.html и вынут из ../artboard/ — там остаются блоки, а не экраны.
+
+   Состояние снимка: участник программы, акция идёт, он в ней участвует.
+   Главная без акции — этот же экран без пилюли акции в шапке, отдельного файла нет (Руслан, 24-09-2026).
+
+   Уровни подписи и числа равны экрану акции (../comeback/03-member-screen.html: .top gap 34,
+   .today-label, .digits 62) — переключение между экранами не должно дёргать раскладку.
+   Предел ширины 520 (16 Pro Max даёт 440), проверено замером 22-09-2026.
+
+   Шапка. 24-09-2026, сессии 56–57: липкая шапка стоит всегда, с первого кадра, как в разделах — вариант 1
+   (был отдельным файлом main-screen-bar-static.html, доделан Русланом, перенесён сюда и удалён). Прежняя механика
+   (шапка проявлялась, когда крупное число уходило под неё) снята. Подложка .bar-surface и баланс в шапке
+   включаются вместе — когда верх крупного числа ушёл под шапку.
+
+   Мерцание звезды, золотая пыль и пересчёт баллов видны только в браузере. */
+
+html, body { background: #0B0D11; margin: 0; }
+body { display: flex; justify-content: center; }
+
+.screen {
+  position: relative; width: 100%; max-width: 520px; min-height: 100dvh;
+  box-sizing: border-box; background: #0B0D11; color: #F4F6F8;
+  font-family: Manrope, 'Segoe UI', system-ui, sans-serif;
+  display: flex; flex-direction: column;
+}
+
+/* ------------------------------------------------------------------ живой фон
+   Из эталона без правок. Массы дышат и расходятся, экран не стоит мёртвым. */
+.top { position: relative; z-index: 6; padding: 104px 20px 44px; display: flex; flex-direction: column; gap: 34px; overflow: clip; }
+/* clip, а не hidden: hidden делает .top контейнером прокрутки, и таймлайн числа баллов
+   (липкая шапка ниже) считал бы прокрутку внутри .top, которой нет, — шапка не появлялась бы никогда */
+.blob { position: absolute; border-radius: 50%; will-change: transform, opacity; }
+@keyframes drift-core {
+  0%   { transform: translate(-150px, -10px) scale(1.00); opacity: 0.92; }
+  25%  { transform: translate(-60px,  60px) scale(1.22); opacity: 1.00; }
+  50%  { transform: translate(-170px, 96px) scale(0.90); opacity: 0.80; }
+  75%  { transform: translate(-260px, 24px) scale(1.12); opacity: 0.95; }
+  100% { transform: translate(-150px, -10px) scale(1.00); opacity: 0.92; }
+}
+@keyframes drift-wine {
+  0%   { transform: translate(-230px,  40px) scale(1.08); opacity: 0.80; }
+  30%  { transform: translate(-280px, -30px) scale(0.88); opacity: 1.00; }
+  60%  { transform: translate(-90px,  104px) scale(1.26); opacity: 0.70; }
+  100% { transform: translate(-230px,  40px) scale(1.08); opacity: 0.80; }
+}
+@keyframes drift-amber {
+  0%   { transform: translate(-90px,  86px) scale(0.96); opacity: 0.70; }
+  35%  { transform: translate(-250px, 20px) scale(1.22); opacity: 1.00; }
+  70%  { transform: translate(-40px,  116px) scale(1.06); opacity: 0.62; }
+  100% { transform: translate(-90px,  86px) scale(0.96); opacity: 0.70; }
+}
+.b-core  { animation: drift-core  13s ease-in-out infinite; }
+.b-wine  { animation: drift-wine  17s ease-in-out infinite; }
+.b-amber { animation: drift-amber 23s ease-in-out infinite; }
+.fade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(11,13,17,0) 45%, rgba(11,13,17,0.86) calc(100% - 104px), #0B0D11 calc(100% - 68px)); }
+
+/* ████████████████████████████████████████████████████ ЛИПКАЯ ШАПКА — НАЧАЛО CSS
+   Всё про шапку главной — здесь, одним куском: раскладка, подложка, аватар и имя, пилюля акции,
+   баланс, анимация баланса. Разметка — между метками «ЛИПКАЯ ШАПКА» в <body>, скрипт — строки
+   с «mini» в скрипте пересчёта баллов внизу файла.
+
+   Шапка стоит всегда, как в разделах (вариант 1, сессия 56, 24-09-2026). Порядок слева направо:
+   аватар, имя с позывным, баланс, пилюля акции — пилюля прибита к правому краю. */
+
+/* ---------- обёртка: липкость. margin-bottom −68 — живой фон .top начинается от верха и уходит под шапку */
+.stickywrap { position: sticky; top: 0; z-index: 7; margin-bottom: -68px; height: 68px; }
+
+/* ---------- подложка — отдельным классом, 1 в 1 с шапкой разделов (../artboard/section-bar.html) */
+.bar-surface {
+  background: rgba(11, 13, 17, 0.82); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ---------- раскладка шапки: высота 68 = 14 + 40 + 14, поля 16.
+   clip-path срезает всё, что свисает ниже края (пыль пилюли), вверх и вбок свечение не режется */
+.stickybar {
+  display: flex; align-items: center; gap: 12px;
+  height: 68px; box-sizing: border-box; padding: calc(14px + env(safe-area-inset-top)) 16px 14px;
+  clip-path: inset(-40px -40px 0 -40px);
+  transition: background-color .2s ease-out, border-color .2s ease-out;
+}
+/* без подложки — прозрачная рамка на месте рамки .bar-surface: высота не прыгает, когда класс добавится.
+   :not() — чтобы это правило не перебило рамку самой .bar-surface, она стоит в файле выше */
+.stickybar:not(.bar-surface) { border-bottom: 1px solid transparent; }
+
+/* ---------- аватар, имя и позывной; правая группа — баланс и пилюля */
+.avatar {
+  width: 40px; height: 40px; border-radius: 999px; flex-shrink: 0;
+  background: rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;
+}
+.who { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.who b, .who span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.who b { font-size: 16px; font-weight: 700; letter-spacing: -0.2px; }
+.who span { font-size: 13px; font-weight: 200; letter-spacing: 0.2px; color: #C2C9D3; }
+.head-right { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+
+/* ---------- баланс — копия .bar .bal из ../artboard/catalog-bar.html */
+/* баланс — пилюля «гранат, число, слово» (Руслан, сессия 90): одна на все экраны Mini App.
+   Слово рядом с числом держит то же, что раньше подпись «Ваши баллы» над ним, — число не читается
+   как цена или сумма, — и пилюля встаёт в один ряд с пилюлями подарка и акции */
+.bal { flex-shrink: 0; height: 36px; box-sizing: border-box; display: flex; align-items: center; border-radius: 999px; padding: 0 14px 0 11px;
+       background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.16); }
+.bal .num { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700; color: #F4F6F8; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bal .unit { font-weight: 400; color: #C2C9D3; margin-left: -2px; }
+
+/* ----------------------------------------------------- пилюля акции вместо баланса
+   Баланс переехал в центр экрана, второе такое же число в шапке не нужно.
+   Место и высота у пилюли те же, что были у баланса: 36 px. */
+.promo-wrap { position: relative; display: flex; align-items: center; }
+.promo {
+  position: relative; z-index: 2;
+  height: 36px; box-sizing: border-box; display: flex; align-items: center; gap: 6px;
+  border-radius: 999px; padding: 0 14px 0 11px; cursor: pointer;
+  background: linear-gradient(135deg, rgba(255,214,120,0.20) 0%, rgba(214,158,54,0.13) 100%);
+  border: 1px solid rgba(255,220,140,0.42);
+  box-shadow: 0 0 14px rgba(255,199,92,0.20), inset 0 1px 0 rgba(255,240,200,0.28);
+  backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px);
+}
+.promo .num { font-size: 14px; font-weight: 500; letter-spacing: 0.4px; color: #FFE7B4;
+              font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 3px; }
+.promo .num .sep { font-weight: 200; color: rgba(255,231,180,0.45); }
+.promo .star { color: #FFD98A; animation: star-pulse 2.6s ease-in-out infinite; }
+@keyframes star-pulse {
+  0%, 100% { opacity: 0.72; transform: scale(0.94) rotate(0deg); filter: drop-shadow(0 0 3px rgba(255,205,105,0.45)); }
+  45%      { opacity: 1;    transform: scale(1.08) rotate(6deg);  filter: drop-shadow(0 0 9px rgba(255,214,120,0.95)); }
+}
+
+/* пыль: частицы качаются на месте и загораются вразнобой, как в луче света */
+.dust { position: absolute; z-index: 1; left: -26px; right: -26px; top: -24px; bottom: -24px; pointer-events: none; mix-blend-mode: screen; }
+.dust i { position: absolute; border-radius: 50%; opacity: 0; will-change: transform, opacity; filter: blur(0.4px); }
+@keyframes dust-a { 0% { transform: translate(0,0); } 50% { transform: translate(7px,-11px); } 100% { transform: translate(0,0); } }
+@keyframes dust-b { 0% { transform: translate(0,0); } 50% { transform: translate(-9px,-7px); } 100% { transform: translate(0,0); } }
+@keyframes dust-c { 0% { transform: translate(0,0); } 50% { transform: translate(5px,9px); } 100% { transform: translate(0,0); } }
+@keyframes dust-d { 0% { transform: translate(0,0); } 50% { transform: translate(-6px,10px); } 100% { transform: translate(0,0); } }
+@keyframes twinkle { 0%, 100% { opacity: 0; } 35% { opacity: 0.85; } 65% { opacity: 0.25; } }
+
+/* ---------- анимация баланса: появляется, когда верх крупных цифр дошёл до низа шапки, гаснет сразу.
+   Без скрипта: таймлайн прокрутки по .amount переключает целое --bal-on на обёртке,
+   проявление — переход по времени 0.15 с по запросу стиля. Порог 61, а не 68: рамка числа
+   выше цифр на 6–7 px (замер @fontsource). Где таймлайнов нет (Safari до 26) — баланс виден всегда.
+   ВНИМАНИЕ: у .top стоит overflow: clip, а не hidden — с hidden таймлайн не двигается.
+   Хочешь выкинуть анимацию — удаляй отсюда до конца блока, баланс останется видимым всегда. */
+@property --bal-on { syntax: '<integer>'; inherits: false; initial-value: 0; }
+@supports (animation-timeline: view()) {
+  .screen { timeline-scope: --amount; }
+  .amount.balance { view-timeline: --amount block; view-timeline-inset: 61px 0px; }   /* 61 — тот же порог в скрипте подложки .bar-surface внизу файла */
+  .stickywrap { container-name: stickywrap; animation: bal-flag linear both; animation-timeline: --amount; animation-range: exit 0% exit 2%; }
+  @keyframes bal-flag { from { --bal-on: 0; } to { --bal-on: 1; } }
+  .stickybar .bal { opacity: 0; transform: translateY(-4px); transition: none; }
+  @container stickywrap style(--bal-on: 1) {
+    .stickybar .bal { opacity: 1; transform: none; transition: opacity .15s ease-out, transform .15s ease-out; }
+    /* пилюля в шапке одна (Руслан, сессия 90): крупные баллы ушли под шапку — пилюля акции или подарка
+       уступает место пилюле баланса, как на всех остальных экранах. Вернулся наверх — вернулась пилюля обещания */
+    .stickybar .promo-wrap { display: none; }
+    .stickywrap .stickybar.on-bonus .bal { display: flex; }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stickybar .bal { transform: none !important; transition: none !important; }
+}
+/* пилюля в шапке показывает другой слайд (Руслан, сессия 90). Пилюли лежат стопкой на одном месте,
+   видна та, что с классом .on. Пилюля баланса — стекло без золота: баланс не обещание.
+   На слайде бонуса баланс уже в пилюле — обычный баланс шапки при прокрутке прячется */
+.promo-wrap { display: grid; }
+.promo-wrap > .promo { grid-area: 1 / 1; justify-self: end; opacity: 0; transform: translateY(6px); pointer-events: none;
+                       transition: opacity .3s ease-out, transform .3s ease-out; }
+.promo-wrap > .promo.on { opacity: 1; transform: none; pointer-events: auto; }
+.promo.pill-balance { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.16); box-shadow: none; }
+.promo.pill-balance .num { color: #F4F6F8; font-weight: 700; }
+.promo.pill-balance .num .unit { font-weight: 400; color: #C2C9D3; margin-left: 2px; }   /* «6 баллов»: число и слово — новичок ещё не знает, что гранат значит баллы (Руслан, сессия 90) */
+.promo-wrap:has(.pill-balance.on) .dust { display: none; }
+.stickybar.on-bonus .bal { display: none; }
+/* ████████████████████████████████████████████████████ ЛИПКАЯ ШАПКА — КОНЕЦ CSS */
+
+/* --------------------------------------------------------------- центр: баллы */
+.points { position: relative; display: flex; flex-direction: column; align-items: center; gap: 20px; }
+.points-top { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 1.4px; text-transform: uppercase; color: #A9B2BF; }
+.amount {
+  font-family: Unbounded, Manrope, sans-serif; font-size: 62px; line-height: 1;
+  letter-spacing: -3px; font-weight: 700; color: #F4F6F8; font-variant-numeric: tabular-nums; cursor: pointer;
+}
+/* z-index соседям кнопки сразу: свечение выходит за её габариты (memory/feedback_zindex_above_glow.md) */
+.exchange {
+  position: relative; z-index: 1; border: 0; cursor: pointer; height: 48px; padding: 0 30px; border-radius: 999px;
+  background: #E8365D; color: #fff; font-family: Manrope, sans-serif; font-size: 15px; font-weight: 700;
+  box-shadow: 0 8px 26px rgba(232,54,93,0.38);
+}
+.updated { position: relative; z-index: 1; font-size: 13px; font-weight: 200; letter-spacing: 0.2px; color: #8A93A2; }
+
+
+/* --------------------------------------------------------------- слайдер центра (T119, сессия 90)
+   Свайп без полосы прокрутки: .viewport с overflow: clip, а не auto — контейнер прокрутки
+   перехватил бы таймлайн .amount, и баланс в липкой шапке перестал бы появляться. */
+.slider { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+/* подсказка свайпа над точками (Руслан, сессия 90): при первом открытии две стрелки уезжают влево,
+   центр один раз подаётся влево — видно, что за краем есть ещё. Три повтора и гаснет; первый свайп
+   или нажатие на точку гасит сразу. Играет при каждом открытии, если слайдов больше одного (Руслан, сессия 90) */
+.swipe-hint { position: absolute; top: -22px; left: 50%; transform: translateX(-50%); display: flex; gap: 1px;
+              color: rgba(244,246,248,0.7); pointer-events: none; transition: opacity .4s ease-out; }
+.swipe-hint svg { animation: hint-left 1.4s ease-in-out 3; }
+.swipe-hint svg + svg { animation-delay: .12s; }
+.swipe-hint.gone { opacity: 0; }
+@keyframes hint-left { 0% { transform: translateX(10px); opacity: 0; } 35% { opacity: 1; } 100% { transform: translateX(-12px); opacity: 0; } }
+.track.nudge { animation: track-nudge 1.4s ease-in-out .3s 2; }
+@keyframes track-nudge { 0%, 100% { transform: translateX(0); } 40% { transform: translateX(-28px); } }
+@media (prefers-reduced-motion: reduce) { .swipe-hint svg, .track.nudge { animation: none; } }
+
+.dots { display: flex; gap: 6px; height: 6px; }
+.dots i { width: 6px; height: 6px; border-radius: 999px; background: rgba(255,255,255,0.28); transition: width .2s ease-out, background-color .2s ease-out; cursor: pointer; }
+.dots i.on { width: 18px; background: #F4F6F8; }
+.viewport { width: 100%; overflow: clip; touch-action: pan-y; }
+.track { display: flex; transition: transform .28s cubic-bezier(.2,.8,.2,1); will-change: transform; }
+.track.dragging { transition: none; }
+.slide { flex: 0 0 100%; min-width: 0; display: flex; justify-content: center; user-select: none; -webkit-user-select: none; }
+
+/* слайд бонуса: та же сетка, что у баллов, — высота слайдов совпадает, экран не прыгает */
+.amount.gold { color: #FFE7B4; text-shadow: 0 0 24px rgba(255,199,92,0.35); cursor: default; }
+.welcome .steps { height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
+.welcome .bars { display: flex; gap: 6px; }
+.welcome .bars i { width: 40px; height: 8px; border-radius: 999px; background: rgba(255,255,255,0.12); }
+.welcome .bars i.done { background: linear-gradient(90deg, #FFD98A, #E8B04C); box-shadow: 0 0 10px rgba(255,199,92,0.45); }
+.welcome .left { font-size: 15px; font-weight: 500; color: #C2C9D3; }
+.welcome .left b { font-weight: 700; color: #F4F6F8; }
+@media (prefers-reduced-motion: reduce) { .track, .dots i { transition: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .b-core, .b-wine, .b-amber, .promo .star, .dust i { animation: none; }
+  .dust i { opacity: 0.5; }
+}
+
+/* --------------------------------------------------------------- блок истории */
+
+.history {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 14px 20px;
+}
+
+.history-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 4px 0;
+}
+
+/* Ссылка и строка-действие — 14/500, цвет по смыслу (сверка шрифтов, сессия 53, 23-09-2026). */
+.history-head .all {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: #A9B2BF;
+  font-family: Manrope, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.history-head h3 {
+  margin: 0;
+  font-family: Unbounded, Manrope, sans-serif;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.4px;
+}
+
+/* Подпись дня. Сегодня и вчера — словами: водитель ищет вчерашнюю поездку,
+   а не поездку одиннадцатого числа. */
+.day {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: #8A93A2;
+  padding: 14px 4px 6px;
+}
+
+.op {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.day + .op {  /* первая операция дня — без линии под подписью; first-of-type не срабатывал: подпись тоже div (сессия 54) */
+  border-top: 0;
+}
+
+.op .time {
+  width: 42px;
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 300;
+  color: #8A93A2;
+  font-variant-numeric: tabular-nums;
+}
+
+.op .what {
+  flex-grow: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.3;
+}
+
+/* Знак и цвет вместе, а не вместо друг друга: знак читается и в чёрно-белом,
+   и тем, кто не различает цвета.
+
+   Списание алое (#FF5C78), а не серое — решение Руслана 22-09-2026: водитель должен видеть,
+   что баллы ушли с него. Цвет единый на все экраны, где баллы уходят со счёта; выбор
+   и замеры контраста — spend-color.html. */
+.op .sum {
+  flex-shrink: 0;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.op .sum.plus { color: #5FD08A; }
+.op .sum.minus { color: #FF5C78; }  /* алый — единый цвет списания, ../artboard/spend-color.html */
+
+.more {
+  align-self: center;
+  margin-top: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: #F4F6F8;
+  cursor: pointer;
+  height: 40px;
+  padding: 0 22px;
+  border-radius: 999px;
+  font-family: Manrope, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* --------------------------------------------------- пусто, отказ и ожидание */
+
+.notice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  padding: 30px 20px;
+  color: #8A93A2;
+  font-size: 15px;
+  font-weight: 300;
+  line-height: 1.4;
+
+  /* 30, а не 34 — как в блоках заказов и наград; решение Руслана 24-09-2026, сессия 58 */
+}
+
+/* Вторичная кнопка S — пилюля 40, контур, 14/600 (сверка шрифтов, сессия 53, 23-09-2026). */
+.notice .retry {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: #F4F6F8;
+  cursor: pointer;
+  height: 40px;
+  padding: 0 22px;
+  border-radius: 999px;
+  font-family: Manrope, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Ожидание: строки той же высоты, что настоящие, — список не прыгает, когда доедет. */
+.skeleton {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.skeleton:first-of-type { border-top: 0; }
+
+.bar {
+  height: 11px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.13) 50%, rgba(255,255,255,0.07) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+.bar.time { width: 42px; flex-shrink: 0; }
+.bar.what { flex-grow: 1; }
+.bar.sum { width: 54px; flex-shrink: 0; }
+
+@keyframes shimmer {
+  0% { background-position: 140% 0; }
+  100% { background-position: -40% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar { animation: none; }
+}
+
+/* --------------------------------------------------------------- блок заказов
+   Перенесён из ../artboard/orders-block.html — истина по блоку и все его состояния там.
+   На главной показываются только висящие заказы; нет висящих — блока нет вовсе. */
+
+.orders { display: flex; flex-direction: column; gap: 10px; padding: 8px 14px 20px; }
+
+/* Отступ под шапкой блока — один у всех блоков главной: от заголовка до первой строки 18 px
+   (Руслан, 23-09-2026: сначала 26 как у истории, затем на 30% меньше). Здесь 8 снизу шапки + зазор 10;
+   у истории 0 + зазор 4 + 14 сверху подписи дня. */
+.orders-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 4px 4px 8px;
+}
+
+.orders-head h3 {
+  margin: 0; font-family: Unbounded, Manrope, sans-serif;
+  font-size: 17px; font-weight: 600; letter-spacing: -0.4px;
+}
+
+/* Ссылка и строка-действие — 14/500, цвет по смыслу (сверка шрифтов, сессия 53, 23-09-2026). */
+.orders-head .all {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: none; border: 0; padding: 0; cursor: pointer; color: #A9B2BF;
+  font-family: Manrope, sans-serif; font-size: 14px; font-weight: 500;
+}
+
+/* Зелёная — тем же зелёным, которым в разделе помечен висящий заказ. Награда рядом золотая,
+   и это не спор: золото значит подарок, зелёное — «сходи и забери». */
+.order-card {
+  display: flex; align-items: center; gap: 12px;
+  border-radius: 20px; padding: 13px 14px; cursor: pointer;
+  border: 1px solid rgba(95, 208, 138, 0.55);
+  background: linear-gradient(180deg, rgba(95, 208, 138, 0.07) 0%, rgba(20, 23, 29, 1) 62%);
+}
+
+.order-card .body { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+/* Название карточки — 16/700, одно на главной и в разделах (сверка шрифтов, сессия 53, 23-09-2026). */
+.order-card .num { font-size: 16px; font-weight: 700; }
+/* Уточнение серым — 13/300 #8A93A2, одно на все экраны (сверка шрифтов, сессия 53, 23-09-2026). */
+.order-card .state { font-size: 13px; font-weight: 300; color: #8A93A2; line-height: 1.35; }
+/* Состояние цветным словом — 13/600, одно на все карточки (сверка шрифтов, сессия 53, 23-09-2026). */
+.order-card .state b { font-weight: 600; color: #5FD08A; }
+.order-card .chevron { flex-shrink: 0; }
+
+/* --------------------------------------------------------------- блок наград */
+
+.rewards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 14px 20px;
+}
+
+/* Отступ под шапкой блока — один у всех блоков главной: от заголовка до первой строки 18 px
+   (Руслан, 23-09-2026: сначала 26 как у истории, затем на 30% меньше). Здесь 8 снизу шапки + зазор 10;
+   у истории 0 + зазор 4 + 14 сверху подписи дня. */
+.rewards-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 4px 8px;
+}
+
+.rewards-head h3 {
+  margin: 0;
+  font-family: Unbounded, Manrope, sans-serif;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.4px;
+}
+
+/* Ссылка и строка-действие — 14/500, цвет по смыслу (сверка шрифтов, сессия 53, 23-09-2026). */
+.rewards-head .all {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: #A9B2BF;
+  font-family: Manrope, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Карточка награды. Ждущая выделена рамкой и кодом — за ней идти; остальные спокойные. */
+.reward {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: #14171D;
+  padding: 14px 16px;
+}
+
+.reward .what {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.reward .origin {
+  font-size: 13px;
+  font-weight: 300;
+  color: #8A93A2;
+}
+
+.reward .state {
+  font-size: 13px;
+  font-weight: 600;
+  color: #A9B2BF;
+  margin-top: 4px;
+}
+
+.reward .office {
+  font-size: 13px;
+  font-weight: 300;
+  color: #8A93A2;
+}
+
+/* Ждёт в офисе: рамка зелёная, код крупный. Водитель показывает экран, а не диктует. */
+.reward.awaiting {
+  border-color: rgba(95, 208, 138, 0.55);
+  background: linear-gradient(180deg, rgba(95, 208, 138, 0.07) 0%, rgba(20, 23, 29, 1) 62%);
+}
+
+.reward.awaiting .state { color: #5FD08A; }
+
+/* ----------------------------------------- цвет карточки главной: три варианта
+   Зелёный годится внутри раздела, где он один. На главной он третий акцент после граната
+   у баланса и золота у акции — и экран рассыпается. Варианты ниже отличаются только цветом. */
+
+.reward.compact.tone-gold {
+  border-color: rgba(255, 220, 140, 0.40);
+  background: linear-gradient(180deg, rgba(255, 214, 120, 0.08) 0%, rgba(20, 23, 29, 1) 62%);
+}
+
+.reward.compact.tone-gold .state { color: #FFD98A; }
+
+.reward.compact.tone-quiet {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: #14171D;
+}
+
+.reward.compact.tone-quiet .state { color: #A9B2BF; }
+
+/* --------------------------------------------- компактная карточка главной
+   На главной у награды две строки: что за награда и где её ждать. Происхождение, адрес
+   офиса и код живут внутри раздела — на главной они только растят блок.
+   Нажатие ведёт в «Все награды», где эта награда стоит первой. */
+
+.reward.compact {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
+}
+
+.reward.compact .body {
+  flex-grow: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.reward.compact .what {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* «Код внутри» — серым: цветом на карточке отмечено состояние награды, а обещание кода
+   только говорит, что будет за нажатием. Тем же цветом оно тянуло бы на себя вторым акцентом. */
+.reward.compact .state .hint { color: #8A93A2; font-weight: 300; }
+
+.reward.compact .state {
+  margin-top: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.reward.compact .chevron { flex-shrink: 0; }
+
+/* На главной код не показывается: он виден любому, кто заглянул через плечо, а нужен
+   только у стойки. Вместо него — обещание кода и шеврон: карточка открывается. */
+.reward .code-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #5FD08A;
+}
+
+/* Подпись над кодом выдачи — 13/500 #5FD08A, одна у заказа и награды (сверка шрифтов, сессия 53, 23-09-2026). */
+.reward .code-title {
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #5FD08A;
+}
+
+.reward .code {
+  font-family: Unbounded, Manrope, sans-serif;
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: 6px;
+  line-height: 1.2;
+  color: #5FD08A;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Получена и на балансе — статус зелёным, как «Выдан» у заказа: «закончилось хорошо»
+   (Руслан, 27-09-2026, сессия 68; раньше строка была спокойной серой). */
+.reward.issued .what { font-weight: 600; }
+.reward.issued .state,
+.reward.credited .state { color: #5FD08A; }
+
+/* Срок вышел: вся карточка гаснет, но остаётся читаемой — пустота вместо неё
+   выглядела бы так, будто награды и не было. */
+.reward.expired {
+  opacity: 0.55;
+}
+
+
+/* ---------------------------------------------------------- блок каталога
+   Копия ../artboard/catalog-block.html — шапка и отступы как у «Мои заказы» и «Мои награды». */
+.catalog { display: flex; flex-direction: column; gap: 10px; padding: 8px 14px 20px; }
+/* Отступ под шапкой блока — один у всех блоков главной: от заголовка до первой строки 18 px
+   (Руслан, 23-09-2026: сначала 26 как у истории, затем на 30% меньше). Здесь 8 снизу шапки + зазор 10;
+   у истории 0 + зазор 4 + 14 сверху подписи дня. */
+.catalog-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 4px 4px 8px; }
+.catalog-head h3 { margin: 0; font-family: Unbounded, Manrope, sans-serif; font-size: 17px; font-weight: 600; letter-spacing: -0.4px; }
+.catalog-head .all { display: inline-flex; align-items: center; gap: 5px; background: none; border: 0; padding: 0; cursor: pointer; color: #A9B2BF; font-family: Manrope, sans-serif; font-size: 14px; font-weight: 500; }
+.catalog .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px 16px; }
+.catalog .grid.v2 .row { flex-direction: column; justify-content: flex-start; align-items: stretch; gap: 4px; }
+.catalog .grid.v2 .price { order: -1; flex-direction: row-reverse; justify-content: flex-end; align-items: baseline; gap: 8px; }
+.catalog .grid.v2 .price s { top: 0; }
+.catalog .grid.v2 .name { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+/* Вариант 2 плитки — везде, и на витрине, и в блоке на главной (Руслан, 24-09-2026, сессия 58). Название обрезается многоточием по 30 символам — предел, а не переключатель варианта */
+.catalog .tile { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.catalog .ph { position: relative; aspect-ratio: 9 / 10; border-radius: 24px; overflow: hidden; background: #F1F2F4; }
+.catalog .ph img { position: absolute; left: 8%; top: 13%; width: 84%; height: 80%; object-fit: contain; mix-blend-mode: multiply; display: block; }
+.catalog .pills { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; justify-content: space-between; }
+.catalog .pill { height: 24px; display: inline-flex; align-items: center; gap: 3px; padding: 0 9px; border-radius: 999px;
+  background: #FFFFFF; box-shadow: 0 1px 2px rgba(0,0,0,.06); font-size: 12px; font-weight: 600; color: #626A77; }
+.catalog .pill.sale { font-weight: 700; color: #E8365D; padding-left: 6px; }
+.catalog .row { display: flex; justify-content: space-between; align-items: flex-end; gap: 6px; padding: 0 4px; }
+.catalog .name { font-size: 14px; font-weight: 500; line-height: 1.3; color: #F4F6F8; min-width: 0; }
+.catalog .price { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; flex-shrink: 0; }
+.catalog .price s { position: relative; top: 1px; font-size: 12px; font-weight: 500; color: #8A93A2; }
+.catalog .price span { display: flex; align-items: center; gap: 3px; line-height: 1.1; font-size: 20px; font-weight: 800; letter-spacing: -.3px; font-variant-numeric: tabular-nums; }
+.catalog .price .pom { position: relative; top: 2px; flex-shrink: 0; }
+.catalog .pill { white-space: nowrap; }
+@media (max-width: 360px) {
+  .catalog .pills { top: 8px; left: 8px; right: 8px; }
+  .catalog .pill { padding: 0 7px; font-size: 11px; }
+}
+
+
+.sheet-body { display: block !important; padding: 24px 16px 60px; font-family: Manrope, system-ui, sans-serif; color: #F4F6F8; background: #0B0D11; }
+.sheet-body h1 { font: 600 18px Unbounded, Manrope, sans-serif; margin: 0 0 6px; }
+.sheet-body p.lead { color: #A9B2BF; font-size: 14px; margin: 0 0 20px; max-width: 760px; line-height: 1.45; }
+.sheet-body h2 { font-size: 13px; font-weight: 600; letter-spacing: 1.2px; text-transform: uppercase; color: #8A93A2; margin: 26px 0 10px; }
+.row { display: flex; flex-wrap: wrap; gap: 16px 20px; }
+.cap { font-size: 12px; color: #8A93A2; margin-bottom: 6px; }
+.frame { height: 68px; overflow: hidden; border-radius: 14px; background: linear-gradient(120deg, #7a1530 0%, #4a1230 55%, #15121a 100%); }
+</style></head><body class="sheet-body">
+<h1>Пилюля баланса — длина числа</h1>
+<p class="lead">Шапка главной новичка на слайде бонуса: пилюля «число + баллов». Четыре баланса (6, 1 450, 5 432, 12 450) на трёх ширинах, с коротким и длинным именем. Пилюля держит число целиком, обрезается имя — позывной под ним виден всегда. Источник шапки — main-screen-welcome.html, лист собран из неё копией (T119, сессия 90).</p>
+<h2>Ширина 320</h2><div class="row"><div class="cell"><div class="cap">320 · 6 баллов</div><div class="frame" style="width:320px">  <div class="stickywrap" style="position:relative;margin:0"><div class="stickybar on-bonus">
+    <div class="avatar">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="8.5" r="3.6" stroke="#B4BCC8" stroke-width="1.8"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" stroke="#B4BCC8" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </div>
+    <div class="who"><b>Бахтиёр</b><span>А-247</span></div>
+    <div class="head-right">
+      <div class="bal"><span class="num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg><span><span class="bal-num">6</span></span><span class="unit">баллов</span></span></div>
+
+      <div class="promo-wrap">
+                <!-- пилюля показывает другой слайд и листает на него (Руслан, сессия 90):
+             на слайде бонуса — баланс, на слайде баллов — подарок со счётом -->
+        <div class="promo pill-balance on" data-slide="1">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg>
+          <div class="num"><span class="pill-bal-num">6</span><span class="unit">баллов</span></div>
+        </div>
+        <div class="promo pill-gift" data-slide="0">
+          <svg class="star" viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="3.5" y="8" width="17" height="4.2" rx="1.2" fill="currentColor"/><rect x="5" y="12.2" width="14" height="8.3" rx="1.2" fill="currentColor" opacity="0.85"/><path d="M12 8v12.5" stroke="#3A2A10" stroke-width="1.6"/><path d="M12 8C10.6 5.2 7.6 4.6 7.2 6.4 6.9 7.8 9.6 8 12 8zM12 8c1.4-2.8 4.4-3.4 4.8-1.6.3 1.4-2.4 1.6-4.8 1.6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <div class="num"><span>1</span><span class="sep">/</span><span>5</span></div>
+        </div>
+      </div>
+
+
+    </div>
+  </div></div>
+</div></div><div class="cell"><div class="cap">320 · 1 450 баллов</div><div class="frame" style="width:320px">  <div class="stickywrap" style="position:relative;margin:0"><div class="stickybar on-bonus">
+    <div class="avatar">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="8.5" r="3.6" stroke="#B4BCC8" stroke-width="1.8"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" stroke="#B4BCC8" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </div>
+    <div class="who"><b>Бахтиёр</b><span>А-247</span></div>
+    <div class="head-right">
+      <div class="bal"><span class="num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg><span><span class="bal-num">6</span></span><span class="unit">баллов</span></span></div>
+
+      <div class="promo-wrap">
+                <!-- пилюля показывает другой слайд и листает на него (Руслан, сессия 90):
+             на слайде бонуса — баланс, на слайде баллов — подарок со счётом -->
+        <div class="promo pill-balance on" data-slide="1">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg>
+          <div class="num"><span class="pill-bal-num">1 450</span><span class="unit">баллов</span></div>
+        </div>
+        <div class="promo pill-gift" data-slide="0">
+          <svg class="star" viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="3.5" y="8" width="17" height="4.2" rx="1.2" fill="currentColor"/><rect x="5" y="12.2" width="14" height="8.3" rx="1.2" fill="currentColor" opacity="0.85"/><path d="M12 8v12.5" stroke="#3A2A10" stroke-width="1.6"/><path d="M12 8C10.6 5.2 7.6 4.6 7.2 6.4 6.9 7.8 9.6 8 12 8zM12 8c1.4-2.8 4.4-3.4 4.8-1.6.3 1.4-2.4 1.6-4.8 1.6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <div class="num"><span>1</span><span class="sep">/</span><span>5</span></div>
+        </div>
+      </div>
+
+
+    </div>
+  </div></div>
+</div></div><div class="cell"><div class="cap">320 · 5 432 балла</div><div class="frame" style="width:320px">  <div class="stickywrap" style="position:relative;margin:0"><div class="stickybar on-bonus">
+    <div class="avatar">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="8.5" r="3.6" stroke="#B4BCC8" stroke-width="1.8"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" stroke="#B4BCC8" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </div>
+    <div class="who"><b>Бахтиёр</b><span>А-247</span></div>
+    <div class="head-right">
+      <div class="bal"><span class="num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg><span><span class="bal-num">6</span></span><span class="unit">баллов</span></span></div>
+
+      <div class="promo-wrap">
+                <!-- пилюля показывает другой слайд и листает на него (Руслан, сессия 90):
+             на слайде бонуса — баланс, на слайде баллов — подарок со счётом -->
+        <div class="promo pill-balance on" data-slide="1">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg>
+          <div class="num"><span class="pill-bal-num">5 432</span><span class="unit">балла</span></div>
+        </div>
+        <div class="promo pill-gift" data-slide="0">
+          <svg class="star" viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="3.5" y="8" width="17" height="4.2" rx="1.2" fill="currentColor"/><rect x="5" y="12.2" width="14" height="8.3" rx="1.2" fill="currentColor" opacity="0.85"/><path d="M12 8v12.5" stroke="#3A2A10" stroke-width="1.6"/><path d="M12 8C10.6 5.2 7.6 4.6 7.2 6.4 6.9 7.8 9.6 8 12 8zM12 8c1.4-2.8 4.4-3.4 4.8-1.6.3 1.4-2.4 1.6-4.8 1.6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <div class="num"><span>1</span><span class="sep">/</span><span>5</span></div>
+        </div>
+      </div>
+
+
+    </div>
+  </div></div>
+</div></div><div class="cell"><div class="cap">320 · 12 450 баллов</div><div class="frame" style="width:320px">  <div class="stickywrap" style="position:relative;margin:0"><div class="stickybar on-bonus">
+    <div class="avatar">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="8.5" r="3.6" stroke="#B4BCC8" stroke-width="1.8"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" stroke="#B4BCC8" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </div>
+    <div class="who"><b>Бахтиёр</b><span>А-247</span></div>
+    <div class="head-right">
+      <div class="bal"><span class="num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg><span><span class="bal-num">6</span></span><span class="unit">баллов</span></span></div>
+
+      <div class="promo-wrap">
+                <!-- пилюля показывает другой слайд и листает на него (Руслан, сессия 90):
+             на слайде бонуса — баланс, на слайде баллов — подарок со счётом -->
+        <div class="promo pill-balance on" data-slide="1">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg>
+          <div class="num"><span class="pill-bal-num">12 450</span><span class="unit">баллов</span></div>
+        </div>
+        <div class="promo pill-gift" data-slide="0">
+          <svg class="star" viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="3.5" y="8" width="17" height="4.2" rx="1.2" fill="currentColor"/><rect x="5" y="12.2" width="14" height="8.3" rx="1.2" fill="currentColor" opacity="0.85"/><path d="M12 8v12.5" stroke="#3A2A10" stroke-width="1.6"/><path d="M12 8C10.6 5.2 7.6 4.6 7.2 6.4 6.9 7.8 9.6 8 12 8zM12 8c1.4-2.8 4.4-3.4 4.8-1.6.3 1.4-2.4 1.6-4.8 1.6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <div class="num"><span>1</span><span class="sep">/</span><span>5</span></div>
+        </div>
+      </div>
+
+
+    </div>
+  </div></div>
+</div></div><div class="cell"><div class="cap">320 · 6 баллов</div><div class="frame" style="width:320px">  <div class="stickywrap" style="position:relative;margin:0"><div class="stickybar on-bonus">
+    <div class="avatar">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="8.5" r="3.6" stroke="#B4BCC8" stroke-width="1.8"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" stroke="#B4BCC8" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </div>
+    <div class="who"><b>Rahmonov Muxamadjon</b><span>А-247</span></div>
+    <div class="head-right">
+      <div class="bal"><span class="num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg><span><span class="bal-num">6</span></span><span class="unit">баллов</span></span></div>
+
+      <div class="promo-wrap">
+                <!-- пилюля показывает другой слайд и листает на него (Руслан, сессия 90):
+             на слайде бонуса — баланс, на слайде баллов — подарок со счётом -->
+        <div class="promo pill-balance on" data-slide="1">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg>
+          <div class="num"><span class="pill-bal-num">6</span><span class="unit">баллов</span></div>
+        </div>
+        <div class="promo pill-gift" data-slide="0">
+          <svg class="star" viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="3.5" y="8" width="17" height="4.2" rx="1.2" fill="currentColor"/><rect x="5" y="12.2" width="14" height="8.3" rx="1.2" fill="currentColor" opacity="0.85"/><path d="M12 8v12.5" stroke="#3A2A10" stroke-width="1.6"/><path d="M12 8C10.6 5.2 7.6 4.6 7.2 6.4 6.9 7.8 9.6 8 12 8zM12 8c1.4-2.8 4.4-3.4 4.8-1.6.3 1.4-2.4 1.6-4.8 1.6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <div class="num"><span>1</span><span class="sep">/</span><span>5</span></div>
+        </div>
+      </div>
+
+
+    </div>
+  </div></div>
+</div></div><div class="cell"><div class="cap">320 · 1 450 баллов</div><div class="frame" style="width:320px">  <div class="stickywrap" style="position:relative;margin:0"><div class="stickybar on-bonus">
+    <div class="avatar">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="8.5" r="3.6" stroke="#B4BCC8" stroke-width="1.8"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" stroke="#B4BCC8" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </div>
+    <div class="who"><b>Rahmonov Muxamadjon</b><span>А-247</span></div>
+    <div class="head-right">
+      <div class="bal"><span class="num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg><span><span class="bal-num">6</span></span><span class="unit">баллов</span></span></div>
+
+      <div class="promo-wrap">
+                <!-- пилюля показывает другой слайд и листает на него (Руслан, сессия 90):
+             на слайде бонуса — баланс, на слайде баллов — подарок со счётом -->
+        <div class="promo pill-balance on" data-slide="1">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg>
+          <div class="num"><span class="pill-bal-num">1 450</span><span class="unit">баллов</span></div>
+        </div>
+        <div class="promo pill-gift" data-slide="0">
+          <svg class="star" viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="3.5" y="8" width="17" height="4.2" rx="1.2" fill="currentColor"/><rect x="5" y="12.2" width="14" height="8.3" rx="1.2" fill="currentColor" opacity="0.85"/><path d="M12 8v12.5" stroke="#3A2A10" stroke-width="1.6"/><path d="M12 8C10.6 5.2 7.6 4.6 7.2 6.4 6.9 7.8 9.6 8 12 8zM12 8c1.4-2.8 4.4-3.4 4.8-1.6.3 1.4-2.4 1.6-4.8 1.6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <div class="num"><span>1</span><span class="sep">/</span><span>5</span></div>
+        </div>
+      </div>
+
+
+    </div>
+  </div></div>
+</div></div><div class="cell"><div class="cap">320 · 5 432 балла</div><div class="frame" style="width:320px">  <div class="stickywrap" style="position:relative;margin:0"><div class="stickybar on-bonus">
+    <div class="avatar">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="8.5" r="3.6" stroke="#B4BCC8" stroke-width="1.8"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" stroke="#B4BCC8" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </div>
+    <div class="who"><b>Rahmonov Muxamadjon</b><span>А-247</span></div>
+    <div class="head-right">
+      <div class="bal"><span class="num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg><span><span class="bal-num">6</span></span><span class="unit">баллов</span></span></div>
+
+      <div class="promo-wrap">
+                <!-- пилюля показывает другой слайд и листает на него (Руслан, сессия 90):
+             на слайде бонуса — баланс, на слайде баллов — подарок со счётом -->
+        <div class="promo pill-balance on" data-slide="1">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg>
+          <div class="num"><span class="pill-bal-num">5 432</span><span class="unit">балла</span></div>
+        </div>
+        <div class="promo pill-gift" data-slide="0">
+          <svg class="star" viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="3.5" y="8" width="17" height="4.2" rx="1.2" fill="currentColor"/><rect x="5" y="12.2" width="14" height="8.3" rx="1.2" fill="currentColor" opacity="0.85"/><path d="M12 8v12.5" stroke="#3A2A10" stroke-width="1.6"/><path d="M12 8C10.6 5.2 7.6 4.6 7.2 6.4 6.9 7.8 9.6 8 12 8zM12 8c1.4-2.8 4.4-3.4 4.8-1.6.3 1.4-2.4 1.6-4.8 1.6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <div class="num"><span>1</span><span class="sep">/</span><span>5</span></div>
+        </div>
+      </div>
+
+
+    </div>
+  </div></div>
+</div></div><div class="cell"><div class="cap">320 · 12 450 баллов</div><div class="frame" style="width:320px">  <div class="stickywrap" style="position:relative;margin:0"><div class="stickybar on-bonus">
+    <div class="avatar">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="8.5" r="3.6" stroke="#B4BCC8" stroke-width="1.8"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" stroke="#B4BCC8" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </div>
+    <div class="who"><b>Rahmonov Muxamadjon</b><span>А-247</span></div>
+    <div class="head-right">
+      <div class="bal"><span class="num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg><span><span class="bal-num">6</span></span><span class="unit">баллов</span></span></div>
+
+      <div class="promo-wrap">
+                <!-- пилюля показывает другой слайд и листает на него (Руслан, сессия 90):
+             на слайде бонуса — баланс, на слайде баллов — подарок со счётом -->
+        <div class="promo pill-balance on" data-slide="1">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg>
+          <div class="num"><span class="pill-bal-num">12 450</span><span class="unit">баллов</span></div>
+        </div>
+        <div class="promo pill-gift" data-slide="0">
+          <svg class="star" viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="3.5" y="8" width="17" height="4.2" rx="1.2" fill="currentColor"/><rect x="5" y="12.2" width="14" height="8.3" rx="1.2" fill="currentColor" opacity="0.85"/><path d="M12 8v12.5" stroke="#3A2A10" stroke-width="1.6"/><path d="M12 8C10.6 5.2 7.6 4.6 7.2 6.4 6.9 7.8 9.6 8 12 8zM12 8c1.4-2.8 4.4-3.4 4.8-1.6.3 1.4-2.4 1.6-4.8 1.6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <div class="num"><span>1</span><span class="sep">/</span><span>5</span></div>
+        </div>
+      </div>
+
+
+    </div>
+  </div></div>
+</div></div></div>
+<h2>Ширина 360</h2><div class="row"><div class="cell"><div class="cap">360 · 6 баллов</div><div class="frame" style="width:360px">  <div class="stickywrap" style="position:relative;margin:0"><div class="stickybar on-bonus">
+    <div class="avatar">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="8.5" r="3.6" stroke="#B4BCC8" stroke-width="1.8"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" stroke="#B4BCC8" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </div>
+    <div class="who"><b>Бахтиёр</b><span>А-247</span></div>
+    <div class="head-right">
+      <div class="bal"><span class="num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg><span><span class="bal-num">6</span></span><span class="unit">баллов</span></span></div>
+
+      <div class="promo-wrap">
+                <!-- пилюля показывает другой слайд и листает на него (Руслан, сессия 90):
+             на слайде бонуса — баланс, на слайде баллов — подарок со счётом -->
+        <div class="promo pill-balance on" data-slide="1">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg>
+          <div class="num"><span class="pill-bal-num">6</span><span class="unit">баллов</span></div>
+        </div>
+        <div class="promo pill-gift" data-slide="0">
+          <svg class="star" viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="3.5" y="8" width="17" height="4.2" rx="1.2" fill="currentColor"/><rect x="5" y="12.2" width="14" height="8.3" rx="1.2" fill="currentColor" opacity="0.85"/><path d="M12 8v12.5" stroke="#3A2A10" stroke-width="1.6"/><path d="M12 8C10.6 5.2 7.6 4.6 7.2 6.4 6.9 7.8 9.6 8 12 8zM12 8c1.4-2.8 4.4-3.4 4.8-1.6.3 1.4-2.4 1.6-4.8 1.6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <div class="num"><span>1</span><span class="sep">/</span><span>5</span></div>
+        </div>
+      </div>
+
+
+    </div>
+  </div></div>
+</div></div><div class="cell"><div class="cap">360 · 1 450 баллов</div><div class="frame" style="width:360px">  <div class="stickywrap" style="position:relative;margin:0"><div class="stickybar on-bonus">
+    <div class="avatar">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="8.5" r="3.6" stroke="#B4BCC8" stroke-width="1.8"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" stroke="#B4BCC8" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </div>
+    <div class="who"><b>Бахтиёр</b><span>А-247</span></div>
+    <div class="head-right">
+      <div class="bal"><span class="num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg><span><span class="bal-num">6</span></span><span class="unit">баллов</span></span></div>
+
+      <div class="promo-wrap">
+                <!-- пилюля показывает другой слайд и листает на него (Руслан, сессия 90):
+             на слайде бонуса — баланс, на слайде баллов — подарок со счётом -->
+        <div class="promo pill-balance on" data-slide="1">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg>
+          <div class="num"><span class="pill-bal-num">1 450</span><span class="unit">баллов</span></div>
+        </div>
+        <div class="promo pill-gift" data-slide="0">
+          <svg class="star" viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="3.5" y="8" width="17" height="4.2" rx="1.2" fill="currentColor"/><rect x="5" y="12.2" width="14" height="8.3" rx="1.2" fill="currentColor" opacity="0.85"/><path d="M12 8v12.5" stroke="#3A2A10" stroke-width="1.6"/><path d="M12 8C10.6 5.2 7.6 4.6 7.2 6.4 6.9 7.8 9.6 8 12 8zM12 8c1.4-2.8 4.4-3.4 4.8-1.6.3 1.4-2.4 1.6-4.8 1.6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <div class="num"><span>1</span><span class="sep">/</span><span>5</span></div>
+        </div>
+      </div>
+
+
+    </div>
+  </div></div>
+</div></div><div class="cell"><div class="cap">360 · 5 432 балла</div><div class="frame" style="width:360px">  <div class="stickywrap" style="position:relative;margin:0"><div class="stickybar on-bonus">
+    <div class="avatar">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="8.5" r="3.6" stroke="#B4BCC8" stroke-width="1.8"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" stroke="#B4BCC8" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </div>
+    <div class="who"><b>Бахтиёр</b><span>А-247</span></div>
+    <div class="head-right">
+      <div class="bal"><span class="num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg><span><span class="bal-num">6</span></span><span class="unit">баллов</span></span></div>
+
+      <div class="promo-wrap">
+                <!-- пилюля показывает другой слайд и листает на него (Руслан, сессия 90):
+             на слайде бонуса — баланс, на слайде баллов — подарок со счётом -->
+        <div class="promo pill-balance on" data-slide="1">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg>
+          <div class="num"><span class="pill-bal-num">5 432</span><span class="unit">балла</span></div>
+        </div>
+        <div class="promo pill-gift" data-slide="0">
+          <svg class="star" viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="3.5" y="8" width="17" height="4.2" rx="1.2" fill="currentColor"/><rect x="5" y="12.2" width="14" height="8.3" rx="1.2" fill="currentColor" opacity="0.85"/><path d="M12 8v12.5" stroke="#3A2A10" stroke-width="1.6"/><path d="M12 8C10.6 5.2 7.6 4.6 7.2 6.4 6.9 7.8 9.6 8 12 8zM12 8c1.4-2.8 4.4-3.4 4.8-1.6.3 1.4-2.4 1.6-4.8 1.6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <div class="num"><span>1</span><span class="sep">/</span><span>5</span></div>
+        </div>
+      </div>
+
+
+    </div>
+  </div></div>
+</div></div><div class="cell"><div class="cap">360 · 12 450 баллов</div><div class="frame" style="width:360px">  <div class="stickywrap" style="position:relative;margin:0"><div class="stickybar on-bonus">
+    <div class="avatar">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="8.5" r="3.6" stroke="#B4BCC8" stroke-width="1.8"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" stroke="#B4BCC8" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </div>
+    <div class="who"><b>Бахтиёр</b><span>А-247</span></div>
+    <div class="head-right">
+      <div class="bal"><span class="num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg><span><span class="bal-num">6</span></span><span class="unit">баллов</span></span></div>
+
+      <div class="promo-wrap">
+                <!-- пилюля показывает другой слайд и листает на него (Руслан, сессия 90):
+             на слайде бонуса — баланс, на слайде баллов — подарок со счётом -->
+        <div class="promo pill-balance on" data-slide="1">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg>
+          <div class="num"><span class="pill-bal-num">12 450</span><span class="unit">баллов</span></div>
+        </div>
+        <div class="promo pill-gift" data-slide="0">
+          <svg class="star" viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="3.5" y="8" width="17" height="4.2" rx="1.2" fill="currentColor"/><rect x="5" y="12.2" width="14" height="8.3" rx="1.2" fill="currentColor" opacity="0.85"/><path d="M12 8v12.5" stroke="#3A2A10" stroke-width="1.6"/><path d="M12 8C10.6 5.2 7.6 4.6 7.2 6.4 6.9 7.8 9.6 8 12 8zM12 8c1.4-2.8 4.4-3.4 4.8-1.6.3 1.4-2.4 1.6-4.8 1.6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <div class="num"><span>1</span><span class="sep">/</span><span>5</span></div>
+        </div>
+      </div>
+
+
+    </div>
+  </div></div>
+</div></div><div class="cell"><div class="cap">360 · 6 баллов</div><div class="frame" style="width:360px">  <div class="stickywrap" style="position:relative;margin:0"><div class="stickybar on-bonus">
+    <div class="avatar">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="8.5" r="3.6" stroke="#B4BCC8" stroke-width="1.8"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" stroke="#B4BCC8" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </div>
+    <div class="who"><b>Rahmonov Muxamadjon</b><span>А-247</span></div>
+    <div class="head-right">
+      <div class="bal"><span class="num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg><span><span class="bal-num">6</span></span><span class="unit">баллов</span></span></div>
+
+      <div class="promo-wrap">
+                <!-- пилюля показывает другой слайд и листает на него (Руслан, сессия 90):
+             на слайде бонуса — баланс, на слайде баллов — подарок со счётом -->
+        <div class="promo pill-balance on" data-slide="1">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg>
+          <div class="num"><span class="pill-bal-num">6</span><span class="unit">баллов</span></div>
+        </div>
+        <div class="promo pill-gift" data-slide="0">
+          <svg class="star" viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="3.5" y="8" width="17" height="4.2" rx="1.2" fill="currentColor"/><rect x="5" y="12.2" width="14" height="8.3" rx="1.2" fill="currentColor" opacity="0.85"/><path d="M12 8v12.5" stroke="#3A2A10" stroke-width="1.6"/><path d="M12 8C10.6 5.2 7.6 4.6 7.2 6.4 6.9 7.8 9.6 8 12 8zM12 8c1.4-2.8 4.4-3.4 4.8-1.6.3 1.4-2.4 1.6-4.8 1.6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <div class="num"><span>1</span><span class="sep">/</span><span>5</span></div>
+        </div>
+      </div>
+
+
+    </div>
+  </div></div>
+</div></div><div class="cell"><div class="cap">360 · 1 450 баллов</div><div class="frame" style="width:360px">  <div class="stickywrap" style="position:relative;margin:0"><div class="stickybar on-bonus">
+    <div class="avatar">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="8.5" r="3.6" stroke="#B4BCC8" stroke-width="1.8"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" stroke="#B4BCC8" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </div>
+    <div class="who"><b>Rahmonov Muxamadjon</b><span>А-247</span></div>
+    <div class="head-right">
+      <div class="bal"><span class="num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg><span><span class="bal-num">6</span></span><span class="unit">баллов</span></span></div>
+
+      <div class="promo-wrap">
+                <!-- пилюля показывает другой слайд и листает на него (Руслан, сессия 90):
+             на слайде бонуса — баланс, на слайде баллов — подарок со счётом -->
+        <div class="promo pill-balance on" data-slide="1">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg>
+          <div class="num"><span class="pill-bal-num">1 450</span><span class="unit">баллов</span></div>
+        </div>
+        <div class="promo pill-gift" data-slide="0">
+          <svg class="star" viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="3.5" y="8" width="17" height="4.2" rx="1.2" fill="currentColor"/><rect x="5" y="12.2" width="14" height="8.3" rx="1.2" fill="currentColor" opacity="0.85"/><path d="M12 8v12.5" stroke="#3A2A10" stroke-width="1.6"/><path d="M12 8C10.6 5.2 7.6 4.6 7.2 6.4 6.9 7.8 9.6 8 12 8zM12 8c1.4-2.8 4.4-3.4 4.8-1.6.3 1.4-2.4 1.6-4.8 1.6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <div class="num"><span>1</span><span class="sep">/</span><span>5</span></div>
+        </div>
+      </div>
+
+
+    </div>
+  </div></div>
+</div></div><div class="cell"><div class="cap">360 · 5 432 балла</div><div class="frame" style="width:360px">  <div class="stickywrap" style="position:relative;margin:0"><div class="stickybar on-bonus">
+    <div class="avatar">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="8.5" r="3.6" stroke="#B4BCC8" stroke-width="1.8"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" stroke="#B4BCC8" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </div>
+    <div class="who"><b>Rahmonov Muxamadjon</b><span>А-247</span></div>
+    <div class="head-right">
+      <div class="bal"><span class="num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg><span><span class="bal-num">6</span></span><span class="unit">баллов</span></span></div>
+
+      <div class="promo-wrap">
+                <!-- пилюля показывает другой слайд и листает на него (Руслан, сессия 90):
+             на слайде бонуса — баланс, на слайде баллов — подарок со счётом -->
+        <div class="promo pill-balance on" data-slide="1">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg>
+          <div class="num"><span class="pill-bal-num">5 432</span><span class="unit">балла</span></div>
+        </div>
+        <div class="promo pill-gift" data-slide="0">
+          <svg class="star" viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="3.5" y="8" width="17" height="4.2" rx="1.2" fill="currentColor"/><rect x="5" y="12.2" width="14" height="8.3" rx="1.2" fill="currentColor" opacity="0.85"/><path d="M12 8v12.5" stroke="#3A2A10" stroke-width="1.6"/><path d="M12 8C10.6 5.2 7.6 4.6 7.2 6.4 6.9 7.8 9.6 8 12 8zM12 8c1.4-2.8 4.4-3.4 4.8-1.6.3 1.4-2.4 1.6-4.8 1.6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <div class="num"><span>1</span><span class="sep">/</span><span>5</span></div>
+        </div>
+      </div>
+
+
+    </div>
+  </div></div>
+</div></div><div class="cell"><div class="cap">360 · 12 450 баллов</div><div class="frame" style="width:360px">  <div class="stickywrap" style="position:relative;margin:0"><div class="stickybar on-bonus">
+    <div class="avatar">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="8.5" r="3.6" stroke="#B4BCC8" stroke-width="1.8"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" stroke="#B4BCC8" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </div>
+    <div class="who"><b>Rahmonov Muxamadjon</b><span>А-247</span></div>
+    <div class="head-right">
+      <div class="bal"><span class="num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg><span><span class="bal-num">6</span></span><span class="unit">баллов</span></span></div>
+
+      <div class="promo-wrap">
+                <!-- пилюля показывает другой слайд и листает на него (Руслан, сессия 90):
+             на слайде бонуса — баланс, на слайде баллов — подарок со счётом -->
+        <div class="promo pill-balance on" data-slide="1">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg>
+          <div class="num"><span class="pill-bal-num">12 450</span><span class="unit">баллов</span></div>
+        </div>
+        <div class="promo pill-gift" data-slide="0">
+          <svg class="star" viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="3.5" y="8" width="17" height="4.2" rx="1.2" fill="currentColor"/><rect x="5" y="12.2" width="14" height="8.3" rx="1.2" fill="currentColor" opacity="0.85"/><path d="M12 8v12.5" stroke="#3A2A10" stroke-width="1.6"/><path d="M12 8C10.6 5.2 7.6 4.6 7.2 6.4 6.9 7.8 9.6 8 12 8zM12 8c1.4-2.8 4.4-3.4 4.8-1.6.3 1.4-2.4 1.6-4.8 1.6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <div class="num"><span>1</span><span class="sep">/</span><span>5</span></div>
+        </div>
+      </div>
+
+
+    </div>
+  </div></div>
+</div></div></div>
+<h2>Ширина 390</h2><div class="row"><div class="cell"><div class="cap">390 · 6 баллов</div><div class="frame" style="width:390px">  <div class="stickywrap" style="position:relative;margin:0"><div class="stickybar on-bonus">
+    <div class="avatar">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="8.5" r="3.6" stroke="#B4BCC8" stroke-width="1.8"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" stroke="#B4BCC8" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </div>
+    <div class="who"><b>Бахтиёр</b><span>А-247</span></div>
+    <div class="head-right">
+      <div class="bal"><span class="num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg><span><span class="bal-num">6</span></span><span class="unit">баллов</span></span></div>
+
+      <div class="promo-wrap">
+                <!-- пилюля показывает другой слайд и листает на него (Руслан, сессия 90):
+             на слайде бонуса — баланс, на слайде баллов — подарок со счётом -->
+        <div class="promo pill-balance on" data-slide="1">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg>
+          <div class="num"><span class="pill-bal-num">6</span><span class="unit">баллов</span></div>
+        </div>
+        <div class="promo pill-gift" data-slide="0">
+          <svg class="star" viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="3.5" y="8" width="17" height="4.2" rx="1.2" fill="currentColor"/><rect x="5" y="12.2" width="14" height="8.3" rx="1.2" fill="currentColor" opacity="0.85"/><path d="M12 8v12.5" stroke="#3A2A10" stroke-width="1.6"/><path d="M12 8C10.6 5.2 7.6 4.6 7.2 6.4 6.9 7.8 9.6 8 12 8zM12 8c1.4-2.8 4.4-3.4 4.8-1.6.3 1.4-2.4 1.6-4.8 1.6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <div class="num"><span>1</span><span class="sep">/</span><span>5</span></div>
+        </div>
+      </div>
+
+
+    </div>
+  </div></div>
+</div></div><div class="cell"><div class="cap">390 · 1 450 баллов</div><div class="frame" style="width:390px">  <div class="stickywrap" style="position:relative;margin:0"><div class="stickybar on-bonus">
+    <div class="avatar">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="8.5" r="3.6" stroke="#B4BCC8" stroke-width="1.8"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" stroke="#B4BCC8" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </div>
+    <div class="who"><b>Бахтиёр</b><span>А-247</span></div>
+    <div class="head-right">
+      <div class="bal"><span class="num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg><span><span class="bal-num">6</span></span><span class="unit">баллов</span></span></div>
+
+      <div class="promo-wrap">
+                <!-- пилюля показывает другой слайд и листает на него (Руслан, сессия 90):
+             на слайде бонуса — баланс, на слайде баллов — подарок со счётом -->
+        <div class="promo pill-balance on" data-slide="1">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg>
+          <div class="num"><span class="pill-bal-num">1 450</span><span class="unit">баллов</span></div>
+        </div>
+        <div class="promo pill-gift" data-slide="0">
+          <svg class="star" viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="3.5" y="8" width="17" height="4.2" rx="1.2" fill="currentColor"/><rect x="5" y="12.2" width="14" height="8.3" rx="1.2" fill="currentColor" opacity="0.85"/><path d="M12 8v12.5" stroke="#3A2A10" stroke-width="1.6"/><path d="M12 8C10.6 5.2 7.6 4.6 7.2 6.4 6.9 7.8 9.6 8 12 8zM12 8c1.4-2.8 4.4-3.4 4.8-1.6.3 1.4-2.4 1.6-4.8 1.6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <div class="num"><span>1</span><span class="sep">/</span><span>5</span></div>
+        </div>
+      </div>
+
+
+    </div>
+  </div></div>
+</div></div><div class="cell"><div class="cap">390 · 5 432 балла</div><div class="frame" style="width:390px">  <div class="stickywrap" style="position:relative;margin:0"><div class="stickybar on-bonus">
+    <div class="avatar">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="8.5" r="3.6" stroke="#B4BCC8" stroke-width="1.8"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" stroke="#B4BCC8" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </div>
+    <div class="who"><b>Бахтиёр</b><span>А-247</span></div>
+    <div class="head-right">
+      <div class="bal"><span class="num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg><span><span class="bal-num">6</span></span><span class="unit">баллов</span></span></div>
+
+      <div class="promo-wrap">
+                <!-- пилюля показывает другой слайд и листает на него (Руслан, сессия 90):
+             на слайде бонуса — баланс, на слайде баллов — подарок со счётом -->
+        <div class="promo pill-balance on" data-slide="1">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg>
+          <div class="num"><span class="pill-bal-num">5 432</span><span class="unit">балла</span></div>
+        </div>
+        <div class="promo pill-gift" data-slide="0">
+          <svg class="star" viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="3.5" y="8" width="17" height="4.2" rx="1.2" fill="currentColor"/><rect x="5" y="12.2" width="14" height="8.3" rx="1.2" fill="currentColor" opacity="0.85"/><path d="M12 8v12.5" stroke="#3A2A10" stroke-width="1.6"/><path d="M12 8C10.6 5.2 7.6 4.6 7.2 6.4 6.9 7.8 9.6 8 12 8zM12 8c1.4-2.8 4.4-3.4 4.8-1.6.3 1.4-2.4 1.6-4.8 1.6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <div class="num"><span>1</span><span class="sep">/</span><span>5</span></div>
+        </div>
+      </div>
+
+
+    </div>
+  </div></div>
+</div></div><div class="cell"><div class="cap">390 · 12 450 баллов</div><div class="frame" style="width:390px">  <div class="stickywrap" style="position:relative;margin:0"><div class="stickybar on-bonus">
+    <div class="avatar">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="8.5" r="3.6" stroke="#B4BCC8" stroke-width="1.8"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" stroke="#B4BCC8" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </div>
+    <div class="who"><b>Бахтиёр</b><span>А-247</span></div>
+    <div class="head-right">
+      <div class="bal"><span class="num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg><span><span class="bal-num">6</span></span><span class="unit">баллов</span></span></div>
+
+      <div class="promo-wrap">
+                <!-- пилюля показывает другой слайд и листает на него (Руслан, сессия 90):
+             на слайде бонуса — баланс, на слайде баллов — подарок со счётом -->
+        <div class="promo pill-balance on" data-slide="1">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg>
+          <div class="num"><span class="pill-bal-num">12 450</span><span class="unit">баллов</span></div>
+        </div>
+        <div class="promo pill-gift" data-slide="0">
+          <svg class="star" viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="3.5" y="8" width="17" height="4.2" rx="1.2" fill="currentColor"/><rect x="5" y="12.2" width="14" height="8.3" rx="1.2" fill="currentColor" opacity="0.85"/><path d="M12 8v12.5" stroke="#3A2A10" stroke-width="1.6"/><path d="M12 8C10.6 5.2 7.6 4.6 7.2 6.4 6.9 7.8 9.6 8 12 8zM12 8c1.4-2.8 4.4-3.4 4.8-1.6.3 1.4-2.4 1.6-4.8 1.6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <div class="num"><span>1</span><span class="sep">/</span><span>5</span></div>
+        </div>
+      </div>
+
+
+    </div>
+  </div></div>
+</div></div><div class="cell"><div class="cap">390 · 6 баллов</div><div class="frame" style="width:390px">  <div class="stickywrap" style="position:relative;margin:0"><div class="stickybar on-bonus">
+    <div class="avatar">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="8.5" r="3.6" stroke="#B4BCC8" stroke-width="1.8"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" stroke="#B4BCC8" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </div>
+    <div class="who"><b>Rahmonov Muxamadjon</b><span>А-247</span></div>
+    <div class="head-right">
+      <div class="bal"><span class="num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg><span><span class="bal-num">6</span></span><span class="unit">баллов</span></span></div>
+
+      <div class="promo-wrap">
+                <!-- пилюля показывает другой слайд и листает на него (Руслан, сессия 90):
+             на слайде бонуса — баланс, на слайде баллов — подарок со счётом -->
+        <div class="promo pill-balance on" data-slide="1">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg>
+          <div class="num"><span class="pill-bal-num">6</span><span class="unit">баллов</span></div>
+        </div>
+        <div class="promo pill-gift" data-slide="0">
+          <svg class="star" viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="3.5" y="8" width="17" height="4.2" rx="1.2" fill="currentColor"/><rect x="5" y="12.2" width="14" height="8.3" rx="1.2" fill="currentColor" opacity="0.85"/><path d="M12 8v12.5" stroke="#3A2A10" stroke-width="1.6"/><path d="M12 8C10.6 5.2 7.6 4.6 7.2 6.4 6.9 7.8 9.6 8 12 8zM12 8c1.4-2.8 4.4-3.4 4.8-1.6.3 1.4-2.4 1.6-4.8 1.6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <div class="num"><span>1</span><span class="sep">/</span><span>5</span></div>
+        </div>
+      </div>
+
+
+    </div>
+  </div></div>
+</div></div><div class="cell"><div class="cap">390 · 1 450 баллов</div><div class="frame" style="width:390px">  <div class="stickywrap" style="position:relative;margin:0"><div class="stickybar on-bonus">
+    <div class="avatar">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="8.5" r="3.6" stroke="#B4BCC8" stroke-width="1.8"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" stroke="#B4BCC8" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </div>
+    <div class="who"><b>Rahmonov Muxamadjon</b><span>А-247</span></div>
+    <div class="head-right">
+      <div class="bal"><span class="num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg><span><span class="bal-num">6</span></span><span class="unit">баллов</span></span></div>
+
+      <div class="promo-wrap">
+                <!-- пилюля показывает другой слайд и листает на него (Руслан, сессия 90):
+             на слайде бонуса — баланс, на слайде баллов — подарок со счётом -->
+        <div class="promo pill-balance on" data-slide="1">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg>
+          <div class="num"><span class="pill-bal-num">1 450</span><span class="unit">баллов</span></div>
+        </div>
+        <div class="promo pill-gift" data-slide="0">
+          <svg class="star" viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="3.5" y="8" width="17" height="4.2" rx="1.2" fill="currentColor"/><rect x="5" y="12.2" width="14" height="8.3" rx="1.2" fill="currentColor" opacity="0.85"/><path d="M12 8v12.5" stroke="#3A2A10" stroke-width="1.6"/><path d="M12 8C10.6 5.2 7.6 4.6 7.2 6.4 6.9 7.8 9.6 8 12 8zM12 8c1.4-2.8 4.4-3.4 4.8-1.6.3 1.4-2.4 1.6-4.8 1.6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <div class="num"><span>1</span><span class="sep">/</span><span>5</span></div>
+        </div>
+      </div>
+
+
+    </div>
+  </div></div>
+</div></div><div class="cell"><div class="cap">390 · 5 432 балла</div><div class="frame" style="width:390px">  <div class="stickywrap" style="position:relative;margin:0"><div class="stickybar on-bonus">
+    <div class="avatar">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="8.5" r="3.6" stroke="#B4BCC8" stroke-width="1.8"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" stroke="#B4BCC8" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </div>
+    <div class="who"><b>Rahmonov Muxamadjon</b><span>А-247</span></div>
+    <div class="head-right">
+      <div class="bal"><span class="num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg><span><span class="bal-num">6</span></span><span class="unit">баллов</span></span></div>
+
+      <div class="promo-wrap">
+                <!-- пилюля показывает другой слайд и листает на него (Руслан, сессия 90):
+             на слайде бонуса — баланс, на слайде баллов — подарок со счётом -->
+        <div class="promo pill-balance on" data-slide="1">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg>
+          <div class="num"><span class="pill-bal-num">5 432</span><span class="unit">балла</span></div>
+        </div>
+        <div class="promo pill-gift" data-slide="0">
+          <svg class="star" viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="3.5" y="8" width="17" height="4.2" rx="1.2" fill="currentColor"/><rect x="5" y="12.2" width="14" height="8.3" rx="1.2" fill="currentColor" opacity="0.85"/><path d="M12 8v12.5" stroke="#3A2A10" stroke-width="1.6"/><path d="M12 8C10.6 5.2 7.6 4.6 7.2 6.4 6.9 7.8 9.6 8 12 8zM12 8c1.4-2.8 4.4-3.4 4.8-1.6.3 1.4-2.4 1.6-4.8 1.6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <div class="num"><span>1</span><span class="sep">/</span><span>5</span></div>
+        </div>
+      </div>
+
+
+    </div>
+  </div></div>
+</div></div><div class="cell"><div class="cap">390 · 12 450 баллов</div><div class="frame" style="width:390px">  <div class="stickywrap" style="position:relative;margin:0"><div class="stickybar on-bonus">
+    <div class="avatar">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="8.5" r="3.6" stroke="#B4BCC8" stroke-width="1.8"/><path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" stroke="#B4BCC8" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </div>
+    <div class="who"><b>Rahmonov Muxamadjon</b><span>А-247</span></div>
+    <div class="head-right">
+      <div class="bal"><span class="num"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg><span><span class="bal-num">6</span></span><span class="unit">баллов</span></span></div>
+
+      <div class="promo-wrap">
+                <!-- пилюля показывает другой слайд и листает на него (Руслан, сессия 90):
+             на слайде бонуса — баланс, на слайде баллов — подарок со счётом -->
+        <div class="promo pill-balance on" data-slide="1">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" class="pom"><ellipse cx="12" cy="14.6" rx="7.6" ry="7.1" fill="#E8365D"/><path d="M9.4 8.4 C10.5 7.7 10.8 6.7 10.6 5.9 C10.1 5.0 9.1 4.3 7.7 3.7 L10.0 4.1 L10.2 2.4 L11.35 3.8 L12 1.7 L12.65 3.8 L13.8 2.4 L14.0 4.1 L16.3 3.7 C14.9 4.3 13.9 5.0 13.4 5.9 C13.2 6.7 13.5 7.7 14.6 8.4 Z" fill="#E8365D"/></svg>
+          <div class="num"><span class="pill-bal-num">12 450</span><span class="unit">баллов</span></div>
+        </div>
+        <div class="promo pill-gift" data-slide="0">
+          <svg class="star" viewBox="0 0 24 24" width="16" height="16" fill="none"><rect x="3.5" y="8" width="17" height="4.2" rx="1.2" fill="currentColor"/><rect x="5" y="12.2" width="14" height="8.3" rx="1.2" fill="currentColor" opacity="0.85"/><path d="M12 8v12.5" stroke="#3A2A10" stroke-width="1.6"/><path d="M12 8C10.6 5.2 7.6 4.6 7.2 6.4 6.9 7.8 9.6 8 12 8zM12 8c1.4-2.8 4.4-3.4 4.8-1.6.3 1.4-2.4 1.6-4.8 1.6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <div class="num"><span>1</span><span class="sep">/</span><span>5</span></div>
+        </div>
+      </div>
+
+
+    </div>
+  </div></div>
+</div></div></div>
+</body></html>
