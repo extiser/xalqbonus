@@ -9,8 +9,8 @@ import { fillMetricText, METRICS, type MetricKey, type MetricValues } from '#sha
  *
  * Текст — определение из общего словаря `shared/metrics.ts` по ключу: название, что это
  * простым языком и под чертой — как считается. Подсказка из равных частей (issue #402) — без
- * «как считается»: части идут абзацами через пустую строку, черты нет. Пороги в тексте — подстановки,
- * их значения приносит тот, кто ставит значок (`values`).
+ * «как считается»: части идут абзацами через пустую строку, черты нет. Пороги в тексте и в названии —
+ * подстановки, их значения приносит тот, кто ставит значок (`values`).
  *
  * Подсказка висит поверх страницы (`Teleport` в `body`, `position: fixed`): плитка
  * с `overflow: hidden` её не обрезает. Встаёт под значком; не влезает снизу — над ним; у края
@@ -34,7 +34,7 @@ const definition = computed(() => {
   const { title, text, how } = METRICS[props.metric];
 
   return {
-    title,
+    title: fillMetricText(title, props.values),
     paragraphs: fillMetricText(text, props.values).split('\n\n'),
     how: how === undefined ? null : fillMetricText(how, props.values),
   };
