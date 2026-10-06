@@ -1157,8 +1157,9 @@ make prod-psql
 # 2. Живой сбор и перечитывание: в боевом .env
 #      SYNC_TRANSACTIONS_ENABLED=true
 #      SYNC_TRANSACTIONS_RECHECK_ENABLED=true
-#    и пересоздание воркера — правка .env доезжает только так (docs/infra.md)
-make prod-start services="worker"
+#    и пересоздание приложения и воркера — правка .env доезжает только так (docs/infra.md)
+make prod-start services="app worker"
+#    app тоже: карточка «Транзакции» на «Синхронизации» читает SYNC_TRANSACTIONS_ENABLED из окружения app — без пересоздания пишет «расписание выключено» при работающем сборе (замечено на проде 06-10-2026)
 ```
 
 С этой минуты живой сбор идёт сам, прогон истории закрывает прошлое до неё. На экране
