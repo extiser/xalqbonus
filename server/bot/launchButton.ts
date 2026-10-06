@@ -1,6 +1,6 @@
 import type { OpenAppButton } from '#server/adapters/telegram/outgoing';
 import { readMiniAppUrl } from '#server/bot/config';
-import { text } from '#server/bot/texts';
+import { text, type TextKey } from '#server/bot/texts';
 import type { Language } from '#server/generated/prisma/enums';
 
 /**
@@ -14,13 +14,19 @@ import type { Language } from '#server/generated/prisma/enums';
  * `undefined` на машине без `TG_MINIAPP_URL`: Telegram открывает Mini App только по `https`,
  * и подсунуть ему локальный адрес нечем. Приветствие при этом приходит целиком — оно
  * про кнопку под собой не говорит ни слова именно поэтому (server/bot/texts.ts).
+ *
+ * Подпись — «Открыть приложение» везде, кроме уведомления о приветственном бонусе: там
+ * та же кнопка зовёт «Забрать бонус» (server/bot/notifications.ts).
  */
-export const launchButton = (language: Language): OpenAppButton | undefined => {
+export const launchButton = (
+  language: Language,
+  labelKey: Extract<TextKey, 'button_open_app' | 'button_claim_bonus'> = 'button_open_app',
+): OpenAppButton | undefined => {
   const miniAppUrl = readMiniAppUrl();
 
   if (miniAppUrl === '') {
     return undefined;
   }
 
-  return { text: text('button_open_app', language), url: miniAppUrl };
+  return { text: text(labelKey, language), url: miniAppUrl };
 };

@@ -476,15 +476,23 @@ export const renderNotification = (notification: Notification, language: Languag
  * Кнопка под уведомлением. Есть у тех, что зовут в приложение, — та же, что под приветствием
  * бота: у `app_relaunch`, у подарка, который забирают в приложении, у ручной награды, код
  * которой там же, и у привязки из карточки (issue #305) — водитель открывает приложение
- * с нового Telegram. Остальные уведомления сообщают, а не зовут.
+ * с нового Telegram. У приветственного бонуса кнопка та же, но с подписью «Забрать бонус»:
+ * бонус уже на балансе, и зов — посмотреть его в приложении. Остальные уведомления сообщают,
+ * а не зовут.
  */
-export const notificationButton = (notification: Notification, language: Language): OpenAppButton | undefined =>
-  notification.template === 'app_relaunch' ||
-  notification.template === 'gift_received' ||
-  notification.template === 'reward_received' ||
-  notification.template === 'telegram_linked'
-    ? launchButton(language)
-    : undefined;
+export const notificationButton = (notification: Notification, language: Language): OpenAppButton | undefined => {
+  switch (notification.template) {
+    case 'welcome_bonus':
+      return launchButton(language, 'button_claim_bonus');
+    case 'app_relaunch':
+    case 'gift_received':
+    case 'reward_received':
+    case 'telegram_linked':
+      return launchButton(language);
+    default:
+      return undefined;
+  }
+};
 
 /**
  * Фото уведомления: где оно лежит и как прочитать его байты. Путь — ключ, по которому дверь

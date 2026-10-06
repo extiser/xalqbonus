@@ -29,6 +29,7 @@ export type TextKey =
   | 'start_greeting'
   | 'employee_greeting'
   | 'button_open_app'
+  | 'button_claim_bonus'
   | 'select_language'
   | 'button_language_ru'
   | 'button_language_uz'
@@ -374,6 +375,12 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   button_open_app: {
     ru: '🎁 Открыть приложение',
     uz: '🎁 Ilovani ochish',
+  },
+  // Кнопка под уведомлением о приветственном бонусе — тот же запуск приложения, своя подпись.
+  // Узбекский — черновой: вычитывает переводчик одной волной ближе к выкату.
+  button_claim_bonus: {
+    ru: '🎁 Забрать бонус',
+    uz: '🎁 Bonusni olish',
   },
   // Регистрация в Mini App (issue #194) — по макетам `_reference/design/registration/`.
   // Узбекские тексты новых ключей черновые: вычитывает переводчик одной волной ближе к выкату.
