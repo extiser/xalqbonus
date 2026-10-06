@@ -29,13 +29,24 @@ import type { DashboardLeaderGroup, DashboardLeaderRow, DashboardLevers } from '
  * от края плитки до шапки.
  *
  * Справа в шапке — «Выгрузить в Excel» (файл ручки, все строки с телефонами) и «Сделать сегмент · N»,
- * N — строки с «Программа: да». Сегмент из списка — отдельная задача: здесь кнопка видна и погашена всегда.
- * Списка нет — первый месяц истории, «не считаем» или никого — погашены обе.
+ * N — строки с «Программа: да». Списка нет — первый месяц истории, «не считаем» или никого — погашены обе.
+ *
+ * «Сделать сегмент» (issue #415) нажимается, когда список посчитан, N больше нуля и роль позволяет
+ * заводить сегменты; N = 0 — погашена с подсказкой. Запрос — у страницы (`useDashboardSegment`),
+ * здесь — нажатие событием, «Создаём…» на время запроса и отказ строкой под шапкой.
  */
 const props = defineProps<{
   state: LoadState;
   levers: DashboardLevers | null;
+  /** Роль позволяет заводить сегменты. */
+  canCreateSegment: boolean;
+  /** Запрос «Сделать сегмент» идёт. */
+  segmentCreating: boolean;
+  /** Отказ «Сделать сегмент» — строкой под шапкой. */
+  segmentError: string | null;
 }>();
+
+const emit = defineEmits<{ createSegment: [] }>();
 
 const router = useRouter();
 
@@ -48,6 +59,15 @@ const metricValues = computed(() => (leaders.value ? leadersMetricValues(leaders
 const rows = computed(() => (leaders.value?.list?.counted ? leaders.value.list.rows : null));
 
 const segmentSize = computed(() => rows.value?.filter((row) => row.inProgram).length ?? 0);
+
+const segmentEnabled = computed(
+  () => rows.value !== null && segmentSize.value > 0 && props.canCreateSegment && !props.segmentCreating,
+);
+
+/** Подсказка погашенной кнопки: только когда список посчитан, а участников в нём нет. */
+const segmentHint = computed(() => (rows.value !== null && segmentSize.value === 0 ? 'В списке нет участников программы' : undefined));
+
+const segmentLabel = computed(() => (props.segmentCreating ? 'Создаём…' : `Сделать сегмент · ${segmentSize.value}`));
 
 const downloadUrl = computed(() =>
   ready.value
@@ -150,10 +170,17 @@ const PILL_CLASSES = 'inline-block rounded-full px-2.5 py-[3px] font-manrope tex
           :download="downloadUrl ?? undefined"
           :disabled="!rows || rows.length === 0 || !downloadUrl"
         />
-        <AtomsWebActionButton :label="`Сделать сегмент · ${segmentSize}`" title="Сегмент из списка — в следующем обновлении" disabled />
+        <AtomsWebActionButton
+          :label="segmentLabel"
+          :title="segmentHint"
+          :disabled="!segmentEnabled"
+          @click="emit('createSegment')"
+        />
         <MoleculesWebMetricInfo metric="leadersActions" />
       </div>
     </template>
+
+    <AtomsWebFieldError v-if="segmentError" id="leaders-segment-error" :text="segmentError" />
 
     <div v-if="state === 'loading'" class="mt-3.5">
       <AtomsWebHint text="Считаем лидеров…" />

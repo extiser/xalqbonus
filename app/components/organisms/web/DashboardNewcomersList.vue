@@ -19,16 +19,28 @@ import type { DashboardNewcomerRow, DashboardNewcomers } from '#shared/types/das
  * внутри плитки. Текст — влево, «Программа» и числа — вправо, даты серым, порог в «N / 20» серым.
  *
  * Справа в шапке — «Выгрузить в Excel» (файл ручки, все строки с телефонами) и «Сделать сегмент · N»,
- * N — строки с «Программа: да». Сегмент из списка — отдельная задача: кнопка видна и погашена всегда. Строки
- * вместо таблицы — первый месяц истории, «не считаем», новичков нет, 14 дней ещё ни у кого
- * не прошли, никого — по листу `03-depth-newbies-states.html`; тогда погашены обе.
+ * N — строки с «Программа: да». Строки вместо таблицы — первый месяц истории, «не считаем», новичков
+ * нет, 14 дней ещё ни у кого не прошли, никого — по листу `03-depth-newbies-states.html`; тогда
+ * погашены обе.
+ *
+ * «Сделать сегмент» (issue #415) нажимается, когда таблица на экране, N больше нуля и роль позволяет
+ * заводить сегменты; N = 0 — погашена с подсказкой. Запрос — у страницы (`useDashboardSegment`),
+ * здесь — нажатие событием, «Создаём…» на время запроса и отказ строкой под шапкой.
  */
 const props = defineProps<{
   state: LoadState;
   /** Выбранный месяц `YYYY-MM`. */
   month: string | null;
   newcomers: DashboardNewcomers | null;
+  /** Роль позволяет заводить сегменты. */
+  canCreateSegment: boolean;
+  /** Запрос «Сделать сегмент» идёт. */
+  segmentCreating: boolean;
+  /** Отказ «Сделать сегмент» — строкой под шапкой. */
+  segmentError: string | null;
 }>();
+
+const emit = defineEmits<{ createSegment: [] }>();
 
 const router = useRouter();
 
@@ -79,6 +91,21 @@ const note = computed(() => {
   return null;
 });
 
+// Нажимается по тому же условию, что «Выгрузить в Excel»: таблица на экране, без строки-пояснения.
+const segmentEnabled = computed(
+  () =>
+    rows.value !== null &&
+    note.value === null &&
+    segmentSize.value > 0 &&
+    props.canCreateSegment &&
+    !props.segmentCreating,
+);
+
+/** Подсказка погашенной кнопки: только когда список посчитан, а участников в нём нет. */
+const segmentHint = computed(() => (rows.value !== null && segmentSize.value === 0 ? 'В списке нет участников программы' : undefined));
+
+const segmentLabel = computed(() => (props.segmentCreating ? 'Создаём…' : `Сделать сегмент · ${segmentSize.value}`));
+
 const driverPath = (row: DashboardNewcomerRow): string => `/drivers/${row.personId}`;
 
 type Column = { label: string; width: string; align: 'left' | 'right' };
@@ -123,10 +150,17 @@ const PILL_CLASSES = 'inline-block rounded-full px-2.5 py-[3px] font-manrope tex
           :download="downloadUrl ?? undefined"
           :disabled="!rows || rows.length === 0 || note !== null || !downloadUrl"
         />
-        <AtomsWebActionButton :label="`Сделать сегмент · ${segmentSize}`" title="Сегмент из списка — в следующем обновлении" disabled />
+        <AtomsWebActionButton
+          :label="segmentLabel"
+          :title="segmentHint"
+          :disabled="!segmentEnabled"
+          @click="emit('createSegment')"
+        />
         <MoleculesWebMetricInfo metric="newcomersActions" />
       </div>
     </template>
+
+    <AtomsWebFieldError v-if="segmentError" id="newcomers-segment-error" :text="segmentError" />
 
     <div v-if="state === 'loading'" class="mt-3.5">
       <AtomsWebHint text="Считаем новичков…" />

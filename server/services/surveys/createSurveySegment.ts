@@ -1,17 +1,14 @@
 import { consola } from 'consola';
-import { db } from '#server/db';
-import { findSegment, insertSegment, insertSegmentMembers } from '#server/repositories/segments';
 import { surveyGroupMembersSql } from '#server/repositories/surveyResults';
 import { findSurvey } from '#server/repositories/surveys';
-import { toSegment } from '#server/services/segments/fields';
+import { listSnapshotNote, saveListSegment } from '#server/services/segments/saveListSegment';
 import {
   SurveyNotFrozenForSegmentError,
   SurveyRequestInvalidError,
   SurveySegmentEmptyError,
   UnknownSurveyError,
 } from '#server/services/surveys/errors';
-import { formatCalendarDate, formatClockTime, formatDayMonth } from '#server/utils/parkTime';
-import { EMPTY_SEGMENT_CONDITIONS } from '#shared/segment';
+import { formatCalendarDate } from '#server/utils/parkTime';
 import type { Segment } from '#shared/types/segment';
 import type { SurveyGroup } from '#shared/types/surveyResults';
 
@@ -22,8 +19,9 @@ import type { SurveyGroup } from '#shared/types/surveyResults';
  * `segment_members` в момент нажатия и дальше не пересчитываются, что бы ни происходило
  * с опросом. Откуда список взялся, говорит только имя и описание.
  *
- * Сегмент и его люди — одной транзакцией: пустая группа откатывает и заведённую строку
- * сегмента, и сегмента без людей не остаётся.
+ * Сегмент и его люди — одной транзакцией (`saveListSegment`): пустая группа откатывает
+ * и заведённую строку сегмента, и сегмента без людей не остаётся. Имя и описание — по тому же
+ * правилу, что у списков дашборда (issue #415): что за срез и когда собран.
  *
  * Признак демо — у опроса: демо-опрос уходил только демо-рассылками, и список из него —
  * демо-сегмент. Кто вправе его завести, решила ручка — `requireDemoEditor`.
@@ -68,39 +66,17 @@ export const createSurveySegment = async (
   const words = GROUP_WORDS[group];
   const moment = new Date();
 
-  const segmentId = await db.$transaction(async (transaction) => {
-    const insertedId = await insertSegment(
-      {
-        name: `Опрос «${title}» — ${words}, ${formatDayMonth(moment)}`,
-        description: `Из опроса «${title}»: ${words}, ${formatCalendarDate(moment)}, ${formatClockTime(moment)}. Список зафиксирован при создании и не пересчитывается.`,
-        conditions: EMPTY_SEGMENT_CONDITIONS,
-        createdById: employeeId,
-        isDemo: survey.isDemo,
-        kind: 'list',
-      },
-      transaction,
-    );
-
-    const members = await insertSegmentMembers(
-      insertedId,
-      surveyGroupMembersSql(surveyId, group),
-      transaction,
-    );
-
-    if (members === 0) {
-      throw new SurveySegmentEmptyError(surveyId, group);
-    }
-
-    return insertedId;
+  const { segment, members } = await saveListSegment({
+    name: `Опрос «${title}»: ${words} — на ${formatCalendarDate(moment)}`,
+    describe: (count) =>
+      `Опросы → «${title}», сводная воронка, группа «${words}». Вошло ${count}. ${listSnapshotNote(moment)}`,
+    people: surveyGroupMembersSql(surveyId, group),
+    isDemo: survey.isDemo,
+    createdById: employeeId,
+    emptyError: () => new SurveySegmentEmptyError(surveyId, group),
   });
 
-  const row = await findSegment(segmentId);
+  log.info('сегмент-список из итогов опроса заведён', { surveyId, group, segmentId: segment.segmentId, members });
 
-  if (!row) {
-    throw new Error(`заведённый сегмент ${segmentId} не прочитался`);
-  }
-
-  log.info('сегмент-список из итогов опроса заведён', { surveyId, group, segmentId });
-
-  return toSegment(row);
+  return segment;
 };

@@ -275,12 +275,16 @@ describe('сегмент-список из итогов опроса', () => {
       conditions: EMPTY_SEGMENT_CONDITIONS,
       archivedAt: null,
     });
-    expect(segment.name).toMatch(/^Опрос «Тестовый опрос» — не прошли, \d{2}\.\d{2}$/);
-    expect(segment.description).toMatch(
-      /^Из опроса «Тестовый опрос»: не прошли, \d{2}\.\d{2}\.\d{4}, \d{2}:\d{2}\. Список зафиксирован при создании и не пересчитывается\.$/,
-    );
+    expect(segment.name).toMatch(/^Опрос «Тестовый опрос»: не прошли — на \d{2}\.\d{2}\.\d{4}$/);
 
     const group = await groupMembers(cast.surveyId, 'not_completed');
+
+    expect(segment.description).toMatch(
+      new RegExp(
+        `^Опросы → «Тестовый опрос», сводная воронка, группа «не прошли»\\. Вошло ${group.length}\\. ` +
+          'Собран \\d{2}\\.\\d{2}\\.\\d{4} в \\d{2}:\\d{2} по Ташкенту\\. Состав зафиксирован и не пересчитывается\\.$',
+      ),
+    );
 
     expect(await listedPersonIds(segment.segmentId)).toEqual(group);
     expect(sorted(await readSegmentPersonIds(segment.segmentId))).toEqual(group);

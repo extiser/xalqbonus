@@ -333,3 +333,11 @@ export type DashboardNewcomers = {
    */
   list: DashboardLeadersPart<{ rows: DashboardNewcomerRow[] }> | null;
 };
+
+/**
+ * Тело «Сделать сегмент» у списков дашборда (issue #415) — `POST /api/dashboard/leaders/segment`
+ * и `POST /api/dashboard/newcomers/segment`: выбранный на экране месяц `YYYY-MM`.
+ */
+export type DashboardSegmentRequestBody = {
+  month: string;
+};

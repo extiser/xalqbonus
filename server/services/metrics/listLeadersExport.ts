@@ -1,5 +1,5 @@
 import { readMetricsMonth } from '#server/services/metrics/monthPeriod';
-import { readLeaders, type LeaderContact } from '#server/services/metrics/readLeaders';
+import { readLeaders, type LeaderContact, type LeadersReport } from '#server/services/metrics/readLeaders';
 import { formatReportDay } from '#server/services/reports/reportTable';
 import { monthForms } from '#shared/monthNames';
 import type { DashboardLeaderGroup, DashboardLeaderRow } from '#shared/types/dashboard';
@@ -13,7 +13,8 @@ import type { ReportColumn, ReportResult, ReportRow } from '#shared/types/report
  * Телефоны — все незакрытые номера всех профилей человека: список нужен для звонков.
  *
  * Месяц приходит из запроса как есть; негодный — `MetricsMonthError` (`monthPeriod.ts`).
- * Список не строится — `LeadersListError` с причиной.
+ * Список не строится — `LeadersListError` с причиной. Строится ли он, решает `readLeadersList`:
+ * его зовут и выгрузка, и сегмент из списка (issue #415).
  */
 
 /** Список за месяц не строится: лидеров нет или собраны не все сутки. Текст — готовый ответ. */
@@ -69,10 +70,16 @@ const toRow = (row: DashboardLeaderRow, contact: LeaderContact): ReportRow => ({
   kind: 'row',
 });
 
-export const listLeadersExport = async (monthParam: unknown, now: Date = new Date()): Promise<ReportResult> => {
-  const month = readMetricsMonth(monthParam, now);
+/**
+ * Список за разобранный месяц — строки экрана — или `LeadersListError`: лидеров нет или собраны
+ * не все сутки. Одно место, где решается, строится ли список.
+ */
+export const readLeadersList = async (
+  month: string,
+  now: Date,
+): Promise<LeadersReport & { rows: DashboardLeaderRow[] }> => {
   const { dashboard, contacts } = await readLeaders(month, now);
-  const { list, leadersMonth, week } = dashboard;
+  const { list } = dashboard;
 
   if (dashboard.noLeaders || list === null) {
     throw new LeadersListError('Лидеров прошлого месяца нет: история заказов — с октября 2025.');
@@ -82,7 +89,15 @@ export const listLeadersExport = async (monthParam: unknown, now: Date = new Dat
     throw new LeadersListError('Список не строится: собраны не все сутки, нужные для расчёта.');
   }
 
-  const rows = list.rows.map((row) => toRow(row, contacts.get(row.personId) ?? EMPTY_CONTACT));
+  return { dashboard, contacts, rows: list.rows };
+};
+
+export const listLeadersExport = async (monthParam: unknown, now: Date = new Date()): Promise<ReportResult> => {
+  const month = readMetricsMonth(monthParam, now);
+  const { dashboard, contacts, rows: listRows } = await readLeadersList(month, now);
+  const { leadersMonth, week } = dashboard;
+
+  const rows = listRows.map((row) => toRow(row, contacts.get(row.personId) ?? EMPTY_CONTACT));
 
   return {
     report: 'leaders',
