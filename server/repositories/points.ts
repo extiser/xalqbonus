@@ -194,6 +194,21 @@ export const findTransferAmountByIdempotencyKey = async (
   return rows[0]?.amount ?? null;
 };
 
+/**
+ * Время операции перевода по ключу. Пусто — перевода с таким ключом нет. Тем же чтением
+ * по уникальному индексу, что сумма: строка «бонус выдан» в карточке водителя показывает,
+ * когда он встал в журнал.
+ */
+export const findTransferOccurredAtByIdempotencyKey = async (
+  idempotencyKey: string,
+): Promise<Date | null> => {
+  const rows = await db.$queryRaw<{ occurredAt: Date }[]>`
+    SELECT "occurred_at" AS "occurredAt" FROM xb.point_transfers WHERE "idempotency_key" = ${idempotencyKey}
+  `;
+
+  return rows[0]?.occurredAt ?? null;
+};
+
 // Клиент передаётся параметром: внутри транзакции читать глобальным клиентом нельзя —
 // это другое соединение, и собственных, ещё не зафиксированных строк оно не видит.
 const selectTransferByIdempotencyKey = async (
@@ -661,28 +676,3 @@ export const listAccountOperationsForOwner = async (
      ORDER BY transfer."occurred_at" DESC, entry."id" DESC
      LIMIT ${limit}
   `;
-
-/**
- * Есть ли у человека хоть одна поездка в журнале.
- *
- * По журналу, а не по `xb.trips`: обещание бонуса за первые пять поездок отвечает
- * на вопрос «начислялось ли этому человеку хоть раз», а поездка, лежащая в базе и ещё
- * не начисленная, на него отвечает «нет».
- *
- * Ложь у человека без счёта — счёта нет ровно у тех, кому ни разу ничего не начисляли.
- */
-export const hasTripOperations = async (personId: string): Promise<boolean> => {
-  const rows = await db.$queryRaw<{ exists: boolean }[]>`
-    SELECT EXISTS(
-             SELECT 1
-               FROM xb.point_entries AS entry
-               JOIN xb.point_transfers AS transfer ON transfer."id" = entry."transfer_id"
-               JOIN xb.accounts AS account ON account."id" = entry."account_id"
-              WHERE account."type" = 'driver'
-                AND account."person_id" = ${personId}::uuid
-                AND transfer."reason" = 'trip'::xb.point_reason
-           ) AS "exists"
-  `;
-
-  return rows[0]?.exists ?? false;
-};

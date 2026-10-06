@@ -348,6 +348,89 @@ export const homeNewcomerMock = {
   history: { state: 'empty' as const, days: [] },
 };
 
+/**
+ * Счёт до приветственного бонуса — `_reference/design/home/main-screen-welcome.html` (issue #410).
+ * Строка «Ещё N поездок» приходит с сервера кусками; здесь собрана так же — число и слово жирным.
+ */
+function welcomeMock(done: number, left: { count: string; word: string }, language: 'ru' | 'uz' = 'ru') {
+  const texts =
+    language === 'ru'
+      ? {
+          title: 'Приветственный бонус',
+          left: [
+            { text: 'Ещё ', strong: false },
+            { text: left.count, strong: true },
+            { text: ' ', strong: false },
+            { text: left.word, strong: true },
+            { text: ' — и 300 баллов ваши', strong: false },
+          ],
+          counted: 'Считаются поездки после вступления 05.10',
+        }
+      : {
+          title: 'Xush kelish bonusi',
+          left: [
+            { text: 'Yana ', strong: false },
+            { text: left.count, strong: true },
+            { text: ' ta safar — va 300 ball sizniki', strong: false },
+          ],
+          counted: "Dasturga qo'shilgandan keyingi safarlar hisoblanadi: 05.10",
+        };
+
+  return { done, total: 5, amount: '+300', texts };
+}
+
+/** Новичок до бонуса: шесть баллов — пять за поездки до вступления, в счёт бонуса идёт одна. */
+const WELCOME_POINTS = 6;
+
+/** История новичка: поездка после вступления сегодня и пять доначисленных за окно до него. */
+const WELCOME_HISTORY: MemberOperationDayView[] = [
+  {
+    id: 'today',
+    label: 'Сегодня',
+    operations: [{ id: 'w1', time: '09:32', title: 'Поездка', amount: '+1', direction: 'plus' }],
+  },
+  {
+    id: 'yesterday',
+    label: 'Вчера',
+    operations: ['18:40', '16:05', '14:12', '11:47', '09:20'].map((time, index) => ({
+      id: `w${index + 2}`,
+      time,
+      title: 'Поездка',
+      amount: '+1',
+      direction: 'plus' as const,
+    })),
+  },
+];
+
+export const homeWelcomeMock = {
+  ...homeNewcomerMock,
+  points: WELCOME_POINTS,
+  texts: { ...HOME_TEXTS, balanceUnit: balanceUnit(WELCOME_POINTS) },
+  history: { state: 'ready' as const, days: WELCOME_HISTORY },
+  welcome: welcomeMock(1, { count: '4', word: 'поездки' }),
+};
+
+/** До бонуса одна поездка: «Ещё 1 поездка». */
+export const homeWelcomeAlmostMock = {
+  ...homeWelcomeMock,
+  welcome: welcomeMock(4, { count: '1', word: 'поездка' }),
+};
+
+/** Узбекские тексты слайда. Остальной экран — заглушкой по-русски. */
+export const homeWelcomeUzMock = {
+  ...homeWelcomeMock,
+  texts: { ...homeWelcomeMock.texts, balanceUnit: 'ball' },
+  welcome: welcomeMock(1, { count: '4', word: 'safar' }, 'uz'),
+};
+
+/** Бонус выдан: слайда нет, главная как без него — без точек. */
+export const homeWelcomeAwardedMock = {
+  ...homeNewcomerMock,
+  points: WELCOME_POINTS + 300,
+  texts: { ...HOME_TEXTS, balanceUnit: balanceUnit(WELCOME_POINTS + 300) },
+  history: { state: 'ready' as const, days: WELCOME_HISTORY },
+};
+
 /** Ничего не загрузилось: у каждого блока свой отказ и своё «Повторить». */
 export const homeErrorsMock = {
   ...homeMock,

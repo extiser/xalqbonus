@@ -10,12 +10,14 @@ import {
   type ProfilePhoneRow,
 } from '#server/repositories/drivers';
 import { findDriverAccountReconciliation } from '#server/repositories/points';
+import { readWelcomeBonus, type WelcomeBonusState } from '#server/services/points/readWelcomeBonus';
 import type {
   DriverBalance,
   DriverCardResponse,
   DriverLicense,
   DriverParkProfile,
   DriverPhone,
+  DriverWelcomeBonus,
 } from '#shared/types/driver';
 
 /**
@@ -73,6 +75,18 @@ const toProfile = (row: ParkProfileRow, phones: DriverPhone[]): DriverParkProfil
   lastTripEndedAt: row.lastTripEndedAt?.toISOString() ?? null,
 });
 
+/** Даты бонуса — ISO-строками, как все даты карточки. */
+const toWelcomeBonus = (bonus: WelcomeBonusState): DriverWelcomeBonus => {
+  switch (bonus.state) {
+    case 'progress':
+      return { ...bonus, joinedAt: bonus.joinedAt.toISOString() };
+    case 'awarded':
+      return { state: 'awarded', awardedAt: bonus.awardedAt.toISOString() };
+    case 'not_eligible':
+      return bonus;
+  }
+};
+
 /** Телефоны раскладываются по учёткам: телефон принадлежит профилю, а не человеку. */
 const groupPhonesByProfile = (rows: ProfilePhoneRow[]): Map<string, DriverPhone[]> => {
   const grouped = new Map<string, DriverPhone[]>();
@@ -94,13 +108,14 @@ export const readDriverCard = async (personId: string): Promise<DriverCardRespon
     return null;
   }
 
-  const [licenses, profiles, phones, telegramLinks, settings, reconciliation] = await Promise.all([
+  const [licenses, profiles, phones, telegramLinks, settings, reconciliation, welcomeBonus] = await Promise.all([
     listPersonLicenses(personId),
     listPersonParkProfiles(personId),
     listPersonPhones(personId),
     listPersonTelegramLinks(personId),
     findPersonSettings(personId),
     findDriverAccountReconciliation(personId),
+    readWelcomeBonus(personId),
   ]);
 
   const phonesByProfile = groupPhonesByProfile(phones);
@@ -148,5 +163,6 @@ export const readDriverCard = async (personId: string): Promise<DriverCardRespon
         }
       : null,
     balance,
+    welcomeBonus: welcomeBonus ? toWelcomeBonus(welcomeBonus) : null,
   };
 };

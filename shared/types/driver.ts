@@ -245,7 +245,21 @@ export type DriverCardResponse = {
   membership: DriverMembership | null;
   /** Пусто, когда счёта нет. */
   balance: DriverBalance | null;
+  /** Приветственный бонус (issue #410). Пусто у не участника — как `membership`. */
+  welcomeBonus: DriverWelcomeBonus | null;
 };
+
+/**
+ * Приветственный бонус тем же счётом, что слайд «+300» у водителя, — `readWelcomeBonus`.
+ *
+ * - `progress` — зачётных поездок после вступления из скольких
+ * - `awarded` — когда встал перевод `welcome:<person_id>`
+ * - `not_eligible` — перенесён из старой базы, бонус не положен
+ */
+export type DriverWelcomeBonus =
+  | { state: 'progress'; done: number; total: number; joinedAt: string }
+  | { state: 'awarded'; awardedAt: string }
+  | { state: 'not_eligible' };
 
 /** Вторая сторона перевода: перевод всегда двусторонний, и куда ушли баллы — видно. */
 export type DriverOperationCounterparty = {

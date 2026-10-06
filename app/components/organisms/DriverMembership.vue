@@ -48,6 +48,25 @@ const confirmUnlink = (): void => {
   emit('unlink');
 };
 
+/**
+ * Приветственный бонус словами — тем же счётом, что слайд «+300» у водителя (issue #410).
+ * У не участника строки нет: раздел пуст с причиной.
+ */
+const welcomeBonusText = computed(() => {
+  const bonus = props.card.welcomeBonus;
+
+  switch (bonus?.state) {
+    case 'progress':
+      return `${bonus.done} из ${bonus.total} поездок после вступления`;
+    case 'awarded':
+      return `выдан ${formatDateTime(bonus.awardedAt)}`;
+    case 'not_eligible':
+      return 'не положен — перенесён из старой базы';
+    default:
+      return null;
+  }
+});
+
 const linkTitle = computed(() => `Привязать Telegram ${props.candidate?.telegramUserId ?? ''}?`);
 
 const linkMessage = computed(() => {
@@ -103,6 +122,12 @@ const denialParts = computed(() => {
     />
     <dl v-else class="divide-y divide-slate-100">
       <MoleculesFactRow label="Вступил" :value="formatDateTime(card.membership.joinedAt)" mono />
+      <MoleculesFactRow
+        v-if="welcomeBonusText"
+        label="Приветственный бонус"
+        :value="welcomeBonusText"
+        :mono="card.welcomeBonus?.state === 'awarded'"
+      />
       <MoleculesFactRow
         label="Откуда участие"
         :value="sourceLabel(card.membership.joinedSource)"

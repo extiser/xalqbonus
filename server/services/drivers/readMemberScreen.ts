@@ -1,18 +1,19 @@
 import type { Language } from '#server/generated/prisma/enums';
 import { plainText } from '#server/bot/texts';
-import { hasTripOperations } from '#server/repositories/points';
 import { findLastSuccessfulRunFinishedAt } from '#server/repositories/syncRuns';
 import { memberProfileTexts, readMemberProfile } from '#server/services/drivers/memberProfile';
 import { memberScreenTexts } from '#server/services/drivers/memberScreen';
 import type { LinkedDriver } from '#server/services/drivers/readLinkedDriver';
 import { memberOrderTexts } from '#server/services/orders/memberOrderScreen';
+import { WELCOME_BONUS_POINTS } from '#server/services/points/awardWelcomeBonus';
+import { readWelcomeBonus } from '#server/services/points/readWelcomeBonus';
 import { memberRewardTexts } from '#server/services/rewards/memberRewardScreen';
 import { readMemberSurveyBanner } from '#server/services/surveys/readMemberSurveyBanner';
-import { DAY_MS, formatCalendarDate, formatClockTime } from '#server/utils/parkTime';
-import type { MiniAppDemo, MiniAppStateResponse, TripsNote } from '#shared/types/miniapp';
+import { DAY_MS, formatCalendarDate, formatClockTime, formatDayMonth } from '#server/utils/parkTime';
+import type { MemberWelcomeBonus, MiniAppDemo, MiniAppStateResponse, TripsNote } from '#shared/types/miniapp';
 
 /**
- * Экран участника: баланс, имя с позывным, отметка учтённых поездок и обещание бонуса новичку.
+ * Экран участника: баланс, имя с позывным, отметка учтённых поездок и счёт до бонуса новичку.
  *
  * Истории здесь нет — она приезжает своей ручкой и листается: страница экрана читается
  * один раз, а история догружается прокруткой, и пересобирать ради этого весь экран незачем.
@@ -50,6 +51,25 @@ const tripsNote = (syncedAt: Date, language: Language, now: Date): TripsNote => 
 });
 
 /**
+ * Счёт до бонуса для слайда «+300» — только пока бонус положен и не выдан. Выдан — слайд
+ * просто уходит, о выдаче говорит уведомление; перенесённому из старой базы бонус не положен.
+ */
+const memberWelcomeBonus = async (personId: string): Promise<MemberWelcomeBonus | null> => {
+  const bonus = await readWelcomeBonus(personId);
+
+  if (bonus?.state !== 'progress') {
+    return null;
+  }
+
+  return {
+    done: bonus.done,
+    total: bonus.total,
+    points: WELCOME_BONUS_POINTS,
+    joinedAt: formatDayMonth(bonus.joinedAt),
+  };
+};
+
+/**
  * «Сейчас» приходит параметром: от него зависит предупреждение, и тест
  * задаёт его явно, а не ждёт нужного часа.
  *
@@ -64,8 +84,8 @@ export const readMemberScreen = async (
   now: Date,
   demo: MiniAppDemo | null = null,
 ): Promise<MiniAppStateResponse> => {
-  const [hasTrips, syncedAt, profile, survey] = await Promise.all([
-    hasTripOperations(driver.personId),
+  const [welcomeBonus, syncedAt, profile, survey] = await Promise.all([
+    memberWelcomeBonus(driver.personId),
     findLastSuccessfulRunFinishedAt(FRESHNESS_KIND),
     readMemberProfile(driver.personId, telegramChatId),
     readMemberSurveyBanner(driver, now),
@@ -90,13 +110,8 @@ export const readMemberScreen = async (
         ? notReceived
         : plainText('balance_updated', driver.language, { time: formatClockTime(syncedAt) }),
     tripsNote: syncedAt === null ? { text: notReceived, stale: false } : tripsNote(syncedAt, driver.language, now),
-    // Обещание первых пяти поездок — тому, у кого в журнале нет ни одной. Не по факту
-    // сегодняшней регистрации: перенесённый из старой базы приходит сюда с тысячей
-    // поездок за спиной, и обещать ему бонус за первые пять — враньё (issue #101).
-    //
-    // Без обращения по имени: имя стоит строкой выше, в шапке под балансом.
-    promise: hasTrips ? null : plainText('welcome_bonus_promise', driver.language),
-    texts: memberScreenTexts(driver.language),
+    welcomeBonus,
+    texts: memberScreenTexts(driver.language, welcomeBonus),
     orderTexts: memberOrderTexts(driver.language),
     rewardTexts: memberRewardTexts(driver.language),
     profile,

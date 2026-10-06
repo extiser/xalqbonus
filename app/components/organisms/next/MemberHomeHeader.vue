@@ -22,12 +22,22 @@
  * Одним признаком, а не таймлайном прокрутки для баланса: в WebKit без таймлайнов (Telegram
  * на iOS и macOS) запасной путь показывал баланс с первого кадра, рядом с крупным числом
  * (прогон #210 на стенде).
+ *
+ * Пока не выдан приветственный бонус, центр главной — слайдер, и пилюля показывает другой слайд
+ * и листает на него (`main-screen-welcome.html`, issue #410): на слайде бонуса — пилюля баланса,
+ * на слайде баллов — золотая пилюля подарка «1 / 5». Пилюля акции в это время не стоит: первым
+ * обещанием на слайде баллов идёт подарок. Пилюли лежат стопкой на одном месте и сменяют друг
+ * друга вместе со слайдом. Число ушло под шапку — как без слайдера: одна пилюля баланса.
  */
 defineProps<{
   name: string;
   callsign?: string;
   /** Прогресс акции. Нет — водитель не в акции, пилюли нет. */
   promo?: { done: number; total: number };
+  /** Счёт до приветственного бонуса. Есть — центр главной листается, пилюля показывает другой слайд. */
+  welcome?: { done: number; total: number };
+  /** Показан слайд бонуса. Без `welcome` не читается. */
+  welcomeShown?: boolean;
   /** Баланс готовыми строками: число набирается вместе с крупным, слово — по итоговому балансу. */
   balance: { amount: string; unit: string };
   /** Крупное число ушло под шапку — подложка и пилюля баланса вместо пилюли обещания. */
@@ -35,10 +45,12 @@ defineProps<{
   texts: {
     profile: string;
     promo: string;
+    /** Подпись пилюли подарка для экранного чтеца. Нужна, когда есть `welcome`. */
+    welcome?: string;
   };
 }>();
 
-defineEmits<{ profile: []; promo: [] }>();
+defineEmits<{ profile: []; promo: []; showWelcome: []; showPoints: [] }>();
 </script>
 
 <template>
@@ -57,6 +69,26 @@ defineEmits<{ profile: []; promo: [] }>();
 
       <span v-if="surface" class="home-bar-balance flex shrink-0">
         <AtomsNextMemberBalancePill :amount="balance.amount" :unit="balance.unit" />
+      </span>
+      <span v-else-if="welcome" class="home-bar-stack">
+        <button
+          type="button"
+          class="home-bar-stacked flex cursor-pointer border-0 bg-transparent p-0"
+          :class="welcomeShown ? 'home-bar-stacked-on' : ''"
+          :inert="!welcomeShown"
+          @click="$emit('showPoints')"
+        >
+          <AtomsNextMemberBalancePill :amount="balance.amount" :unit="balance.unit" />
+        </button>
+        <span class="home-bar-stacked flex" :class="welcomeShown ? '' : 'home-bar-stacked-on'" :inert="welcomeShown">
+          <MoleculesNextMemberPromoPill
+            icon="gift"
+            :done="welcome.done"
+            :total="welcome.total"
+            :label="texts.welcome ?? ''"
+            @open="$emit('showWelcome')"
+          />
+        </span>
       </span>
       <MoleculesNextMemberPromoPill
         v-else-if="promo"
@@ -120,9 +152,36 @@ defineEmits<{ profile: []; promo: [] }>();
   }
 }
 
+/* Пилюли слайдера — стопкой в одной клетке, у правого края; видна та, что на другой слайд.
+   Смена — за 0,3 с, вместе с листанием. */
+.home-bar-stack {
+  display: grid;
+  flex-shrink: 0;
+}
+
+.home-bar-stacked {
+  grid-area: 1 / 1;
+  justify-self: end;
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+  transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+}
+
+.home-bar-stacked-on {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .home-bar-balance {
     animation: none;
+  }
+
+  .home-bar-stacked {
+    transform: none;
+    transition: none;
   }
 }
 </style>

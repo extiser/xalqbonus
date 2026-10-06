@@ -8,7 +8,9 @@ import {
   formatDayKey,
   previousDayKey,
 } from '#server/utils/parkTime';
-import type { MemberOperation, MemberScreenTexts } from '#shared/types/miniapp';
+import type { MemberSurveyTextPart } from '#shared/types/memberSurvey';
+import type { MemberOperation, MemberScreenTexts, MemberWelcomeBonus, MemberWelcomeTexts } from '#shared/types/miniapp';
+import { formatNumber, pluralize } from '#shared/numberFormat';
 
 /**
  * Во что превращается строка журнала на экране водителя.
@@ -127,8 +129,51 @@ export const describeOperation = (
   };
 };
 
-/** Тексты экрана участника на его языке. */
-export const memberScreenTexts = (language: Language): MemberScreenTexts => ({
+/** Метки строки «Ещё {left} {trips} — …», которые экран выделяет жирным. */
+const WELCOME_STRONG_MARKS: ReadonlySet<string> = new Set(['left', 'trips']);
+
+/**
+ * «Ещё **4 поездки** — и 300 баллов ваши» кусками. Подстановки делает сервер, а жирное
+ * отмечает по меткам `{left}` и `{trips}`: где они стоят в строке, решает язык.
+ */
+const welcomeLeftParts = (bonus: MemberWelcomeBonus, language: Language): MemberSurveyTextPart[] => {
+  const left = bonus.total - bonus.done;
+  const values: Readonly<Record<string, string>> = {
+    left: String(left),
+    trips: pluralize(
+      left,
+      plainText('welcome_trip_one', language),
+      plainText('welcome_trip_few', language),
+      plainText('welcome_trip_many', language),
+    ),
+    points: formatNumber(bonus.points),
+  };
+
+  // `split` с группой оставляет имена меток на нечётных местах.
+  return plainText('welcome_slide_left', language)
+    .split(/\{(\w+)\}/)
+    .map((text, index) =>
+      index % 2 === 1
+        ? { text: values[text] ?? `{${text}}`, strong: WELCOME_STRONG_MARKS.has(text) }
+        : { text, strong: false },
+    )
+    .filter((part) => part.text !== '');
+};
+
+const welcomeTexts = (bonus: MemberWelcomeBonus, language: Language): MemberWelcomeTexts => ({
+  title: plainText('welcome_slide_title', language),
+  left: welcomeLeftParts(bonus, language),
+  counted: plainText('welcome_slide_counted', language, { date: bonus.joinedAt }),
+});
+
+/**
+ * Тексты экрана участника на его языке. Тексты слайда бонуса — только при счёте:
+ * без него слайда нет, и подписывать нечего.
+ */
+export const memberScreenTexts = (
+  language: Language,
+  welcomeBonus: MemberWelcomeBonus | null,
+): MemberScreenTexts => ({
   profile: plainText('profile_title', language),
   balanceTitle: plainText('balance_title', language),
   balanceUnit: {
@@ -174,4 +219,5 @@ export const memberScreenTexts = (language: Language): MemberScreenTexts => ({
   cancelHint: plainText('cancel_order_hint', language),
   yes: plainText('button_yes', language),
   no: plainText('button_no', language),
+  welcome: welcomeBonus ? welcomeTexts(welcomeBonus, language) : null,
 });

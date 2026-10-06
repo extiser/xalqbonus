@@ -2,6 +2,10 @@
 /**
  * Пилюля акции в шапке главной: мерцающая звезда и прогресс «3 / 5», вокруг — золотая пыль.
  *
+ * Та же пилюля с подарком вместо звезды — приветственный бонус «1 / 5»
+ * (`_reference/design/home/main-screen-welcome.html`, `.pill-gift`): звезда — знак акции,
+ * бонус — другое обещание.
+ *
  * Стоит там, где раньше был баланс, и той же высоты — 36 px: баланс переехал в центр экрана,
  * второе такое же число в шапке не нужно. Нажатие ведёт в акцию.
  *
@@ -9,12 +13,16 @@
  * частиц снята с эталона главного экрана как есть: случайная раскладка при каждой
  * отрисовке разошлась бы между сервером и браузером.
  */
-defineProps<{
-  done: number;
-  total: number;
-  /** Подпись для экранного чтеца: на пилюле только звезда и цифры. */
-  label: string;
-}>();
+withDefaults(
+  defineProps<{
+    done: number;
+    total: number;
+    /** Подпись для экранного чтеца: на пилюле только значок и цифры. */
+    label: string;
+    icon?: 'star' | 'gift';
+  }>(),
+  { icon: 'star' },
+);
 
 defineEmits<{ open: [] }>();
 
@@ -96,7 +104,18 @@ function particleStyle(particle: DustParticle): Record<string, string> {
       />
     </span>
     <span class="promo-pill">
-      <svg class="promo-star" viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+      <svg v-if="icon === 'gift'" class="promo-star" viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+        <rect x="3.5" y="8" width="17" height="4.2" rx="1.2" fill="currentColor" />
+        <rect x="5" y="12.2" width="14" height="8.3" rx="1.2" fill="currentColor" opacity="0.85" />
+        <path d="M12 8v12.5" stroke="#3A2A10" stroke-width="1.6" />
+        <path
+          d="M12 8C10.6 5.2 7.6 4.6 7.2 6.4 6.9 7.8 9.6 8 12 8zM12 8c1.4-2.8 4.4-3.4 4.8-1.6.3 1.4-2.4 1.6-4.8 1.6z"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linejoin="round"
+        />
+      </svg>
+      <svg v-else class="promo-star" viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
         <path
           d="M12 2.6l2.55 6.05 6.55.52-4.98 4.27 1.52 6.4L12 16.4l-5.64 3.44 1.52-6.4-4.98-4.27 6.55-.52z"
           fill="currentColor"

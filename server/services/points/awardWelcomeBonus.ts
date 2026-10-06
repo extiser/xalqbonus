@@ -21,11 +21,15 @@ import { transferPoints } from '#server/services/points/transfer';
 
 const log = consola.withTag('points:welcome-bonus');
 
-/** Сколько баллов обещано. Продуктовое решение парка, унаследованное как есть. */
-const WELCOME_BONUS_POINTS = 300;
+/**
+ * Сколько баллов обещано. Продуктовое решение парка, унаследованное как есть.
+ *
+ * Наружу — для счёта на экране (`readWelcomeBonus.ts`): обещание и выдача читают одно число.
+ */
+export const WELCOME_BONUS_POINTS = 300;
 
 /** После скольких завершённых поездок бонус положен. */
-const WELCOME_TRIPS_REQUIRED = 5;
+export const WELCOME_TRIPS_REQUIRED = 5;
 
 export type WelcomeBonusInput = {
   personId: string;
