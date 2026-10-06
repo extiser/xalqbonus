@@ -32,7 +32,7 @@ import type { DashboardLeaderGroup, DashboardLeaderRow, DashboardLevers } from '
  * N — строки с «Программа: да». Списка нет — первый месяц истории, «не считаем» или никого — погашены обе.
  *
  * «Сделать сегмент» (issue #415) нажимается, когда список посчитан, N больше нуля и роль позволяет
- * заводить сегменты; N = 0 — погашена с подсказкой. Запрос — у страницы (`useDashboardSegment`),
+ * заводить сегменты; таблица на экране и N = 0 — погашена с подсказкой. Запрос — у страницы (`useDashboardSegment`),
  * здесь — нажатие событием, «Создаём…» на время запроса и отказ строкой под шапкой.
  */
 const props = defineProps<{
@@ -59,15 +59,6 @@ const metricValues = computed(() => (leaders.value ? leadersMetricValues(leaders
 const rows = computed(() => (leaders.value?.list?.counted ? leaders.value.list.rows : null));
 
 const segmentSize = computed(() => rows.value?.filter((row) => row.inProgram).length ?? 0);
-
-const segmentEnabled = computed(
-  () => rows.value !== null && segmentSize.value > 0 && props.canCreateSegment && !props.segmentCreating,
-);
-
-/** Подсказка погашенной кнопки: только когда список посчитан, а участников в нём нет. */
-const segmentHint = computed(() => (rows.value !== null && segmentSize.value === 0 ? 'В списке нет участников программы' : undefined));
-
-const segmentLabel = computed(() => (props.segmentCreating ? 'Создаём…' : `Сделать сегмент · ${segmentSize.value}`));
 
 const downloadUrl = computed(() =>
   ready.value
@@ -97,6 +88,20 @@ const note = computed(() => {
 
   return null;
 });
+
+const segmentEnabled = computed(
+  () => rows.value !== null && segmentSize.value > 0 && props.canCreateSegment && !props.segmentCreating,
+);
+
+/**
+ * Подсказка погашенной кнопки — только когда таблица на экране, а участников в ней нет. Есть строка
+ * вместо таблицы — причину называет она, подсказки нет.
+ */
+const segmentHint = computed(() =>
+  rows.value !== null && note.value === null && segmentSize.value === 0 ? 'В списке нет участников программы' : undefined,
+);
+
+const segmentLabel = computed(() => (props.segmentCreating ? 'Создаём…' : `Сделать сегмент · ${segmentSize.value}`));
 
 const GROUP_TITLES: Record<DashboardLeaderGroup, (count: number) => string> = {
   below: (count) => `Ездят меньше обычного · ${formatNumber(count)}`,

@@ -24,7 +24,7 @@ import type { DashboardNewcomerRow, DashboardNewcomers } from '#shared/types/das
  * погашены обе.
  *
  * «Сделать сегмент» (issue #415) нажимается, когда таблица на экране, N больше нуля и роль позволяет
- * заводить сегменты; N = 0 — погашена с подсказкой. Запрос — у страницы (`useDashboardSegment`),
+ * заводить сегменты; таблица на экране и N = 0 — погашена с подсказкой. Запрос — у страницы (`useDashboardSegment`),
  * здесь — нажатие событием, «Создаём…» на время запроса и отказ строкой под шапкой.
  */
 const props = defineProps<{
@@ -101,8 +101,13 @@ const segmentEnabled = computed(
     !props.segmentCreating,
 );
 
-/** Подсказка погашенной кнопки: только когда список посчитан, а участников в нём нет. */
-const segmentHint = computed(() => (rows.value !== null && segmentSize.value === 0 ? 'В списке нет участников программы' : undefined));
+/**
+ * Подсказка погашенной кнопки — только когда таблица на экране, а участников в ней нет. Есть строка
+ * вместо таблицы — причину называет она, подсказки нет.
+ */
+const segmentHint = computed(() =>
+  rows.value !== null && note.value === null && segmentSize.value === 0 ? 'В списке нет участников программы' : undefined,
+);
 
 const segmentLabel = computed(() => (props.segmentCreating ? 'Создаём…' : `Сделать сегмент · ${segmentSize.value}`));
 
