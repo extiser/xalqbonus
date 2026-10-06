@@ -18,6 +18,10 @@
  * `{имя}` (`MetricValues`): значения — константы сервера, экран берёт их из ответа ручки, и копии
  * числа в тексте нет. У названия списка и у его кнопок подсказка — равные части абзацами через
  * пустую строку, без «как считается» (`codex.md`, «Подсказка метрики»).
+ *
+ * Новички (issue #407) — подсказки `_reference/design/web/dashboard/03-depth-newbies.html`, дословно;
+ * последнее предложение «как считается» у «Сколько остаётся» — решение Руслана 06-10-2026. Окно,
+ * порог и граница точных наборов — подстановки, как у лидеров, в названии тоже.
  */
 
 export type MetricDefinition = {
@@ -30,7 +34,16 @@ export type MetricDefinition = {
 };
 
 /** Подстановки в тексты подсказок: «8 недель», «3+ недели», «30». */
-export type MetricPlaceholder = 'leadersPercent' | 'normWeeks' | 'belowNormPercent' | 'streakWeeks' | 'streakPlus';
+export type MetricPlaceholder =
+  | 'leadersPercent'
+  | 'normWeeks'
+  | 'belowNormPercent'
+  | 'streakWeeks'
+  | 'streakPlus'
+  | 'newcomerDays'
+  | 'newcomerDaysAfter'
+  | 'newcomerTrips'
+  | 'newcomersExactFrom';
 
 export type MetricValues = Readonly<Partial<Record<MetricPlaceholder, string>>>;
 
@@ -69,7 +82,11 @@ export type MetricKey =
   | 'leadersProgram'
   | 'leadersWeekNorm'
   | 'leadersToNorm'
-  | 'leadersWeeksBelow';
+  | 'leadersWeeksBelow'
+  | 'newcomersRetention'
+  | 'newcomersFirstDays'
+  | 'newcomersList'
+  | 'newcomersActions';
 
 export const METRICS: Readonly<Record<MetricKey, MetricDefinition>> = {
   trips: {
@@ -224,6 +241,25 @@ export const METRICS: Readonly<Record<MetricKey, MetricDefinition>> = {
     title: 'Недель ниже',
     text: 'Сколько недель подряд водитель ездит ниже своей нормы — до выбранной недели включительно.',
     how: 'Ниже нормы — на {belowNormPercent} % и больше. Неделя без поездок тоже считается неделей ниже нормы.',
+  },
+  newcomersRetention: {
+    title: 'Новички: сколько остаётся',
+    text: 'Новичок — водитель, чья первая поездка в парке пришлась на этот месяц. Сколько из них ездят в следующие месяцы.',
+    how: '«+1», «+3» — сколько месяцев прошло после месяца, когда новичок впервые поехал. Пришёл в апреле: +1 — май, +3 — июль. Точка на +1 — сколько из 100 новичков хоть раз поехали в следующем месяце. Считается по всем новичкам с ноября 2025: раньше истории поездок нет. Наборы до {newcomersExactFrom} могут включать вернувшихся после долгого перерыва: их прежние поездки раньше истории.',
+  },
+  newcomersFirstDays: {
+    title: 'Первые {newcomerDays} дней новичков',
+    text: 'Сколько новичков месяца сделали {newcomerTrips} поездок и больше за свои первые {newcomerDays} дней. Тех, у кого меньше {newcomerTrips}, — поимённо внизу экрана.',
+    how: '{newcomerDays} дней у каждого свои: день первой поездки и {newcomerDaysAfter} следующих. Пока {newcomerDays} дней не прошли, новичок в долю не входит — он в штриховке полосы. Сравнение с прошлым месяцем — тоже только по тем, у кого {newcomerDays} дней прошли.',
+  },
+  newcomersList: {
+    title: 'Новички: меньше {newcomerTrips} поездок за {newcomerDays} дней',
+    text: 'Новички месяца, у которых {newcomerDays} дней прошли, а поездок меньше {newcomerTrips}, — по именам. Сначала те, у кого поездок меньше всего.',
+    how: 'Программа — привязан ли Telegram к боту сейчас. Последняя поездка — на конец выбранного месяца.',
+  },
+  newcomersActions: {
+    title: 'Выгрузить в Excel и Сделать сегмент',
+    text: '«Выгрузить в Excel» — все строки списка с телефонами, для звонков. «Сделать сегмент» — участники программы из списка: им можно написать в боте.',
   },
 };
 

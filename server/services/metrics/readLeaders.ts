@@ -15,7 +15,7 @@ import {
   STREAK_MIN_WEEKS,
 } from '#server/services/metrics/constants';
 import { wholeMonthPeriod } from '#server/services/metrics/monthPeriod';
-import { withCoverage } from '#server/services/metrics/periodCoverage';
+import { coverageByMonth, isComplete } from '#server/services/metrics/periodCoverage';
 import { formatDayKey, shiftDayKey } from '#server/utils/parkTime';
 import { shiftMonth } from '#shared/monthNames';
 import type {
@@ -94,32 +94,6 @@ const median = (values: readonly number[]): number => {
     : ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2;
 };
 
-/**
- * Сутки `from`–`to` по месяцам с покрытием; раньше истории — не проверяются. Пусто — проверять
- * нечего.
- */
-const coverageOf = async (from: string, to: string): Promise<DashboardPeriod[]> => {
-  const start = from < METRICS_FIRST_DAY ? METRICS_FIRST_DAY : from;
-  const segments: { from: string; to: string; days: number; partial: boolean }[] = [];
-
-  for (let month = start.slice(0, 7); month <= to.slice(0, 7); month = shiftMonth(month, 1)) {
-    const whole = wholeMonthPeriod(month);
-    const segmentFrom = whole.from < start ? start : whole.from;
-    const segmentTo = whole.to > to ? to : whole.to;
-
-    if (segmentFrom <= segmentTo) {
-      const days = daysBetween(segmentFrom, segmentTo) + 1;
-
-      segments.push({ from: segmentFrom, to: segmentTo, days, partial: days < whole.days });
-    }
-  }
-
-  return Promise.all(segments.map((segment) => withCoverage(segment)));
-};
-
-const complete = (coverage: readonly DashboardPeriod[]): boolean =>
-  coverage.every((period) => period.coveredDays >= period.days);
-
 /** Лидеры месяца: по поездкам по убыванию, затем по `person_id`; первые ⌈на линии × доля⌉. */
 const pickLeaders = (people: readonly PersonTripsRow[]): PersonTripsRow[] => {
   const ranked = [...people].sort(
@@ -195,7 +169,8 @@ type DraftRow = Omit<DashboardLeaderRow, 'callsign' | 'name' | 'inProgram'> & {
   ratio: number;
 };
 
-const fullName = (person: LeaderPersonRow | undefined): string | null => {
+/** «Фамилия Имя Отчество» как в базе; пусто — `null`. Им же подписан список новичков (issue #407). */
+export const fullName = (person: LeaderPersonRow | undefined): string | null => {
   const name = [person?.lastName, person?.firstName, person?.middleName]
     .map((part) => part?.trim() ?? '')
     .filter((part) => part !== '')
@@ -256,21 +231,21 @@ export const readLeaders = async (month: string, now: Date = new Date()): Promis
   const slippingTo = ongoing ? weeksTo : asOfDay;
 
   const [leadersCoverage, slippingCoverage, leftCoverage] = await Promise.all([
-    coverageOf(leadersPeriod.from, leadersPeriod.to),
-    coverageOf(normFrom, slippingTo),
+    coverageByMonth(leadersPeriod.from, leadersPeriod.to),
+    coverageByMonth(normFrom, slippingTo),
     // Месяц когорты и следующий, а перед ними — окно нормы до остановки: её недели уходят
     // раньше месяца когорты.
     cohortAvailable
-      ? coverageOf(
+      ? coverageByMonth(
           shiftDayKey(mondayOf(wholeMonthPeriod(cohortMonth).from), -NORM_WEEKS * WEEK_DAYS),
           wholeMonthPeriod(emptyMonth).to,
         )
       : Promise.resolve([]),
   ]);
 
-  const leadersCounted = complete(leadersCoverage);
-  const slippingCounted = leadersCounted && complete(slippingCoverage);
-  const leftCounted = cohortAvailable && complete(leftCoverage);
+  const leadersCounted = isComplete(leadersCoverage);
+  const slippingCounted = leadersCounted && isComplete(slippingCoverage);
+  const leftCounted = cohortAvailable && isComplete(leftCoverage);
   const listCounted = slippingCounted && (leftCounted || !cohortAvailable);
 
   // Лидеры месяца лидеров нужны всем частям; когорта — плитке и группе «ушли».

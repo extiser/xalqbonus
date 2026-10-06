@@ -1,5 +1,5 @@
 /**
- * Ответы ручек дашборда метрик (issues #371, #373, #392, #402). Определения метрик — `shared/metrics.ts`.
+ * Ответы ручек дашборда метрик (issues #371, #373, #392, #402, #407). Определения метрик — `shared/metrics.ts`.
  *
  * Даты — строки `YYYY-MM-DD`, месяцы — `YYYY-MM`: сутки и месяц метрик календарные
  * по Ташкенту, и зона показа сдвигать их не должна.
@@ -235,4 +235,101 @@ export type DashboardDepth = {
   weeks: DashboardPointsWeek[];
   economy: DashboardProgramEconomy;
   outside: DashboardOutsideProgram;
+  /** Новички: сколько остаётся, первые 14 дней и список (issue #407). */
+  newcomers: DashboardNewcomers;
+};
+
+/**
+ * Пороги новичков — значения констант сервера (`server/services/metrics/constants.ts`):
+ * экран подставляет их в подписи и подсказки, а не держит свою копию.
+ */
+export type DashboardNewcomersThresholds = {
+  /** Окно первых дней, суток. */
+  firstDays: number;
+  /** Порог поездок за окно. */
+  tripsTarget: number;
+  /** С этого месяца `YYYY-MM` наборы точные: раньше в них могут быть вернувшиеся (`FLOW_NEW_EXACT_FROM`). */
+  exactFromMonth: string;
+};
+
+/** Точка кривой «+k»: сумма ездивших в «набор + k» и сумма размеров этих наборов. */
+export type DashboardNewcomersCurvePoint = {
+  offset: number;
+  riding: number;
+  newcomers: number;
+};
+
+/**
+ * Плитка «Сколько остаётся» по месяцу кривой R. Главная цифра — новички R − 1, ездившие в R;
+ * кривая — средняя взвешенно по наборам окна. Точки без единого набора нет.
+ */
+export type DashboardNewcomersRetention = {
+  /** Новичков R − 1. */
+  newcomers: number;
+  /** Из них ездили в R. */
+  riding: number;
+  /** Точки «+1» … по порядку, только те, за которыми есть новички. */
+  curve: DashboardNewcomersCurvePoint[];
+  /** Месяц первого набора в окне кривой `YYYY-MM`. */
+  curveFromMonth: string;
+};
+
+/** Плитка «Первые 14 дней» по месяцу M на опорный день. */
+export type DashboardNewcomersFirstDays = {
+  /** Новичков M к опорному дню. */
+  newcomers: number;
+  /** Окно прошло, поездок не меньше порога. */
+  reached: number;
+  /** Окно прошло, поездок меньше порога. */
+  below: number;
+  /** Окно ещё идёт. */
+  running: number;
+  /** Ни одно окно не прошло: последний день окна самого раннего новичка; иначе `null`. */
+  firstResultsDay: string | null;
+  /** M − 1 тем же расчётом на тот же день, только прошедшие окна; `null` — M − 1 раньше первого набора. */
+  previous: { passed: number; reached: number } | null;
+};
+
+/** Строка списка: человек. Телефонов здесь нет — они только в выгрузке. */
+export type DashboardNewcomerRow = {
+  personId: string;
+  callsign: string | null;
+  /** Фамилия, имя, отчество через пробел, как в базе. */
+  name: string | null;
+  /** Привязка Telegram открыта сейчас. */
+  inProgram: boolean;
+  /** Сутки первой поездки. */
+  firstTripDay: string;
+  /** Поездок за окно первых дней. */
+  windowTrips: number;
+  /** Последние сутки с поездкой не позже опорного дня. */
+  lastTripDay: string;
+};
+
+/**
+ * Новички на «Глубине» (issue #407) за выбранный месяц M (docs/decisions.md → «Новички
+ * на дашборде»). Элемент посчитан или «не считаем» — `DashboardLeadersPart`: собраны не все сутки
+ * с начала истории, и тогда `coverage` — эти сутки по месяцам.
+ */
+export type DashboardNewcomers = {
+  thresholds: DashboardNewcomersThresholds;
+  /** Выбранный месяц идёт. */
+  ongoing: boolean;
+  /** Опорный день D: последний день закрытого M, вчера у идущего. */
+  asOfDay: string;
+  /** Месяц кривой R: закрытый M — он сам, идущий — M − 1. */
+  curveMonth: string;
+  /** Первый набор `YYYY-MM` — месяц после первого месяца истории. */
+  firstCohortMonth: string;
+  /** M — первый месяц истории: новичков нет, всех элементов ниже нет. */
+  noNewcomers: boolean;
+  /** `null` — новичков нет или R − 1 раньше первого набора. */
+  retention: DashboardLeadersPart<DashboardNewcomersRetention> | null;
+  firstDays: DashboardLeadersPart<DashboardNewcomersFirstDays> | null;
+  /**
+   * Новички M с прошедшим окном и поездками меньше порога, в порядке экрана; считается вместе
+   * с «Первыми 14 днями». Пустой и при нуле новичков, и когда ни одно окно не прошло — какой
+   * из случаев, говорит `firstDays`.
+   */
+  list: DashboardLeadersPart<{ rows: DashboardNewcomerRow[] }> | null;
 };

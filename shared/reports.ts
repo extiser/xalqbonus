@@ -19,10 +19,10 @@ export type SectionReportKey =
 
 /**
  * Любой отчёт, собранный в `ReportResult`: отчёты раздела и выгрузки дашборда — «Вне программы»
- * (issue #373) и список лидеров (issue #402). Выгрузка дашборда рисуется в Excel той же книгой, но в выборе раздела её нет:
- * её скачивают с плитки за месяц плитки.
+ * (issue #373), список лидеров (issue #402) и список новичков (issue #407). Выгрузка дашборда
+ * рисуется в Excel той же книгой, но в выборе раздела её нет: её скачивают с плитки за месяц плитки.
  */
-export type ReportKey = SectionReportKey | 'outside_program' | 'leaders';
+export type ReportKey = SectionReportKey | 'outside_program' | 'leaders' | 'newcomers';
 
 export const REPORT_TITLES: Record<SectionReportKey, string> = {
   sales: 'Продажи за период',

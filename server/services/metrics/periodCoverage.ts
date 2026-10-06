@@ -1,7 +1,8 @@
 import { listClosedHistoryDays } from '#server/repositories/metrics';
-import { TRIPS_COMPLETE_FROM } from '#server/services/metrics/constants';
-import type { MonthPeriodDays } from '#server/services/metrics/monthPeriod';
+import { METRICS_FIRST_DAY, TRIPS_COMPLETE_FROM } from '#server/services/metrics/constants';
+import { wholeMonthPeriod, type MonthPeriodDays } from '#server/services/metrics/monthPeriod';
 import { shiftDayKey } from '#server/utils/parkTime';
+import { shiftMonth } from '#shared/monthNames';
 import type { DashboardPeriod } from '#shared/types/dashboard';
 
 /**
@@ -29,3 +30,34 @@ export const withCoverage = async (period: MonthPeriodDays): Promise<DashboardPe
   ...period,
   coveredDays: await countCoveredDays(period),
 });
+
+/** Целых суток от `from` до `to`. */
+const daysBetween = (from: string, to: string): number =>
+  Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+
+/**
+ * Сутки `from`–`to` по месяцам с покрытием (issue #402); раньше истории — не проверяются:
+ * это не пропуск, а отсутствие истории. Пусто — проверять нечего.
+ */
+export const coverageByMonth = async (from: string, to: string): Promise<DashboardPeriod[]> => {
+  const start = from < METRICS_FIRST_DAY ? METRICS_FIRST_DAY : from;
+  const segments: MonthPeriodDays[] = [];
+
+  for (let month = start.slice(0, 7); month <= to.slice(0, 7); month = shiftMonth(month, 1)) {
+    const whole = wholeMonthPeriod(month);
+    const segmentFrom = whole.from < start ? start : whole.from;
+    const segmentTo = whole.to > to ? to : whole.to;
+
+    if (segmentFrom <= segmentTo) {
+      const days = daysBetween(segmentFrom, segmentTo) + 1;
+
+      segments.push({ from: segmentFrom, to: segmentTo, days, partial: days < whole.days });
+    }
+  }
+
+  return Promise.all(segments.map((segment) => withCoverage(segment)));
+};
+
+/** Собраны все сутки каждого периода. */
+export const isComplete = (coverage: readonly DashboardPeriod[]): boolean =>
+  coverage.every((period) => period.coveredDays >= period.days);

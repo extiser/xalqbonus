@@ -47,3 +47,19 @@ export const BELOW_NORM_SHARE = 0.3;
 
 /** В список — с этой длины серии недель ниже нормы. Предварительное, как `BELOW_NORM_SHARE`. */
 export const STREAK_MIN_WEEKS = 3;
+
+/**
+ * Новички на «Глубине» (issue #407) — docs/decisions.md → «Новички на дашборде».
+ */
+
+/** Окно первых дней новичка: день первой поездки и `NEWCOMER_FIRST_DAYS − 1` следующих. */
+export const NEWCOMER_FIRST_DAYS = 14;
+
+/** Порог поездок за окно первых дней: перегиба по порогам 10–30 замер не нашёл, 20 делит новичков почти пополам. */
+export const NEWCOMER_TRIPS_TARGET = 20;
+
+/** Кривая «Сколько остаётся» — до точки «+N» месяцев после прихода. */
+export const NEWCOMER_CURVE_POINTS = 6;
+
+/** Кривая — средняя взвешенно по наборам за столько месяцев до месяца кривой. */
+export const NEWCOMER_CURVE_WINDOW_MONTHS = 12;

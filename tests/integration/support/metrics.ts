@@ -51,6 +51,37 @@ export const upsertTestHistoryDay = async (parkDay: string, closed: boolean): Pr
   });
 };
 
+/**
+ * Закрытые порции сбора истории за сутки `from`–`to` включительно (сутки UTC) — новичкам
+ * (issue #407) нужна вся история с первых суток метрик. Уже заведённые не трогаются. Возвращает
+ * сутки — для `cleanupTestMetrics`.
+ */
+export const closeTestHistoryDays = async (from: string, to: string): Promise<string[]> => {
+  const days: string[] = [];
+
+  for (let day = new Date(`${from}T00:00:00Z`); day <= new Date(`${to}T00:00:00Z`); day.setUTCDate(day.getUTCDate() + 1)) {
+    days.push(day.toISOString().slice(0, 10));
+  }
+
+  const now = new Date();
+
+  await db.fleetOrderHistoryDay.createMany({
+    data: days.map((parkDay) => ({
+      parkDay: new Date(`${parkDay}T00:00:00Z`),
+      orders: 0,
+      complete: 0,
+      malformed: 0,
+      pages: 1,
+      rateLimited: 0,
+      startedAt: now,
+      finishedAt: now,
+    })),
+    skipDuplicates: true,
+  });
+
+  return days;
+};
+
 export type TestPersonDay = { day: string; personId: string; trips: number };
 
 /** Строки таблицы метрик этих людей, по порядку суток. */

@@ -1,5 +1,5 @@
 import { pluralize } from '~/utils/format';
-import { monthForms, shiftMonth } from '#shared/monthNames';
+import { monthForms, monthYear, shiftMonth } from '#shared/monthNames';
 import type { MetricValues } from '#shared/metrics';
 import type { DashboardLeaders, DashboardLeadersThresholds, DashboardPeriod } from '#shared/types/dashboard';
 
@@ -27,9 +27,6 @@ export const leadersMetricValues = (thresholds: DashboardLeadersThresholds): Met
 /** «ниже своей нормы на 30 % и больше» — начало строки порога. */
 export const belowNormLabel = (thresholds: DashboardLeadersThresholds): string =>
   `ниже своей нормы на ${thresholds.belowNormPercent} % и больше`;
-
-const monthYear = (month: string, form: 'nominative' | 'genitive' | 'prepositional'): string =>
-  `${monthForms(month)[form]} ${month.slice(0, 4)}`;
 
 /**
  * Первый месяц истории: «Лидеров за сентябрь 2025 нет: история заказов — с октября 2025.

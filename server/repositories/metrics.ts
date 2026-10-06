@@ -680,3 +680,102 @@ export const listLeaderPeople = async (
       LEFT JOIN xb.park_profiles AS profile ON profile."profile_id" = last_trip."profile_id"
   `;
 };
+
+/**
+ * Новички на «Глубине» (issue #407). Всё — из готовой таблицы `metric_person_days`; кто новичок,
+ * чьё окно прошло и как сложить кривую, решает сервис (`server/services/metrics/readNewcomers.ts`),
+ * здесь только выборки.
+ *
+ * Новичок месяца X — человек, чьи самые ранние сутки в таблице приходятся на X (docs/decisions.md →
+ * «Новички на дашборде»). Самые ранние — по всей таблице до конца нужного периода: первая поездка
+ * смотрит всю историю, а не только месяц. Первое число месяца — вычитанием дня месяца, как
+ * у `readDriverFlowByMonth`: `date_trunc` у даты приводит её к моменту в зоне сеанса.
+ */
+
+export type NewcomerCohortMonthRow = {
+  /** Месяц набора `YYYY-MM`. */
+  cohortMonth: string;
+  /** Месяц `YYYY-MM`, в котором ездили; равен месяцу набора — это весь набор. */
+  month: string;
+  /** Разных людей набора с поездкой в этом месяце. */
+  drivers: number;
+};
+
+/**
+ * Наборы с `fromMonth` по `toMonth` включительно и сколько людей каждого ездило в каждом месяце
+ * с месяца набора по `toDay`. Месяц без единого ездившего строки не даёт.
+ */
+export const listNewcomerCohortMonths = async (
+  fromMonth: string,
+  toMonth: string,
+  toDay: string,
+): Promise<NewcomerCohortMonthRow[]> =>
+  db.$queryRaw<NewcomerCohortMonthRow[]>`
+    WITH firsts AS (
+           SELECT person_day."person_id",
+                  min(person_day."day") - (extract(day FROM min(person_day."day"))::int - 1) AS "cohort_month"
+             FROM xb.metric_person_days AS person_day
+            WHERE person_day."day" <= ${toDay}::date
+            GROUP BY person_day."person_id"
+         ),
+         cohort AS (
+           SELECT firsts."person_id", firsts."cohort_month"
+             FROM firsts
+            WHERE firsts."cohort_month" BETWEEN ${`${fromMonth}-01`}::date AND ${`${toMonth}-01`}::date
+         ),
+         riding AS (
+           SELECT DISTINCT person_day."person_id",
+                  person_day."day" - (extract(day FROM person_day."day")::int - 1) AS "month"
+             FROM xb.metric_person_days AS person_day
+             JOIN cohort ON cohort."person_id" = person_day."person_id"
+            WHERE person_day."day" BETWEEN ${`${fromMonth}-01`}::date AND ${toDay}::date
+         )
+    SELECT to_char(cohort."cohort_month", 'YYYY-MM') AS "cohortMonth",
+           to_char(riding."month", 'YYYY-MM')        AS "month",
+           count(*)::int                             AS "drivers"
+      FROM cohort
+      JOIN riding ON riding."person_id" = cohort."person_id"
+     GROUP BY 1, 2
+     ORDER BY 1, 2
+  `;
+
+export type NewcomerWindowRow = {
+  personId: string;
+  /** Сутки первой поездки, `YYYY-MM-DD`. */
+  firstDay: string;
+  /** Поездки за окно первых суток, не позже `asOfDay`. */
+  windowTrips: number;
+  /** Последние сутки с поездкой не позже `asOfDay`. */
+  lastDay: string;
+};
+
+/**
+ * Новички месяца `month` (`YYYY-MM`) на сутки `asOfDay`: первая поездка, поездки за `windowDays`
+ * суток с неё и последняя поездка. Окно и прошло ли оно — правило сервиса; здесь только сумма.
+ */
+export const listNewcomerWindows = async (
+  month: string,
+  asOfDay: string,
+  windowDays: number,
+): Promise<NewcomerWindowRow[]> =>
+  db.$queryRaw<NewcomerWindowRow[]>`
+    WITH newcomers AS (
+           SELECT person_day."person_id", min(person_day."day") AS "first_day"
+             FROM xb.metric_person_days AS person_day
+            WHERE person_day."day" <= ${asOfDay}::date
+            GROUP BY person_day."person_id"
+           HAVING min(person_day."day") >= ${`${month}-01`}::date
+              AND min(person_day."day") < (${`${month}-01`}::timestamp + interval '1 month')::date
+         )
+    SELECT newcomers."person_id"                        AS "personId",
+           to_char(newcomers."first_day", 'YYYY-MM-DD') AS "firstDay",
+           coalesce(sum(person_day."trips") FILTER (
+             WHERE person_day."day" < newcomers."first_day" + ${windowDays}::int
+           ), 0)::int                                   AS "windowTrips",
+           to_char(max(person_day."day"), 'YYYY-MM-DD') AS "lastDay"
+      FROM newcomers
+      JOIN xb.metric_person_days AS person_day
+        ON person_day."person_id" = newcomers."person_id"
+       AND person_day."day" <= ${asOfDay}::date
+     GROUP BY newcomers."person_id", newcomers."first_day"
+  `;

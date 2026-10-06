@@ -7,9 +7,12 @@ import { toLoadState } from '~/utils/loadState';
  * Дашборд, вкладка «Глубина» (issue #373) — экран `_reference/design/web/dashboard/03-depth.html`.
  *
  * Второй срез дашборда: три плитки про программу, данные для которых уже есть, — баллы
- * по неделям, экономика программы и водители вне программы. Остальные плитки «Глубины» —
- * LTV, наборы, удержание — ждут полной истории и транзакций. Кнопок-входов у плиток нет:
+ * по неделям, экономика программы и водители вне программы. Кнопок-входов у плиток нет:
  * подробных страниц нет.
+ *
+ * Новички (issue #407, `03-depth-newbies.html`) — первым рядом «Сколько остаётся» и «Первые 14 дней»,
+ * последней плиткой экрана — список тех, у кого меньше 20 поездок за 14 дней. Остальные плитки
+ * «Глубины» — LTV и прочее — ждут транзакций.
  *
  * Шапка и месяц — как у «Рычагов»: месяц живёт в адресе (`?month=2026-10`) и переходит между
  * вкладками.
@@ -59,6 +62,8 @@ const changeMonth = (month: string): void => {
     </div>
 
     <MoleculesWebBento>
+      <OrganismsWebDashboardNewcomersRetention :state="state" :month="depth?.month ?? null" :newcomers="depth?.newcomers ?? null" />
+      <OrganismsWebDashboardNewcomersFirstDays :state="state" :month="depth?.month ?? null" :newcomers="depth?.newcomers ?? null" />
       <MoleculesWebTile :cols="8" :rows="3" title="Баллы по неделям" metric="pointsWeekly" class="max-web:min-h-[300px]">
         <div v-if="state === 'loading'" class="mt-[18px]">
           <AtomsWebHint text="Считаем баллы…" />
@@ -73,6 +78,7 @@ const changeMonth = (month: string): void => {
       </MoleculesWebTile>
       <OrganismsWebDashboardProgramEconomy :state="state" :month="depth?.month ?? null" :economy="depth?.economy ?? null" />
       <OrganismsWebDashboardOutsideProgram :state="state" :month="depth?.month ?? null" :outside="depth?.outside ?? null" />
+      <OrganismsWebDashboardNewcomersList :state="state" :month="depth?.month ?? null" :newcomers="depth?.newcomers ?? null" />
     </MoleculesWebBento>
   </div>
 </template>
