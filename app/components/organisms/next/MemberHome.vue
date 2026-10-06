@@ -27,13 +27,26 @@ import type {
  * нечего.
  *
  * Число баллов набирается здесь, один раз на крупное и на баланс в шапке: они считаются вместе.
+ *
+ * Пока не выдан приветственный бонус, центр — слайдер (`_reference/design/home/main-screen-welcome.html`,
+ * issue #410): первым экраном слайд бонуса «+300», вторым — баллы, как без слайдера. Пилюля в шапке
+ * показывает другой слайд и листает на него. Нет `welcome` — центр как был, без точек и слайдера.
+ * Номер слайда живёт здесь, а не в слайдере: его читает шапка.
  */
 const props = defineProps<{
   name: string;
   callsign?: string;
   points: number;
-  /** Прогресс акции в шапке. Нет — водитель не в акции. */
+  /** Прогресс акции в шапке. Нет — водитель не в акции. При `welcome` не показывается. */
   promo?: { done: number; total: number };
+  /** Счёт до приветственного бонуса — слайд «+300». Нет — бонус выдан или не положен. */
+  welcome?: {
+    done: number;
+    total: number;
+    /** «+300». */
+    amount: string;
+    texts: { title: string; left: MemberSurveyTextPart[]; counted: string };
+  };
   /** Плашка приглашения. Есть — водитель в снимке акции, но не вступил. */
   invite?: { kicker: string; title: string; when: string };
   /** Плашка опроса: «Опрос не закончен» или «Пройдите опрос». Нажатие отдаётся наружу `survey`. */
@@ -100,6 +113,18 @@ const amount = useCountUp(() => props.points);
 
 /** Крупное число ушло под шапку — у шапки подложка. Считает `MemberBalance`. */
 const barSurface = ref(false);
+
+/** Слайды центра по порядку: бонус первым экраном. */
+const WELCOME_SLIDE = 0;
+const POINTS_SLIDE = 1;
+
+const slide = ref(WELCOME_SLIDE);
+
+/** Пилюля шапки листает на свой слайд и поднимает экран к нему. */
+const showSlide = (target: number): void => {
+  slide.value = target;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
 </script>
 
 <template>
@@ -111,11 +136,15 @@ const barSurface = ref(false);
       :name="name"
       :callsign="callsign"
       :promo="promo"
+      :welcome="welcome && { done: welcome.done, total: welcome.total }"
+      :welcome-shown="slide === WELCOME_SLIDE"
       :balance="{ amount, unit: texts.balanceUnit }"
       :surface="barSurface"
-      :texts="{ profile: texts.profile, promo: texts.promo ?? '' }"
+      :texts="{ profile: texts.profile, promo: texts.promo ?? '', welcome: welcome?.texts.title }"
       @profile="$emit('profile')"
       @promo="$emit('promo')"
+      @show-welcome="showSlide(WELCOME_SLIDE)"
+      @show-points="showSlide(POINTS_SLIDE)"
     />
 
     <!-- overflow: clip, а не hidden: живой фон обрезается по блоку, а контейнером прокрутки
@@ -123,7 +152,27 @@ const barSurface = ref(false);
     <div class="relative z-[6] flex flex-col gap-[34px] overflow-clip px-5 pt-[104px]" :class="props.invite || props.survey ? 'pb-4' : 'pb-11'">
       <AtomsNextMemberLiveBackdrop variant="home" />
 
+      <OrganismsNextMemberHomeSlider
+        v-if="welcome"
+        v-model:index="slide"
+        :count="2"
+        :labels="[welcome.texts.title, texts.balanceTitle]"
+      >
+        <OrganismsNextMemberWelcomeSlide
+          :done="welcome.done"
+          :total="welcome.total"
+          :amount="welcome.amount"
+          :texts="welcome.texts"
+        />
+        <OrganismsNextMemberBalance
+          :amount="amount"
+          :texts="{ title: texts.balanceTitle, exchange: texts.exchange, updated: texts.updated }"
+          @exchange="$emit('exchange')"
+          @covered="(covered) => (barSurface = covered)"
+        />
+      </OrganismsNextMemberHomeSlider>
       <OrganismsNextMemberBalance
+        v-else
         :amount="amount"
         :texts="{ title: texts.balanceTitle, exchange: texts.exchange, updated: texts.updated }"
         @exchange="$emit('exchange')"

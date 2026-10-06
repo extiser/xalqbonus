@@ -61,7 +61,12 @@ export type TextKey =
   | 'employee_denied_text'
   | 'contact_not_own'
   | 'linked_new'
-  | 'welcome_bonus_promise'
+  | 'welcome_slide_title'
+  | 'welcome_slide_left'
+  | 'welcome_slide_counted'
+  | 'welcome_trip_one'
+  | 'welcome_trip_few'
+  | 'welcome_trip_many'
   | 'balance_title'
   | 'balance_unit_one'
   | 'balance_unit_few'
@@ -532,17 +537,37 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     uz: "Xush kelibsiz, {name}! Xalq Taxi'ni tanlaganingiz uchun rahmat. Birinchi 5 ta safarni yakunlang va 300 ball oling — ularni ofislarimizdagi sovg'alarga almashtirish mumkin.",
   },
   /**
-   * Обещание бонуса за первые поездки на экране участника — тому, у кого в журнале нет
-   * ни одной поездки.
+   * Слайд приветственного бонуса на главной Mini App (issue #410): пока бонус не выдан, первым
+   * экраном стоит «+300» и счёт зачётных поездок.
    *
-   * Своим текстом, а не `linked_new`: там обещание идёт следом за приветствием, потому что
-   * это единственное сообщение на экране после привязки. Здесь имя водителя уже стоит
-   * в шапке под балансом, и второе «Добро пожаловать, {name}!» подряд — это имя, прочитанное
-   * дважды. Подстановок у ключа нет вовсе: обещание ни к кому не обращается.
+   * `{left}` — сколько поездок осталось, `{trips}` — слово при нём (`welcome_trip_*`, форма
+   * по `pluralize`). Число и слово сервер выделяет жирным — по меткам, а не по позиции:
+   * в узбекской строке слово стоит в самом тексте и не склоняется.
    */
-  welcome_bonus_promise: {
-    ru: 'Завершите первые 5 поездок и получите 300 баллов — их можно обменять на подарки в наших офисах.',
-    uz: "Birinchi 5 ta safarni yakunlang va 300 ball oling — ularni ofislarimizdagi sovg'alarga almashtirish mumkin.",
+  welcome_slide_title: {
+    ru: 'Приветственный бонус',
+    uz: 'Xush kelish bonusi',
+  },
+  welcome_slide_left: {
+    ru: 'Ещё {left} {trips} — и {points} баллов ваши',
+    uz: 'Yana {left} ta safar — va {points} ball sizniki',
+  },
+  /** На месте «Обновлено в»: поездки до вступления в счёт не идут, хоть баллы за них и есть. */
+  welcome_slide_counted: {
+    ru: 'Считаются поездки после вступления {date}',
+    uz: "Dasturga qo'shilgandan keyingi safarlar hisoblanadi: {date}",
+  },
+  welcome_trip_one: {
+    ru: 'поездка',
+    uz: 'safar',
+  },
+  welcome_trip_few: {
+    ru: 'поездки',
+    uz: 'safar',
+  },
+  welcome_trip_many: {
+    ru: 'поездок',
+    uz: 'safar',
   },
   balance_title: {
     ru: 'Ваши баллы',

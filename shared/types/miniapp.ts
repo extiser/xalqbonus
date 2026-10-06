@@ -25,7 +25,7 @@ import type {
   OrderStatus,
 } from '../../server/generated/prisma/enums';
 import type { FormattedPhone } from '../phone';
-import type { MemberSurveyBanner } from './memberSurvey';
+import type { MemberSurveyBanner, MemberSurveyTextPart } from './memberSurvey';
 import type { EmployeeOffice } from './orders';
 import type { MemberRewardTexts } from './rewards';
 
@@ -159,6 +159,32 @@ export type MemberScreenTexts = {
   cancelHint: string;
   yes: string;
   no: string;
+  /** Тексты слайда приветственного бонуса. Есть ровно тогда, когда есть `welcomeBonus`. */
+  welcome: MemberWelcomeTexts | null;
+};
+
+/**
+ * Счёт до приветственного бонуса — тем же правилом, что выдача: завершённые поездки после
+ * вступления, по всем профилям человека.
+ */
+export type MemberWelcomeBonus = {
+  /** Зачётных поездок, не больше `total`. */
+  done: number;
+  total: number;
+  /** Сколько баллов обещано — для «+300». */
+  points: number;
+  /** День вступления, «05.10», по Ташкенту. */
+  joinedAt: string;
+};
+
+/** Тексты слайда бонуса готовыми строками на языке водителя. */
+export type MemberWelcomeTexts = {
+  /** «Приветственный бонус» — на месте «Ваши баллы». */
+  title: string;
+  /** «Ещё **4 поездки** — и 300 баллов ваши»: число и слово при нём выделены. */
+  left: MemberSurveyTextPart[];
+  /** «Считаются поездки после вступления 05.10» — на месте «Обновлено в». */
+  counted: string;
 };
 
 /**
@@ -250,10 +276,11 @@ export type MiniAppMemberScreen = {
    */
   tripsNote: TripsNote;
   /**
-   * Обещание 300 баллов за первые пять поездок. Пусто у того, у кого поездки уже есть:
-   * перенесённому из старой базы с тысячей поездок обещать первые пять незачем.
+   * Счёт до приветственного бонуса — слайд «+300» на главной (issue #410). Заполнен, только
+   * пока бонус положен и не выдан; у выданного, перенесённого из старой базы — `null`,
+   * и главная без слайдера. Тексты слайда — в `texts.welcome`.
    */
-  promise: string | null;
+  welcomeBonus: MemberWelcomeBonus | null;
   texts: MemberScreenTexts;
   /**
    * Тексты каталога. Приезжают с экраном участника, а не с каждой ручкой витрины: экраны

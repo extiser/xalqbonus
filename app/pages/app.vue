@@ -37,7 +37,7 @@ import type {
   MemberOfficeView,
   MemberProfileFieldView,
 } from '~/types/memberView';
-import { pluralize } from '~/utils/format';
+import { formatSignedNumber, pluralize } from '~/utils/format';
 import {
   cartLinesView,
   catalogProductsView,
@@ -1547,6 +1547,16 @@ const homeView = computed(() => {
     name: current.name,
     callsign: current.callsign ?? undefined,
     points: current.balancePoints,
+    // Слайд «+300» — пока бонус не выдан; счёт и тексты приходят с сервера готовыми (issue #410).
+    welcome:
+      current.welcomeBonus && texts.welcome
+        ? {
+            done: current.welcomeBonus.done,
+            total: current.welcomeBonus.total,
+            amount: formatSignedNumber(current.welcomeBonus.points),
+            texts: texts.welcome,
+          }
+        : undefined,
     survey: current.survey ?? undefined,
     orders: homeOrdersView(memberOrders.ordersState.value, memberOrders.orders.value, texts),
     rewards: homeRewardsView(memberRewards.state.value, memberRewards.rewards.value, memberRewards.gifts.value, texts),
