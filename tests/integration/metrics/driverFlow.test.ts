@@ -142,11 +142,11 @@ describe('поток водителей по месяцам', () => {
     expect(flow).toEqual({ months: [], panel: null, selectedOngoing: false, firstMonthOnLine: 2, conclusion: null });
   });
 
-  it('ранняя история — у марта 2026 есть, у апреля нет', async () => {
-    const flow = await readDriverFlow('2026-04', NOW);
+  it('ранняя история — у июня 2026 есть, у июля нет', async () => {
+    const flow = await readDriverFlow('2026-07', NOW);
     const earlyByMonth = Object.fromEntries(flow.months.map((month) => [month.month, month.earlyHistory]));
 
-    expect(earlyByMonth['2026-03']).toBe(true);
-    expect(earlyByMonth['2026-04']).toBe(false);
+    expect(earlyByMonth['2026-06']).toBe(true);
+    expect(earlyByMonth['2026-07']).toBe(false);
   });
 });
