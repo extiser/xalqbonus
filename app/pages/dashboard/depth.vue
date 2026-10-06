@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useDashboardSegment } from '~/composables/useDashboardSegment';
 import { toLoadState } from '~/utils/loadState';
 
 /**
@@ -37,6 +38,14 @@ const query = computed(() => (monthQuery.value ? { month: monthQuery.value } : {
 const { data: depth, status } = await useFetch('/api/dashboard/depth', { query });
 
 const state = computed(() => toLoadState(status.value));
+
+// «Сделать сегмент» у списка новичков (issue #415) — за месяц, который на экране.
+const {
+  allowed: canCreateSegment,
+  creating: segmentCreating,
+  error: segmentError,
+  create: createSegment,
+} = useDashboardSegment('newcomers', computed(() => depth.value?.month ?? null));
 
 const weeks = computed(() => (state.value === 'ready' ? (depth.value?.weeks ?? null) : null));
 
@@ -78,7 +87,15 @@ const changeMonth = (month: string): void => {
       </MoleculesWebTile>
       <OrganismsWebDashboardProgramEconomy :state="state" :month="depth?.month ?? null" :economy="depth?.economy ?? null" />
       <OrganismsWebDashboardOutsideProgram :state="state" :month="depth?.month ?? null" :outside="depth?.outside ?? null" />
-      <OrganismsWebDashboardNewcomersList :state="state" :month="depth?.month ?? null" :newcomers="depth?.newcomers ?? null" />
+      <OrganismsWebDashboardNewcomersList
+        :state="state"
+        :month="depth?.month ?? null"
+        :newcomers="depth?.newcomers ?? null"
+        :can-create-segment="canCreateSegment"
+        :segment-creating="segmentCreating"
+        :segment-error="segmentError"
+        @create-segment="createSegment"
+      />
     </MoleculesWebBento>
   </div>
 </template>

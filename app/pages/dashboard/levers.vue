@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useDashboardSegment } from '~/composables/useDashboardSegment';
 import { toLoadState } from '~/utils/loadState';
 
 /**
@@ -38,6 +39,14 @@ const { data: levers, status } = await useFetch('/api/dashboard/levers', { query
 
 const state = computed(() => toLoadState(status.value));
 
+// «Сделать сегмент» у списка лидеров (issue #415) — за месяц, который на экране.
+const {
+  allowed: canCreateSegment,
+  creating: segmentCreating,
+  error: segmentError,
+  create: createSegment,
+} = useDashboardSegment('leaders', computed(() => levers.value?.month ?? null));
+
 const changeMonth = (month: string): void => {
   void router.push({ query: { ...route.query, month } });
 };
@@ -64,7 +73,14 @@ const changeMonth = (month: string): void => {
       <OrganismsWebDashboardDriverFlow :state="state" :levers="levers ?? null" @select="changeMonth" />
       <OrganismsWebDashboardFlowMonth :state="state" :levers="levers ?? null" />
       <OrganismsWebDashboardLeaders :state="state" :levers="levers ?? null" />
-      <OrganismsWebDashboardLeadersList :state="state" :levers="levers ?? null" />
+      <OrganismsWebDashboardLeadersList
+        :state="state"
+        :levers="levers ?? null"
+        :can-create-segment="canCreateSegment"
+        :segment-creating="segmentCreating"
+        :segment-error="segmentError"
+        @create-segment="createSegment"
+      />
     </MoleculesWebBento>
   </div>
 </template>

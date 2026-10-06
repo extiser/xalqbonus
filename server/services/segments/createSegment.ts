@@ -13,7 +13,8 @@ import type { Segment } from '#shared/types/segment';
  * `segments_has_condition_check`.
  *
  * Здесь заводится только сегмент условиями: список заводится из итогов опроса
- * (`services/surveys/createSurveySegment.ts`, issue #356), вручную — никогда.
+ * (`services/surveys/createSurveySegment.ts`, issue #356) и из списков дашборда
+ * (`services/metrics/create*Segment.ts`, issue #415), вручную — никогда.
  *
  * Уникальности имени нет, как у офисов: два одинаковых имени — состояние, а не ошибка ввода.
  *
