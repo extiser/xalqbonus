@@ -123,7 +123,7 @@ const PILL_CLASSES = 'inline-block rounded-full px-2.5 py-[3px] font-manrope tex
           :download="downloadUrl ?? undefined"
           :disabled="!rows || rows.length === 0 || note !== null || !downloadUrl"
         />
-        <AtomsWebActionButton :label="`Сделать сегмент · ${segmentSize}`" title="Сегмент из списка — T107" disabled />
+        <AtomsWebActionButton :label="`Сделать сегмент · ${segmentSize}`" title="Сегмент из списка — в следующем обновлении" disabled />
         <MoleculesWebMetricInfo metric="newcomersActions" />
       </div>
     </template>
