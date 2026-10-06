@@ -105,7 +105,7 @@ const priceDeskItems = async (
   return items.map((item) => {
     const product = products.get(item.productId);
 
-    // Скрытый с витрины здесь не отсекается намеренно — решение Руслана по ревью #298.
+    // Скрытый с витрины здесь не отсекается намеренно — по ревью #298.
     if (
       !product ||
       product.publishedAt === null ||

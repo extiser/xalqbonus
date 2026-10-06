@@ -39,7 +39,7 @@ const state = computed(() => toLoadState(status.value));
 
 const missing = computed(() => error.value?.statusCode === 404);
 
-/** «Плакат · Офис 1, стена у стойки · с 06.10.2026 · завёл Руслан»; носитель — отдельно, жирным. */
+/** «Плакат · Офис 1, стена у стойки · с 06.10.2026 · завёл {имя}»; носитель — отдельно, жирным. */
 const metaTail = computed(() => {
   const promo = card.value?.promo;
 

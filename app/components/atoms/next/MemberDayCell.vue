@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import type { MemberWeekDayView } from '~/types/memberView';
 
 /**
- * Клетка дня в неделе акции — `product/design/comeback/03-member-week-states.html`.
+ * Клетка дня в неделе акции.
  *
  * В клетке календарная дата, а не номер шага: водитель сверяется с календарём в голове,
  * «день 5» ему сверять не с чем. Стакан — заливка снизу, высота — взятые поездки от пяти:

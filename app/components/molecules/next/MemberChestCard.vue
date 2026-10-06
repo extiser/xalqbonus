@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue';
 import type { MemberChestCardView } from '~/types/memberView';
 
 /**
- * Карточка дня в шторке «Сундуки дня» — `product/design/comeback/04-chest-cards-states.html`.
+ * Карточка дня в шторке «Сундуки дня».
  *
  * Колонка из трёх строк: ярлык, сундук, подпись. Ярлык есть у каждой — где сказать нечего,
  * он пустой и держит высоту: иначе сундук с надписью садился бы ниже соседних.

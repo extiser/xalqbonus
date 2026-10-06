@@ -2,8 +2,7 @@
 import type { MemberChestRowView, MemberHeatStage, MemberWeekDayView } from '~/types/memberView';
 
 /**
- * Экран участника акции — `product/design/comeback/03-member-screen.html` и листы
- * `03-member-week-states.html`, `03-member-chests-states.html`, `03-member-heat-scale.html`.
+ * Экран участника акции.
  *
  * Сверху — нагретый фон, шапка с балансом и дневная цель; уровни подписи и числа равны
  * главному экрану, переключение между ними не дёргает раскладку. Ниже — неделя и три

@@ -7,7 +7,7 @@ COMPOSE_COPY = docker compose -f docker/compose.local.yml -f docker/compose.copy
 
 .DEFAULT_GOAL := help
 
-.PHONY: help up up-d down restart logs ps shell psql sql migrate migrate-rolled-back migrate-create migrate-diff migrate-sql generate typecheck old-engine-guard test test-db \
+.PHONY: help image up up-d down restart logs ps shell psql sql migrate migrate-rolled-back migrate-create migrate-diff migrate-sql generate typecheck old-engine-guard test test-db \
         db-restore db-drop db-schema invariants license-collisions legacy-vs-api import-legacy import-legacy-awarded-trips \
         employee-owner prod-employee-owner \
         import-legacy-dump \
@@ -313,6 +313,12 @@ db-drop: ## Удалить базу локального стека, не раб
 
 old-engine-guard: ## Проверить, что скрипт проверки движка Mini App написан на ES5
 	npx tsx --tsconfig .nuxt/tsconfig.app.json scripts/check-old-engine-guard.ts
+
+# Боевой образ, собранный на этой машине, со всеми проверками сборки из docker/Dockerfile:
+# бандлы, служебные пометки, карты кода. Локальный стек его не использует — он живёт на этапе
+# build, — поэтому образ проверяется только этой целью или выкатом.
+image: ## Собрать боевой образ локально со всеми проверками сборки — xalqbonus:local
+	docker build -f docker/Dockerfile -t xalqbonus:local .
 
 # Отдельная база под тесты, в том же контейнере. Схему в ней создаёт та же миграция —
 # второго описания структуры не заводится. Цель идемпотентна: базу создаёт, только если

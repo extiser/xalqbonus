@@ -3,7 +3,7 @@ import { computed, useId } from 'vue';
 import type { MemberRewardTicketView } from '~/types/memberView';
 
 /**
- * Карточка награды — билет с корешком, `product/design/comeback/06-reward-card-sketch.html`.
+ * Карточка награды — билет с корешком.
  *
  * Сверху полоса отрыва, по бокам вырезы-полукружия — одним SVG с маской, поэтому вырезы
  * прозрачны. По углам накладки металла ступени, у низа значок: гранат ступени, у золотой —

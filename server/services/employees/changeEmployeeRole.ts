@@ -20,7 +20,7 @@ import { canChangeRole, type EmployeeActor } from '#server/services/employees/ro
  * ни одного заказа — как свежий менеджер.
  *
  * След — строка лога с автором, учёткой, прежней и новой ролью. Журнала действий сотрудника
- * здесь нет: он заводится отдельно (T90).
+ * здесь нет: он заводится отдельно.
  */
 
 const log = consola.withTag('employees:role');

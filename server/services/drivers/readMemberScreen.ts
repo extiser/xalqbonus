@@ -104,7 +104,7 @@ export const readMemberScreen = async (
     // Баллов у водителя не бывает столько, чтобы число вышло за точность `number`.
     balancePoints: Number(driver.points),
     // Без даты, как в макете главной, и без предупреждения об устаревании: признак живёт
-    // в разделе истории, в `tripsNote` (Руслан, 25-09-2026).
+    // в разделе истории, в `tripsNote`.
     updatedNote:
       syncedAt === null
         ? notReceived
