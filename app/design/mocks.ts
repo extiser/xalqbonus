@@ -1665,7 +1665,7 @@ export const CATALOG_CURRENT_OFFICE = 'kadysheva';
 /**
  * Сцены витрины офиса: `showcase` — `catalog-showcase.html`, остальные — сцены 1–5
  * `catalog-showcase-states.html`. На листе состояний по два товара, в сцене 3 у держателя в офисе
- * две штуки. Каталог без офиса (T70) — своими заглушками ниже.
+ * две штуки. Каталог без офиса — своими заглушками ниже.
  */
 export type CatalogScene = 'showcase' | 'nothing' | 'overBalance' | 'stockLimit' | 'empty' | 'error';
 
@@ -1782,10 +1782,10 @@ function confirmMock(products: CatalogProduct[], cart: CatalogCart, officeId: st
   };
 }
 
-// ------------------------------------------------- каталог без офиса на входе (T70, issue #234)
+// ------------------------------------------------------- каталог без офиса на входе (issue #234)
 
 /**
- * Остатки по офисам для сцен T70 — `catalog-no-office.md`. В Кадышева нет гарнитуры и держателя:
+ * Остатки по офисам для этих сцен — `catalog-no-office.md`. В Кадышева нет гарнитуры и держателя:
  * на витрине офиса они приглушены в конце (`catalog-office-picked.html`). В ТТЗ нет ничего —
  * «Выбрать» его показывает пустую витрину.
  */

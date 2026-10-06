@@ -3,7 +3,7 @@ import { ref, watch } from 'vue';
 import type { MemberLanguage, MemberLanguageOptionView } from '~/types/memberView';
 
 /**
- * Шторка «Язык» из профиля — `product/design/artboard/language-sheet.html`.
+ * Шторка «Язык» из профиля — `_reference/design/profile/language-sheet.html`.
  *
  * Шторка, а не экран: выбор из двух строк, прокрутки и порядка нет. Выбор — отметкой,
  * применяется «Сохранить»; «Закрыть» уходит без изменений. Название языка — на нём самом:

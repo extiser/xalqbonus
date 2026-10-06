@@ -3,8 +3,7 @@ import { computed, nextTick, ref } from 'vue';
 import type { MemberRewardTicketView } from '~/types/memberView';
 
 /**
- * Шторка крупного сундука — трёх дней или недели: `product/design/comeback/05-3days-chest-sheet.html`,
- * `05-week-chest-sheet.html` и их листы состояний.
+ * Шторка крупного сундука — трёх дней или недели.
  *
  * Сундук один на всё окно, поэтому сетки нет: он стоит посередине и занимает место, которое
  * у сундуков дня делят семеро. Шторки двух сундуков отличаются картинкой и словами — одна

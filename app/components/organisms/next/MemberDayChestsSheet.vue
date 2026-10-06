@@ -3,8 +3,7 @@ import { computed, nextTick, ref } from 'vue';
 import type { MemberChestCardView, MemberRewardTicketView } from '~/types/memberView';
 
 /**
- * Шторка «Сундуки дня» — эталон `product/design/comeback/04-day-chests-sheet.html`,
- * сцены `04-day-chests-sheet-states.html`.
+ * Шторка «Сундуки дня».
  *
  * Семь карточек — по одной на день окна, три в ряд; седьмая одна в третьем ряду и стоит
  * по центру: у края она читалась бы как ошибка раскладки.

@@ -142,7 +142,7 @@ export class MailingSurveyUnknownError extends MailingError {
 
 /**
  * Опрос не того мира (issue #321): живой опрос в демо-рассылке начислил бы баллы
- * демо-водителям тем же ключом, что живым (решение Руслана 02-10-2026).
+ * демо-водителям тем же ключом, что живым.
  */
 export class MailingSurveyDemoMismatchError extends MailingError {
   constructor(

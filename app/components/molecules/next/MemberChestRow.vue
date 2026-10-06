@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import type { MemberChestRowView } from '~/types/memberView';
 
 /**
- * Строка сундука на экране участника — `product/design/comeback/03-member-chests-states.html`.
+ * Строка сундука на экране участника.
  *
  * Здесь сундуки показывают состояние, а не условия: что уже ваше, чего ещё нет. Строка
  * со стрелкой, а не кнопка — кнопка на экране одна, в дневной цели, и двух золотых кнопок

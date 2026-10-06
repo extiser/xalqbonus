@@ -237,7 +237,7 @@ describe('ответ бота на входящее сообщение', () => {
 
     await bot.handleUpdate(privateMessageUpdate(telegramUserId, { text: CHAT_TEXT }));
 
-    // Кнопка запуска та же: какой экран показать, приложение решает само (T25).
+    // Кнопка запуска та же: какой экран показать, приложение решает само.
     expect(screensOf(bot)).toEqual([text('employee_greeting', 'ru')]);
   });
 

@@ -10,7 +10,7 @@ import type { MemberLanguage } from '~/types/memberView';
  * награды карточки нет. «Опрос закрыт» — без полосок и без карточки.
  *
  * Карточка — своя, вне шкалы намеренно, и в `MemberCard` / `MemberBigNumber` не сводится:
- * по размеру текста, цифра Unbounded 40/600 (решение Руслана 03-10-2026, `survey.md` → п. 5
+ * по размеру текста, цифра Unbounded 40/600 (`survey.md` → п. 5
  * сверки; CSS карточки в снимке `finish.html` — отвергнутая проба).
  */
 defineProps<{

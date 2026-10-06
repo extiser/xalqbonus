@@ -362,7 +362,7 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
    * Приветствие сотруднику парка — на то же любое сообщение и с той же кнопкой запуска.
    *
    * Своим текстом, потому что водительский зовёт регистрироваться и копить баллы, а у сотрудника
-   * в приложении своя работа (T25). Про кнопку не говорит по той же причине, что и водительское.
+   * в приложении своя работа. Про кнопку не говорит по той же причине, что и водительское.
    */
   employee_greeting: {
     ru: 'Xalq Taxi — рабочее место сотрудника парка. Выдача заказов водителям по коду и отмена заказов — в приложении.',
@@ -591,7 +591,7 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   },
   /**
    * Строка под балансом на главной — время последнего успешного прогона заказов, тот же момент,
-   * что в `trips_counted`. Даты нет, как в макете (Руслан, 25-09-2026).
+   * что в `trips_counted`. Даты нет, как в макете.
    */
   balance_updated: {
     ru: 'Обновлено в {time}',
@@ -763,7 +763,7 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Менеджер',
     uz: 'Menejer',
   },
-  /** Подпись рабочая, название за Русланом (`_reference/design/demo/demo.md`). */
+  /** Подпись рабочая, название не утверждено (`_reference/design/demo/demo.md`). */
   demo_enter: {
     ru: 'Войти',
     uz: 'Kirish',
@@ -851,8 +851,8 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   },
   /**
    * Подарок от Xalq Taxi (issue #219). Причина у него `campaign`, как у акции, а отличает его
-   * ключ перевода — `campaign:gift-…`. Повод раздачи в строку истории не входит (решение
-   * Руслана 25-09-2026). Узбекский — черновой.
+   * ключ перевода — `campaign:gift-…`. Повод раздачи в строку истории не входит.
+   * Узбекский — черновой.
    */
   reason_gift: {
     ru: 'Подарок от Xalq Taxi',
@@ -1149,7 +1149,7 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Отменить заказ?',
     uz: 'Buyurtma bekor qilinsinmi?',
   },
-  /** Подзаголовок шторки отмены: последствие отдельно от вопроса, чтобы его прочитали (Руслан, 25-09-2026). */
+  /** Подзаголовок шторки отмены: последствие отдельно от вопроса, чтобы его прочитали. */
   cancel_order_hint: {
     ru: 'Баллы вернутся на баланс.',
     uz: 'Ballar hisobingizga qaytadi.',
@@ -1420,9 +1420,8 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     uz: 'Voz kechish',
   },
 
-  // Блок недели и дневной цели (issue #168). Строки — по таблицам верха и низа
-  // `product/design/comeback/03-member-week-states.md` и шаблону `03-member-heat-scale.md`;
-  // выбор строки — `server/services/campaigns/weekProgress.ts`. Строки со счётом и склонением
+  // Блок недели и дневной цели (issue #168). Выбор строки —
+  // `server/services/campaigns/weekProgress.ts`. Строки со счётом и склонением
   // живут ниже, в `COUNTED_TEXTS`.
   //
   // Строка низа узкая: на 320 в ней около двадцати двух знаков в 11 px. При правке текста
@@ -1462,8 +1461,7 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Ура! Сундук дня ваш!',
     uz: "Hurra! Kun sandig'i sizniki!",
   },
-  // Лестница сундуков (issue #181) — по `product/design/comeback/03-member-chests-states.md`
-  // и `04-day-chests-sheet.md`. Какая строка к какому состоянию — `memberProgress.ts`.
+  // Лестница сундуков (issue #181). Какая строка к какому состоянию — `memberProgress.ts`.
   campaign_chests_day_title: {
     ru: 'Сундуки дня',
     uz: 'Kun sandiqlari',
@@ -1550,7 +1548,7 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Приз сейчас недоступен, попробуйте позже или подойдите в офис',
     uz: "Sovg'a hozir mavjud emas, keyinroq urinib ko'ring yoki ofisga murojaat qiling",
   },
-  // Завершённая акция (issue #182) — рабочий минимум строками; макет — планировочная T50.
+  // Завершённая акция (issue #182) — рабочий минимум строками.
   // Какое состояние когда — `describeCampaignFinish` в `memberProgress.ts`.
   /**
    * Не дотянул, итог не подведён. Итог не объявляется: опоздавшая поездка ещё может дозачесть
@@ -1855,7 +1853,7 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   },
   // Страница опроса в Mini App (issue #323) — дословно из словаря `T` макетов
   // `_reference/design/survey/`. Узбекский — черновик, вычитывает переводчик.
-  /** Заголовок экрана открытия — один на все опросы, поля в опросе нет (решение Руслана 03-10-2026). */
+  /** Заголовок экрана открытия — один на все опросы, поля в опросе нет. */
   survey_title: {
     ru: 'Короткий опрос',
     uz: "Qisqa so'rovnoma",
@@ -1905,7 +1903,7 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   },
   /**
    * Подсказка в поле «Своего варианта» и в поле свободного ответа — одна на оба: пример из макета
-   * свободного ответа привязан к вопросу и в общий текст не переносится (решение Руслана 03-10-2026).
+   * свободного ответа привязан к вопросу и в общий текст не переносится.
    */
   survey_answer_placeholder: {
     ru: 'Напишите своими словами',
@@ -1929,7 +1927,7 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     ru: 'Отлично',
     uz: "A'lo",
   },
-  /** Заголовок финала — один на все опросы, `finish` опроса идёт абзацем под ним (решение Руслана 03-10-2026). */
+  /** Заголовок финала — один на все опросы, `finish` опроса идёт абзацем под ним. */
   survey_finish_title: {
     ru: 'Спасибо за ответы!',
     uz: 'Javoblaringiz uchun rahmat!',
@@ -1943,7 +1941,7 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     uz: "Javoblar {date}gacha qabul qilindi. Kirganingiz uchun rahmat — yangi so'rovnomalar shu botga keladi.",
   },
   // Опрос, завершённый досрочно кнопкой в админке (issue #348): день — день завершения
-  // по Ташкенту, а не последний день. Узбекский — черновик Cowork, переводчик посмотрит вместе
+  // по Ташкенту, а не последний день. Узбекский — черновик, переводчик посмотрит вместе
   // с остальными текстами опроса.
   survey_closed_early_title: {
     ru: 'Опрос закрыт досрочно',
@@ -1958,7 +1956,7 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
     uz: 'Tushunarli',
   },
   // Плашки опроса на главной — `_reference/design/survey/main-screen-survey*.html`. Словаря `T`
-  // у макетов главной нет: узбекский написан черновиком (решение Руслана 03-10-2026).
+  // у макетов главной нет: узбекский написан черновиком.
   survey_banner_progress_kicker: {
     ru: 'Опрос не закончен',
     uz: "So'rovnoma tugallanmagan",

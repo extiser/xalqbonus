@@ -2,7 +2,7 @@
 import type { MemberLanguage, MemberLanguageOptionView, MemberProfileFieldView } from '~/types/memberView';
 
 /**
- * Раздел «Профиль» — `product/design/app/profile-screen.html` и шторка `artboard/language-sheet.html`.
+ * Раздел «Профиль» — `_reference/design/profile/profile-screen.html` и шторка `language-sheet.html`.
  *
  * Кто залогинен и настройки. Водители работают «друг за друга», и при разборе проблем
  * с баллами менеджер в офисе должен понять, чья учётка перед ним, одним экраном.
@@ -16,7 +16,7 @@ import type { MemberLanguage, MemberLanguageOptionView, MemberProfileFieldView }
  *
  * Номера ВУ нет (`license: null`) — строки с глазиком нет: прячется нечего. Строку «Номер ВУ»
  * с прочерком родитель ставит последней в `fields`, тем же видом, что позывной без значения
- * (решение Руслана 25-09-2026, issue #216).
+ * (issue #216).
  *
  * Пока идёт запрос, кнопка шторки ждёт с кольцом: «Сохранить» — у языка (`savingLanguage`),
  * «Сбросить» — у сброса (`resetting`), и тогда «Отменить» гаснет.

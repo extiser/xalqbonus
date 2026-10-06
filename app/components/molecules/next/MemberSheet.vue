@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted } from 'vue';
 
 /**
- * Шторка водительского Mini App — по эталону `product/design/comeback/04-day-chests-sheet.html`.
+ * Шторка водительского Mini App.
  *
  * Выезжает снизу, под ней затемнение. Полоски-ручки и свайпа нет: у Mini App своё
  * сворачивание жестом, и второе на шторке спорило бы с ним. Нажатие на затемнение шторку
