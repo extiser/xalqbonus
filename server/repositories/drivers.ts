@@ -523,6 +523,8 @@ export type PersonSettingsRow = {
   joinedSource: string;
   language: Language;
   notificationsEnabled: boolean;
+  /** «Спасибо» на слайде выданного приветственного бонуса (issue #421). Пусто — не нажимал. */
+  welcomeBonusSeenAt: Date | null;
 };
 
 /**
@@ -534,10 +536,24 @@ export const findPersonSettings = async (personId: string): Promise<PersonSettin
     SELECT "joined_at"     AS "joinedAt",
            "joined_source" AS "joinedSource",
            "language",
-           "notifications_enabled" AS "notificationsEnabled"
+           "notifications_enabled" AS "notificationsEnabled",
+           "welcome_bonus_seen_at" AS "welcomeBonusSeenAt"
       FROM xb.person_settings
      WHERE "person_id" = ${personId}::uuid
   `;
 
   return rows[0] ?? null;
 };
+
+/**
+ * Отметка «Спасибо нажато» на слайде выданного приветственного бонуса (issue #421). Стоящая
+ * отметка не переписывается — условием записи: повторное нажатие или второй запрос в пути
+ * время первого не сдвигают. Возвращает число отмеченных строк.
+ */
+export const markWelcomeBonusSeen = async (personId: string, seenAt: Date): Promise<number> =>
+  db.$executeRaw`
+    UPDATE xb.person_settings
+       SET "welcome_bonus_seen_at" = ${seenAt}
+     WHERE "person_id" = ${personId}::uuid
+       AND "welcome_bonus_seen_at" IS NULL
+  `;

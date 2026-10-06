@@ -32,6 +32,12 @@ import type {
  * issue #410): первым экраном слайд бонуса «+300», вторым — баллы, как без слайдера. Пилюля в шапке
  * показывает другой слайд и листает на него. Нет `welcome` — центр как был, без точек и слайдера.
  * Номер слайда живёт здесь, а не в слайдере: его читает шапка.
+ *
+ * Бонус выдан, а «Спасибо» не нажато (`welcome.awarded`, `main-screen-welcome-awarded.html`,
+ * issue #421) — слайд празднует, подсказки свайпа нет, над верхним блоком два прохода серпантина.
+ * Серпантин монтируется вместе с праздником: играет и при открытии главной, и когда фоновое
+ * перечитывание перевело счёт в «зачислен». «Спасибо» отдаётся наружу `welcomeThanks`: слайд
+ * убирает страница.
  */
 const props = defineProps<{
   name: string;
@@ -39,13 +45,15 @@ const props = defineProps<{
   points: number;
   /** Прогресс акции в шапке. Нет — водитель не в акции. При `welcome` не показывается. */
   promo?: { done: number; total: number };
-  /** Счёт до приветственного бонуса — слайд «+300». Нет — бонус выдан или не положен. */
+  /** Слайд «+300»: счёт до бонуса или праздник выданного. Нет — «Спасибо» нажато или бонус не положен. */
   welcome?: {
+    /** Бонус выдан — «Ура! Бонус зачислен!» и «Спасибо». */
+    awarded: boolean;
     done: number;
     total: number;
     /** «+300». */
     amount: string;
-    texts: { title: string; left: MemberSurveyTextPart[]; counted: string };
+    texts: { title: string; left: MemberSurveyTextPart[]; counted: string; cheer: string; thanks: string };
   };
   /** Плашка приглашения. Есть — водитель в снимке акции, но не вступил. */
   invite?: { kicker: string; title: string; when: string };
@@ -103,6 +111,7 @@ defineEmits<{
   catalog: [];
   product: [productId: string];
   history: [];
+  welcomeThanks: [];
   retryOrders: [];
   retryRewards: [];
   retryCatalog: [];
@@ -152,17 +161,25 @@ const showSlide = (target: number): void => {
     <div class="relative z-[6] flex flex-col gap-[34px] overflow-clip px-5 pt-[104px]" :class="props.invite || props.survey ? 'pb-4' : 'pb-11'">
       <AtomsNextMemberLiveBackdrop variant="home" />
 
+      <!-- Серпантин выданного бонуса — над всем верхним блоком, поверх слайдов -->
+      <div v-if="welcome?.awarded" class="pointer-events-none absolute inset-0 z-[2]">
+        <AtomsNextMemberConfetti />
+      </div>
+
       <OrganismsNextMemberHomeSlider
         v-if="welcome"
         v-model:index="slide"
         :count="2"
         :labels="[welcome.texts.title, texts.balanceTitle]"
+        :hint="!welcome.awarded"
       >
         <OrganismsNextMemberWelcomeSlide
+          :awarded="welcome.awarded"
           :done="welcome.done"
           :total="welcome.total"
           :amount="welcome.amount"
           :texts="welcome.texts"
+          @thanks="$emit('welcomeThanks')"
         />
         <OrganismsNextMemberBalance
           :amount="amount"

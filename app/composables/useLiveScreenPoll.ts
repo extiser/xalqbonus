@@ -14,8 +14,14 @@ export const LIVE_SCREEN_POLL_MS = 5000;
  * Следующий запрос уходит через шаг **после ответа** на предыдущий, а не по часам: два запроса
  * одного экрана одновременно не идут, и медленная сеть не копит очередь. Отказ молчит — в консоль,
  * а на экране остаётся последнее известное состояние: перечитывание никто не нажимал.
+ *
+ * Шаг — третьим параметром: главная перечитывается реже экрана с кодом (issue #421).
  */
-export const useLiveScreenPoll = (waiting: Readonly<Ref<boolean>>, refresh: () => Promise<void>): void => {
+export const useLiveScreenPoll = (
+  waiting: Readonly<Ref<boolean>>,
+  refresh: () => Promise<void>,
+  stepMs: number = LIVE_SCREEN_POLL_MS,
+): void => {
   /** Приложение на переднем плане. На сервере и до монтирования — нет: таймеров там не заводим. */
   const visible = ref(false);
   const running = computed(() => waiting.value && visible.value);
@@ -34,7 +40,7 @@ export const useLiveScreenPoll = (waiting: Readonly<Ref<boolean>>, refresh: () =
     stop();
 
     if (running.value) {
-      timer = setTimeout(() => void step(), LIVE_SCREEN_POLL_MS);
+      timer = setTimeout(() => void step(), stepMs);
     }
   };
 

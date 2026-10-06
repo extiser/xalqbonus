@@ -1,6 +1,8 @@
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
 import { awardTripPoints } from '#server/services/points/awardTripPoints';
+import { WelcomeBonusNotAwardedError } from '#server/services/points/errors';
+import { markWelcomeBonusSeen } from '#server/services/points/markWelcomeBonusSeen';
 import { readWelcomeBonus } from '#server/services/points/readWelcomeBonus';
 import {
   cleanupTestData,
@@ -13,7 +15,8 @@ import {
 import { disconnectQueues } from '../support/queues';
 
 /**
- * Счёт до приветственного бонуса — слайд «+300» и строка карточки водителя (issue #410).
+ * Счёт до приветственного бонуса — слайд «+300» и строка карточки водителя (issue #410),
+ * и отметка «Спасибо» на слайде выданного бонуса (issue #421).
  *
  * Настоящей базой: счёт поездок и время выдачи живут сырыми запросами, и обещание обязано
  * считаться тем же правилом, что выдача. Заглушка подтвердила бы работу кода, а не правила.
@@ -22,6 +25,7 @@ import { disconnectQueues } from '../support/queues';
 const JOINED_AT = new Date('2026-10-05T07:00:00.000Z');
 const BEFORE_JOIN = new Date('2026-10-04T12:00:00.000Z');
 const AFTER_JOIN = new Date('2026-10-06T09:32:00.000Z');
+const THANKED_AT = new Date('2026-10-06T10:15:00.000Z');
 
 /** Заводит человеку завершённые поездки на одно время и возвращает их идентификаторы заказов. */
 const createCompletedTrips = async (
@@ -78,7 +82,42 @@ describe('счёт до приветственного бонуса', () => {
 
     expect(summary.welcomeAwarded).toBe(1);
     // Время выдачи — время поездки, на которой порог сошёлся, а не время прогона.
-    expect(await readWelcomeBonus(person.personId)).toEqual({ state: 'awarded', awardedAt: AFTER_JOIN });
+    // «Спасибо» ещё не нажато — слайд праздника стоит.
+    expect(await readWelcomeBonus(person.personId)).toEqual({
+      state: 'awarded',
+      awardedAt: AFTER_JOIN,
+      seenAt: null,
+      joinedAt: JOINED_AT,
+    });
+  });
+
+  it('«Спасибо» на выданном бонусе ставит отметку, повтор её не сдвигает', async () => {
+    const person = await createTestPerson({ inProgram: true, joinedAt: JOINED_AT });
+    await awardTripPoints(await createCompletedTrips(person, 5, AFTER_JOIN, 'thanked'));
+
+    await markWelcomeBonusSeen(person.personId, THANKED_AT);
+    await markWelcomeBonusSeen(person.personId, new Date(THANKED_AT.getTime() + 60_000));
+
+    expect(await readWelcomeBonus(person.personId)).toEqual({
+      state: 'awarded',
+      awardedAt: AFTER_JOIN,
+      seenAt: THANKED_AT,
+      joinedAt: JOINED_AT,
+    });
+  });
+
+  it('«Спасибо» до выдачи — отказ, отметки нет', async () => {
+    const person = await createTestPerson({ inProgram: true, joinedAt: JOINED_AT });
+    await awardTripPoints(await createCompletedTrips(person, 4, AFTER_JOIN, 'early'));
+
+    await expect(markWelcomeBonusSeen(person.personId, THANKED_AT)).rejects.toBeInstanceOf(
+      WelcomeBonusNotAwardedError,
+    );
+
+    // Бонус выдан пятой поездкой позже — отметки нет, праздник впереди.
+    await awardTripPoints(await createCompletedTrips(person, 1, AFTER_JOIN, 'fifth'));
+
+    expect(await readWelcomeBonus(person.personId)).toMatchObject({ state: 'awarded', seenAt: null });
   });
 
   it('перенесённому из старой базы — не положен, сколько бы поездок ни было', async () => {

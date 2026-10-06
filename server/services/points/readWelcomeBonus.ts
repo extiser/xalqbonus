@@ -14,12 +14,13 @@ import { buildWelcomeIdempotencyKey } from '#server/services/points/idempotencyK
  * пять из которых до вступления, видел бы «5 из 5» и не получал бы ничего.
  *
  * - `progress` — бонус положен и ещё не выдан: сколько зачётных поездок из скольких
- * - `awarded` — перевод с ключом `welcome:<person_id>` есть, с его временем
+ * - `awarded` — перевод с ключом `welcome:<person_id>` есть, с его временем; `seenAt` — когда водитель
+ *   нажал «Спасибо» на слайде выданного бонуса (issue #421), пусто — не нажимал
  * - `not_eligible` — перенесён из старой базы: бонус только новым
  */
 export type WelcomeBonusState =
   | { state: 'progress'; done: number; total: number; joinedAt: Date }
-  | { state: 'awarded'; awardedAt: Date }
+  | { state: 'awarded'; awardedAt: Date; seenAt: Date | null; joinedAt: Date }
   | { state: 'not_eligible' };
 
 /** `null` — не участник: строки `person_settings` нет, и считать поездки не от чего. */
@@ -35,7 +36,7 @@ export const readWelcomeBonus = async (personId: string): Promise<WelcomeBonusSt
   const awardedAt = await findTransferOccurredAtByIdempotencyKey(buildWelcomeIdempotencyKey(personId));
 
   if (awardedAt) {
-    return { state: 'awarded', awardedAt };
+    return { state: 'awarded', awardedAt, seenAt: settings.welcomeBonusSeenAt, joinedAt: settings.joinedAt };
   }
 
   if (await hasLegacyRecord(personId)) {

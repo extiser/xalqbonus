@@ -67,6 +67,9 @@ export type TextKey =
   | 'welcome_trip_one'
   | 'welcome_trip_few'
   | 'welcome_trip_many'
+  | 'welcome_slide_cheer'
+  | 'welcome_slide_thanks'
+  | 'welcome_denied_not_awarded'
   | 'balance_title'
   | 'balance_unit_one'
   | 'balance_unit_few'
@@ -568,6 +571,23 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   welcome_trip_many: {
     ru: 'поездок',
     uz: 'safar',
+  },
+  /**
+   * Слайд выданного бонуса (issue #421): бонус выдан, и пока водитель не нажал «Спасибо»,
+   * слайд встречает его первым экраном. «Спасибо» убирает слайд насовсем.
+   */
+  welcome_slide_cheer: {
+    ru: 'Ура! Бонус зачислен!',
+    uz: 'Hurra! Bonus hisobingizga tushdi!',
+  },
+  welcome_slide_thanks: {
+    ru: 'Спасибо',
+    uz: 'Rahmat',
+  },
+  /** Отказ «Спасибо», пока бонус не выдан. На экран не выходит — экран пишет его в консоль. */
+  welcome_denied_not_awarded: {
+    ru: 'Бонус ещё не выдан.',
+    uz: 'Bonus hali berilmagan.',
   },
   balance_title: {
     ru: 'Ваши баллы',

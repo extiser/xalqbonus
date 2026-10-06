@@ -8,8 +8,16 @@ import type { MemberSurveyTextPart } from '#shared/types/memberSurvey';
  * Сетка та же, что у баллов (`MemberBalance`): надпись, крупное число, на месте кнопки «Обменять
  * баллы» — блок той же высоты 48 с делениями и подписью, на месте «Обновлено в» — строка о том,
  * какие поездки считаются. Высоты слайдов равны: при листании экран не прыгает.
+ *
+ * Бонус выдан, а «Спасибо» не нажато (`awarded`, `main-screen-welcome-awarded.html`, issue #421) —
+ * все деления золотые, вместо счёта «Ура! Бонус зачислен!», вместо строки о поездках — золотая
+ * кнопка «Спасибо», та же, что «Открыть сундук» у цели дня. Кнопка выше строки, и слайд выше
+ * на 22 px: дорожка слайдера держит высоту большего, слайд баллов тянется до неё. Серпантин
+ * праздника — над всем верхним блоком главной, его держит `MemberHome`.
  */
 defineProps<{
+  /** Бонус выдан — праздник вместо счёта. */
+  awarded: boolean;
   /** Зачётных поездок, не больше `total`. */
   done: number;
   total: number;
@@ -20,8 +28,14 @@ defineProps<{
     /** «Ещё **4 поездки** — и 300 баллов ваши». */
     left: MemberSurveyTextPart[];
     counted: string;
+    /** «Ура! Бонус зачислен!». */
+    cheer: string;
+    /** «Спасибо». */
+    thanks: string;
   };
 }>();
+
+defineEmits<{ thanks: [] }>();
 </script>
 
 <template>
@@ -32,16 +46,20 @@ defineProps<{
     </div>
     <div class="flex h-12 flex-col items-center justify-center gap-2.5">
       <span class="flex gap-1.5" aria-hidden="true">
-        <i v-for="step in total" :key="step" class="welcome-step" :class="step <= done ? 'welcome-step-done' : ''" />
+        <i v-for="step in total" :key="step" class="welcome-step" :class="awarded || step <= done ? 'welcome-step-done' : ''" />
       </span>
-      <span class="text-center text-[15px] font-medium text-xb-secondary">
+      <span v-if="awarded" class="text-center text-[16px] font-bold leading-[1.3] text-white">{{ texts.cheer }}</span>
+      <span v-else class="text-center text-[15px] font-medium text-xb-secondary">
         <template v-for="(part, index) in texts.left" :key="index">
           <b v-if="part.strong" class="font-bold text-xb-text">{{ part.text }}</b>
           <template v-else>{{ part.text }}</template>
         </template>
       </span>
     </div>
-    <div class="relative z-[1] text-center">
+    <div v-if="awarded" class="relative z-[1]">
+      <AtomsNextMemberButton size="s" tone="gold" @click="$emit('thanks')">{{ texts.thanks }}</AtomsNextMemberButton>
+    </div>
+    <div v-else class="relative z-[1] text-center">
       <AtomsNextMemberSyncNote :text="texts.counted" />
     </div>
   </div>
