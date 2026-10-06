@@ -12,8 +12,8 @@ import type { MemberItemTone, MemberOrderDetailView, MemberOrderStatus } from '~
  */
 defineProps<{
   order: MemberOrderDetailView;
-  /** Баланс справа в шапке — готовыми строками («Ваши баллы», «1 450»). */
-  balance?: { label: string; amount: string };
+  /** Баланс справа в шапке — готовыми строками («1 450», «баллов»). */
+  balance?: { amount: string; unit: string };
   texts: {
     back: string;
     codeTitle: string;

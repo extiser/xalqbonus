@@ -131,6 +131,11 @@ export const describeOperation = (
 export const memberScreenTexts = (language: Language): MemberScreenTexts => ({
   profile: plainText('profile_title', language),
   balanceTitle: plainText('balance_title', language),
+  balanceUnit: {
+    one: plainText('balance_unit_one', language),
+    few: plainText('balance_unit_few', language),
+    many: plainText('balance_unit_many', language),
+  },
   exchange: plainText('button_exchange_points', language),
   back: plainText('button_back', language),
   retry: plainText('button_retry', language),

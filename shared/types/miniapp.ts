@@ -110,8 +110,10 @@ export type RegistrationScreenTexts = {
 export type MemberScreenTexts = {
   /** Кнопка-аватар в шапке главной — для экранного чтеца. */
   profile: string;
-  /** Подпись над балансом: крупным на главной и в шапках. */
+  /** Подпись над крупным балансом в центре главной. */
   balanceTitle: string;
+  /** Слово при числе в пилюле баланса шапки, три формы счёта: «балл», «балла», «баллов». */
+  balanceUnit: { one: string; few: string; many: string };
   exchange: string;
   back: string;
   retry: string;

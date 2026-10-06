@@ -31,6 +31,7 @@ import type {
   StaffRewardView,
 } from '~/types/staffView';
 import type { MemberSurvey, MemberSurveyView } from '#shared/types/memberSurvey';
+import { pluralize } from '~/utils/format';
 
 /**
  * Заглушки служебной страницы `/design` — значения сняты с макетов `_reference/design/`.
@@ -48,8 +49,8 @@ const RETRY = 'Повторить';
 /** Ссылка на карту у офисов: в макетах её значения нет, нарисована только строка карты. */
 const MAP_URL = 'https://yandex.uz/maps/';
 
-/** Баланс справа в шапке раздела — `_reference/design/home/catalog-bar.html`, число из экранов разделов. */
-const BAR_BALANCE = { label: 'Ваши баллы', amount: '1\u00A0450' };
+/** Баланс в шапках разделов и на главной — число из экранов разделов. */
+const BAR_POINTS = 1450;
 
 /**
  * Фото товаров — вынуты из макетов `_reference/design/orders/` и `catalog/` в `public/design/products/`.
@@ -83,6 +84,19 @@ function formatPoints(value: number): string {
 
   return value < 0 ? `\u2212${digits}` : digits;
 }
+
+/** Слово при числе в пилюле баланса — форма по числу, как её выбирает рабочий экран. */
+function balanceUnit(points: number): string {
+  return pluralize(points, 'балл', 'балла', 'баллов');
+}
+
+/** Пилюля баланса в шапке — `_reference/design/home/catalog-bar.html`: «1 450 баллов». */
+function barBalance(points: number): { amount: string; unit: string } {
+  return { amount: formatPoints(points), unit: balanceUnit(points) };
+}
+
+/** Баланс справа в шапке раздела. */
+const BAR_BALANCE = barBalance(BAR_POINTS);
 
 /** Товары витрины `_reference/design/catalog/catalog-showcase.html`, по порядку сетки. */
 const POWER_BANK: CatalogProduct = {
@@ -280,8 +294,8 @@ const HOME_CATALOG: MemberProductView[] = [POWER_BANK, HEADSET, CHECKER, FRESHEN
 const HOME_BASE = {
   name: 'Бахтиёр',
   callsign: 'А-247',
-  points: 1450,
-  texts: HOME_TEXTS,
+  points: BAR_POINTS,
+  texts: { ...HOME_TEXTS, balanceUnit: balanceUnit(BAR_POINTS) },
 };
 
 /** Эталон: участник программы, акция идёт, он в ней участвует. */
@@ -1169,7 +1183,7 @@ export function campaignMock(scene: { heat?: number; week?: number; chests?: num
   return {
     name: 'Бахтиёр',
     callsign: 'А-247',
-    balance: '1\u00A0450',
+    balance: BAR_BALANCE,
     stage: heat.stage,
     goal: { done: heat.done, target: 5, note: heat.note },
     week: WEEK_SCENES[scene.week ?? 1] ?? WEEK_SCENES[1]!,
@@ -1608,7 +1622,7 @@ export function catalogShowcaseMock(scene: CatalogScene, cart: CatalogCart, offi
 
   return {
     state: setup.state,
-    balance: { label: 'Ваши баллы', amount: formatPoints(CATALOG_BALANCE) },
+    balance: barBalance(CATALOG_BALANCE),
     office: { label: 'Офис', name: catalogOffice(officeId).name, action: 'Сменить' },
     products: setup.products.map((product) => productView(product, cart)),
     checkout: checkoutMock(total),
@@ -1716,7 +1730,7 @@ function officeProducts(officeId: string): CatalogProduct[] {
 export function catalogNoOfficeMock() {
   return {
     state: 'ready' as const,
-    balance: { label: 'Ваши баллы', amount: formatPoints(CATALOG_BALANCE) },
+    balance: barBalance(CATALOG_BALANCE),
     office: { label: 'Офис', action: 'Выбрать' },
     products: CATALOG_ALL.map((product): MemberProductView => ({ ...productView(product, {}), stock: undefined, available: undefined })),
     texts: CATALOG_TEXTS,
@@ -1737,7 +1751,7 @@ export function catalogPickedMock(officeId: string, cart: CatalogCart, hintShown
 
   return {
     state: products.length > 0 ? ('ready' as const) : ('empty' as const),
-    balance: { label: 'Ваши баллы', amount: formatPoints(CATALOG_BALANCE) },
+    balance: barBalance(CATALOG_BALANCE),
     office: { label: 'Офис', name: office.name, action: 'Сменить' },
     products: products.map((product) => productView(product, cart)),
     missingProducts: missing.map(
@@ -1764,7 +1778,7 @@ export function catalogPickedMock(officeId: string, cart: CatalogCart, hintShown
 export function catalogLoadingMock(officeId: string | null) {
   return {
     state: 'pick' as const,
-    balance: { label: 'Ваши баллы', amount: formatPoints(CATALOG_BALANCE) },
+    balance: barBalance(CATALOG_BALANCE),
     office: officeId === null ? undefined : { label: 'Офис', name: catalogOffice(officeId).name, action: 'Сменить' },
     products: [],
     texts: CATALOG_TEXTS,

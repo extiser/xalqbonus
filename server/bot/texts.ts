@@ -63,6 +63,9 @@ export type TextKey =
   | 'linked_new'
   | 'welcome_bonus_promise'
   | 'balance_title'
+  | 'balance_unit_one'
+  | 'balance_unit_few'
+  | 'balance_unit_many'
   | 'balance_updated'
   | 'trips_counted'
   | 'trips_not_received'
@@ -544,6 +547,22 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   balance_title: {
     ru: 'Ваши баллы',
     uz: 'Ballaringiz',
+  },
+  /**
+   * Слово при числе в пилюле баланса шапки Mini App: «1 450 баллов». Форма — по итоговому
+   * балансу, правилом `pluralize`. По-узбекски «ball» при числе не склоняется.
+   */
+  balance_unit_one: {
+    ru: 'балл',
+    uz: 'ball',
+  },
+  balance_unit_few: {
+    ru: 'балла',
+    uz: 'ball',
+  },
+  balance_unit_many: {
+    ru: 'баллов',
+    uz: 'ball',
   },
   /**
    * Строка под балансом на главной — время последнего успешного прогона заказов, тот же момент,

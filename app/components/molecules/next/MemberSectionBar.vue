@@ -27,8 +27,8 @@ defineProps<{
   backLabel: string;
   /** Подпись действия справа. Без слота `action` не читается. */
   actionLabel?: string;
-  /** Баланс справа — готовыми строками. Есть — действия справа нет. */
-  balance?: { label: string; amount: string };
+  /** Баланс справа — готовыми строками: число и слово при нём. Есть — действия справа нет. */
+  balance?: { amount: string; unit: string };
 }>();
 
 defineEmits<{ back: []; action: [] }>();
@@ -48,7 +48,7 @@ defineEmits<{ back: []; action: [] }>();
       {{ title }}
     </h1>
 
-    <AtomsNextMemberBarBalance v-if="balance" :label="balance.label" :amount="balance.amount" />
+    <AtomsNextMemberBalancePill v-if="balance" :amount="balance.amount" :unit="balance.unit" />
     <AtomsNextMemberIconButton v-else-if="$slots.action" :label="actionLabel ?? ''" size="m" @click="$emit('action')">
       <slot name="action" />
     </AtomsNextMemberIconButton>
