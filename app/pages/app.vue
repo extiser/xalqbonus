@@ -37,6 +37,7 @@ import type {
   MemberOfficeView,
   MemberProfileFieldView,
 } from '~/types/memberView';
+import { pluralize } from '~/utils/format';
 import {
   cartLinesView,
   catalogProductsView,
@@ -266,6 +267,22 @@ const member = ref<MiniAppMemberScreen | null>(null);
  * меняется набором от показанного, а без изменения стоит как есть.
  */
 const balanceAmount = useCountUp(() => member.value?.balancePoints ?? 0);
+
+/**
+ * Слово при числе в пилюле баланса — по итоговому балансу, а не по набираемому числу:
+ * на главной число набирается от нуля, и слово во время набора меняться не должно.
+ */
+const balanceUnit = computed(() => {
+  const current = member.value;
+
+  if (!current) {
+    return '';
+  }
+
+  const { one, few, many } = current.texts.balanceUnit;
+
+  return pluralize(current.balancePoints, one, few, many);
+});
 
 /**
  * Регистрация: шаг 1 — язык, шаг 2 — номер, после отправки — экран исхода.
@@ -1507,9 +1524,9 @@ useLiveScreenPoll(
   memberRewards.reload,
 );
 
-/** Баланс в шапке разделов: «Ваши баллы» и число в наборе. */
+/** Баланс в шапке разделов: число в наборе и слово при нём. */
 const sectionBalance = computed(() =>
-  member.value ? { label: member.value.texts.balanceTitle, amount: balanceAmount.value } : undefined,
+  member.value ? { amount: balanceAmount.value, unit: balanceUnit.value } : undefined,
 );
 
 /**
@@ -1538,6 +1555,7 @@ const homeView = computed(() => {
     texts: {
       profile: texts.profile,
       balanceTitle: texts.balanceTitle,
+      balanceUnit: balanceUnit.value,
       exchange: texts.exchange,
       updated: current.updatedNote,
       ordersTitle: texts.ordersTitle,
@@ -1589,7 +1607,7 @@ const catalogScreen = computed(() => {
   const catalog = memberOrders.catalog.value;
   const showcase = memberOrders.showcase.value;
   const base = {
-    balance: { label: texts.balanceTitle, amount: balanceAmount.value },
+    balance: { amount: balanceAmount.value, unit: balanceUnit.value },
     products: [],
     focusProductId: catalogFocusProductId.value ?? undefined,
     texts: {

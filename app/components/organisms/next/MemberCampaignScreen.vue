@@ -15,7 +15,8 @@ import type { MemberChestRowView, MemberHeatStage, MemberWeekDayView } from '~/t
 defineProps<{
   name: string;
   callsign?: string;
-  balance: string;
+  /** Баланс пилюлей в шапке — готовыми строками: «1 450», «баллов». */
+  balance: { amount: string; unit: string };
   stage: MemberHeatStage;
   goal: {
     done: number;
@@ -67,7 +68,7 @@ defineEmits<{ profile: []; refresh: []; take: []; chest: [chestId: string] }>();
         </div>
 
         <div class="flex shrink-0 items-center gap-2">
-          <AtomsNextMemberBalancePill :points="balance" />
+          <AtomsNextMemberBalancePill :amount="balance.amount" :unit="balance.unit" />
           <AtomsNextMemberIconButton :label="texts.refresh" size="l" @click="$emit('refresh')">
             <svg viewBox="0 0 24 24" width="19" height="19" fill="none" aria-hidden="true">
               <path d="M20 12a8 8 0 1 1-2.6-5.9" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />

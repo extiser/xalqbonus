@@ -14,8 +14,8 @@ defineProps<{
   state: MemberViewLoad;
   pending: MemberOrderRowView[];
   past: MemberOrderRowView[];
-  /** Баланс справа в шапке — готовыми строками («Ваши баллы», «1 450»). */
-  balance?: { label: string; amount: string };
+  /** Баланс справа в шапке — готовыми строками («1 450», «баллов»). */
+  balance?: { amount: string; unit: string };
   texts: {
     title: string;
     back: string;

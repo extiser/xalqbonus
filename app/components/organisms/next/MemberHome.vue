@@ -48,6 +48,8 @@ const props = defineProps<{
     /** Подпись пилюли акции. Нужна, когда есть `promo`. */
     promo?: string;
     balanceTitle: string;
+    /** Слово при числе в пилюле баланса шапки — в форме по итоговому балансу: «баллов». */
+    balanceUnit: string;
     exchange: string;
     updated: string;
     ordersTitle: string;
@@ -109,7 +111,7 @@ const barSurface = ref(false);
       :name="name"
       :callsign="callsign"
       :promo="promo"
-      :balance="{ label: texts.balanceTitle, amount }"
+      :balance="{ amount, unit: texts.balanceUnit }"
       :surface="barSurface"
       :texts="{ profile: texts.profile, promo: texts.promo ?? '' }"
       @profile="$emit('profile')"

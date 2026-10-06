@@ -12,6 +12,9 @@
  *
  * Заголовок переносится, а не режется: узбекский длиннее русского примерно на четверть,
  * и обрезанное название раздела нечитаемо. Шапка растёт, содержимое съезжает вниз.
+ * До 389 px ширины заголовок мельче — 16 px вместо 19: справа пилюля баланса со словом,
+ * и одно длинное слово заголовка («Buyurtmalarim») иначе заходит под неё. На 320 этого
+ * не хватает и так и оставлено — известное ограничение.
  *
  * Липкая, с размытием 14 px и тонкой границей: списки разделов длинные, выход назад
  * не должен требовать прокрутки вверх, а под шапкой видно, что список продолжается.
@@ -27,8 +30,8 @@ defineProps<{
   backLabel: string;
   /** Подпись действия справа. Без слота `action` не читается. */
   actionLabel?: string;
-  /** Баланс справа — готовыми строками. Есть — действия справа нет. */
-  balance?: { label: string; amount: string };
+  /** Баланс справа — готовыми строками: число и слово при нём. Есть — действия справа нет. */
+  balance?: { amount: string; unit: string };
 }>();
 
 defineEmits<{ back: []; action: [] }>();
@@ -44,14 +47,23 @@ defineEmits<{ back: []; action: [] }>();
       </svg>
     </AtomsNextMemberIconButton>
 
-    <h1 class="m-0 min-w-0 grow font-unbounded text-[19px] font-semibold leading-[1.25] tracking-[-0.5px] text-xb-text">
+    <h1 class="section-bar-title m-0 min-w-0 grow font-unbounded text-[19px] font-semibold leading-[1.25] tracking-[-0.5px] text-xb-text">
       {{ title }}
     </h1>
 
-    <AtomsNextMemberBarBalance v-if="balance" :label="balance.label" :amount="balance.amount" />
+    <AtomsNextMemberBalancePill v-if="balance" :amount="balance.amount" :unit="balance.unit" />
     <AtomsNextMemberIconButton v-else-if="$slots.action" :label="actionLabel ?? ''" size="m" @click="$emit('action')">
       <slot name="action" />
     </AtomsNextMemberIconButton>
     <span v-else class="size-10 shrink-0" aria-hidden="true" />
   </header>
 </template>
+
+<style scoped>
+@media (max-width: 389px) {
+  .section-bar-title {
+    font-size: 16px;
+    letter-spacing: -0.4px;
+  }
+}
+</style>

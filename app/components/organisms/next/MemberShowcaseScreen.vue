@@ -31,8 +31,8 @@ type ShowcaseState = 'pick' | 'ready' | 'empty' | 'error';
 
 const props = defineProps<{
   state: ShowcaseState;
-  /** Баланс справа в шапке — готовыми строками («Ваши баллы», «2 450»). */
-  balance: { label: string; amount: string };
+  /** Баланс справа в шапке — готовыми строками («2 450», «баллов»). */
+  balance: { amount: string; unit: string };
   /**
    * Строка офиса. Без имени — «Офис · Выбрать»: офис ещё не выбран. `action` — подпись ссылки,
    * «Выбрать» или «Сменить». Нет всей строки — её нет на экране.

@@ -4,15 +4,20 @@
  * «ЛИПКАЯ ШАПКА», и `section-bar.md`, «Шапка главной».
  *
  * Не шапка раздела: главная — витрина программы, а не раздел, и назад отсюда идти некуда.
- * Слева направо: аватар, имя с позывным, баланс, пилюля акции у правого края. Пилюля стоит,
- * только пока водитель в акции: у невступившего прогресса не существует, его зовёт плашка
- * приглашения под балансом. Кнопки «обновить» нет.
+ * Слева направо: аватар, имя с позывным, у правого края — одна пилюля. Кнопки «обновить» нет.
+ *
+ * Пилюля в шапке одна. Пока крупное число видно — пилюля обещания (акции), если она есть:
+ * баланс и так крупно в центре. Пилюля акции стоит, только пока водитель в акции:
+ * у невступившего прогресса не существует, его зовёт плашка приглашения под балансом.
+ * Крупное число ушло под шапку — пилюля обещания уступает место пилюле баланса,
+ * как на всех остальных экранах; вернулся наверх — вернулась пилюля обещания.
  *
  * Шапка стоит всегда, с первого кадра, и не уезжает; живой фон верхнего блока начинается
  * от верха экрана и уходит под неё — отсюда `margin-bottom: −68`. Пока крупное число видно,
- * шапка прозрачная и баланса в ней нет: он крупно в центре. Верх числа ушёл под шапку —
- * подложка и баланс появляются вместе, по одному `surface`: его считает скрипт у числа
- * (`MemberBalance`, порог 61). Баланс проявляется переходом 0,15 с, гаснет сразу.
+ * шапка прозрачная. Верх числа ушёл под шапку — подложка и баланс появляются вместе, по одному
+ * `surface`: его считает скрипт у числа (`MemberBalance`, порог 61). Баланс проявляется
+ * за 0,15 с, гаснет сразу. Скрытая пилюля из раскладки убрана, а не прозрачна: иначе имя
+ * обрезалось бы под пилюлю, которой не видно (`main-screen-welcome-pill-lengths.html`, `.on-bonus .bal`).
  *
  * Одним признаком, а не таймлайном прокрутки для баланса: в WebKit без таймлайнов (Telegram
  * на iOS и macOS) запасной путь показывал баланс с первого кадра, рядом с крупным числом
@@ -23,9 +28,9 @@ defineProps<{
   callsign?: string;
   /** Прогресс акции. Нет — водитель не в акции, пилюли нет. */
   promo?: { done: number; total: number };
-  /** Баланс готовыми строками; число набирается вместе с крупным. */
-  balance: { label: string; amount: string };
-  /** Крупное число ушло под шапку — подложка включена. */
+  /** Баланс готовыми строками: число набирается вместе с крупным, слово — по итоговому балансу. */
+  balance: { amount: string; unit: string };
+  /** Крупное число ушло под шапку — подложка и пилюля баланса вместо пилюли обещания. */
   surface: boolean;
   texts: {
     profile: string;
@@ -50,18 +55,16 @@ defineEmits<{ profile: []; promo: [] }>();
         <AtomsNextMemberNameplate :name="name" :callsign="callsign" />
       </div>
 
-      <div class="flex shrink-0 items-center gap-3.5">
-        <span class="home-bar-balance flex shrink-0" :class="surface ? 'home-bar-balance-on' : ''">
-          <AtomsNextMemberBarBalance :label="balance.label" :amount="balance.amount" />
-        </span>
-        <MoleculesNextMemberPromoPill
-          v-if="promo"
-          :done="promo.done"
-          :total="promo.total"
-          :label="texts.promo"
-          @open="$emit('promo')"
-        />
-      </div>
+      <span v-if="surface" class="home-bar-balance flex shrink-0">
+        <AtomsNextMemberBalancePill :amount="balance.amount" :unit="balance.unit" />
+      </span>
+      <MoleculesNextMemberPromoPill
+        v-else-if="promo"
+        :done="promo.done"
+        :total="promo.total"
+        :label="texts.promo"
+        @open="$emit('promo')"
+      />
     </div>
   </div>
 </template>
@@ -103,22 +106,23 @@ defineEmits<{ profile: []; promo: [] }>();
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-/* Баланс в шапке — по тому же `surface`, что подложка: гаснет сразу, проявляется за 0,15 с. */
+/* Пилюля баланса — по тому же `surface`, что подложка: проявляется за 0,15 с, гаснет сразу.
+   Ключевыми кадрами, а не переходом: пилюля появляется в раскладке вместе с `surface`,
+   и переходу не от чего отталкиваться. */
 .home-bar-balance {
-  opacity: 0;
-  transform: translateY(-4px);
+  animation: home-bar-balance-in 0.15s ease-out;
 }
 
-.home-bar-balance-on {
-  opacity: 1;
-  transform: none;
-  transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+@keyframes home-bar-balance-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .home-bar-balance {
-    transform: none;
-    transition: none !important;
+    animation: none;
   }
 }
 </style>
