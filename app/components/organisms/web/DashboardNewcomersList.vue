@@ -3,8 +3,9 @@ import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { DASH, formatNumber } from '~/utils/format';
 import { formatShortDay, incompleteMonthsText } from '~/utils/leaders';
-import { dayWord, listTitle, monthYear, newcomersMetricValues, noNewcomersText } from '~/utils/newcomers';
+import { listTitle, newcomersMetricValues } from '~/utils/newcomers';
 import { monthForms } from '#shared/monthNames';
+import { listFromDayText, noNewcomersInMonthText, noNewcomersListText } from '#shared/newcomers';
 import type { LoadState } from '~/types/loadState';
 import type { DashboardNewcomerRow, DashboardNewcomers } from '#shared/types/dashboard';
 
@@ -53,7 +54,7 @@ const note = computed(() => {
   if (!value || !month) return null;
 
   if (value.noNewcomers || !value.list || !value.firstDays) {
-    return `${noNewcomersText(month)}. Список — с ${monthYear(value.firstCohortMonth, 'genitive')}.`;
+    return noNewcomersListText(month, value.firstCohortMonth);
   }
 
   const genitive = monthForms(month).genitive;
@@ -65,10 +66,10 @@ const note = computed(() => {
     return `Список не строим, пока не собраны все сутки ${incompleteMonthsText(coverage)}: поездки в несобранные дни выглядят как их отсутствие, и в список попали бы те, кто ездил.`;
   }
 
-  if (value.firstDays.newcomers === 0) return `Новичков в ${monthForms(month).prepositional} нет.`;
+  if (value.firstDays.newcomers === 0) return noNewcomersInMonthText(month);
 
   if (value.firstDays.firstResultsDay !== null) {
-    return `Список — с ${dayWord(value.firstDays.firstResultsDay)}: у новичков ${genitive} ${days} дней ещё не прошли.`;
+    return listFromDayText(value.firstDays.firstResultsDay, month, days);
   }
 
   if (value.list.rows.length === 0) {

@@ -3,7 +3,8 @@ import { readMetricsMonth } from '#server/services/metrics/monthPeriod';
 import type { LeaderContact } from '#server/services/metrics/readLeaders';
 import { readNewcomers } from '#server/services/metrics/readNewcomers';
 import { formatReportDay } from '#server/services/reports/reportTable';
-import { monthForms } from '#shared/monthNames';
+import { monthForms, monthYear } from '#shared/monthNames';
+import { listFromDayText, noNewcomersInMonthText, noNewcomersListText } from '#shared/newcomers';
 import type { DashboardNewcomerRow } from '#shared/types/dashboard';
 import type { ReportColumn, ReportResult, ReportRow } from '#shared/types/reports';
 
@@ -15,7 +16,8 @@ import type { ReportColumn, ReportResult, ReportRow } from '#shared/types/report
  * Телефоны — все незакрытые номера всех профилей человека: список нужен для звонков.
  *
  * Месяц приходит из запроса как есть; негодный — `MetricsMonthError` (`monthPeriod.ts`).
- * Список не строится — `NewcomersListError` с причиной.
+ * Список не строится — `NewcomersListError` с причиной; тексты причин — `shared/newcomers.ts`,
+ * одни с экраном.
  */
 
 /** Список за месяц не строится. Текст — готовый ответ человеку. */
@@ -57,21 +59,13 @@ const toRow = (row: DashboardNewcomerRow, contact: LeaderContact): ReportRow => 
   kind: 'row',
 });
 
-/** «14 октября» — день `YYYY-MM-DD` словом. */
-const dayWord = (day: string): string => `${Number(day.slice(8, 10))} ${monthForms(day).genitive}`;
-
-const monthYear = (month: string, form: 'genitive' | 'prepositional'): string =>
-  `${monthForms(month)[form]} ${month.slice(0, 4)}`;
-
 export const listNewcomersExport = async (monthParam: unknown, now: Date = new Date()): Promise<ReportResult> => {
   const month = readMetricsMonth(monthParam, now);
   const { dashboard, contacts } = await readNewcomers(month, now);
   const { firstDays, list, asOfDay } = dashboard;
 
   if (dashboard.noNewcomers || firstDays === null || list === null) {
-    throw new NewcomersListError(
-      `Новичков в ${monthYear(month, 'prepositional')} нет: история заказов — с ${monthYear(month, 'genitive')}. Список — с ${monthYear(dashboard.firstCohortMonth, 'genitive')}.`,
-    );
+    throw new NewcomersListError(noNewcomersListText(month, dashboard.firstCohortMonth));
   }
 
   if (!firstDays.counted || !list.counted) {
@@ -79,13 +73,11 @@ export const listNewcomersExport = async (monthParam: unknown, now: Date = new D
   }
 
   if (firstDays.newcomers === 0) {
-    throw new NewcomersListError(`Новичков в ${monthForms(month).prepositional} нет.`);
+    throw new NewcomersListError(noNewcomersInMonthText(month));
   }
 
   if (firstDays.firstResultsDay !== null) {
-    throw new NewcomersListError(
-      `Список — с ${dayWord(firstDays.firstResultsDay)}: у новичков ${monthForms(month).genitive} ${NEWCOMER_FIRST_DAYS} дней ещё не прошли.`,
-    );
+    throw new NewcomersListError(listFromDayText(firstDays.firstResultsDay, month, NEWCOMER_FIRST_DAYS));
   }
 
   const rows = list.rows.map((row) => toRow(row, contacts.get(row.personId) ?? EMPTY_CONTACT));

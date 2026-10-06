@@ -53,6 +53,13 @@ export const shiftMonth = (month: string, shift: number): string => {
   return new Date(Date.UTC(year ?? 0, (monthNumber ?? 1) - 1 + shift, 1)).toISOString().slice(0, 7);
 };
 
+/** «октября 2025», «в октябре 2025» — месяц `YYYY-MM` с годом в нужном падеже. */
+export const monthYear = (month: string, form: 'nominative' | 'genitive' | 'prepositional'): string =>
+  `${monthForms(month)[form]} ${month.slice(0, 4)}`;
+
+/** «14 октября» — день `YYYY-MM-DD` словом, без года. */
+export const dayWord = (day: string): string => `${Number(day.slice(8, 10))} ${monthForms(day).genitive}`;
+
 /** «Октябрь 2026» — месяц `YYYY-MM` с заглавной и годом. */
 export const formatMonthTitle = (month: string): string => {
   const { nominative } = monthForms(month);

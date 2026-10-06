@@ -2,16 +2,9 @@
 import { computed } from 'vue';
 import { DASH, formatNumber, pluralize } from '~/utils/format';
 import { collectedText } from '~/utils/leaders';
-import {
-  curveFromText,
-  monthsLater,
-  monthYear,
-  newcomersMetricValues,
-  noNewcomersText,
-  ongoingNote,
-  percentOf,
-} from '~/utils/newcomers';
-import { monthForms, shiftMonth } from '#shared/monthNames';
+import { curveFromText, monthsLater, newcomersMetricValues, ongoingNote, percentOf } from '~/utils/newcomers';
+import { monthForms, monthYear, shiftMonth } from '#shared/monthNames';
+import { noNewcomersText } from '#shared/newcomers';
 import type { LoadState } from '~/types/loadState';
 import type { DashboardNewcomers } from '#shared/types/dashboard';
 

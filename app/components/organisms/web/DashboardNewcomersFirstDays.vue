@@ -2,8 +2,9 @@
 import { computed } from 'vue';
 import { DASH, formatNumber } from '~/utils/format';
 import { collectedText } from '~/utils/leaders';
-import { dayWord, monthYear, newcomersMetricValues, noNewcomersText, percentOf } from '~/utils/newcomers';
-import { monthForms, shiftMonth } from '#shared/monthNames';
+import { newcomersMetricValues, percentOf } from '~/utils/newcomers';
+import { dayWord, monthForms, monthYear, shiftMonth } from '#shared/monthNames';
+import { noNewcomersText } from '#shared/newcomers';
 import type { LoadState } from '~/types/loadState';
 import type { DashboardNewcomers } from '#shared/types/dashboard';
 
