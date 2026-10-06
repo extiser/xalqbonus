@@ -161,6 +161,9 @@ body { color: var(--text); font: 400 15px/1.45 Manrope, system-ui, sans-serif; }
 }
 
 /* Экран 3: когорты, LTV, программа */
+.newbies { display: grid; grid-template-columns: 1fr 2.2fr; gap: 28px; flex: 1; min-height: 0; }
+@media (max-width: 900px) { .newbies { grid-template-columns: 1fr; gap: 12px; } .newbies .chart { min-height: 220px; } }
+
 .seg { display: inline-flex; gap: 4px; background: var(--raised); border-radius: 999px; padding: 4px; }
 .seg span { font: 600 13px Manrope; color: var(--title); padding: 6px 12px; border-radius: 999px; white-space: nowrap; }
 .seg span.on { background: var(--tile); color: var(--text); }
@@ -181,6 +184,28 @@ body { color: var(--text); font: 400 15px/1.45 Manrope, system-ui, sans-serif; }
 .coh tr.mark td.name::after { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--garnet); margin-left: 8px; vertical-align: 1px; }
 .empty-note { font: 400 14px/1.45 Manrope; color: var(--title); margin-top: 12px; }
 @media (max-width: 900px) { .head { flex-wrap: wrap; } }
+.tbl tr.grp td { font: 600 12px Manrope; color: var(--title); padding: 18px 12px 8px 0; border-top: 0; }
+.tbl tr.grp:first-child td { padding-top: 4px; }
+.tbl .stop { font: 600 14px Manrope; color: var(--title); }
+.tbl { table-layout: fixed; min-width: 860px; }
+.tbl th.prog, .tbl td.prog { text-align: right; }
+.tbl th .glue { position: relative; }
+.tbl th.num .info, .tbl th.prog .info { position: absolute; right: -30px; top: 50%; margin: -14px 0 0; } /* значок за правым краем подписи: правый край текста подписи — на правом крае чисел */
+.acts { display: flex; gap: 10px; margin-right: -5px; align-items: center; flex: none; }
+.tbl th:last-child, .tbl td:last-child { padding-right: 0; } /* последняя колонка — вровень с кнопками шапки */
+.pill.yes { color: var(--green); background: rgba(71,203,74,.12); } .pill.no { color: var(--scarlet); background: rgba(255,92,120,.12); }
+.btn.ghost { color: var(--title); background: var(--raised); box-shadow: none; }
+.btn.off { opacity: .4; }
+.tbl td:nth-child(2) { white-space: normal; padding-right: 16px; } /* длинные ФИО переносятся, а не наезжают на «Программу» */
+.tbl-wrap { overflow-x: auto; margin: 14px -4px 0; padding: 0 4px; } /* от шапки до таблицы 14 + 14 у .tbl = 28, как --pad от края плитки до шапки */
+.bar14 { display: flex; gap: 3px; height: 12px; margin-top: 16px; }
+.bar14 i { display: block; height: 100%; border-radius: 4px; }
+.bar14 .ok { background: var(--cyan); } .bar14 .low { background: var(--gold); }
+.bar14 .run { background: repeating-linear-gradient(135deg, var(--raised) 0 5px, rgba(156,238,255,.10) 5px 9px); }
+.bar14-legend { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 12px; font: 500 14px Manrope; color: var(--title); }
+.bar14-legend b { color: var(--text); font-weight: 700; }
+.bar14-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 7px; vertical-align: 0; }
+.tile.newbies-list .tbl td { padding-top: 12.1px; padding-bottom: 12.1px; } /* макет: высота плитки подогнана под 22 строки апреля; в коде плитка растёт по списку */
 </style>
 </head>
 <body>
@@ -215,9 +240,9 @@ body { color: var(--text); font: 400 15px/1.45 Manrope, system-ui, sans-serif; }
         <div class="levels"><span class="lvl">Деньги</span><span class="lvl">Рычаги</span><span class="lvl on">Глубина</span></div>
       </div>
       <div style="display:flex;align-items:center;gap:12px">
-        <span class="badge">цифры условные</span>
+        <span class="badge">новички — живые цифры апреля 2026, остальные плитки — условные из эталона</span>
         <div class="period">
-          <span>Октябрь 2026</span>
+          <span>Апрель 2026</span>
           <span class="arr"><svg viewBox="0 0 16 16" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8l5 5"/></svg></span>
           <span class="arr" style="opacity:.4"><svg viewBox="0 0 16 16" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg></span>
         </div>
@@ -231,7 +256,7 @@ body { color: var(--text); font: 400 15px/1.45 Manrope, system-ui, sans-serif; }
         <div class="head"><span class="t-title">LTV водителя · прогноз</span><span class="go"><svg viewBox="0 0 16 16" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg></span></div>
         <div class="t-hero">4,1<span class="t-unit">млн сум</span></div>
         <span class="small-delta">доход парка с водителя за 24 месяца</span>
-        <span class="small-delta"><b class="pos">+0,3 млн</b> к сентябрю</span>
+        <span class="small-delta"><b class="pos">+0,3 млн</b> к марту</span>
         <div class="t-sub">Средний водитель на линии: 326 тыс. сум в месяц, уходит 11 % в месяц. Считается по группам ниже, итог — среднее по водителям.</div>
       </section>
 
@@ -267,30 +292,33 @@ body { color: var(--text); font: 400 15px/1.45 Manrope, system-ui, sans-serif; }
         <div class="t-sub" style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px"><span>CAC — расходы на привлечение за месяц / новых водителей</span><span class="btn">Задать</span></div>
       </section>
 
-      <!-- Когорты -->
-      <section class="tile c12" style="grid-row:span 5">
-        <div class="head"><span class="t-title">Наборы по месяцу первой поездки · % на линии</span><span class="seg"><span class="on">На линии</span><span>Доход на водителя</span></span></div>
-        <div class="tbl-wrap">
-        <table class="coh">
-          <thead><tr><th>Набор</th><th>Водителей</th><th>0</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th><th>9</th><th>10</th><th>11</th></tr></thead>
-          <tbody>
-<tr class="pre"><td class="name">пришли до истории</td><td class="size">312</td><td style="background:rgba(156,238,255,0.68);color:#081114">100</td><td style="background:rgba(156,238,255,0.61);color:#081114">88</td><td style="background:rgba(156,238,255,0.57);color:#081114">83</td><td style="background:rgba(156,238,255,0.55);color:#081114">79</td><td style="background:rgba(156,238,255,0.53);color:#081114">76</td><td style="background:rgba(156,238,255,0.51);color:#081114">73</td><td style="background:rgba(156,238,255,0.50);color:#081114">71</td><td style="background:rgba(156,238,255,0.49);color:#F4F9FA">69</td><td style="background:rgba(156,238,255,0.48);color:#F4F9FA">67</td><td style="background:rgba(156,238,255,0.46);color:#F4F9FA">65</td><td style="background:rgba(156,238,255,0.46);color:#F4F9FA">64</td><td style="background:rgba(156,238,255,0.44);color:#F4F9FA">62</td></tr>
-<tr><td class="name">ноя 25</td><td class="size">41</td><td style="background:rgba(156,238,255,0.68);color:#081114">100</td><td style="background:rgba(156,238,255,0.46);color:#F4F9FA">65</td><td style="background:rgba(156,238,255,0.38);color:#F4F9FA">51</td><td style="background:rgba(156,238,255,0.36);color:#F4F9FA">49</td><td style="background:rgba(156,238,255,0.30);color:#F4F9FA">39</td><td style="background:rgba(156,238,255,0.29);color:#F4F9FA">37</td><td style="background:rgba(156,238,255,0.31);color:#F4F9FA">41</td><td style="background:rgba(156,238,255,0.26);color:#F4F9FA">32</td><td style="background:rgba(156,238,255,0.27);color:#F4F9FA">34</td><td style="background:rgba(156,238,255,0.23);color:#F4F9FA">27</td><td style="background:rgba(156,238,255,0.27);color:#F4F9FA">34</td><td></td></tr>
-<tr><td class="name">дек 25</td><td class="size">36</td><td style="background:rgba(156,238,255,0.68);color:#081114">100</td><td style="background:rgba(156,238,255,0.45);color:#F4F9FA">63</td><td style="background:rgba(156,238,255,0.36);color:#F4F9FA">49</td><td style="background:rgba(156,238,255,0.33);color:#F4F9FA">44</td><td style="background:rgba(156,238,255,0.34);color:#F4F9FA">45</td><td style="background:rgba(156,238,255,0.32);color:#F4F9FA">42</td><td style="background:rgba(156,238,255,0.27);color:#F4F9FA">34</td><td style="background:rgba(156,238,255,0.27);color:#F4F9FA">34</td><td style="background:rgba(156,238,255,0.25);color:#F4F9FA">30</td><td style="background:rgba(156,238,255,0.28);color:#F4F9FA">35</td><td></td><td></td></tr>
-<tr><td class="name">янв 26</td><td class="size">29</td><td style="background:rgba(156,238,255,0.68);color:#081114">100</td><td style="background:rgba(156,238,255,0.47);color:#F4F9FA">66</td><td style="background:rgba(156,238,255,0.36);color:#F4F9FA">49</td><td style="background:rgba(156,238,255,0.33);color:#F4F9FA">44</td><td style="background:rgba(156,238,255,0.32);color:#F4F9FA">42</td><td style="background:rgba(156,238,255,0.28);color:#F4F9FA">36</td><td style="background:rgba(156,238,255,0.30);color:#F4F9FA">39</td><td style="background:rgba(156,238,255,0.25);color:#F4F9FA">31</td><td style="background:rgba(156,238,255,0.26);color:#F4F9FA">32</td><td></td><td></td><td></td></tr>
-<tr><td class="name">фев 26</td><td class="size">44</td><td style="background:rgba(156,238,255,0.68);color:#081114">100</td><td style="background:rgba(156,238,255,0.43);color:#F4F9FA">60</td><td style="background:rgba(156,238,255,0.41);color:#F4F9FA">57</td><td style="background:rgba(156,238,255,0.34);color:#F4F9FA">45</td><td style="background:rgba(156,238,255,0.33);color:#F4F9FA">43</td><td style="background:rgba(156,238,255,0.32);color:#F4F9FA">42</td><td style="background:rgba(156,238,255,0.28);color:#F4F9FA">35</td><td style="background:rgba(156,238,255,0.30);color:#F4F9FA">39</td><td></td><td></td><td></td><td></td></tr>
-<tr><td class="name">мар 26</td><td class="size">38</td><td style="background:rgba(156,238,255,0.68);color:#081114">100</td><td style="background:rgba(156,238,255,0.44);color:#F4F9FA">61</td><td style="background:rgba(156,238,255,0.39);color:#F4F9FA">53</td><td style="background:rgba(156,238,255,0.38);color:#F4F9FA">51</td><td style="background:rgba(156,238,255,0.31);color:#F4F9FA">41</td><td style="background:rgba(156,238,255,0.29);color:#F4F9FA">37</td><td style="background:rgba(156,238,255,0.28);color:#F4F9FA">36</td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr><td class="name">апр 26</td><td class="size">47</td><td style="background:rgba(156,238,255,0.68);color:#081114">100</td><td style="background:rgba(156,238,255,0.46);color:#F4F9FA">65</td><td style="background:rgba(156,238,255,0.37);color:#F4F9FA">50</td><td style="background:rgba(156,238,255,0.38);color:#F4F9FA">51</td><td style="background:rgba(156,238,255,0.31);color:#F4F9FA">40</td><td style="background:rgba(156,238,255,0.28);color:#F4F9FA">36</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr><td class="name">май 26</td><td class="size">35</td><td style="background:rgba(156,238,255,0.68);color:#081114">100</td><td style="background:rgba(156,238,255,0.45);color:#F4F9FA">63</td><td style="background:rgba(156,238,255,0.41);color:#F4F9FA">56</td><td style="background:rgba(156,238,255,0.38);color:#F4F9FA">51</td><td style="background:rgba(156,238,255,0.34);color:#F4F9FA">45</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr><td class="name">июн 26</td><td class="size">52</td><td style="background:rgba(156,238,255,0.68);color:#081114">100</td><td style="background:rgba(156,238,255,0.46);color:#F4F9FA">65</td><td style="background:rgba(156,238,255,0.41);color:#F4F9FA">56</td><td style="background:rgba(156,238,255,0.37);color:#F4F9FA">50</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr><td class="name">июл 26</td><td class="size">40</td><td style="background:rgba(156,238,255,0.68);color:#081114">100</td><td style="background:rgba(156,238,255,0.46);color:#F4F9FA">65</td><td style="background:rgba(156,238,255,0.39);color:#F4F9FA">53</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr><td class="name">авг 26</td><td class="size">46</td><td style="background:rgba(156,238,255,0.68);color:#081114">100</td><td style="background:rgba(156,238,255,0.45);color:#F4F9FA">63</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr class="mark"><td class="name">сен 26</td><td class="size">39</td><td style="background:rgba(156,238,255,0.68);color:#081114">100</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-          </tbody>
-        </table>
+      <!-- Новички: сколько остаётся — живые цифры апреля 2026 (прод, замер 06-10, сессия 89) -->
+      <section class="tile c8 r3">
+        <div class="head"><span class="t-title">Новички: сколько <span class="glue">остаётся<button class="info" type="button" aria-label="Что это: Новички: сколько остаётся" aria-expanded="false" data-tip-title="Новички: сколько остаётся" data-tip-text="Новичок — водитель, чья первая поездка в парке пришлась на этот месяц. Сколько из них ездят в следующие месяцы." data-tip-how="«+1», «+3» — сколько месяцев прошло после месяца, когда новичок впервые поехал. Пришёл в апреле: +1 — май, +3 — июль. Точка на +1 — сколько из 100 новичков хоть раз поехали в следующем месяце. Считается по всем новичкам с ноября 2025: раньше истории поездок нет."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span></div>
+        <div class="newbies">
+          <div style="display:flex;flex-direction:column">
+            <div class="t-big" style="font-size:60px;letter-spacing:-3px;margin-top:18px">55 %</div>
+            <div style="font:500 15px/1.35 Manrope;color:var(--title);margin-top:10px">новичков марта ездят в апреле</div>
+            <div class="t-sub" style="margin-top:12px;padding-top:0">в среднем через месяц ездят 55 %, через 3 месяца — 30 %</div>
+            <div class="t-sub" style="margin-top:auto">Кривая — по 817 новичкам с ноября 2025; у последних точек новичков меньше: через 5 месяцев — 229</div>
+          </div>
+          <div style="display:flex;flex-direction:column;min-width:0">
+            
+            <div class="chart nb-chart" role="img" aria-label="Из 100 новичков через N месяцев после прихода ездят: 55, 36, 30, 25, 23" style="position:relative"><svg viewBox="0 0 644 190" preserveAspectRatio="none" style="position:absolute;left:56px;right:20px;top:8px;bottom:22px;width:calc(100% - 76px);height:calc(100% - 30px);overflow:visible"><line x1="0" x2="644" y1="190.0" y2="190.0" stroke="#566E74" vector-effect="non-scaling-stroke"/><line x1="0" x2="644" y1="142.5" y2="142.5" stroke="rgba(156,238,255,.07)" vector-effect="non-scaling-stroke"/><line x1="0" x2="644" y1="95.0" y2="95.0" stroke="rgba(156,238,255,.07)" vector-effect="non-scaling-stroke"/><line x1="0" x2="644" y1="47.5" y2="47.5" stroke="rgba(156,238,255,.07)" vector-effect="non-scaling-stroke"/><line x1="0" x2="644" y1="0.0" y2="0.0" stroke="rgba(156,238,255,.07)" vector-effect="non-scaling-stroke"/><line x1="128.8" x2="128.8" y1="0" y2="190" stroke="rgba(156,238,255,.25)" stroke-dasharray="3 4" vector-effect="non-scaling-stroke"/><line x1="386.4" x2="386.4" y1="0" y2="190" stroke="rgba(156,238,255,.25)" stroke-dasharray="3 4" vector-effect="non-scaling-stroke"/><polyline points="0.0,0.0 128.8,85.5 257.6,121.6 386.4,133.0 515.2,142.5 644.0,146.3" fill="none" stroke="#9CEEFF" stroke-width="2" vector-effect="non-scaling-stroke"/></svg><span style="position:absolute;font:500 12px Manrope;color:#566E74;white-space:nowrap;left:0;width:46px;text-align:right;top:calc(8px + 1.00*(100% - 30px));transform:translateY(-50%)">0&nbsp;%</span><span style="position:absolute;font:500 12px Manrope;color:#566E74;white-space:nowrap;left:0;width:46px;text-align:right;top:calc(8px + 0.75*(100% - 30px));transform:translateY(-50%)">25&nbsp;%</span><span style="position:absolute;font:500 12px Manrope;color:#566E74;white-space:nowrap;left:0;width:46px;text-align:right;top:calc(8px + 0.50*(100% - 30px));transform:translateY(-50%)">50&nbsp;%</span><span style="position:absolute;font:500 12px Manrope;color:#566E74;white-space:nowrap;left:0;width:46px;text-align:right;top:calc(8px + 0.25*(100% - 30px));transform:translateY(-50%)">75&nbsp;%</span><span style="position:absolute;font:500 12px Manrope;color:#566E74;white-space:nowrap;left:0;width:46px;text-align:right;top:calc(8px + 0.00*(100% - 30px));transform:translateY(-50%)">100&nbsp;%</span><span style="position:absolute;font:500 12px Manrope;color:#566E74;white-space:nowrap;bottom:0;line-height:14px;left:calc(56px + 0/5*(100% - 76px));transform:translateX(-50%)">пришёл</span><span style="position:absolute;font:500 12px Manrope;color:#566E74;white-space:nowrap;bottom:0;line-height:14px;left:calc(56px + 1/5*(100% - 76px));transform:translateX(-50%)">+1</span><span style="position:absolute;font:500 12px Manrope;color:#566E74;white-space:nowrap;bottom:0;line-height:14px;left:calc(56px + 2/5*(100% - 76px));transform:translateX(-50%)">+2</span><span style="position:absolute;font:500 12px Manrope;color:#566E74;white-space:nowrap;bottom:0;line-height:14px;left:calc(56px + 3/5*(100% - 76px));transform:translateX(-50%)">+3</span><span style="position:absolute;font:500 12px Manrope;color:#566E74;white-space:nowrap;bottom:0;line-height:14px;left:calc(56px + 4/5*(100% - 76px));transform:translateX(-50%)">+4</span><span style="position:absolute;font:500 12px Manrope;color:#566E74;white-space:nowrap;bottom:0;line-height:14px;left:calc(56px + 5/5*(100% - 76px));transform:translateX(-50%)">+5</span><i style="position:absolute;width:10px;height:10px;border-radius:50%;background:#9CEEFF;left:calc(56px + 1/5*(100% - 76px));top:calc(8px + 0.45*(100% - 30px));transform:translate(-50%,-50%)"></i><span style="position:absolute;font:700 12px Manrope;color:#9DB1B5;left:calc(56px + 1/5*(100% - 76px) + 8px);top:calc(8px + 0.45*(100% - 30px) - 10px);transform:translateY(-50%)">55&nbsp;%</span><i style="position:absolute;width:10px;height:10px;border-radius:50%;background:#9CEEFF;left:calc(56px + 3/5*(100% - 76px));top:calc(8px + 0.70*(100% - 30px));transform:translate(-50%,-50%)"></i><span style="position:absolute;font:700 12px Manrope;color:#9DB1B5;left:calc(56px + 3/5*(100% - 76px) + 8px);top:calc(8px + 0.70*(100% - 30px) - 10px);transform:translateY(-50%)">30&nbsp;%</span></div>
+          </div>
         </div>
-        <div class="t-sub">Столбец — месяцев с первой поездки, 0 — месяц набора. На линии — хоть одна поездка в месяце. «Пришли до истории» — ездили уже в октябре 2025, когда история Fleet только начинается: новые и старые там не различимы. Гранатовая точка — набор после нового бота. Наборы держатся одинаково: к третьему месяцу на линии около половины.</div>
       </section>
+      <!-- Первые 14 дней новичков — шапка; живые цифры, апрель на 30.04 (прод, замер 06-10, сессия 89) -->
+      <section class="tile c4 r3">
+        <div class="head"><span class="t-title">Первые 14 дней <span class="glue">новичков<button class="info" type="button" aria-label="Что это: Первые 14 дней новичков" aria-expanded="false" data-tip-title="Первые 14 дней новичков" data-tip-text="Сколько новичков месяца сделали 20 поездок и больше за свои первые 14 дней. Тех, у кого меньше 20, — поимённо внизу экрана." data-tip-how="14 дней у каждого свои: день первой поездки и 13 следующих. Пока 14 дней не прошли, новичок в долю не входит — он в штриховке полосы. Сравнение с прошлым месяцем — тоже только по тем, у кого 14 дней прошли."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span></div>
+        <div class="t-big">58&nbsp;%</div>
+        <div style="font:500 15px/1.35 Manrope;color:var(--title);margin-top:8px">новичков апреля сделали 20+ поездок за 14 дней</div>
+        <div class="t-sub" style="margin-top:6px;padding-top:0">в марте — 53&nbsp;%</div>
+        <div class="bar14" style="margin-top:auto" role="img" aria-label="20 поездок и больше — 31, меньше 20 — 22, 14 дней ещё идут — 36"><i class="ok" style="flex:31"></i><i class="low" style="flex:22"></i><i class="run" style="flex:36"></i></div>
+        <div class="bar14-legend" style="flex-direction:column;gap:6px;margin-top:12px"><span><i style="background:var(--cyan)"></i>20 поездок и больше — <b>31</b></span><span><i style="background:var(--gold)"></i>меньше 20 — <b>22</b></span><span><i style="background:rgba(156,238,255,.25)"></i>14 дней ещё идут — <b>36</b></span></div>
+        <div class="t-sub" style="margin-top:10px;padding-top:0">Новичков апреля — 89 · на 30 апреля</div>
+      </section>
+
 
       <!-- Программа: график -->
       <section class="tile c8 r3 chart-tile">
@@ -307,7 +335,7 @@ body { color: var(--text); font: 400 15px/1.45 Manrope, system-ui, sans-serif; }
 
       <!-- Программа: числа -->
       <section class="tile c4 r3">
-        <div class="head"><span class="t-title">Экономика программы · октябрь</span></div>
+        <div class="head"><span class="t-title">Экономика программы · апрель</span></div>
         <div class="why">
           <div class="why-row"><span>Выдано <span class="glue">баллов<button class="info" type="button" aria-label="Что это: Выдано баллов" aria-expanded="false" data-tip-title="Выдано баллов" data-tip-text="Сколько баллов водители получили за месяц." data-tip-how="Баллы за поездки, приветственный бонус, акции, опросы и ручные начисления за вычетом ручных списаний. Перенос балансов из старого бота не входит."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span><span class="hint">за поездки, подарки, акции</span></span><b>50 100</b></div>
           <div class="why-row"><span><span class="glue">Потрачено<button class="info" type="button" aria-label="Что это: Потрачено" aria-expanded="false" data-tip-title="Потрачено" data-tip-text="Сколько баллов водители потратили на товары за месяц. Выкуп — какая это часть от выданного." data-tip-how="Заказы за баллы за вычетом отменённых с возвратом. Выкуп = потрачено ÷ выдано."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span><span class="hint">выкуп 70 % от выданного</span></span><b>35 000</b></div>
@@ -345,9 +373,44 @@ body { color: var(--text); font: 400 15px/1.45 Manrope, system-ui, sans-serif; }
       </section>
 
 
+      <!-- Новички апреля: меньше 20 поездок за 14 дней — поимённо; живые цифры, апрель на 30.04 (прод, замер 06-10, сессия 89). Замыкает «Глубину» -->
+      <section class="tile c12 newbies-list" style="grid-row:span 9">
+        <div class="head"><span class="t-title">Новички апреля: меньше 20 поездок за 14 дней — <span class="glue">поимённо<button class="info" type="button" aria-label="Что это: Новички: меньше 20 поездок за 14 дней" aria-expanded="false" data-tip-title="Новички: меньше 20 поездок за 14 дней" data-tip-text="Новички месяца, у которых 14 дней прошли, а поездок меньше 20, — по именам. Сначала те, у кого поездок меньше всего." data-tip-how="Программа — привязан ли Telegram к боту сейчас. Последняя поездка — на конец выбранного месяца."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span><div class="acts"><span class="btn">Выгрузить в Excel</span><span class="btn">Сделать сегмент · 11</span><button class="info" type="button" aria-label="Что это: Выгрузить в Excel и Сделать сегмент" aria-expanded="false" data-tip-title="Выгрузить в Excel и Сделать сегмент" data-tip-text="«Выгрузить в Excel» — все строки списка с телефонами, для звонков. «Сделать сегмент» — участники программы из списка: им можно написать в боте."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></div></div>
+<div class="tbl-wrap">
+        <table class="tbl"><colgroup><col style="width:10%"><col style="width:30%"><col style="width:12%"><col style="width:16%"><col style="width:16%"><col style="width:16%"></colgroup>
+          <thead><tr><th>Позывной</th><th>Водитель</th><th class="prog">Программа</th><th class="num">Первая поездка</th><th class="num">Поездок за 14 дней</th><th class="num">Последняя поездка</th></tr></thead>
+          <tbody>
+            <tr><td>20588</td><td>ANVAROV XOJIAKBAR</td><td class="prog"><span class="pill no">нет</span></td><td class="num muted">05.04</td><td class="num">1 <span class="muted">/ 20</span></td><td class="num muted">05.04</td></tr>
+            <tr><td>16402</td><td>TULAGANOV ULUGBEK</td><td class="prog"><span class="pill yes">да</span></td><td class="num muted">06.04</td><td class="num">1 <span class="muted">/ 20</span></td><td class="num muted">30.04</td></tr>
+            <tr><td>22366</td><td>Xudayberganov Sardorjon</td><td class="prog"><span class="pill yes">да</span></td><td class="num muted">11.04</td><td class="num">1 <span class="muted">/ 20</span></td><td class="num muted">11.04</td></tr>
+            <tr><td>11190</td><td>RAXMADOV RUSTAM</td><td class="prog"><span class="pill yes">да</span></td><td class="num muted">14.04</td><td class="num">1 <span class="muted">/ 20</span></td><td class="num muted">14.04</td></tr>
+            <tr><td>4404</td><td>Amirov Rovshan</td><td class="prog"><span class="pill no">нет</span></td><td class="num muted">15.04</td><td class="num">1 <span class="muted">/ 20</span></td><td class="num muted">15.04</td></tr>
+            <tr><td>11436</td><td>Поклонов Артём</td><td class="prog"><span class="pill no">нет</span></td><td class="num muted">11.04</td><td class="num">2 <span class="muted">/ 20</span></td><td class="num muted">25.04</td></tr>
+            <tr><td>31547</td><td>Nuridinova Xumor</td><td class="prog"><span class="pill yes">да</span></td><td class="num muted">13.04</td><td class="num">2 <span class="muted">/ 20</span></td><td class="num muted">13.04</td></tr>
+            <tr><td>6868</td><td>Vaisov Bobur</td><td class="prog"><span class="pill no">нет</span></td><td class="num muted">01.04</td><td class="num">3 <span class="muted">/ 20</span></td><td class="num muted">02.04</td></tr>
+            <tr><td>7208</td><td>Abduvoxidov Abduvoris</td><td class="prog"><span class="pill no">нет</span></td><td class="num muted">02.04</td><td class="num">3 <span class="muted">/ 20</span></td><td class="num muted">02.04</td></tr>
+            <tr><td>31541</td><td>Mirsobitov Shohruh</td><td class="prog"><span class="pill yes">да</span></td><td class="num muted">02.04</td><td class="num">3 <span class="muted">/ 20</span></td><td class="num muted">28.04</td></tr>
+            <tr><td>21111</td><td>KASIMOV AXMAD</td><td class="prog"><span class="pill yes">да</span></td><td class="num muted">06.04</td><td class="num">3 <span class="muted">/ 20</span></td><td class="num muted">06.04</td></tr>
+            <tr><td>9197</td><td>TADJIBAYEV ROMAN</td><td class="prog"><span class="pill no">нет</span></td><td class="num muted">15.04</td><td class="num">3 <span class="muted">/ 20</span></td><td class="num muted">15.04</td></tr>
+            <tr><td>31564</td><td>Uskenbayev Medgat</td><td class="prog"><span class="pill no">нет</span></td><td class="num muted">14.04</td><td class="num">5 <span class="muted">/ 20</span></td><td class="num muted">14.04</td></tr>
+            <tr><td>10500</td><td>Normamatov Baxtiyor</td><td class="prog"><span class="pill yes">да</span></td><td class="num muted">07.04</td><td class="num">6 <span class="muted">/ 20</span></td><td class="num muted">07.04</td></tr>
+            <tr><td>22749</td><td>XAMITOV SHERZOD</td><td class="prog"><span class="pill yes">да</span></td><td class="num muted">14.04</td><td class="num">7 <span class="muted">/ 20</span></td><td class="num muted">15.04</td></tr>
+            <tr><td>20143</td><td>ISMОILOV ABDULAZIZ</td><td class="prog"><span class="pill no">нет</span></td><td class="num muted">04.04</td><td class="num">8 <span class="muted">/ 20</span></td><td class="num muted">07.04</td></tr>
+            <tr><td>31532</td><td>Abduraxmonov Javohir</td><td class="prog"><span class="pill yes">да</span></td><td class="num muted">03.04</td><td class="num">9 <span class="muted">/ 20</span></td><td class="num muted">29.04</td></tr>
+            <tr><td>7144</td><td>Samsakov Murаd</td><td class="prog"><span class="pill yes">да</span></td><td class="num muted">03.04</td><td class="num">9 <span class="muted">/ 20</span></td><td class="num muted">04.04</td></tr>
+            <tr><td>11674</td><td>TYO FEDOR</td><td class="prog"><span class="pill no">нет</span></td><td class="num muted">07.04</td><td class="num">9 <span class="muted">/ 20</span></td><td class="num muted">08.04</td></tr>
+            <tr><td>31556</td><td>Umrzakov Iskandar</td><td class="prog"><span class="pill no">нет</span></td><td class="num muted">12.04</td><td class="num">12 <span class="muted">/ 20</span></td><td class="num muted">15.04</td></tr>
+            <tr><td><span class="muted">—</span></td><td>ISMAGILOV MAKSIM</td><td class="prog"><span class="pill no">нет</span></td><td class="num muted">16.04</td><td class="num">15 <span class="muted">/ 20</span></td><td class="num muted">30.04</td></tr>
+            <tr><td>9999</td><td>SHODIBOYEV JAMSHID</td><td class="prog"><span class="pill yes">да</span></td><td class="num muted">08.04</td><td class="num">16 <span class="muted">/ 20</span></td><td class="num muted">08.04</td></tr>
+          </tbody>
+        </table>
+        </div>
+      </section>
+      </section>
     </div>
   </main>
 </div>
+
 <script>
 /* Меню аккаунта открывается кнопкой и закрывается щелчком мимо — только чтобы макет можно было потрогать */
 document.querySelectorAll('.side').forEach(function (side) {
@@ -387,6 +450,7 @@ document.addEventListener('click', closeTip);
 document.addEventListener('keydown', function (event) { if (event.key === 'Escape') closeTip(); });
 /* Прокрутка и смена размера окна подсказку не закрывают, а двигают за значком: на телефоне окно меняет высоту, когда прячется строка адреса */
 window.addEventListener('scroll', placeTip, true); window.addEventListener('resize', placeTip);
+
 </script>
 </body>
 </html>
