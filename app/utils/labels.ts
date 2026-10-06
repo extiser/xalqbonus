@@ -33,6 +33,8 @@ const RUN_KIND_LABELS: Record<SyncRunRow['kind'], string> = {
   registry: 'Реестр',
   registry_full: 'Реестр, полный обход',
   registry_profile: 'Реестр, один телефон',
+  transactions: 'Транзакции',
+  transactions_recheck: 'Транзакции: перечитывание',
 };
 
 export const runKindLabel = (kind: SyncRunRow['kind']): string => RUN_KIND_LABELS[kind];

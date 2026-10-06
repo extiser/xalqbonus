@@ -16,7 +16,7 @@ import {
 import { applyOrdersSchedule, createOrdersQueue, createOrdersWorker } from '#server/queues/orders';
 import { applySyncSchedule, createSyncQueue, createSyncWorker } from '#server/queues/sync';
 import { failAbandonedRuns } from '#server/repositories/syncRuns';
-import { readSyncConfig } from '#server/services/sync/config';
+import { readSyncConfig, readTransactionsSyncConfig } from '#server/services/sync/config';
 import { readBotToken } from '#server/bot/config';
 import {
   BOT_DISABLED_MESSAGE,
@@ -77,6 +77,7 @@ connection.on('error', (error: Error) => {
 // Расписание синхронизации заказов. Конфигурация читается один раз на старте: смена
 // интервала или выключателя — это перезапуск контейнера воркера, а не правка на лету.
 const config = readSyncConfig();
+const transactionsConfig = readTransactionsSyncConfig();
 const syncQueue = createSyncQueue();
 const syncWorker = createSyncWorker();
 
@@ -199,7 +200,7 @@ if (abandoned > 0) {
   });
 }
 
-await applySyncSchedule(syncQueue, config);
+await applySyncSchedule(syncQueue, config, transactionsConfig);
 await applyOrdersSchedule(ordersQueue);
 await applyCampaignsSchedule(campaignsQueue);
 await applyMetricsSchedule(metricsQueue);
@@ -212,6 +213,9 @@ log.info('воркер запущен', {
   lagSeconds: config.lagSeconds,
   registryEnabled: config.registryEnabled,
   registryIntervalSec: config.registryIntervalSec,
+  transactionsEnabled: transactionsConfig.enabled,
+  transactionsIntervalSec: transactionsConfig.intervalSec,
+  transactionsRecheckEnabled: transactionsConfig.recheckEnabled,
 });
 
 const shutdown = async (signal: string): Promise<void> => {

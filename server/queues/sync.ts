@@ -1,11 +1,17 @@
 import { Queue, Worker, type Job } from 'bullmq';
 import { consola } from 'consola';
 import { getQueueConnection } from '#server/queues/connection';
+import { runTransactionsRecheck } from '#server/services/fleetTransactions/recheckTransactions';
+import { runTransactionsSync } from '#server/services/fleetTransactions/syncTransactions';
 import {
   readSyncConfig,
+  readTransactionsSyncConfig,
   syncIntervalMs,
+  transactionsIntervalMs,
   type ScheduledSyncKind,
   type SyncConfig,
+  type TransactionsSyncConfig,
+  type TransactionsSyncKind,
 } from '#server/services/sync/config';
 import { runOrdersSync } from '#server/services/sync/syncOrders';
 import { runOrdersCatchup } from '#server/services/sync/syncOrdersCatchup';
@@ -25,6 +31,11 @@ import { runRegistrySync } from '#server/services/sync/syncRegistry';
  * `SYNC_CATCHUP_INTERVAL_SEC` продолжает проход кусками, а новый проход начинается раз
  * в `SYNC_CATCHUP_PASS_EVERY_HOURS` (`syncOrdersCatchup.ts`), `registry` —
  * инкрементальная синхронизация профилей парка со своим выключателем и интервалом.
+ * Транзакции парка (issue #358) идут той же очередью и по одному с остальными — ключ тот же:
+ * `transactions` — живой сбор с интервалом `SYNC_TRANSACTIONS_INTERVAL_SEC`,
+ * `transactions_recheck` — ночное перечитывание последних суток, раз в сутки в 01:00 UTC
+ * (06:00 по Ташкенту) планировщиком с `pattern`, а не `every`: к этому часу вчерашние сутки UTC
+ * закрыты давно, а нагрузка на ключ ночью меньше.
  * Выключатель снимает планировщик, а не просто перестаёт его заводить: иначе однажды
  * включённое расписание продолжало бы срабатывать после `SYNC_LIVE_ENABLED=false`.
  *
@@ -40,13 +51,19 @@ const log = consola.withTag('queue:sync');
 export const SYNC_QUEUE_NAME = 'sync';
 
 /** Идентификаторы планировщиков. Постоянные: по ним расписание обновляется и снимается. */
-const SCHEDULER_IDS: Record<ScheduledSyncKind, string> = {
+const SCHEDULER_IDS: Record<ScheduledSyncKind | TransactionsSyncKind, string> = {
   orders: 'orders-live',
   orders_catchup: 'orders-catchup',
   registry: 'registry-live',
+  transactions: 'transactions-live',
+  transactions_recheck: 'transactions-recheck',
 };
 
-export type SyncJobData = { kind: ScheduledSyncKind };
+/** Перечитывание транзакций — каждый день в 01:00 UTC, 06:00 по Ташкенту. */
+const TRANSACTIONS_RECHECK_PATTERN = '0 1 * * *';
+const TRANSACTIONS_RECHECK_TIME_ZONE = 'UTC';
+
+export type SyncJobData = { kind: ScheduledSyncKind | TransactionsSyncKind };
 
 export const createSyncQueue = (): Queue<SyncJobData> =>
   new Queue<SyncJobData>(SYNC_QUEUE_NAME, {
@@ -73,10 +90,11 @@ const isEnabled = (kind: ScheduledSyncKind, config: SyncConfig): boolean => {
   return config.liveEnabled;
 };
 
-/** Заводит или снимает расписание обоих прогонов по нынешнему состоянию окружения. */
+/** Заводит или снимает расписание всех прогонов по нынешнему состоянию окружения. */
 export const applySyncSchedule = async (
   queue: Queue<SyncJobData>,
   config: SyncConfig,
+  transactionsConfig: TransactionsSyncConfig,
 ): Promise<void> => {
   for (const kind of ['orders', 'orders_catchup', 'registry'] as const) {
     const schedulerId = SCHEDULER_IDS[kind];
@@ -92,7 +110,46 @@ export const applySyncSchedule = async (
     await queue.upsertJobScheduler(schedulerId, { every }, { name: kind, data: { kind } });
     log.info('Расписание заведено', { kind, everySec: every / 1_000 });
   }
+
+  if (transactionsConfig.enabled) {
+    const every = transactionsIntervalMs('transactions', transactionsConfig);
+
+    await queue.upsertJobScheduler(
+      SCHEDULER_IDS.transactions,
+      { every },
+      { name: 'transactions', data: { kind: 'transactions' } },
+    );
+    log.info('Расписание заведено', { kind: 'transactions', everySec: every / 1_000 });
+  } else {
+    await queue.removeJobScheduler(SCHEDULER_IDS.transactions);
+    log.info('Расписание снято', { kind: 'transactions' });
+  }
+
+  if (transactionsConfig.recheckEnabled) {
+    await queue.upsertJobScheduler(
+      SCHEDULER_IDS.transactions_recheck,
+      { pattern: TRANSACTIONS_RECHECK_PATTERN, tz: TRANSACTIONS_RECHECK_TIME_ZONE },
+      { name: 'transactions_recheck', data: { kind: 'transactions_recheck' } },
+    );
+    log.info('Расписание заведено', {
+      kind: 'transactions_recheck',
+      pattern: TRANSACTIONS_RECHECK_PATTERN,
+      tz: TRANSACTIONS_RECHECK_TIME_ZONE,
+    });
+  } else {
+    await queue.removeJobScheduler(SCHEDULER_IDS.transactions_recheck);
+    log.info('Расписание снято', { kind: 'transactions_recheck' });
+  }
 };
+
+const isTransactionsKind = (kind: SyncJobData['kind']): kind is TransactionsSyncKind =>
+  kind === 'transactions' || kind === 'transactions_recheck';
+
+/** Интервал вида прогона: по нему задача, прождавшая слот, считается просроченной. */
+const jobIntervalMs = (kind: SyncJobData['kind']): number =>
+  isTransactionsKind(kind)
+    ? transactionsIntervalMs(kind, readTransactionsSyncConfig())
+    : syncIntervalMs(kind, readSyncConfig());
 
 /** Когда задача должна была пойти в работу и когда её поставили в очередь. */
 export type ScheduledJobTiming = {
@@ -128,11 +185,9 @@ export const createSyncWorker = (): Worker<SyncJobData> =>
   new Worker<SyncJobData>(
     SYNC_QUEUE_NAME,
     async (job) => {
-      const config = readSyncConfig();
-
       const timing = jobTiming(job);
 
-      if (isOverdue(timing, syncIntervalMs(job.data.kind, config))) {
+      if (isOverdue(timing, jobIntervalMs(job.data.kind))) {
         log.warn('Задача просрочена и пропущена — окно возьмёт следующий прогон', {
           kind: job.data.kind,
           lateSec: Math.round((Date.now() - timing.timestamp - timing.delay) / 1_000),
@@ -147,6 +202,16 @@ export const createSyncWorker = (): Worker<SyncJobData> =>
 
       if (job.data.kind === 'orders_catchup') {
         await runOrdersCatchup();
+        return;
+      }
+
+      if (job.data.kind === 'transactions') {
+        await runTransactionsSync();
+        return;
+      }
+
+      if (job.data.kind === 'transactions_recheck') {
+        await runTransactionsRecheck();
         return;
       }
 

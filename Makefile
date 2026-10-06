@@ -13,10 +13,13 @@ COMPOSE_COPY = docker compose -f docker/compose.local.yml -f docker/compose.copy
         import-legacy-dump \
         copy-restore copy-up copy-psql copy-status metrics-recompute report-print \
         sync-orders sync-registry sync-state fleet-history fleet-history-status \
+        sync-transactions sync-transactions-recheck fleet-transactions fleet-transactions-status fleet-transactions-check \
         prod-up prod-down prod-restart prod-logs prod-ps prod-shell prod-psql prod-invariants prod-migrate prod-migrate-rolled-back \
         prod-stop prod-start prod-sql prod-db-restore prod-uploads-restore \
         prod-import-legacy prod-import-legacy-check prod-import-legacy-awarded-trips \
         prod-fleet-history prod-fleet-history-logs prod-fleet-history-stop prod-fleet-history-status \
+        prod-fleet-transactions prod-fleet-transactions-logs prod-fleet-transactions-stop \
+        prod-fleet-transactions-status prod-fleet-transactions-check \
         prod-metrics-recompute \
         prod-deploy prod-rollback \
         proxy-up proxy-down proxy-ps proxy-logs proxy-validate proxy-reload
@@ -231,6 +234,36 @@ FLEET_HISTORY_TO = 2026-09-30
 fleet-history-status: ## Сводка прогона истории по журналу суток. make fleet-history-status [from=2025-08-01] [to=2026-09-30]
 	$(COMPOSE) exec -T postgres sh -c 'psql -X -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -q -v from="$$1" -v to="$$2"' \
 		sh "$(or $(from),$(FLEET_HISTORY_FROM))" "$(or $(to),$(FLEET_HISTORY_TO))" < scripts/fleet-history-status.sql
+
+# Разовые прогоны сбора транзакций парка (issue #358) мимо очереди — тем же кодом, каким ходит
+# воркер. Выключатели SYNC_TRANSACTIONS_ENABLED и SYNC_TRANSACTIONS_RECHECK_ENABLED на них
+# не влияют — они снимают расписание, а не запрещают сбор. Прод-целей у них нет: на машине
+# оба вида ходят расписанием воркера.
+sync-transactions: ## Разовый прогон живого сбора транзакций: окно по event_at от отметки
+	$(COMPOSE) exec -T app npx tsx scripts/sync-transactions.ts transactions
+
+sync-transactions-recheck: ## Разовое перечитывание последних суток транзакций. make sync-transactions-recheck [days=1]
+	$(COMPOSE) exec -T $(if $(days),-e SYNC_TRANSACTIONS_RECHECK_DAYS=$(days)) app npx tsx scripts/sync-transactions.ts transactions_recheck
+
+# История транзакций всего парка (issue #358), в `xb.fleet_transactions`, по образцу
+# `fleet-history`: список дат (`dates=`) — проба глубины, ноль транзакций останавливает список;
+# диапазон (`from= to= budget=`) — прогон от старых суток к новым с паузой `pause=` секунд,
+# охраной живой синхронизации и паузой `cooldown=` минут после отказов по лимиту. В начале
+# каждого запуска — справочник категорий, его запрос идёт в бюджет. Бюджет жёсткий: у списка
+# по умолчанию 60, у диапазона обязателен.
+fleet-transactions: ## История транзакций парка. make fleet-transactions dates=2026-09-24 [budget=60] | from=2024-07-01 to=2026-10-06 budget=N [pause=5] [cooldown=10]
+	$(COMPOSE) exec -T app npx tsx scripts/fleet-transactions.ts \
+		dates="$(dates)" from="$(from)" to="$(to)" budget="$(budget)" pause="$(pause)" cooldown="$(cooldown)"
+
+# Пустые from/to — крайние сутки журнала транзакций.
+fleet-transactions-status: ## Сводка прогона истории транзакций по журналу суток. make fleet-transactions-status [from=2024-07-01] [to=2026-10-06]
+	$(COMPOSE) exec -T postgres sh -c 'psql -X -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -q -v from="$$1" -v to="$$2"' \
+		sh "$(from)" "$(to)" < scripts/fleet-transactions-status.sql
+
+fleet-transactions-check: ## Сверка комиссии парка с историей заказов по суткам UTC. make fleet-transactions-check from=2026-09-24 to=2026-09-24
+	@test -n "$(from)" && test -n "$(to)" || { echo "укажите диапазон: make fleet-transactions-check from=2026-09-24 to=2026-09-24"; exit 1; }
+	$(COMPOSE) exec -T postgres sh -c 'psql -X -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -q -v from="$$1" -v to="$$2"' \
+		sh "$(from)" "$(to)" < scripts/fleet-transactions-check.sql
 
 # Разовый прогон синхронизации профилей парка мимо очереди — тем же кодом, каким ходит
 # воркер. Полный обход запускается только отсюда: по расписанию он не ходит никогда,
@@ -545,6 +578,47 @@ prod-fleet-history-stop: ## Остановить прогон истории (pr
 prod-fleet-history-status: ## Сводка прогона истории по журналу суток (prod). make prod-fleet-history-status [from=2025-08-01] [to=2026-09-30]
 	$(COMPOSE_PROD) exec -T postgres sh -c 'PGPASSWORD="$$POSTGRES_PASSWORD" psql -X -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -q -v from="$$1" -v to="$$2"' \
 		sh "$(or $(from),$(FLEET_HISTORY_FROM))" "$(or $(to),$(FLEET_HISTORY_TO))" < scripts/fleet-history-status.sql
+
+# Прогон истории транзакций парка на боевой машине (issue #358) — так же, как история заказов:
+# бандлом из образа, одноразовым контейнером `app` в фоне с постоянным именем, без `--rm`
+# (лог с итогом переживает конец прогона), `--no-deps`. Не стартует, пока идёт контейнер
+# истории заказов: два долгих прогона на одном ключе не идут. Запускается на самой машине,
+# руками: CLI на серверы не ходит (CLAUDE.md → «Важные ограничения»). Порядок —
+# docker/DEPLOY-MANUAL.md → «Транзакции парка».
+PROD_FLEET_TRANSACTIONS_CONTAINER = xalqbonus-fleet-transactions
+
+prod-fleet-transactions: ## Прогон истории транзакций в фоне (prod). make prod-fleet-transactions dates=2024-07-15,2024-04-15 budget=80 | from=2024-07-01 to=2026-10-06 budget=1000 [pause=5] [cooldown=10]
+	@test -n "$(budget)" && { test -n "$(dates)" || { test -n "$(from)" && test -n "$(to)"; }; } || { echo "укажите даты или диапазон и бюджет: make prod-fleet-transactions dates=2024-07-15,2024-04-15 budget=80 | from=2024-07-01 to=2026-10-06 budget=1000 [pause=5] [cooldown=10]"; exit 1; }
+	@history=$$(docker inspect -f '{{.State.Status}}' $(PROD_FLEET_HISTORY_CONTAINER) 2>/dev/null || true); \
+	case "$$history" in \
+		running|restarting|paused) echo "идёт прогон истории заказов (контейнер $(PROD_FLEET_HISTORY_CONTAINER), $$history): два долгих прогона на одном ключе Fleet не идут. Дождитесь конца или остановите его — make prod-fleet-history-stop"; exit 1;; \
+	esac
+	@state=$$(docker inspect -f '{{.State.Status}}' $(PROD_FLEET_TRANSACTIONS_CONTAINER) 2>/dev/null || true); \
+	case "$$state" in \
+		'') ;; \
+		running|restarting|paused) echo "прогон истории транзакций уже идёт (контейнер $(PROD_FLEET_TRANSACTIONS_CONTAINER), $$state): make prod-fleet-transactions-logs, остановить — make prod-fleet-transactions-stop"; exit 1;; \
+		*) echo "удаляется прежний контейнер $(PROD_FLEET_TRANSACTIONS_CONTAINER) ($$state) вместе с логом прошлого запуска"; docker rm $(PROD_FLEET_TRANSACTIONS_CONTAINER) >/dev/null || exit 1;; \
+	esac
+	$(COMPOSE_PROD) run -d --no-deps --name $(PROD_FLEET_TRANSACTIONS_CONTAINER) \
+		app node .output/fleet-transactions.mjs dates="$(dates)" from="$(from)" to="$(to)" budget="$(budget)" pause="$(pause)" cooldown="$(cooldown)"
+	@echo "прогон запущен: make prod-fleet-transactions-logs, сводка — make prod-fleet-transactions-status"
+
+prod-fleet-transactions-logs: ## Хвост лога прогона истории транзакций (prod), и идущего, и закончившегося. make prod-fleet-transactions-logs [lines=200]
+	docker logs -f --tail $(or $(lines),200) $(PROD_FLEET_TRANSACTIONS_CONTAINER)
+
+# Ждём до минуты: прогон по сигналу дожидается ушедшего запроса, сохраняет частичные итоги
+# суток и печатает итог запуска. Незакрытые сутки доберёт следующий запуск.
+prod-fleet-transactions-stop: ## Остановить прогон истории транзакций (prod) — штатно, с итогом в логе
+	docker stop -t 60 $(PROD_FLEET_TRANSACTIONS_CONTAINER)
+
+prod-fleet-transactions-status: ## Сводка прогона истории транзакций по журналу суток (prod). make prod-fleet-transactions-status [from=2024-07-01] [to=2026-10-06]
+	$(COMPOSE_PROD) exec -T postgres sh -c 'PGPASSWORD="$$POSTGRES_PASSWORD" psql -X -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -q -v from="$$1" -v to="$$2"' \
+		sh "$(from)" "$(to)" < scripts/fleet-transactions-status.sql
+
+prod-fleet-transactions-check: ## Сверка комиссии парка с историей заказов по суткам UTC (prod). make prod-fleet-transactions-check from=2025-10-01 to=2026-09-30
+	@test -n "$(from)" && test -n "$(to)" || { echo "укажите диапазон: make prod-fleet-transactions-check from=2025-10-01 to=2026-09-30"; exit 1; }
+	$(COMPOSE_PROD) exec -T postgres sh -c 'PGPASSWORD="$$POSTGRES_PASSWORD" psql -X -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -q -v from="$$1" -v to="$$2"' \
+		sh "$(from)" "$(to)" < scripts/fleet-transactions-check.sql
 
 # Разовый пересчёт метрик дашборда на боевой машине (issue #387) — бандлом из образа,
 # одноразовым контейнером `app`, тем же сервисом, что ночная задача воркера. Идёт секунды

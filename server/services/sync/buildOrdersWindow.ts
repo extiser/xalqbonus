@@ -36,29 +36,49 @@ const shift = (moment: Date, milliseconds: number): Date =>
  * Перекрытие безопасно — повтор отсекается уникальностью заказа и ключом идемпотентности
  * начисления, поэтому дешевле перечитать лишнее, чем однажды не перечитать нужное.
  */
-const buildLiveWindow = (input: OrdersWindowInput): OrdersWindow => {
-  const { config } = input;
-  const upperLimit = shift(input.now, -config.lagSeconds * SECOND_MS);
-  const endedFrom = shift(input.watermark ?? upperLimit, -config.overlapMinutes * MINUTE_MS);
-  const cappedTo = shift(endedFrom, config.liveMaxWindowMinutes * MINUTE_MS);
+export type SlidingWindowInput = {
+  /** Отметка прогона. Пусто — прогонов ещё не было: окно начинается от «сейчас» минус перекрытие. */
+  watermark: Date | null;
+  now: Date;
+  overlapMinutes: number;
+  lagSeconds: number;
+  maxWindowMinutes: number;
+};
 
-  return {
-    endedFrom,
-    endedTo: cappedTo < upperLimit ? cappedTo : upperLimit,
-  };
+export type SlidingWindow = {
+  from: Date;
+  to: Date;
 };
 
 /**
- * Возвращает окно скользящего прогона или `null`, если запрашивать нечего.
+ * Устройство скользящего окна без привязки к полю выборки: им же строится окно живого сбора
+ * транзакций по `event_at` (issue #358) — со своими перекрытием, отставанием и потолком.
  *
- * Пустое окно — не ошибка: так выглядит прогон, запущенный чаще, чем идёт время
- * (интервал меньше отставания), или сразу после предыдущего успешного. Прогон при этом
- * не заводится вовсе, и отметка остаётся на месте.
+ * Возвращает `null`, если запрашивать нечего. Пустое окно — не ошибка: так выглядит прогон,
+ * запущенный чаще, чем идёт время (интервал меньше отставания), или сразу после предыдущего
+ * успешного. Прогон при этом не заводится вовсе, и отметка остаётся на месте.
  */
-export const buildOrdersWindow = (input: OrdersWindowInput): OrdersWindow | null => {
-  const window = buildLiveWindow(input);
+export const buildSlidingWindow = (input: SlidingWindowInput): SlidingWindow | null => {
+  const upperLimit = shift(input.now, -input.lagSeconds * SECOND_MS);
+  const from = shift(input.watermark ?? upperLimit, -input.overlapMinutes * MINUTE_MS);
+  const cappedTo = shift(from, input.maxWindowMinutes * MINUTE_MS);
+  const to = cappedTo < upperLimit ? cappedTo : upperLimit;
 
-  return window.endedTo > window.endedFrom ? window : null;
+  return to > from ? { from, to } : null;
+};
+
+/** Возвращает окно скользящего прогона заказов или `null`, если запрашивать нечего. */
+export const buildOrdersWindow = (input: OrdersWindowInput): OrdersWindow | null => {
+  const { config } = input;
+  const window = buildSlidingWindow({
+    watermark: input.watermark,
+    now: input.now,
+    overlapMinutes: config.overlapMinutes,
+    lagSeconds: config.lagSeconds,
+    maxWindowMinutes: config.liveMaxWindowMinutes,
+  });
+
+  return window === null ? null : { endedFrom: window.from, endedTo: window.to };
 };
 
 /**
