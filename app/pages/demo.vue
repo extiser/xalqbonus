@@ -18,6 +18,7 @@ import type {
   DemoManagerCreateResponse,
   DemoManagerOfficesResponse,
   DemoOverviewResponse,
+  DemoTripsDeleteResponse,
   DemoViewerStateResponse,
 } from '#shared/types/demo';
 
@@ -184,6 +185,44 @@ const loadTrips = async (personId: string): Promise<void> => {
   }
 };
 
+const describeDeleted = (result: DemoTripsDeleteResponse): string => {
+  const trips = `${formatNumber(result.deletedTrips)} ${pluralize(result.deletedTrips, 'поездка', 'поездки', 'поездок')}`;
+  const points = `${formatNumber(result.deletedPoints)} ${pluralize(result.deletedPoints, 'балл', 'балла', 'баллов')}`;
+  const welcome = result.welcomeBonusRemoved ? ', приветственный бонус снят' : '';
+
+  return `Удалено ${trips}, снято ${points}${welcome}`;
+};
+
+/**
+ * Удаление поездок (issue #422): `orderId` пустой — все. Кнопки водителя гаснут на время
+ * запроса, затем перечитываются его поездки и обзор — баланс и число поездок в строке.
+ */
+const deleteTrips = async (personId: string, orderId: string | null): Promise<void> => {
+  driverBusyId.value = personId;
+  driverError.value = null;
+  tripsResult.value = null;
+
+  const path =
+    orderId === null
+      ? `/api/demo/drivers/${personId}/trips`
+      : `/api/demo/drivers/${personId}/trips/${encodeURIComponent(orderId)}`;
+
+  try {
+    const result = await $fetch<DemoTripsDeleteResponse>(path, { method: 'DELETE' });
+
+    tripsResult.value = { personId, text: describeDeleted(result) };
+    await Promise.all([refresh(), loadTrips(personId)]);
+  } catch (error) {
+    driverError.value = failureText(error);
+  } finally {
+    driverBusyId.value = null;
+  }
+};
+
+const deleteTrip = (personId: string, orderId: string): Promise<void> => deleteTrips(personId, orderId);
+
+const clearTrips = (personId: string): Promise<void> => deleteTrips(personId, null);
+
 const toggleTrips = (personId: string): Promise<void> | undefined => {
   if (openTrips.value?.personId === personId) {
     openTrips.value = null;
@@ -331,6 +370,8 @@ const saveManagerOffices = (officeIds: string[]): Promise<void> =>
         @hide="hide"
         @unhide="unhide"
         @toggle-trips="toggleTrips"
+        @delete-trip="deleteTrip"
+        @clear-trips="clearTrips"
       />
 
       <OrganismsDemoGenerator

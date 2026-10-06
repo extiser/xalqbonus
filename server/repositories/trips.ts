@@ -1,4 +1,5 @@
 import { db } from '#server/db';
+import type { Prisma } from '#server/generated/prisma/client';
 import { COMPLETED_TRIP_STATUS } from '#server/utils/tripStatus';
 
 /**
@@ -59,12 +60,16 @@ export const findTripsForAccrual = async (tripOrderIds: string[]): Promise<TripF
  * Потолок здесь не оптимизация ради оптимизации: вопрос к этому запросу один — набралось
  * ли пять, — а у работающего водителя поездок тысячи, и считать их все на каждой новой
  * ради порога незачем. Ответ `limit` читается как «столько или больше».
+ *
+ * Клиент — транзакции вызывающего, когда счёт идёт после её же записей: удаление
+ * демо-поездок решает судьбу бонуса по поездкам, которые само только что удалило.
  */
 export const countCompletedTripsByPerson = async (
   personId: string,
   limit: number,
+  client: Prisma.TransactionClient = db,
 ): Promise<number> => {
-  const rows = await db.$queryRaw<{ total: bigint }[]>`
+  const rows = await client.$queryRaw<{ total: bigint }[]>`
     SELECT COUNT(*) AS total
       FROM (
             SELECT 1

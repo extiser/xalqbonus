@@ -14,7 +14,9 @@ import type { DemoDriverSummary, DemoDriverTrip } from '#shared/types/demo';
  * и «Вернуть», без формы поездок.
  *
  * «Поездки» раскрывают последние завершённые поездки с итогом по журналу. Приходят они
- * страницей по событию: данные в компоненты не ходят.
+ * страницей по событию: данные в компоненты не ходят. В раскрытом списке — «×» у поездки
+ * и «Очистить все» (issue #422): удаление вместе с баллами и приветственным бонусом, чтобы
+ * путь бонуса прогонялся на демо-водителе заново.
  *
  * Поля формы у каждой строки свои и живут здесь: это ввод, а не данные, и страница о них
  * узнаёт только из события отправки.
@@ -35,6 +37,8 @@ const emit = defineEmits<{
   hide: [personId: string];
   unhide: [personId: string];
   toggleTrips: [personId: string];
+  deleteTrip: [personId: string, orderId: string];
+  clearTrips: [personId: string];
 }>();
 
 const onlyHidden = ref(false);
@@ -54,6 +58,20 @@ const shown = computed(() =>
 );
 
 const tripsOpenFor = (personId: string): boolean => props.openTrips?.personId === personId;
+
+/**
+ * «Очистить все» — через подтверждение: уходят все поездки и бонус разом. Одна поездка —
+ * без него: путь назад — «Добавить поездки».
+ */
+const clearAskedFor = ref<string | null>(null);
+
+const confirmClear = (): void => {
+  if (clearAskedFor.value !== null) {
+    emit('clearTrips', clearAskedFor.value);
+  }
+
+  clearAskedFor.value = null;
+};
 
 const pointsText = (trip: DemoDriverTrip): string =>
   trip.points === null ? 'не начислено' : `+${formatNumber(trip.points)}`;
@@ -146,7 +164,7 @@ const submit = (personId: string): void => {
             <div class="flex flex-wrap gap-3">
               <AtomsActionButton
                 :label="tripsOpenFor(driver.personId) ? 'Скрыть поездки' : 'Поездки'"
-                :disabled="driver.tripsCount === 0"
+                :disabled="driver.tripsCount === 0 && !tripsOpenFor(driver.personId)"
                 @click="emit('toggleTrips', driver.personId)"
               />
               <AtomsActionButton
@@ -179,10 +197,18 @@ const submit = (personId: string): void => {
               message="Завершённых поездок нет."
             />
             <template v-else>
-              <p class="mb-2 text-xs text-slate-500">
-                Последние {{ openTrips.trips.length }}, свежие первыми. Приветственные 300 — в истории
-                операций карточки.
-              </p>
+              <div class="mb-2 flex items-start justify-between gap-4">
+                <p class="text-xs text-slate-500">
+                  Последние {{ openTrips.trips.length }}, свежие первыми. Приветственные 300 — в истории
+                  операций карточки.
+                </p>
+                <AtomsActionButton
+                  label="Очистить все"
+                  tone="danger"
+                  :disabled="busyPersonId === driver.personId"
+                  @click="clearAskedFor = driver.personId"
+                />
+              </div>
               <ul class="space-y-1">
                 <li
                   v-for="trip in openTrips.trips"
@@ -190,8 +216,19 @@ const submit = (personId: string): void => {
                   class="flex justify-between gap-4 text-sm"
                 >
                   <span class="text-slate-900">{{ formatMinuteDateTime(trip.endedAt) }}</span>
-                  <span :class="trip.points === null ? 'text-slate-500' : 'text-emerald-700'">
-                    {{ pointsText(trip) }}
+                  <span class="flex items-center gap-2">
+                    <span :class="trip.points === null ? 'text-slate-500' : 'text-emerald-700'">
+                      {{ pointsText(trip) }}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label="Удалить поездку"
+                      class="rounded px-1 leading-none text-slate-400 transition-colors hover:text-red-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400 disabled:cursor-not-allowed disabled:text-slate-300"
+                      :disabled="busyPersonId === driver.personId"
+                      @click="emit('deleteTrip', driver.personId, trip.orderId)"
+                    >
+                      ×
+                    </button>
                   </span>
                 </li>
               </ul>
@@ -223,5 +260,16 @@ const submit = (personId: string): void => {
 
       <p v-if="error" class="text-sm text-red-700">{{ error }}</p>
     </div>
+
+    <MoleculesConfirmDialog
+      :open="clearAskedFor !== null"
+      title="Удалить все поездки демо-водителя?"
+      message="Удалятся все его поездки, баллы за них и приветственный бонус. Остальные операции счёта останутся."
+      confirm-label="Удалить все"
+      cancel-label="Отмена"
+      tone="danger"
+      @confirm="confirmClear"
+      @cancel="clearAskedFor = null"
+    />
   </MoleculesSectionPanel>
 </template>

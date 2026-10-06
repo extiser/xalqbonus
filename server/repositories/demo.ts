@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { db } from '#server/db';
 import { Prisma } from '#server/generated/prisma/client';
-import type { DemoRole } from '#server/generated/prisma/enums';
+import type { AccountType, DemoRole } from '#server/generated/prisma/enums';
 import { COMPLETED_TRIP_STATUS } from '#server/utils/tripStatus';
 
 /**
@@ -552,4 +552,159 @@ export const listDemoEntities = async (client: Executor = db): Promise<DemoEntit
   ]);
 
   return { products, mailings, segments, campaigns };
+};
+
+// ---------------------------------------------------------------------------
+// Удаление демо-поездок (issue #422)
+// ---------------------------------------------------------------------------
+//
+// Исключение из «баланс меняется только записью в журнал» (docs/points.md): записи журнала
+// удаляются, а кэш баланса откатывается на их сумму в той же транзакции. Действует только
+// для демо-водителей и только для поездок `demo-…`
+// (docs/decisions.md → «Демо-поездки удаляются вместе с начислениями»). Признак демо
+// проверяет сервис — функции ниже вызываются только из `deleteDemoTrips`.
+
+/** Префикс заказа ручной поездки (`addDemoTrips`): у заказов Fleet API его не бывает. */
+const DEMO_TRIP_ORDER_PREFIX = 'demo-';
+
+export type DemoTripLockRow = {
+  id: string;
+  orderId: string;
+};
+
+/**
+ * Поездки демо-водителя под удаление — с блокировкой строк, по всем профилям человека.
+ * Только `demo-…`: живая поездка, даже оказавшись у демо-человека, не удаляется никогда.
+ * `orderId` пустой — все.
+ */
+export const lockDemoTrips = async (
+  personId: string,
+  orderId: string | null,
+  client: Executor,
+): Promise<DemoTripLockRow[]> =>
+  client.$queryRaw<DemoTripLockRow[]>`
+    SELECT trip."id",
+           trip."order_id" AS "orderId"
+      FROM xb.trips AS trip
+      JOIN xb.park_profiles AS profile ON profile."profile_id" = trip."profile_id"
+     WHERE profile."person_id" = ${personId}::uuid
+       AND trip."order_id" LIKE ${`${DEMO_TRIP_ORDER_PREFIX}%`}
+       AND (${orderId}::text IS NULL OR trip."order_id" = ${orderId}::text)
+     ORDER BY trip."order_id"
+       FOR UPDATE OF trip
+  `;
+
+export type DemoAccountLockRow = {
+  id: string;
+  type: AccountType;
+};
+
+/**
+ * Водительский счёт человека и `emission` — с блокировкой, по возрастанию идентификатора,
+ * как в переводе (`writeTransfer`): иначе удаление и начисление, идущие разом, встали бы
+ * в дедлок на этой паре счетов.
+ */
+export const lockDemoDriverAccounts = async (personId: string, client: Executor): Promise<DemoAccountLockRow[]> =>
+  client.$queryRaw<DemoAccountLockRow[]>`
+    SELECT "id", "type"
+      FROM xb.accounts
+     WHERE ("type" = 'driver' AND "person_id" = ${personId}::uuid)
+        OR "type" = 'emission'
+     ORDER BY "id"
+       FOR UPDATE
+  `;
+
+/** Переводы по ключам идемпотентности. Ключа нет в журнале — его нет и в ответе. */
+export const findTransferIdsByKeys = async (idempotencyKeys: readonly string[], client: Executor): Promise<string[]> => {
+  if (idempotencyKeys.length === 0) {
+    return [];
+  }
+
+  const rows = await client.$queryRaw<{ id: string }[]>`
+    SELECT "id"
+      FROM xb.point_transfers
+     WHERE "idempotency_key" = ANY(${[...idempotencyKeys]}::text[])
+  `;
+
+  return rows.map((row) => row.id);
+};
+
+export type RevertedAccountRow = {
+  accountId: string;
+  /** Сумма удалённых записей по счёту — на столько уменьшен его баланс. */
+  delta: bigint;
+};
+
+/**
+ * Удаляет переводы целиком: каждый счёт откатывается на сумму своих записей этих переводов
+ * (`balance − delta`), затем удаляются записи и сами переводы. Счета заблокированы
+ * вызывающим. Возвращает, на сколько откачен каждый счёт.
+ */
+export const deleteTransfersWithEntries = async (
+  transferIds: readonly string[],
+  client: Executor,
+): Promise<RevertedAccountRow[]> => {
+  if (transferIds.length === 0) {
+    return [];
+  }
+
+  const ids = [...transferIds];
+
+  const reverted = await client.$queryRaw<RevertedAccountRow[]>`
+    UPDATE xb.accounts AS account
+       SET "balance"    = account."balance" - entries."delta",
+           "updated_at" = now()
+      FROM (
+           SELECT "account_id", sum("delta")::bigint AS "delta"
+             FROM xb.point_entries
+            WHERE "transfer_id" = ANY(${ids}::text[]::uuid[])
+            GROUP BY "account_id"
+      ) AS entries
+     WHERE account."id" = entries."account_id"
+     RETURNING account."id" AS "accountId",
+               entries."delta"
+  `;
+
+  await client.$executeRaw`
+    DELETE FROM xb.point_entries WHERE "transfer_id" = ANY(${ids}::text[]::uuid[])
+  `;
+
+  await client.$executeRaw`
+    DELETE FROM xb.point_transfers WHERE "id" = ANY(${ids}::text[]::uuid[])
+  `;
+
+  return reverted;
+};
+
+/** Удаляет поездки с их событиями и точками маршрута. Возвращает, сколько поездок удалено. */
+export const deleteTripsWithDetails = async (tripIds: readonly string[], client: Executor): Promise<number> => {
+  if (tripIds.length === 0) {
+    return 0;
+  }
+
+  const ids = [...tripIds];
+
+  await client.$executeRaw`
+    DELETE FROM xb.trip_events WHERE "trip_id" = ANY(${ids}::text[]::uuid[])
+  `;
+
+  await client.$executeRaw`
+    DELETE FROM xb.trip_route_points WHERE "trip_id" = ANY(${ids}::text[]::uuid[])
+  `;
+
+  return client.$executeRaw`
+    DELETE FROM xb.trips WHERE "id" = ANY(${ids}::text[]::uuid[])
+  `;
+};
+
+/**
+ * Снимает отметку «Спасибо» на слайде выданного бонуса: бонуса больше нет, и следующий,
+ * выданный заново, встретит водителя слайдом «Ура!» снова (issue #421).
+ */
+export const clearWelcomeBonusSeen = async (personId: string, client: Executor): Promise<void> => {
+  await client.$executeRaw`
+    UPDATE xb.person_settings
+       SET "welcome_bonus_seen_at" = NULL
+     WHERE "person_id" = ${personId}::uuid
+  `;
 };

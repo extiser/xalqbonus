@@ -23,6 +23,16 @@ export class NotDemoDriverError extends DemoError {
   }
 }
 
+/** У демо-водителя нет демо-поездки с таким заказом (issue #422). */
+export class DemoTripNotFoundError extends DemoError {
+  constructor(
+    public readonly personId: string,
+    public readonly orderId: string,
+  ) {
+    super(`у демо-водителя ${personId} нет демо-поездки ${orderId}`);
+  }
+}
+
 /** Что не так в запросе ручных поездок. Имя — то, что покажет ручка. */
 export type DemoTripsProblem = 'count_invalid' | 'ended_at_invalid' | 'ended_at_future';
 
