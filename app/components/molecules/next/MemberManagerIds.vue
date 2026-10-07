@@ -20,8 +20,20 @@ type CopyTarget = 'phone' | 'telegramId';
 const props = defineProps<MemberManagerIdsView>();
 
 const rows = computed(() => [
-  { target: 'phone' as const, label: props.texts.phoneLabel, value: props.phone.display, copyLabel: props.texts.copyPhone },
-  { target: 'telegramId' as const, label: props.texts.telegramIdLabel, value: props.telegramId, copyLabel: props.texts.copyTelegramId },
+  {
+    target: 'phone' as const,
+    label: props.texts.phoneLabel,
+    value: props.phone.display,
+    copyLabel: props.texts.copyPhone,
+    sensitive: true,
+  },
+  {
+    target: 'telegramId' as const,
+    label: props.texts.telegramIdLabel,
+    value: props.telegramId,
+    copyLabel: props.texts.copyTelegramId,
+    sensitive: false,
+  },
 ]);
 
 /** Сколько держится галочка после копирования. */
@@ -63,6 +75,7 @@ onBeforeUnmount(() => {
         :key="row.target"
         :label="row.label"
         :value="row.value"
+        :sensitive="row.sensitive"
         spacing="even"
       >
         <template #aside>

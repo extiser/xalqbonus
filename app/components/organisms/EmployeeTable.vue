@@ -139,7 +139,7 @@ const empty = computed(
               <span class="text-sm text-slate-500">{{ employeeRoleLabel(invite.role) }}</span>
               <AtomsStatusBadge tone="warn" label="Приглашение ждёт" />
             </div>
-            <p v-if="invite.phoneE164" class="mt-0.5 text-xs text-slate-500">
+            <p v-if="invite.phoneE164" class="ym-hide-content mt-0.5 text-xs text-slate-500">
               {{ formatPhone(invite.phoneE164).display }}
             </p>
             <p class="mt-0.5 text-xs text-slate-500">
@@ -189,7 +189,7 @@ const empty = computed(
               />
               <AtomsStatusBadge v-if="account.isDemo" tone="demo" label="ДЕМО" />
             </div>
-            <p class="mt-0.5 text-xs text-slate-500">{{ account.phoneE164 }}</p>
+            <p class="ym-hide-content mt-0.5 text-xs text-slate-500">{{ account.phoneE164 }}</p>
             <p class="mt-0.5 text-xs text-slate-500">
               <template v-if="account.anyOffice">Любой офис</template>
               <span v-else-if="account.offices.length === 0" class="text-amber-700">

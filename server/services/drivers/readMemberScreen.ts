@@ -111,6 +111,7 @@ export const readMemberScreen = async (
 
   return {
     screen: 'member',
+    personId: driver.personId,
     language: driver.language,
     name: driver.name,
     callsign: driver.callsign,

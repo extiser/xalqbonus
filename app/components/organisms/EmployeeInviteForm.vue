@@ -78,7 +78,8 @@ watch(
     <div class="space-y-4">
       <div v-if="issued" class="space-y-3 rounded-md border border-amber-200 bg-amber-50 p-3">
         <p class="text-sm text-slate-900">
-          Ссылка для «{{ issued.fullName }}», {{ formatPhone(issued.phoneE164).display }}, роль
+          Ссылка для «{{ issued.fullName }}»,
+          <span class="ym-hide-content">{{ formatPhone(issued.phoneE164).display }}</span>, роль
           «{{ employeeRoleLabel(issued.role) }}». Действует до {{ formatDateTime(issued.expiresAt) }}.
         </p>
         <MoleculesCopyableLink :link="issued.link">

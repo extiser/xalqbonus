@@ -20,8 +20,13 @@ defineProps<{
   <AtomsNextMemberCard tone="plain" divided>
     <MoleculesNextMemberPersonHead v-if="driver.lastName" :last-name="driver.lastName" :given-names="driver.givenNames" />
     <MoleculesNextMemberFieldRow v-if="driver.callsign" label="Позывной" :value="driver.callsign" />
-    <a v-if="driver.phone" :href="driver.phone.href" class="block text-inherit no-underline active:bg-white/4">
-      <MoleculesNextMemberFieldRow label="Телефон" :value="driver.phone.display">
+    <!-- `ym-disable-tracklink`: переход по ссылке звонка Метрика иначе записала бы вместе с номером. -->
+    <a
+      v-if="driver.phone"
+      :href="driver.phone.href"
+      class="ym-disable-tracklink block text-inherit no-underline active:bg-white/4"
+    >
+      <MoleculesNextMemberFieldRow label="Телефон" :value="driver.phone.display" sensitive>
         <template #aside>
           <span class="-mr-1.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-[rgba(95,208,138,0.14)]" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none">

@@ -267,6 +267,11 @@ export type TripsNote = {
  */
 export type MiniAppMemberScreen = {
   screen: 'member';
+  /**
+   * Человек — тот же `personId`, что в адресе карточки водителя в вебе `/drivers/{personId}`.
+   * По нему визит в Метрике связывается с водителем (issue #432).
+   */
+  personId: string;
   /** Язык участника из `person_settings` — тот, который он однажды уже выбрал. */
   language: Language;
   /** Имя из учётки парка — то же, которым с водителем здоровается бот. */

@@ -70,11 +70,11 @@ const callsigns = computed(() => props.driver.callsigns.join(', '));
     <dl class="mt-1 grid grid-cols-1 gap-x-6 text-sm sm:grid-cols-3">
       <div class="flex gap-2">
         <dt class="text-slate-500">ВУ</dt>
-        <dd class="font-mono break-all text-slate-700">{{ driver.licenseNumberRaw ?? DASH }}</dd>
+        <dd class="ym-hide-content font-mono break-all text-slate-700">{{ driver.licenseNumberRaw ?? DASH }}</dd>
       </div>
       <div class="flex gap-2">
         <dt class="text-slate-500">Телефон</dt>
-        <dd class="font-mono break-all text-slate-700">
+        <dd class="ym-hide-content font-mono break-all text-slate-700">
           {{ driver.phones.length > 0 ? driver.phones.join(', ') : DASH }}
         </dd>
       </div>

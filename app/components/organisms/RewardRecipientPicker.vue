@@ -116,7 +116,8 @@ const pick = (row: DriverSearchRow): void => {
             <div class="min-w-48 flex-1">
               <p class="text-sm font-medium text-slate-900">{{ rowName(row) }}</p>
               <p class="text-xs text-slate-500">
-                {{ row.callsigns.join(', ') || DASH }} · {{ row.phones.join(', ') || DASH }} ·
+                {{ row.callsigns.join(', ') || DASH }} ·
+                <span class="ym-hide-content">{{ row.phones.join(', ') || DASH }}</span> ·
                 {{ row.balance === null ? 'счёта нет' : `${formatNumber(row.balance)} баллов` }}
               </p>
             </div>

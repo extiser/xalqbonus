@@ -69,18 +69,26 @@ const welcomeBonusText = computed(() => {
 
 const linkTitle = computed(() => `Привязать Telegram ${props.candidate?.telegramUserId ?? ''}?`);
 
+/**
+ * Текст подтверждения привязки — номером отдельно от остального: номер в записях вебвизора
+ * закрыт, Telegram ID и дата — нет (issue #432).
+ */
 const linkMessage = computed(() => {
   const candidate = props.candidate;
 
   if (!candidate) {
-    return '';
+    return null;
   }
 
-  const shared = `Номер из этого Telegram: ${candidate.phone ?? DASH}, водитель делился им ${formatDateTime(candidate.sharedAt)}.`;
+  const shared = `, водитель делился им ${formatDateTime(candidate.sharedAt)}.`;
 
-  return candidate.currentTelegramChatId === null
-    ? shared
-    : `${shared} Действующая привязка ${candidate.currentTelegramChatId} будет закрыта, в тот чат уйдёт сообщение.`;
+  return {
+    phone: candidate.phone ?? DASH,
+    rest:
+      candidate.currentTelegramChatId === null
+        ? shared
+        : `${shared} Действующая привязка ${candidate.currentTelegramChatId} будет закрыта, в тот чат уйдёт сообщение.`,
+  };
 });
 
 /**
@@ -201,13 +209,16 @@ const denialParts = computed(() => {
     <MoleculesConfirmDialog
       :open="candidate !== null"
       :title="linkTitle"
-      :message="linkMessage"
       confirm-label="Привязать"
       cancel-label="Отмена"
       tone="primary"
       @confirm="emit('confirm-link')"
       @cancel="emit('cancel')"
-    />
+    >
+      <template v-if="linkMessage" #message>
+        Номер из этого Telegram: <span class="ym-hide-content">{{ linkMessage.phone }}</span>{{ linkMessage.rest }}
+      </template>
+    </MoleculesConfirmDialog>
     <MoleculesConfirmDialog
       :open="unlinkAsked"
       :title="`Отвязать Telegram ${activeLink?.telegramChatId ?? ''}?`"

@@ -1,6 +1,7 @@
 import { useCurrentEmployee } from '~/composables/useCurrentEmployee';
 import { failureDenial } from '~/utils/requestError';
 import type { ServerDenialCode } from '#shared/denials';
+import { DESIGN_PATH, isUnderPath, LINK_PAGE_PREFIXES, MINIAPP_PATH } from '#shared/pagePaths';
 import type { EmployeeMeResponse } from '#shared/types/employee';
 
 /**
@@ -17,31 +18,20 @@ import type { EmployeeMeResponse } from '#shared/types/employee';
 
 const LOGIN_PATH = '/login';
 
-/** Mini App водителя: своя дверь и своя личность — подписанная `initData`, а не cookie. */
-const MINIAPP_PATH = '/app';
-
-/** Служебная страница макетов (`app/pages/design/`) — только в разработке. */
-const DESIGN_PATH = '/design';
-
-/**
- * Страницы одноразовых ссылок (issue #267): приглашение и «задать пароль». Открывший их входа
- * не имеет — учётки ещё нет или пароль сброшен, — и доказывает себя токеном в адресе, который
- * проверяют ручки этих страниц.
- */
-const LINK_PAGE_PREFIXES = ['/invite/', '/set-password/'] as const;
-
 export default defineNuxtRouteMiddleware(async (to) => {
-  if (to.path === LOGIN_PATH || to.path === MINIAPP_PATH || to.path.startsWith(`${MINIAPP_PATH}/`)) {
+  // Mini App водителя: своя дверь и своя личность — подписанная `initData`, а не cookie.
+  if (to.path === LOGIN_PATH || isUnderPath(to.path, MINIAPP_PATH)) {
     return;
   }
 
+  // Страницы одноразовых ссылок: открывший их доказывает себя токеном в адресе.
   if (LINK_PAGE_PREFIXES.some((prefix) => to.path.startsWith(prefix))) {
     return;
   }
 
   // Макеты водительского экрана на заглушках: ни данных, ни ручек, в сборке их нет вовсе.
   // Входа сотрудника они не требуют — на них смотрят и без учётки.
-  if (import.meta.dev && (to.path === DESIGN_PATH || to.path.startsWith(`${DESIGN_PATH}/`))) {
+  if (import.meta.dev && isUnderPath(to.path, DESIGN_PATH)) {
     return;
   }
 

@@ -27,12 +27,13 @@ defineProps<{
       message="Действующего номера удостоверения нет. Профиль без номера в реестр не заводится — такую строку надо разбирать."
     />
     <dl v-else class="divide-y divide-slate-100">
-      <MoleculesFactRow label="Номер удостоверения" :value="card.activeLicense.numberRaw" mono />
+      <MoleculesFactRow label="Номер удостоверения" :value="card.activeLicense.numberRaw" mono sensitive="value" />
       <MoleculesFactRow
         label="Нормализованный номер"
         :value="card.activeLicense.numberCanonical"
         hint="по нему идёт поиск и по нему склеиваются двойники"
         mono
+        sensitive="value"
       />
       <MoleculesFactRow label="Страна" :value="card.activeLicense.country" />
       <MoleculesFactRow
@@ -67,6 +68,7 @@ defineProps<{
           :label="license.numberRaw"
           :value="`закрыт ${formatDateTime(license.closedAt)}`"
           mono
+          sensitive="label"
         />
       </dl>
     </div>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { MINIAPP_PATH } from '#shared/pagePaths';
 import { formatPhone, type FormattedPhone } from '#shared/phone';
 import {
   INIT_DATA_HEADER,
@@ -26,6 +27,7 @@ import { useMemberHistory } from '~/composables/useMemberHistory';
 import { useMemberOrders } from '~/composables/useMemberOrders';
 import { useMemberRewards } from '~/composables/useMemberRewards';
 import { useMemberSurvey } from '~/composables/useMemberSurvey';
+import { useMetrika } from '~/composables/useMetrika';
 import { useOfficeDesk } from '~/composables/useOfficeDesk';
 import { useDesignFonts } from '~/design/fonts';
 import type { MemberSheetReward } from '#shared/types/rewards';
@@ -691,7 +693,7 @@ const staffProfile = computed(() => {
 
   const fields: MemberProfileFieldView[] = [
     { id: 'role', label: 'Роль', value: STAFF_ROLE_LABELS[current.role] },
-    { id: 'phone', label: 'Телефон', value: current.phone.display },
+    { id: 'phone', label: 'Телефон', value: current.phone.display, sensitive: true },
     { id: 'telegram', label: 'Telegram ID', value: current.telegramId },
   ];
 
@@ -2021,7 +2023,7 @@ const profileScreen = computed(() => {
   const fields: MemberProfileFieldView[] = [
     profile.phone === null
       ? { id: 'phone', label: texts.phone, value: texts.phoneMissing, missing: true }
-      : { id: 'phone', label: texts.phone, value: profile.phone.display },
+      : { id: 'phone', label: texts.phone, value: profile.phone.display, sensitive: true },
     { id: 'telegram', label: texts.telegramId, value: profile.telegramId },
     profile.callsign === null
       ? { id: 'callsign', label: texts.callsign, value: MISSING_VALUE, missing: true }
@@ -2433,6 +2435,52 @@ const onVisibilityChange = (): void => {
   }
 };
 
+const metrika = useMetrika();
+
+/**
+ * Виртуальный адрес экрана для Метрики (issue #432). Адрес Mini App один на весь визит,
+ * экраны меняются состоянием — без своего адреса у каждого экрана Метрика видела бы один
+ * просмотр. Загрузка просмотром не считается, шторки — тоже: они поверх экрана, а не вместо.
+ */
+const metrikaPath = computed((): string | null => {
+  switch (stage.value) {
+    case 'loading':
+      return null;
+    case 'error':
+      return `${MINIAPP_PATH}/error`;
+    case 'registration':
+      return `${MINIAPP_PATH}/registration/${registrationStep.value}`;
+    case 'member':
+      return `${MINIAPP_PATH}/${currentScreen.value}`;
+    case 'employee':
+      return `${MINIAPP_PATH}/employee/${employeeScreen.value}`;
+    case 'employee_denied':
+      return `${MINIAPP_PATH}/employee-denied`;
+  }
+});
+
+/** Последний отправленный адрес: тот же адрес подряд — не новый просмотр, а источник следующего. */
+let lastMetrikaPath: string | null = null;
+
+watch(metrikaPath, (path) => {
+  if (path === null || path === lastMetrikaPath) {
+    return;
+  }
+
+  metrika.hit(path, lastMetrikaPath ?? document.referrer);
+  lastMetrikaPath = path;
+});
+
+/** Визит связан с водителем один раз за загрузку; сотрудники в Метрику не передаются. */
+let metrikaPersonSent = false;
+
+watch(member, (current) => {
+  if (current && !metrikaPersonSent) {
+    metrika.setPersonId(current.personId);
+    metrikaPersonSent = true;
+  }
+});
+
 /** Щипок в iOS: `user-scalable=no` Safari не слушает, жест гасится здесь. */
 const preventGesture = (event: Event): void => {
   event.preventDefault();
@@ -2459,6 +2507,13 @@ onMounted(async () => {
 
   webApp = await loadTelegramWebApp();
   initData = resolveInitData(webApp);
+  // Счётчик заводится только на адресе без хеша. Хеш стирается, лишь когда SDK отдал подписанную
+  // строку; не загрузился скрипт Telegram — `#tgWebAppData=…` с пропуском водителя остаётся
+  // в адресе, а читает ли `tag.js` хеш, не проверено. Хеш не пуст — счётчика в этой загрузке
+  // нет, и просмотры с `userParams` молча ничего не делают.
+  if (window.location.hash === '') {
+    metrika.init();
+  }
   launchSurveyId = new URLSearchParams(window.location.search).get('survey') || null;
 
   // Ни строки от Telegram, ни своей копии — значит страницу открыли не из мессенджера.

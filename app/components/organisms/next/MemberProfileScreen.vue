@@ -87,12 +87,14 @@ const LICENSE_MASK = '•••••';
           :label="field.label"
           :value="field.value"
           :missing="field.missing"
+          :sensitive="field.sensitive"
         />
         <MoleculesNextMemberFieldRow
           v-if="license"
           :label="license.label"
           :value="licenseRevealed ? license.full : license.tail"
           :mask="licenseRevealed ? undefined : LICENSE_MASK"
+          sensitive
         >
           <template #aside>
             <span class="-mr-1.5 flex">
