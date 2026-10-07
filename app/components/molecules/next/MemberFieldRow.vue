@@ -8,6 +8,9 @@
  * Маска — скрытая часть значения точками (номер ВУ до глазика), рядом — слот `aside`
  * под кнопку, раскрывающую его.
  *
+ * `sensitive` — значение личное (телефон, номер ВУ): в записях вебвизора Метрики оно закрыто
+ * (`ym-hide-content`, issue #432). Подпись остаётся видна — по ней понятно, что за строка.
+ *
  * `spacing` — как далеко кнопка от значения. `tight` — глазик в профиле: он часть значения
  * и стоит к нему ближе, чем подпись. `even` — копирование в «Покажите менеджеру»
  * (`registration/registration-refused.html`): кнопка — отдельное действие строки и стоит
@@ -24,6 +27,7 @@ defineProps<{
   /** Скрытая часть перед значением: «•••••». */
   mask?: string;
   spacing?: 'tight' | 'even';
+  sensitive?: boolean;
 }>();
 </script>
 
@@ -34,7 +38,10 @@ defineProps<{
     <span class="flex items-center" :class="spacing === 'even' ? 'gap-3' : 'gap-2'">
       <span
         class="text-right text-[15px] tabular-nums"
-        :class="missing ? 'font-normal text-xb-grey' : 'font-semibold tracking-[0.3px] text-xb-text'"
+        :class="[
+          missing ? 'font-normal text-xb-grey' : 'font-semibold tracking-[0.3px] text-xb-text',
+          { 'ym-hide-content': sensitive },
+        ]"
       >
         <span v-if="mask" class="mr-0.5 tracking-[2px] text-xb-grey">{{ mask }}</span>{{ value }}
       </span>

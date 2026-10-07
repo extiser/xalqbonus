@@ -60,7 +60,7 @@ const toggle = (officeId: string, checked: boolean): void => {
       <template v-if="manager">
         <p class="text-sm text-slate-900">
           {{ manager.fullName }}
-          <span class="text-slate-500">· {{ manager.phone.display }}</span>
+          <span class="text-slate-500">· <span class="ym-hide-content">{{ manager.phone.display }}</span></span>
         </p>
 
         <MoleculesStateNotice

@@ -9,6 +9,9 @@ import { ref, watch } from 'vue';
  * стоит на экране текстом и выделяется целиком одним нажатием, а кнопка лишь экономит жест.
  *
  * Рядом с кнопкой — место для действий строки (`#actions`): «Отозвать», «Открыть в Telegram».
+ *
+ * Текст ссылки в записях вебвизора Метрики закрыт: в ней токен, которым открывший её
+ * доказывает себя (issue #432) — тот же, ради которого счётчика нет на страницах этих ссылок.
  */
 const props = defineProps<{
   link: string;
@@ -44,7 +47,7 @@ const COPY_LABELS: Record<CopyState, string> = {
 
 <template>
   <div class="space-y-2">
-    <p class="font-mono text-xs break-all text-slate-700 select-all">{{ link }}</p>
+    <p class="ym-hide-content font-mono text-xs break-all text-slate-700 select-all">{{ link }}</p>
     <div class="flex flex-wrap gap-3">
       <AtomsActionButton :label="COPY_LABELS[copyState]" tone="primary" @click="copy" />
       <slot name="actions" />

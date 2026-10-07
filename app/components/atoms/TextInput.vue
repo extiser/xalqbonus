@@ -10,6 +10,11 @@
  * набранное вообще похоже на адрес; `date` — календарь браузера и значение `YYYY-MM-DD`,
  * которое не зависит от того, как дату пишут в локали смотрящего. Поэтому тип приходит
  * снаружи: это смысл поля, а не его вид.
+ *
+ * Набранное в поля телефона и пароля вебвизор Метрики не записывает (`ym-disable-keys`,
+ * issue #432) — явной пометкой, а не надеждой на то, что Метрика сама распознает такое поле.
+ * `sensitive` — то же для поля, где тип ни о чём не говорит: в поиск водителя набирают
+ * телефон и номер ВУ.
  */
 type InputType = 'search' | 'text' | 'tel' | 'password' | 'url' | 'date' | 'datetime-local';
 
@@ -42,6 +47,7 @@ const props = withDefaults(
     inputmode?: InputMode;
     /** Нижняя граница поля `date` — `YYYY-MM-DD`: день раньше календарь не даст выбрать. */
     min?: string;
+    sensitive?: boolean;
   }>(),
   {
     size: 'medium',
@@ -52,8 +58,11 @@ const props = withDefaults(
     required: false,
     inputmode: undefined,
     min: undefined,
+    sensitive: false,
   },
 );
+
+const keysHidden = computed(() => props.sensitive || props.type === 'tel' || props.type === 'password');
 
 const model = defineModel<string>({ required: true });
 
@@ -95,6 +104,6 @@ onMounted(() => {
     :inputmode="inputmode"
     :min="min"
     class="w-full rounded-md border border-slate-300 bg-white text-slate-900 transition-colors placeholder:text-slate-400 focus-visible:border-slate-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
-    :class="SIZE_CLASSES[size]"
+    :class="[SIZE_CLASSES[size], { 'ym-disable-keys': keysHidden }]"
   />
 </template>

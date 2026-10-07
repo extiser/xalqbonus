@@ -41,11 +41,6 @@ defineSlots<{ expanded(props: { order: OfficeOrder }): unknown }>();
 /** Колонок в строке — раскрытая карточка занимает их все. */
 const COLUMN_COUNT = 8;
 
-/** «16895 · +998 93 527-43-00» — вторая строка водителя. Нет ни того, ни другого — пусто. */
-const driverContacts = (order: OfficeOrder): string =>
-  [order.callsign, order.phone ? formatPhone(order.phone).display : null]
-    .filter((part): part is string => part !== null && part !== '')
-    .join(' · ');
 </script>
 
 <template>
@@ -97,8 +92,11 @@ const driverContacts = (order: OfficeOrder): string =>
                 </td>
                 <td class="py-2 pr-4">
                   <p>{{ order.driverName ?? DASH }}</p>
-                  <p v-if="driverContacts(order)" class="text-xs text-slate-500 tabular-nums">
-                    {{ driverContacts(order) }}
+                  <!-- «16895 · +998 93 527-43-00» — вторая строка водителя. Телефон закрыт
+                       в записях вебвизора, позывной — нет (issue #432). -->
+                  <p v-if="order.callsign || order.phone" class="text-xs text-slate-500 tabular-nums">
+                    {{ order.callsign }}<template v-if="order.callsign && order.phone"> · </template>
+                    <span v-if="order.phone" class="ym-hide-content">{{ formatPhone(order.phone).display }}</span>
                   </p>
                 </td>
                 <td class="py-2 pr-4">{{ orderPaymentLabel(order.payment) }}</td>

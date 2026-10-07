@@ -7,7 +7,7 @@ COMPOSE_COPY = docker compose -f docker/compose.local.yml -f docker/compose.copy
 
 .DEFAULT_GOAL := help
 
-.PHONY: help image up up-d down restart logs ps shell psql sql migrate migrate-rolled-back migrate-create migrate-diff migrate-sql generate typecheck old-engine-guard test test-db \
+.PHONY: help image image-run image-stop up up-d down restart logs ps shell psql sql migrate migrate-rolled-back migrate-create migrate-diff migrate-sql generate typecheck old-engine-guard test test-db \
         db-restore db-drop db-schema invariants license-collisions legacy-vs-api import-legacy import-legacy-awarded-trips \
         employee-owner prod-employee-owner \
         import-legacy-dump \
@@ -319,6 +319,29 @@ old-engine-guard: ## Проверить, что скрипт проверки д
 # build, — поэтому образ проверяется только этой целью или выкатом.
 image: ## Собрать боевой образ локально со всеми проверками сборки — xalqbonus:local
 	docker build -f docker/Dockerfile -t xalqbonus:local .
+
+# Собранный образ на месте app локального стека: тот же порт 3003, та же база и очередь.
+# Тома с фото у образа нет: том стека заводил dev-контейнер от root, а образ работает под
+# `node` и на чужие права не поднимется — фото товаров на страницах образа не видно.
+# Нужен там, где поведение зависит от окружения, — dev-сервер читает `.env` до сборки,
+# и дефект запечённого значения на нём невидим (docs/decisions.md → «Окружение читается
+# напрямую»). Переменные — из `.env` и `env="…"` поверх, через пробел.
+#
+# app стека на это время останавливается: у токена бота один приёмник апдейтов, и два
+# процесса на polling отбирали бы апдейты друг у друга. NODE_ENV — из `.env`, то есть
+# `development`: вне прода исходящие Telegram держит список TG_OUTGOING_ALLOWLIST, а в базе
+# стека — боевой дамп с настоящими водителями.
+IMAGE_RUN_NAME = xalqbonus-image
+
+image-run: ## Поднять собранный образ на месте app стека (порт 3003). make image-run [env="YANDEX_METRIKA_ID=113517499"]. Обратно — make image-stop
+	$(COMPOSE) stop app
+	docker run -d --rm --name $(IMAGE_RUN_NAME) --network xalqbonus-local_default \
+		--env-file .env $(foreach pair,$(env),-e $(pair)) \
+		-p 3003:3000 xalqbonus:local
+
+image-stop: ## Остановить образ, поднятый make image-run, и вернуть app стека
+	-docker stop $(IMAGE_RUN_NAME)
+	$(COMPOSE) start app
 
 # Отдельная база под тесты, в том же контейнере. Схему в ней создаёт та же миграция —
 # второго описания структуры не заводится. Цель идемпотентна: базу создаёт, только если

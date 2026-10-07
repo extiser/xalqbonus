@@ -272,6 +272,8 @@ export interface MemberProfileFieldView {
   value: string;
   /** Значения нет — пишется серым, а не алым: это не ошибка. */
   missing?: boolean;
+  /** Значение личное — в записях вебвизора закрыто (issue #432). */
+  sensitive?: boolean;
 }
 
 export type MemberLanguage = 'ru' | 'uz';

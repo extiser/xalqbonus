@@ -17,36 +17,46 @@ const props = defineProps<{
 
 const emit = defineEmits<{ page: [offset: number] }>();
 
+/** Признак запроса: подпись и распознанное значение. */
+type SearchCriterion = {
+  label: string;
+  value: string;
+};
+
 /**
  * Строка «по чему искали»: номер, телефон, слова имени, позывной — только те признаки,
  * что были распознаны в запросе.
+ *
+ * Значения в записях вебвизора закрыты все, подписи — нет (issue #432): строка повторяет
+ * набранное в поиске, а набранное там вебвизор не пишет. Закрыть одни номер и телефон мало —
+ * телефон, набранный целиком, приезжает сюда ещё и позывным.
  */
-const criteriaNote = computed(() => {
+const criteria = computed((): SearchCriterion[] => {
   const data = props.data;
 
   if (!data) {
-    return null;
+    return [];
   }
 
-  const parts: string[] = [];
+  const parts: SearchCriterion[] = [];
 
   if (data.licenseCanonical) {
-    parts.push(`номер ВУ ${data.licenseCanonical}`);
+    parts.push({ label: 'номер ВУ', value: data.licenseCanonical });
   }
 
   if (data.phoneDigits) {
-    parts.push(`телефон, оканчивающийся на ${data.phoneDigits}`);
+    parts.push({ label: 'телефон, оканчивающийся на', value: data.phoneDigits });
   }
 
   if (data.nameTerms.length > 0) {
-    parts.push(`имя: ${data.nameTerms.join(' ')}`);
+    parts.push({ label: 'имя:', value: data.nameTerms.join(' ') });
   }
 
   if (data.callsignTerm) {
-    parts.push(`позывной, содержащий ${data.callsignTerm}`);
+    parts.push({ label: 'позывной, содержащий', value: data.callsignTerm });
   }
 
-  return parts.length > 0 ? `Искали: ${parts.join(' · ')}` : null;
+  return parts;
 });
 </script>
 
@@ -71,10 +81,22 @@ const criteriaNote = computed(() => {
         state="empty"
         message="В реестре парка такого водителя нет — ни среди работающих, ни среди уволенных."
       />
-      <p v-if="criteriaNote" class="text-center text-xs text-slate-400">{{ criteriaNote }}</p>
+      <p v-if="criteria.length > 0" class="text-center text-xs text-slate-400">
+        Искали:
+        <template v-for="(part, index) in criteria" :key="part.label">
+          <template v-if="index > 0"> · </template>{{ part.label }}
+          <span class="ym-hide-content">{{ part.value }}</span>
+        </template>
+      </p>
     </div>
     <div v-else class="space-y-0">
-      <p v-if="criteriaNote" class="pb-3 text-xs text-slate-400">{{ criteriaNote }}</p>
+      <p v-if="criteria.length > 0" class="pb-3 text-xs text-slate-400">
+        Искали:
+        <template v-for="(part, index) in criteria" :key="part.label">
+          <template v-if="index > 0"> · </template>{{ part.label }}
+          <span class="ym-hide-content">{{ part.value }}</span>
+        </template>
+      </p>
       <MoleculesDriverSearchItem
         v-for="driver in data.rows"
         :key="driver.personId"

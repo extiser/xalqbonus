@@ -13,18 +13,21 @@ import { onMounted, ref, watch } from 'vue';
  *
  * Открытием управляет вызывающий свойством `open`: диалог сам себя не закрывает, а сообщает
  * ответ событием — решение, что делать дальше, не его.
+ *
+ * Слот `message` — вместо текста, когда в нём есть часть, закрытая в записях вебвизора
+ * (issue #432): класс ставится на сам номер, а не на весь абзац.
  */
 const props = withDefaults(
   defineProps<{
     open: boolean;
     title: string;
-    message: string;
+    message?: string;
     confirmLabel: string;
     cancelLabel: string;
     /** `danger` — подтверждение что-то теряет или необратимо. */
     tone?: 'primary' | 'danger';
   }>(),
-  { tone: 'danger' },
+  { tone: 'danger', message: '' },
 );
 
 const emit = defineEmits<{ confirm: []; cancel: [] }>();
@@ -73,7 +76,9 @@ const onBackdropClick = (event: MouseEvent): void => {
       <h2 class="text-base font-semibold text-slate-900">{{ title }}</h2>
       <!-- Переводы строк в тексте сохраняются: подтверждение запуска акции держит отдельной
            строкой то, что состав больше не пересчитывается (issue #166). -->
-      <p class="text-sm whitespace-pre-line text-slate-600">{{ message }}</p>
+      <p class="text-sm whitespace-pre-line text-slate-600">
+        <slot name="message">{{ message }}</slot>
+      </p>
       <div class="flex flex-wrap justify-end gap-2">
         <!-- Первой в разметке — безопасная: `showModal` ставит фокус на первое, что его принимает. -->
         <AtomsActionButton :label="cancelLabel" @click="emit('cancel')" />

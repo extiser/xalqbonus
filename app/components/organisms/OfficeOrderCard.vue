@@ -83,7 +83,7 @@ watch(
       <MoleculesFactRow label="Канал" :value="orderChannelLabel(order.channel)" />
       <MoleculesFactRow label="Водитель" :value="order.driverName" />
       <MoleculesFactRow label="Позывной" :value="order.callsign" mono />
-      <MoleculesFactRow label="Телефон" :value="order.phone" mono />
+      <MoleculesFactRow label="Телефон" :value="order.phone" mono sensitive="value" />
       <MoleculesFactRow v-if="order.code" label="Код" :value="order.code" mono />
       <MoleculesFactRow label="Оформлен" :value="formatDate(order.createdAt)" />
       <MoleculesFactRow

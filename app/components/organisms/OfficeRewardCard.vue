@@ -35,7 +35,7 @@ watch(
       <MoleculesFactRow label="Почему" :value="reward.reasonText" />
       <MoleculesFactRow label="Водитель" :value="reward.driverName" />
       <MoleculesFactRow label="Позывной" :value="reward.callsign" mono />
-      <MoleculesFactRow label="Телефон" :value="reward.phone" mono />
+      <MoleculesFactRow label="Телефон" :value="reward.phone" mono sensitive="value" />
       <MoleculesFactRow v-if="reward.code" label="Код" :value="reward.code" mono />
       <MoleculesFactRow label="Вручена" :value="formatDate(reward.createdAt)" />
       <MoleculesFactRow

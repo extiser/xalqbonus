@@ -73,6 +73,7 @@ const fullName = computed(() =>
             : undefined
         "
         mono
+        sensitive="value"
       />
       <MoleculesFactRow
         label="Синхронизирован"
