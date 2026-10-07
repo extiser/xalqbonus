@@ -1,13 +1,19 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { computed, onMounted, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import { toLoadState } from '~/utils/loadState';
 
 /**
  * Экран поиска водителя.
  *
- * Запрос живёт в адресе, а не только в поле ввода: найденного водителя показывают
- * коллеге ссылкой, а не пересказом того, что было набрано.
+ * Запрос живёт в состоянии записи истории (`history.state`), а не в адресе: адрес остаётся
+ * `/drivers`. Набирают сюда телефон и номер ВУ, а адрес страницы Яндекс Метрика читает сама,
+ * в обход наших просмотров, — запрос в адресе уезжал бы ей при каждой загрузке (issue #432).
+ * Состояние записи переживает и «назад» из карточки водителя, и перезагрузку вкладки:
+ * браузер хранит его вместе с записью, а роутер при старте дописывает своё поверх, не стирая.
+ *
+ * Отрисованная сервером страница запроса не знает — состояние есть только у браузера, — поэтому
+ * результаты поднимаются после монтирования.
  */
 
 useHead({ title: 'Водители — Xalq Taxi Bonus' });
@@ -15,13 +21,15 @@ useHead({ title: 'Водители — Xalq Taxi Bonus' });
 /** Сколько строк результата на странице. */
 const RESULTS_LIMIT = 25;
 
-const route = useRoute();
+/** Ключ запроса в `history.state`. Остальные ключи там — роутера. */
+const QUERY_STATE_KEY = 'driverQuery';
+
 const router = useRouter();
 
-/** Что искали по адресу строки. Поле ввода при этом живёт своей жизнью до отправки. */
-const submittedQuery = computed(() => (typeof route.query.q === 'string' ? route.query.q : ''));
+/** Что искали в этой записи истории. Поле ввода при этом живёт своей жизнью до отправки. */
+const submittedQuery = ref('');
 
-const draftQuery = ref(submittedQuery.value);
+const draftQuery = ref('');
 const offset = ref(0);
 
 const { data, status } = await useFetch('/api/drivers', {
@@ -36,8 +44,38 @@ watch(submittedQuery, () => {
   offset.value = 0;
 });
 
+/** Запрос из состояния текущей записи истории. Нет его — пустая строка. */
+const readStateQuery = (): string => {
+  const historyState: unknown = window.history.state;
+
+  if (typeof historyState !== 'object' || historyState === null || !(QUERY_STATE_KEY in historyState)) {
+    return '';
+  }
+
+  const value: unknown = historyState[QUERY_STATE_KEY];
+
+  return typeof value === 'string' ? value : '';
+};
+
+const restoreQuery = (): void => {
+  submittedQuery.value = readStateQuery();
+  draftQuery.value = submittedQuery.value;
+};
+
+onMounted(restoreQuery);
+
+// Новый поиск и «назад»/«вперёд» между двумя поисками — та же страница с тем же адресом:
+// она не пересоздаётся, а роутер меняет только маршрут. Запрос перечитывается из записи,
+// на которую пришли. Уход на другую страницу не в счёт — у её записи запроса нет.
+watch(router.currentRoute, (current) => {
+  if (current.path === '/drivers') {
+    restoreQuery();
+  }
+});
+
+// `force`: адрес тот же, и без него роутер счёл бы переход повтором и записи не завёл.
 const submit = (): void => {
-  router.push({ query: draftQuery.value ? { q: draftQuery.value } : {} });
+  void router.push({ path: '/drivers', state: { [QUERY_STATE_KEY]: draftQuery.value }, force: true });
 };
 </script>
 
