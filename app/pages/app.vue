@@ -2507,9 +2507,13 @@ onMounted(async () => {
 
   webApp = await loadTelegramWebApp();
   initData = resolveInitData(webApp);
-  // Подписанная строка прочитана и стёрта из адреса — счётчик заводится только теперь:
-  // раньше он прочитал бы адрес вместе с пропуском водителя в хеше.
-  metrika.init();
+  // Счётчик заводится только на адресе без хеша. Хеш стирается, лишь когда SDK отдал подписанную
+  // строку; не загрузился скрипт Telegram — `#tgWebAppData=…` с пропуском водителя остаётся
+  // в адресе, а читает ли `tag.js` хеш, не проверено. Хеш не пуст — счётчика в этой загрузке
+  // нет, и просмотры с `userParams` молча ничего не делают.
+  if (window.location.hash === '') {
+    metrika.init();
+  }
   launchSurveyId = new URLSearchParams(window.location.search).get('survey') || null;
 
   // Ни строки от Telegram, ни своей копии — значит страницу открыли не из мессенджера.
