@@ -16,7 +16,9 @@ import {
   cleanupTestMetrics,
   countMetricPersonDays,
   insertTestHistoryOrder,
+  insertTestTransaction,
   readTestPersonDays,
+  readTestPersonPrior,
   upsertTestHistoryDay,
 } from '../support/metrics';
 
@@ -29,6 +31,9 @@ import {
  * сервисы, которыми их зовут очередь и ручка.
  *
  * Собранный месяц — ноябрь 2025: внутри окна метрик и далеко от поездок остальных тестов.
+ *
+ * Поездки до истории заказов (issue #429) — комиссии `partner_ride_fee` раньше 2025-10-01
+ * по Ташкенту, тем же прогоном.
  */
 
 /** «Сейчас» пересчёта: окно метрик — по 2026-10-04 включительно. */
@@ -58,6 +63,7 @@ let twoProfiles: TestPerson;
 let secondProfileId: string;
 let single: TestPerson;
 let demo: TestPerson;
+let early: TestPerson;
 
 const personIds = (): string[] => [twoProfiles.personId, single.personId, demo.personId];
 
@@ -163,6 +169,24 @@ describe('пересчёт таблицы метрик', () => {
       endedAt: new Date('2025-11-20T09:00:00Z'),
     });
 
+    // Поездки до истории заказов. 20:00Z 31 августа — 01:00 первого сентября по Ташкенту;
+    // выплата наличных — не комиссия и последние сутки не сдвигает.
+    early = await createTestPerson({ inProgram: false });
+    await insertTestTransaction(early.profileId, 'partner_ride_fee', new Date('2025-06-10T08:00:00Z'));
+    await insertTestTransaction(early.profileId, 'partner_ride_fee', new Date('2025-08-31T20:00:00Z'));
+    await insertTestTransaction(early.profileId, 'cash_collected', new Date('2025-09-20T08:00:00Z'));
+
+    // Вторым профилем, 18:30Z 30 сентября — 23:30 по Ташкенту, ещё до истории.
+    await insertTestTransaction(secondProfileId, 'partner_ride_fee', new Date('2025-09-30T18:30:00Z'));
+
+    // 19:30Z 30 сентября — 00:30 первого октября по Ташкенту: уже история, строки не даёт.
+    await insertTestTransaction(single.profileId, 'partner_ride_fee', new Date('2025-09-30T19:30:00Z'));
+
+    // Демо и профиль вне реестра не дают строки.
+    await insertTestTransaction(demo.profileId, 'partner_ride_fee', new Date('2025-05-01T08:00:00Z'));
+    await insertTestTransaction(UNKNOWN_PROFILE_ID, 'partner_ride_fee', new Date('2025-05-01T08:00:00Z'));
+    await insertTestTransaction(null, 'partner_ride_fee', new Date('2025-05-01T08:00:00Z'));
+
     for (const day of HISTORY_DAYS) {
       await upsertTestHistoryDay(day, day !== '2025-11-30');
     }
@@ -188,6 +212,21 @@ describe('пересчёт таблицы метрик', () => {
       { day: '2025-11-15', personId: twoProfiles.personId, trips: 3 },
       { day: '2026-10-01', personId: single.personId, trips: 1 },
     ]);
+  });
+
+  it('поездки до истории — последние сутки комиссии по Ташкенту, по человеку, без демо', async () => {
+    await recomputePersonDays(NOW);
+
+    const expected = [
+      { personId: early.personId, lastDay: '2025-09-01' },
+      { personId: twoProfiles.personId, lastDay: '2025-09-30' },
+    ].sort((left, right) => (left.personId < right.personId ? -1 : 1));
+
+    expect(await readTestPersonPrior([...personIds(), early.personId])).toEqual(expected);
+
+    // Повторный пересчёт таблицу не удваивает.
+    await recomputePersonDays(NOW);
+    expect(await readTestPersonPrior([...personIds(), early.personId])).toEqual(expected);
   });
 
   it('заказ истории без профиля в реестре — в unattributed_orders, а не в таблице', async () => {

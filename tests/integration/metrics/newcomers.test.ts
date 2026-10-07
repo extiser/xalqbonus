@@ -17,6 +17,7 @@ import {
   cleanupTestMetrics,
   closeTestHistoryDays,
   insertTestPersonDays,
+  insertTestPersonPrior,
   linkTestPersonAt,
   setTestProfileCard,
   upsertTestHistoryDay,
@@ -43,13 +44,26 @@ import {
  * - `febFew` — новичок февраля, 2 поездки 01.02 и больше ничего: меньше 20, первый в списке
  * - `febRunning` — новичок февраля с 20.02: окно кончается 05.03, на 28.02 ещё идёт
  * - `marchNew` — новичок марта с 01.03: в идущем марте первые итоги 14.03
+ * - `priorJan` и `priorFeb` — первые сутки в таблице в январе и феврале, но ездили до истории
+ *   заказов (issue #429): новичками не бывают нигде; без этого priorJan ездил бы и в феврале,
+ *   а priorFeb с двумя поездками попал бы в список
  */
 
 const HISTORY_FROM = '2025-09-30';
 const HISTORY_TO = '2026-09-20';
 const CLOSED_FEBRUARY_NOW = new Date('2027-03-05T12:00:00Z');
 
-type PersonName = 'veteran' | 'janRider' | 'janQuit' | 'febReached' | 'febBelow' | 'febFew' | 'febRunning' | 'marchNew';
+type PersonName =
+  | 'veteran'
+  | 'janRider'
+  | 'janQuit'
+  | 'febReached'
+  | 'febBelow'
+  | 'febFew'
+  | 'febRunning'
+  | 'marchNew'
+  | 'priorJan'
+  | 'priorFeb';
 
 const PERSON_NAMES: readonly PersonName[] = [
   'veteran',
@@ -60,6 +74,8 @@ const PERSON_NAMES: readonly PersonName[] = [
   'febFew',
   'febRunning',
   'marchNew',
+  'priorJan',
+  'priorFeb',
 ];
 
 describe('новички на «Глубине»', () => {
@@ -94,8 +110,15 @@ describe('новички на «Глубине»', () => {
     add('febFew', '2027-02-01', 2);
     add('febRunning', '2027-02-20', 7);
     add('marchNew', '2027-03-01', 4);
+    add('priorJan', '2027-01-10', 4);
+    add('priorJan', '2027-02-10', 4);
+    add('priorFeb', '2027-02-04', 2);
 
     await insertTestPersonDays(rows);
+    await insertTestPersonPrior([
+      { personId: people.priorJan.personId, lastDay: '2025-08-20' },
+      { personId: people.priorFeb.personId, lastDay: '2024-05-03' },
+    ]);
 
     // Карточка строки — профиль с последней поездкой не позже D; программа — открытая привязка.
     await setTestProfileCard(people.febBelow.profileId, {
@@ -124,8 +147,8 @@ describe('новички на «Глубине»', () => {
   });
 
   it('закрытый месяц: опорный день — его конец, кривая — по нему же', () => {
+    expect(closed.dashboard.thresholds).toEqual({ firstDays: 14, tripsTarget: 20 });
     expect(closed.dashboard).toMatchObject({
-      thresholds: { firstDays: 14, tripsTarget: 20, exactFromMonth: '2026-07' },
       ongoing: false,
       asOfDay: '2027-02-28',
       curveMonth: '2027-02',
@@ -181,6 +204,17 @@ describe('новички на «Глубине»', () => {
       middleName: 'Ботирович',
       phones: '+998901234567',
     });
+  });
+
+  it('ездил до истории заказов — ни в наборе, ни в окнах, ни в списке', () => {
+    const list = closed.dashboard.list;
+    const listed = list?.counted ? list.rows.map((row) => row.personId) : [];
+
+    expect(listed).not.toContain(people.priorFeb.personId);
+    expect(listed).not.toContain(people.priorJan.personId);
+    // Набор января — janRider и janQuit; февраля — четверо без priorFeb.
+    expect(closed.dashboard.retention).toMatchObject({ counted: true, newcomers: 2, riding: 1 });
+    expect(closed.dashboard.firstDays).toMatchObject({ counted: true, newcomers: 4, previous: { passed: 2, reached: 1 } });
   });
 
   it('идущий месяц: кривая — по последнему закрытому, окна марта ещё не прошли', async () => {

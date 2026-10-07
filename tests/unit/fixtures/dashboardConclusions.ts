@@ -328,13 +328,12 @@ export const PROGRAM_ECONOMY_CASES: readonly ConclusionCase<ProgramEconomyConclu
   },
 ];
 
-/** Закрытый полный месяц с апреля 2026, 1 000 водителей на линии в прошлом: 1 водитель — 0,1 %. */
+/** Закрытый полный месяц, 1 000 водителей на линии в прошлом: 1 водитель — 0,1 %. */
 const FLOW: DriverFlowConclusionInput = {
   newDrivers: 50,
   returned: 20,
   left: 30,
   previousOnLine: 1_000,
-  earlyHistory: false,
   incomplete: false,
 };
 
@@ -347,8 +346,8 @@ export const DRIVER_FLOW_CASES: readonly ConclusionCase<DriverFlowConclusionInpu
       'На линии на 18 водителей больше: пришло 65, ушло 47. Новых меньше, чем ушедших: убыль закрыли вернувшиеся — 27.',
   },
   {
-    rule: 'пример декабря 2025: 70 / 25 / 106 при D₀ = 806, ранняя история',
-    input: { newDrivers: 70, returned: 25, left: 106, previousOnLine: 806, earlyHistory: true, incomplete: false },
+    rule: 'пример декабря 2025: 70 / 25 / 106 при D₀ = 806',
+    input: { newDrivers: 70, returned: 25, left: 106, previousOnLine: 806, incomplete: false },
     expected: 'Водителей на линии почти столько же: пришло 95, ушло 106.',
   },
 
@@ -385,11 +384,6 @@ export const DRIVER_FLOW_CASES: readonly ConclusionCase<DriverFlowConclusionInpu
     rule: 'N + R < L — второго предложения нет',
     input: { ...FLOW, newDrivers: 20, returned: 10, left: 70 },
     expected: 'На линии на 40 водителей меньше: ушло 70, пришло 30.',
-  },
-  {
-    rule: 'ранняя история — второго предложения нет',
-    input: { ...FLOW, earlyHistory: true },
-    expected: 'На линии на 40 водителей больше: пришло 70, ушло 30.',
   },
   {
     rule: '«почти столько же» со вторым предложением',

@@ -589,6 +589,7 @@ model Person {
   surveys       SurveyResponse[]
   segmentMemberships SegmentMember[]
   metricDays    MetricPersonDay[]
+  metricPrior   MetricPersonPrior?
   promoTouches  PromoTouch[]
 
   @@map("persons")
@@ -2653,6 +2654,21 @@ model MetricPersonDay {
   @@id([day, personId])
   @@index([personId, day])
   @@map("metric_person_days")
+  @@schema("xb")
+}
+
+/// Поездки человека до истории заказов (issue #429): последние сутки с комиссией парка
+/// `partner_ride_fee` раньше `METRICS_FIRST_DAY`. По ним «новый» в потоке и новичок отличаются
+/// от вернувшегося после долгого перерыва (docs/decisions.md → «Поток водителей — по календарному
+/// месяцу»). Считается тем же пересчётом и в той же транзакции, что `metric_person_days`; демо-людей нет.
+model MetricPersonPrior {
+  personId String   @id @map("person_id") @db.Uuid
+  /// Последние сутки по Ташкенту с комиссией раньше `METRICS_FIRST_DAY`.
+  lastDay  DateTime @map("last_day") @db.Date
+
+  person Person @relation(fields: [personId], references: [id])
+
+  @@map("metric_person_prior")
   @@schema("xb")
 }
 

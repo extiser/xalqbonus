@@ -1,6 +1,6 @@
 import { readDriverFlowByMonth } from '#server/repositories/metrics';
 import { driverFlowConclusion } from '#server/services/metrics/conclusions';
-import { FLOW_NEW_EXACT_FROM, METRICS_FIRST_DAY } from '#server/services/metrics/constants';
+import { METRICS_FIRST_DAY } from '#server/services/metrics/constants';
 import { wholeMonthPeriod } from '#server/services/metrics/monthPeriod';
 import { withCoverage } from '#server/services/metrics/periodCoverage';
 import { formatDayKey } from '#server/utils/parkTime';
@@ -27,8 +27,6 @@ const FIRST_MONTH = METRICS_FIRST_DAY.slice(0, 7);
 
 /** Первый месяц потока — у первого месяца метрик прошлого нет. */
 const FIRST_FLOW_MONTH = shiftMonth(FIRST_MONTH, 1);
-
-const EXACT_FROM_MONTH = FLOW_NEW_EXACT_FROM.slice(0, 7);
 
 /** Месяцы `from`–`to` включительно, от старых к новым. */
 const monthsBetween = (from: string, to: string): string[] => {
@@ -81,7 +79,6 @@ export const readDriverFlow = async (month: string, now: Date = new Date()): Pro
     return {
       ...row,
       onLineChange: row.newDrivers + row.returned - row.left,
-      earlyHistory: row.month < EXACT_FROM_MONTH,
       incomplete: periods.some((period) => period.coveredDays < period.days),
       coverage: periods,
     };
@@ -96,7 +93,6 @@ export const readDriverFlow = async (month: string, now: Date = new Date()): Pro
           returned: panel.returned,
           left: panel.left,
           previousOnLine: panel.onLine - panel.onLineChange,
-          earlyHistory: panel.earlyHistory,
           incomplete: panel.incomplete,
         });
 

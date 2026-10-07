@@ -69,9 +69,10 @@ export const startMetricRecomputeRun = async (daysFrom: string, daysTo: string):
 };
 
 /**
- * Считает `metric_person_days` целиком заново за сутки `daysFrom`–`daysTo` включительно
- * и закрывает прогон итогами — одной транзакцией. Целиком, а не добавкой: история догружается
- * задним числом, и добавка пропустила бы дозакрытые сутки.
+ * Считает `metric_person_days` целиком заново за сутки `daysFrom`–`daysTo` включительно,
+ * следом `metric_person_prior` — поездки до `daysFrom` по комиссиям парка — и закрывает прогон
+ * итогами — одной транзакцией. Целиком, а не добавкой: история догружается задним числом,
+ * и добавка пропустила бы дозакрытые сутки.
  *
  * `DELETE`, а не `TRUNCATE`: тот взял бы на таблицу исключительную блокировку, и экран,
  * открытый посреди пересчёта, ждал бы его конца. Под `DELETE` он видит прежнюю таблицу.
@@ -102,6 +103,23 @@ export const replaceMetricPersonDays = async (
           JOIN xb.persons AS person ON person."id" = profile."person_id"
          WHERE NOT person."is_demo"
          GROUP BY 1, 2
+      `;
+
+      // Поездки до истории заказов — по комиссии парка: она идёт строкой на заказ и глубже
+      // истории (docs/decisions.md → «Поток водителей — по календарному месяцу»). Комиссия без
+      // профиля или с профилем вне реестра человека не даёт и пропускается.
+      await transaction.$executeRaw`DELETE FROM xb.metric_person_prior`;
+      await transaction.$executeRaw`
+        INSERT INTO xb.metric_person_prior ("person_id", "last_day")
+        SELECT profile."person_id",
+               max(${parkDaySql(Prisma.sql`fee."event_at"`)})
+          FROM xb.fleet_transactions AS fee
+          JOIN xb.park_profiles AS profile ON profile."profile_id" = fee."driver_profile_id"
+          JOIN xb.persons AS person ON person."id" = profile."person_id"
+         WHERE fee."category_id" = 'partner_ride_fee'
+           AND fee."event_at" < ${windowStart}
+           AND NOT person."is_demo"
+         GROUP BY profile."person_id"
       `;
 
       // Заказ `trips` без профиля не бывает — внешний ключ; без человека остаётся только история.
@@ -177,9 +195,9 @@ export type DriverFlowMonthRow = {
   month: string;
   /** Разных людей со строками в месяце. */
   onLine: number;
-  /** На линии, и это первый месяц человека в таблице. */
+  /** На линии, это первый месяц человека в таблице, и поездок до истории заказов у него нет. */
   newDrivers: number;
-  /** На линии, в прошлом месяце строк нет, раньше есть. */
+  /** На линии, в прошлом месяце строк нет, раньше есть — или есть поездки до истории заказов. */
   returned: number;
   /** На линии в прошлом месяце, в этом строк нет. */
   left: number;
@@ -194,6 +212,10 @@ export type DriverFlowMonthRow = {
  * нет прошлого — новый, прошлый раньше M−1 — вернулся, следующего после M−1 нет или он
  * позже M — ушёл в M.
  *
+ * Поездки до истории заказов (`metric_person_prior`) дают человеку месяц своих последних суток
+ * как прошлый: он участвует в `lag`, и возврат становится «вернулся», а не «новый». Месяцем
+ * потока он не бывает — ни «на линии», ни «ушли»: месяцы потока — только по истории заказов.
+ *
  * Первое число месяца — вычитанием дня месяца, а месяцы ряда — от `timestamp` без зоны:
  * у даты `date_trunc` и `generate_series` приводят её к моменту в зоне сеанса.
  */
@@ -201,12 +223,19 @@ export const readDriverFlowByMonth = async (fromMonth: string, toMonth: string):
   db.$queryRaw<DriverFlowMonthRow[]>`
     WITH person_months AS (
            SELECT DISTINCT person_day."person_id",
-                  person_day."day" - (extract(day FROM person_day."day")::int - 1) AS "month"
+                  person_day."day" - (extract(day FROM person_day."day")::int - 1) AS "month",
+                  false AS "prior"
              FROM xb.metric_person_days AS person_day
             WHERE person_day."day" < (${`${toMonth}-01`}::timestamp + interval '1 month')::date
+           UNION ALL
+           SELECT prior_trips."person_id",
+                  prior_trips."last_day" - (extract(day FROM prior_trips."last_day")::int - 1) AS "month",
+                  true AS "prior"
+             FROM xb.metric_person_prior AS prior_trips
          ),
          neighbours AS (
            SELECT person_month."month",
+                  person_month."prior",
                   lag(person_month."month") OVER person_history  AS "previous",
                   lead(person_month."month") OVER person_history AS "next"
              FROM person_months AS person_month
@@ -236,6 +265,7 @@ export const readDriverFlowByMonth = async (fromMonth: string, toMonth: string):
       FROM months
       LEFT JOIN neighbours AS neighbour
              ON neighbour."month" IN (months."month", months."previous_month")
+            AND NOT neighbour."prior"
      GROUP BY months."month"
      ORDER BY months."month"
   `;
@@ -686,9 +716,10 @@ export const listLeaderPeople = async (
  * чьё окно прошло и как сложить кривую, решает сервис (`server/services/metrics/readNewcomers.ts`),
  * здесь только выборки.
  *
- * Новичок месяца X — человек, чьи самые ранние сутки в таблице приходятся на X (docs/decisions.md →
- * «Новички на дашборде»). Самые ранние — по всей таблице до конца нужного периода: первая поездка
- * смотрит всю историю, а не только месяц. Первое число месяца — вычитанием дня месяца, как
+ * Новичок месяца X — человек, чьи самые ранние сутки в таблице приходятся на X и у кого нет поездок
+ * до истории заказов в `metric_person_prior` (docs/decisions.md → «Новички на дашборде»). Самые
+ * ранние — по всей таблице до конца нужного периода: первая поездка смотрит всю историю, а не
+ * только месяц. Первое число месяца — вычитанием дня месяца, как
  * у `readDriverFlowByMonth`: `date_trunc` у даты приводит её к моменту в зоне сеанса.
  */
 
@@ -716,6 +747,10 @@ export const listNewcomerCohortMonths = async (
                   min(person_day."day") - (extract(day FROM min(person_day."day"))::int - 1) AS "cohort_month"
              FROM xb.metric_person_days AS person_day
             WHERE person_day."day" <= ${toDay}::date
+              AND NOT EXISTS (
+                    SELECT 1 FROM xb.metric_person_prior AS prior_trips
+                     WHERE prior_trips."person_id" = person_day."person_id"
+                  )
             GROUP BY person_day."person_id"
          ),
          cohort AS (
@@ -763,6 +798,10 @@ export const listNewcomerWindows = async (
            SELECT person_day."person_id", min(person_day."day") AS "first_day"
              FROM xb.metric_person_days AS person_day
             WHERE person_day."day" <= ${asOfDay}::date
+              AND NOT EXISTS (
+                    SELECT 1 FROM xb.metric_person_prior AS prior_trips
+                     WHERE prior_trips."person_id" = person_day."person_id"
+                  )
             GROUP BY person_day."person_id"
            HAVING min(person_day."day") >= ${`${month}-01`}::date
               AND min(person_day."day") < (${`${month}-01`}::timestamp + interval '1 month')::date
