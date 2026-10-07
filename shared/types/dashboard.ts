@@ -159,8 +159,6 @@ export type DashboardFlowMonth = {
   returned: number;
   left: number;
   onLineChange: number;
-  /** Месяц раньше FLOW_NEW_EXACT_FROM: часть вернувшихся посчитана как новые. */
-  earlyHistory: boolean;
   /** Собраны не все сутки у месяца или у прошлого. */
   incomplete: boolean;
   /** Периоды M−1 и M с покрытием — те, по которым считается incomplete; из них экран собирает строку покрытия. */
@@ -248,8 +246,6 @@ export type DashboardNewcomersThresholds = {
   firstDays: number;
   /** Порог поездок за окно. */
   tripsTarget: number;
-  /** С этого месяца `YYYY-MM` наборы точные: раньше в них могут быть вернувшиеся (`FLOW_NEW_EXACT_FROM`). */
-  exactFromMonth: string;
 };
 
 /** Точка кривой «+k»: сумма ездивших в «набор + k» и сумма размеров этих наборов. */

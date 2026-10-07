@@ -12,9 +12,9 @@ import type { DashboardLevers } from '#shared/types/dashboard';
  * множителей.
  *
  * Месяц панели — выбранный, если он закрыт, иначе последний закрытый (`flow.panel`). Под
- * названием — серой строкой, почему цифры такие: идущий месяц посчитается позже; ранняя история
- * считает часть вернувшихся новыми; у первого месяца истории потока нет вовсе — тогда у трёх
- * строк прочерк, а «На линии» — его водители без знака (`02-levers-first-month.html`).
+ * названием — серой строкой, почему цифры такие: идущий месяц посчитается позже; у первого месяца
+ * истории потока нет вовсе — тогда у трёх строк прочерк, а «На линии» — его водители без знака
+ * (`02-levers-first-month.html`).
  *
  * Под строками — вывод словами о месяце панели, его собирает сервер (issue #398,
  * `server/services/metrics/conclusions.ts`). Собраны не все сутки у месяца или у прошлого —
@@ -63,10 +63,6 @@ const note = computed(() => {
 
   if (flow.selectedOngoing) {
     return `${capitalized(month)} идёт — поток посчитается после ${lastDay(month)} ${monthForms(month).genitive}`;
-  }
-
-  if (flow.panel?.earlyHistory) {
-    return `История с ${monthForms(range.firstMonth).genitive} ${range.firstMonth.slice(0, 4)}: часть вернувшихся посчитана как новые`;
   }
 
   if (month === range.firstMonth) {

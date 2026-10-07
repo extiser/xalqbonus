@@ -103,6 +103,47 @@ export const insertTestPersonDays = async (rows: readonly TestPersonDay[]): Prom
   });
 };
 
+export type TestPersonPrior = { personId: string; lastDay: string };
+
+/**
+ * Поездки до истории заказов напрямую, мимо пересчёта, — фикстура потока и новичков (issue #429):
+ * они читают только таблицу, как и `metric_person_days`.
+ */
+export const insertTestPersonPrior = async (rows: readonly TestPersonPrior[]): Promise<void> => {
+  await db.metricPersonPrior.createMany({
+    data: rows.map((row) => ({ personId: row.personId, lastDay: new Date(`${row.lastDay}T00:00:00Z`) })),
+  });
+};
+
+/** Строки поездок до истории заказов этих людей, по порядку человека. */
+export const readTestPersonPrior = async (personIds: readonly string[]): Promise<TestPersonPrior[]> =>
+  db.$queryRaw<TestPersonPrior[]>`
+    SELECT "person_id" AS "personId", to_char("last_day", 'YYYY-MM-DD') AS "lastDay"
+      FROM xb.metric_person_prior
+     WHERE "person_id" = ANY(${[...personIds]}::uuid[])
+     ORDER BY "person_id"
+  `;
+
+/** Транзакции парка тестов пересчёта: убираются `cleanupTestMetrics` по идентификатору. */
+const createdTransactionIds = new Set<string>();
+
+let nextTransactionNumber = 0;
+
+/** Транзакция парка категории `categoryId` у профиля в момент `eventAt`. */
+export const insertTestTransaction = async (
+  profileId: string | null,
+  categoryId: string,
+  eventAt: Date,
+): Promise<void> => {
+  nextTransactionNumber += 1;
+  const id = `test-metrics-transaction-${process.pid}-${nextTransactionNumber}`;
+
+  await db.fleetTransaction.create({
+    data: { id, eventAt, categoryId, amount: -1374, currencyCode: 'UZS', driverProfileId: profileId },
+  });
+  createdTransactionIds.add(id);
+};
+
 export const countMetricPersonDays = async (): Promise<number> => {
   const rows = await db.$queryRaw<{ total: number }[]>`
     SELECT count(*)::int AS "total" FROM xb.metric_person_days
@@ -115,8 +156,13 @@ export const cleanupTestMetrics = async (
   historyOrderIds: readonly string[],
   historyDays: readonly string[],
 ): Promise<void> => {
+  const transactionIds = [...createdTransactionIds];
+  createdTransactionIds.clear();
+
   await db.$executeRaw`DELETE FROM xb.metric_person_days`;
+  await db.$executeRaw`DELETE FROM xb.metric_person_prior`;
   await db.$executeRaw`DELETE FROM xb.metric_recompute_runs`;
+  await db.$executeRaw`DELETE FROM xb.fleet_transactions WHERE "id" = ANY(${transactionIds}::text[])`;
   await db.$executeRaw`
     DELETE FROM xb.fleet_order_history WHERE "order_id" = ANY(${[...historyOrderIds]}::text[])
   `;

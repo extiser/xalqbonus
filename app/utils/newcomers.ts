@@ -10,12 +10,11 @@ import type { DashboardNewcomers, DashboardNewcomersThresholds } from '#shared/t
  * не строится, — в `shared/newcomers.ts`: их же отдаёт отказ выгрузки.
  */
 
-/** Подстановки окна, порога и границы точных наборов в подсказки (`shared/metrics.ts`). */
+/** Подстановки окна и порога в подсказки (`shared/metrics.ts`). */
 export const newcomersMetricValues = (thresholds: DashboardNewcomersThresholds): MetricValues => ({
   newcomerDays: String(thresholds.firstDays),
   newcomerDaysAfter: String(thresholds.firstDays - 1),
   newcomerTrips: String(thresholds.tripsTarget),
-  newcomersExactFrom: monthYear(thresholds.exactFromMonth, 'genitive'),
 });
 
 /** Доля целым процентом; делить не на что — `null`. */

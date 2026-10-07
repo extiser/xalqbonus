@@ -6,7 +6,6 @@ import {
   type NewcomerWindowRow,
 } from '#server/repositories/metrics';
 import {
-  FLOW_NEW_EXACT_FROM,
   METRICS_FIRST_DAY,
   NEWCOMER_CURVE_POINTS,
   NEWCOMER_CURVE_WINDOW_MONTHS,
@@ -32,8 +31,9 @@ import type {
  * Новички на «Глубине» (issue #407) — при открытии экрана из готовой таблицы `metric_person_days`
  * (docs/decisions.md → «Новички на дашборде»).
  *
- * Новичок месяца X — человек, чьи самые ранние сутки в таблице приходятся на X. Наборы — с месяца
- * после первого месяца истории: в октябре 2025 история начинается, и «впервые» там все.
+ * Новичок месяца X — человек, чьи самые ранние сутки в таблице приходятся на X и кто не ездил до
+ * истории заказов — по комиссиям парка (`metric_person_prior`). Наборы — с месяца после первого
+ * месяца истории: в октябре 2025 история начинается, и «впервые» там все.
  *
  * Выбран месяц M, опорный день D — как у «Глубины»: у закрытого M его последний день, у идущего —
  * вчера. Месяц кривой R — у закрытого M он сам, у идущего M − 1: идущий месяц показывает последний
@@ -60,7 +60,6 @@ const FIRST_COHORT_MONTH = shiftMonth(FIRST_MONTH, 1);
 export const NEWCOMERS_THRESHOLDS: DashboardNewcomersThresholds = {
   firstDays: NEWCOMER_FIRST_DAYS,
   tripsTarget: NEWCOMER_TRIPS_TARGET,
-  exactFromMonth: FLOW_NEW_EXACT_FROM.slice(0, 7),
 };
 
 export type NewcomersReport = {

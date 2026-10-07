@@ -3,7 +3,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { readDriverFlowByMonth, type DriverFlowMonthRow } from '#server/repositories/metrics';
 import { readDriverFlow } from '#server/services/metrics/readDriverFlow';
 import { cleanupTestData, createTestPerson, disconnectDatabase } from '../support/database';
-import { cleanupTestMetrics, insertTestPersonDays, type TestPersonDay } from '../support/metrics';
+import {
+  cleanupTestMetrics,
+  insertTestPersonDays,
+  insertTestPersonPrior,
+  type TestPersonDay,
+  type TestPersonPrior,
+} from '../support/metrics';
 
 /**
  * Поток водителей по месяцам против настоящей базы (issue #392).
@@ -19,6 +25,7 @@ import { cleanupTestMetrics, insertTestPersonDays, type TestPersonDay } from '..
  * - `longGap` — ноябрь 2025, март и апрель 2026: пропустил три месяца
  * - `early` — октябрь 2025 и июнь 2026: ездил до начала любого диапазона
  * - `ongoing` — только октябрь 2026, идущий месяц
+ * - `prior` — только май 2026, а до истории заказов — комиссия 15.09.2025 (issue #429)
  */
 
 /** «Сейчас»: идёт октябрь 2026. */
@@ -33,7 +40,13 @@ const MONTHS_BY_PERSON = {
   longGap: ['2025-11', '2026-03', '2026-04'],
   early: ['2025-10', '2026-06'],
   ongoing: ['2026-10'],
+  prior: ['2026-05'],
 } as const;
+
+/** Последние сутки поездок до истории заказов — у тех, у кого они есть. */
+const PRIOR_DAY_BY_PERSON: Partial<Record<keyof typeof MONTHS_BY_PERSON, string>> = {
+  prior: '2025-09-15',
+};
 
 type PersonName = keyof typeof MONTHS_BY_PERSON;
 
@@ -56,9 +69,15 @@ describe('поток водителей по месяцам', () => {
     await cleanupTestMetrics([], []);
 
     const personDays: TestPersonDay[] = [];
+    const priorTrips: TestPersonPrior[] = [];
 
     for (const name of Object.keys(MONTHS_BY_PERSON) as PersonName[]) {
       const { personId } = await createTestPerson({ inProgram: false });
+      const priorDay = PRIOR_DAY_BY_PERSON[name];
+
+      if (priorDay !== undefined) {
+        priorTrips.push({ personId, lastDay: priorDay });
+      }
 
       for (const month of MONTHS_BY_PERSON[name]) {
         // Двое суток в месяце: человек на линии считается в месяце один раз.
@@ -68,6 +87,7 @@ describe('поток водителей по месяцам', () => {
     }
 
     await insertTestPersonDays(personDays);
+    await insertTestPersonPrior(priorTrips);
     rows = await readDriverFlowByMonth('2025-10', '2026-09');
   });
 
@@ -114,7 +134,18 @@ describe('поток водителей по месяцам', () => {
   it('«новые» смотрят всю таблицу, а не только запрошенный диапазон', async () => {
     const [june] = await readDriverFlowByMonth('2026-06', '2026-06');
 
-    expect(june).toEqual({ month: '2026-06', onLine: 2, newDrivers: 0, returned: 1, left: 1 });
+    // Ушли после мая newcomer и prior.
+    expect(june).toEqual({ month: '2026-06', onLine: 2, newDrivers: 0, returned: 1, left: 2 });
+  });
+
+  it('ездил до истории заказов — в месяце первой поездки в истории «вернулся», а не «новый»', () => {
+    // steady, newcomer, prior; longGap ушёл после апреля.
+    expect(flowOf(rows, '2026-05')).toEqual({ onLine: 3, newDrivers: 0, returned: 1, left: 1 });
+  });
+
+  it('месяц поездок до истории — не месяц потока: ни «на линии», ни «ушли»', () => {
+    // Комиссия prior — в сентябре 2025, прошлом месяце октября: в «ушли» октября её нет.
+    expect(flowOf(rows, '2025-10')).toEqual({ onLine: 2, newDrivers: 2, returned: 0, left: 0 });
   });
 
   it('идущий месяц в ответ не попадает: панель — последний закрытый', async () => {
@@ -140,13 +171,5 @@ describe('поток водителей по месяцам', () => {
     const flow = await readDriverFlow('2025-10', NOW);
 
     expect(flow).toEqual({ months: [], panel: null, selectedOngoing: false, firstMonthOnLine: 2, conclusion: null });
-  });
-
-  it('ранняя история — у июня 2026 есть, у июля нет', async () => {
-    const flow = await readDriverFlow('2026-07', NOW);
-    const earlyByMonth = Object.fromEntries(flow.months.map((month) => [month.month, month.earlyHistory]));
-
-    expect(earlyByMonth['2026-06']).toBe(true);
-    expect(earlyByMonth['2026-07']).toBe(false);
   });
 });

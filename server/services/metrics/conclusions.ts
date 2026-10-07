@@ -245,8 +245,6 @@ export type DriverFlowConclusionInput = {
   left: number;
   /** Водителей на линии в прошлом месяце — только для порога, в текст не попадает. */
   previousOnLine: number;
-  /** Месяц раньше FLOW_NEW_EXACT_FROM: точна только сумма новых и вернувшихся. */
-  earlyHistory: boolean;
   /** Собраны не все сутки у месяца или у прошлого. */
   incomplete: boolean;
 };
@@ -268,12 +266,8 @@ const flowTotalSentence = (input: DriverFlowConclusionInput): string => {
     : `На линии на ${formatNumber(Math.abs(change))} ${drivers} меньше: ушло ${formatNumber(input.left)}, пришло ${formatNumber(came)}.`;
 };
 
-/** Второе — за счёт кого. Ранней истории и при `N + R < L` его нет. */
+/** Второе — за счёт кого. При `N + R < L` его нет. */
 const flowSourceSentence = (input: DriverFlowConclusionInput): string | null => {
-  if (input.earlyHistory) {
-    return null;
-  }
-
   if (input.newDrivers >= input.left) {
     return `Одни новые перекрывают ушедших: ${formatNumber(input.newDrivers)} против ${formatNumber(input.left)}.`;
   }
