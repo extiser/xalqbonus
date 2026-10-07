@@ -1545,7 +1545,7 @@ flowchart LR
   end
   subgraph mac["Мак Руслана"]
     agent["LaunchAgent<br/>com.extiser.xalqbonus-pull-backups<br/>05:00, проспал — при пробуждении"] --> script["~/.local/bin/<br/>xalqbonus-pull-backups.sh"]
-    script --> local[("~/git/startups/xalqbonus/<br/>_backup/prod-daily/<br/>без удаления")]
+    script --> local[("~/git/startups/xalqbonus/<br/>_backup/prod-daily/<br/>14 + первая копия месяца,<br/>pre-migrate/ — 10")]
   end
   script -->|"rsync по ssh, root, ключ<br/>5 попыток через минуту"| shelf
 ```
@@ -1554,7 +1554,7 @@ flowchart LR
 |---|---|---|---|
 | Дамп базы и архив тома фото | машина, `/srv/xalqbonus-backups/` | 04:00 каждый день | 14 последних |
 | Дамп перед миграцией | машина, `/srv/xalqbonus-backups/pre-migrate/` | каждый выкат | 10 последних |
-| Всё содержимое `/srv/xalqbonus-backups/` | Мак, `~/git/startups/xalqbonus/_backup/prod-daily/` (`_backup/` в `.gitignore`) | 05:00 или при пробуждении | всё, без удаления |
+| Всё содержимое `/srv/xalqbonus-backups/` | Мак, `~/git/startups/xalqbonus/_backup/prod-daily/` (`_backup/` в `.gitignore`) | 05:00 или при пробуждении | копии базы и архивы фото — 14 последних и первая копия каждого месяца; перед миграцией — 10 последних |
 
 Часы машины идут в `Etc/GMT-5` (+05), поэтому `04:00` в таймере — четыре утра по Ташкенту. Копия на машине снимается раньше забора на Мак на час: к пяти она уже готова.
 
@@ -1604,26 +1604,72 @@ ls -la /srv/xalqbonus-backups/
 
 #### Мак: скрипт забора и LaunchAgent
 
-Забор идёт с Мака, а не отправкой с машины: машине не нужно знать ничего о Маке, а у Мака ключ на машину уже есть. `rsync` без `--delete`: полка машины ротируется, на Маке копии копятся.
+Забор идёт с Мака, а не отправкой с машины: машине не нужно знать ничего о Маке, а у Мака ключ на машину уже есть.
+
+После забора скрипт убирает старые копии на Маке сам (с 07-10-2026: копия с историей транзакций — 0,6 ГБ, без уборки Мак набирал бы, по оценке, около 20 ГБ в месяц). Хранятся копии базы и архивы фото — последние 14 и первая копия каждого месяца, копии перед миграцией — последние 10. Числа последних — те же, что у полок машины в `pg-backup.sh`, и менять их по отдельности нельзя: удали Мак копию, которая на машине ещё лежит, `rsync` наутро скачал бы её заново. Поэтому и `rsync` без `--delete`: месячные копии на машине уже удалены, а на Маке должны остаться. Файлы, чьё имя не подходит под шаблоны копий (например, `legacy-public*.dump` старого бота), уборка не трогает.
 
 `~/.local/bin/xalqbonus-pull-backups.sh`:
 
 ```bash
 #!/bin/bash
-# Забор копий базы XalqBonus с боевой машины на Мак. Запускает launchd в 05:00;
-# если Мак спал — при пробуждении. Сеть после пробуждения поднимается не сразу,
-# поэтому пять попыток с паузой в минуту. Без --delete: на Маке копии копятся.
-DEST="$HOME/git/startups/xalqbonus/_backup/prod-daily/"
-for attempt in 1 2 3 4 5; do
-  if /usr/bin/rsync -a -e "/usr/bin/ssh -o BatchMode=yes -o ConnectTimeout=20" \
-      root@89.124.107.89:/srv/xalqbonus-backups/ "$DEST"; then
-    echo "$(date '+%Y-%m-%d %H:%M:%S') ok, попытка $attempt"
-    exit 0
-  fi
-  echo "$(date '+%Y-%m-%d %H:%M:%S') не вышло, попытка $attempt"
-  sleep 60
-done
-exit 1
+# Забор копий базы XalqBonus с боевой машины на Мак и уборка старых копий на Маке.
+# Запускает launchd в 05:00; если Мак спал — при пробуждении. Сеть после пробуждения
+# поднимается не сразу, поэтому пять попыток с паузой в минуту.
+#
+# Уборка идёт после забора, удачного или нет. Хранится: копий базы и архивов фото — последние 14
+# и первая копия каждого месяца; копий перед миграцией — последние 10. Числа те же, что на машине
+# (pg-backup.sh): удали Мак копию, которая на машине ещё лежит, rsync наутро скачал бы её заново.
+#
+# DRY_RUN=1 — только напечатать, что было бы удалено.
+DEST="$HOME/git/startups/xalqbonus/_backup/prod-daily"
+KEEP_DAILY=14
+KEEP_PRE_MIGRATE=10
+
+pull() {
+  for attempt in 1 2 3 4 5; do
+    if /usr/bin/rsync -a -e "/usr/bin/ssh -o BatchMode=yes -o ConnectTimeout=20" \
+        root@89.124.107.89:/srv/xalqbonus-backups/ "$DEST/"; then
+      echo "$(date '+%Y-%m-%d %H:%M:%S') ok, попытка $attempt"
+      return 0
+    fi
+    echo "$(date '+%Y-%m-%d %H:%M:%S') не вышло, попытка $attempt"
+    sleep 60
+  done
+  return 1
+}
+
+# Уборка в каталоге $1 файлов, чьё имя подходит под $2 (grep -E): хранятся последние $3
+# и, если $4 = monthly, первая копия каждого месяца. Порядок имён = порядок времени:
+# отметка UTC стоит в имени.
+rotate() {
+  local dir="$1" pattern="$2" keep="$3" monthly="$4"
+  local names total index=0 name month kept_months=" "
+  names=$(ls -1 "$dir" | grep -E "$pattern" | sort)
+  total=$(printf '%s\n' "$names" | grep -c .)
+  for name in $names; do
+    index=$((index + 1))
+    month=$(printf '%s' "$name" | grep -oE '[0-9]{8}_[0-9]{6}' | cut -c1-6)
+    if [ "$monthly" = monthly ] && [[ "$kept_months" != *" $month "* ]]; then
+      kept_months="$kept_months$month "
+      continue
+    fi
+    if [ "$index" -gt $((total - keep)) ]; then
+      continue
+    fi
+    if [ "$DRY_RUN" = 1 ]; then
+      echo "удалил бы $name"
+    else
+      rm -f "$dir/$name" && echo "удалена $name"
+    fi
+  done
+}
+
+pull
+status=$?
+rotate "$DEST" '^xalqbonus_[0-9]{8}_[0-9]{6}\.sql\.gz$' "$KEEP_DAILY" monthly
+rotate "$DEST" '^uploads_[0-9]{8}_[0-9]{6}\.tar\.gz$' "$KEEP_DAILY" monthly
+rotate "$DEST/pre-migrate" '^xalqbonus_pre-migrate_[0-9]{8}_[0-9]{6}\.sql\.gz$' "$KEEP_PRE_MIGRATE" no
+exit $status
 ```
 
 `~/Library/LaunchAgents/com.extiser.xalqbonus-pull-backups.plist`:
@@ -1662,7 +1708,8 @@ exit 1
 Проверка:
 
 ```bash
-cat ~/Library/Logs/xalqbonus-backups.log                                   # строка на каждый прогон
+cat ~/Library/Logs/xalqbonus-backups.log                                   # строка на каждый прогон и удалённые копии
+DRY_RUN=1 bash ~/.local/bin/xalqbonus-pull-backups.sh                      # забор и список того, что уборка удалила бы
 launchctl print gui/$(id -u)/com.extiser.xalqbonus-pull-backups | grep -E 'state|last exit'
 ls -la ~/git/startups/xalqbonus/_backup/prod-daily/
 ```
@@ -1672,7 +1719,6 @@ ls -la ~/git/startups/xalqbonus/_backup/prod-daily/
 #### Известные слабые места
 
 - Мак выключен две недели подряд — копии старше 14 дней уходят с полки машины, не доехав до Мака
-- На Маке копии не удаляются: около 20 МБ в сутки на 26-09-2026, почти всё — архив фото
 - Ключ ssh под `launchd` берётся тот же, что в терминале; ключ с паролем без агента из-под `launchd` не подхватится — строки «не вышло» в логе
 - Всё это закрывается хранилищем вне машины — Cloudflare R2, после выката
 
