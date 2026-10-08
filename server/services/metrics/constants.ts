@@ -55,3 +55,37 @@ export const NEWCOMER_CURVE_POINTS = 6;
 
 /** Кривая — средняя взвешенно по наборам за столько месяцев до месяца кривой. */
 export const NEWCOMER_CURVE_WINDOW_MONTHS = 12;
+
+/**
+ * Вкладка «Деньги» (issue #438) — docs/decisions.md → «Доход парка — комиссия партнёра за заказ»
+ * и «Деньги на дашборде».
+ */
+
+/** Первые сутки денег: комиссия парка в транзакциях Fleet — с 2024-04-01. */
+export const MONEY_FIRST_DAY = '2024-04-01';
+
+/**
+ * С этих суток по Ташкенту сутки денег держит живой сбор транзакций — он идёт с 06.10.2026
+ * 14:49 по Ташкенту, — и журнал прогона истории для них не нужен; как `TRIPS_COMPLETE_FROM`
+ * у поездок (docs/decisions.md → «Деньги на дашборде», абзац о полных сутках).
+ */
+export const TRANSACTIONS_COMPLETE_FROM = '2026-10-07';
+
+/**
+ * Комиссия парка — единственный доход парка с водителя, строка на оплаченный заказ
+ * (docs/decisions.md → «Доход парка — комиссия партнёра за заказ»).
+ */
+export const PARK_FEE_CATEGORY_ID = 'partner_ride_fee';
+
+/**
+ * Оплата заказа: наличные, карта, корпоративная, промокод, скидка, компенсация. Чаевые
+ * не входят (docs/decisions.md → «Деньги на дашборде», «Почему изменилось»).
+ */
+export const PAYMENT_CATEGORY_IDS: readonly string[] = [
+  'cash_collected',
+  'card',
+  'corporate',
+  'promotion_promocode',
+  'promotion_discount',
+  'compensation',
+];

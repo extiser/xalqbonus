@@ -2,10 +2,16 @@ import { describe, expect, it } from 'vitest';
 
 import {
   driverFlowConclusion,
+  moneyConclusion,
   multipliersConclusion,
   programEconomyConclusion,
 } from '#server/services/metrics/conclusions';
-import { DRIVER_FLOW_CASES, MULTIPLIERS_CASES, PROGRAM_ECONOMY_CASES } from './fixtures/dashboardConclusions';
+import {
+  DRIVER_FLOW_CASES,
+  MONEY_CASES,
+  MULTIPLIERS_CASES,
+  PROGRAM_ECONOMY_CASES,
+} from './fixtures/dashboardConclusions';
 
 /**
  * Выводы словами под плитками дашборда против эталона — таблиц
@@ -30,5 +36,11 @@ describe('вывод под «Экономикой программы»', () => 
 describe('вывод под панелью «Потока водителей»', () => {
   it.each(DRIVER_FLOW_CASES)('$rule', ({ input, expected }) => {
     expect(driverFlowConclusion(input)).toBe(expected);
+  });
+});
+
+describe('вывод под «Почему изменилось» вкладки «Деньги»', () => {
+  it.each(MONEY_CASES)('$rule', ({ input, expected }) => {
+    expect(moneyConclusion(input)).toBe(expected);
   });
 });

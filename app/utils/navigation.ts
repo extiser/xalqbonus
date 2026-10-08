@@ -55,7 +55,8 @@ export type NavigationItem = {
 
 const SERVICE_NAVIGATION: NavigationItem[] = [
   // Первым: дашборд — первый экран владельца (issue #371). Вкладки
-  // `/dashboard/levers` и `/dashboard/depth` подсвечивают этот же пункт — они вложены в его адрес.
+  // `/dashboard/money`, `/dashboard/levers` и `/dashboard/depth` подсвечивают этот же пункт — они
+  // вложены в его адрес.
   { title: 'Дашборд', path: '/dashboard', icon: PhSquaresFour, roles: METRICS_ROLES },
   { title: 'Водители', path: '/drivers', icon: PhUsers, roles: ALL_EMPLOYEE_ROLES },
   { title: 'Заказы', path: '/orders', icon: PhShoppingBag, roles: ORDER_ROLES },

@@ -12,7 +12,7 @@ COMPOSE_COPY = docker compose -f docker/compose.local.yml -f docker/compose.copy
         employee-owner prod-employee-owner \
         import-legacy-dump \
         copy-restore copy-up copy-psql copy-status metrics-recompute report-print \
-        sync-orders sync-registry sync-state fleet-history fleet-history-status \
+        sync-orders sync-registry sync-enqueue sync-state fleet-history fleet-history-status \
         sync-transactions sync-transactions-recheck fleet-transactions fleet-transactions-status fleet-transactions-check \
         prod-up prod-down prod-restart prod-logs prod-ps prod-shell prod-psql prod-invariants prod-migrate prod-migrate-rolled-back \
         prod-stop prod-start prod-sql prod-db-restore prod-uploads-restore \
@@ -272,6 +272,14 @@ fleet-transactions-check: ## Сверка комиссии парка с ист�
 sync-registry: ## Разовый прогон синхронизации профилей. Использование: make sync-registry [kind=registry_full]
 	$(COMPOSE) exec -T app npx tsx scripts/sync-registry.ts $(or $(kind),registry)
 
+# Задача синхронизации — в очередь воркера, а не мимо неё (issue #438): разовые цели выше
+# выполняют сервис на месте, и реакции воркера на конец задачи не срабатывают. Нужна, когда
+# проверяется сама реакция — после `transactions_recheck` воркер ставит пересчёт денег дашборда.
+# Задачу берёт работающий воркер со своим окружением и ходит в Fleet по ключу из `.env`.
+sync-enqueue: ## Поставить задачу синхронизации в очередь воркера. make sync-enqueue kind=transactions_recheck
+	@test -n "$(kind)" || { echo "укажите вид: make sync-enqueue kind=transactions_recheck"; exit 1; }
+	$(COMPOSE) exec -T app npx tsx scripts/sync-enqueue.ts "$(kind)"
+
 # Что синхронизация думает о себе: отметки и последние прогоны со счётчиками.
 sync-state: ## Показать отметки синхронизации и последние прогоны
 	$(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -q' < scripts/sync-state.sql
@@ -412,10 +420,10 @@ copy-up: ## Поднять app на копии боевой базы, в фон�
 	$(COMPOSE) stop worker
 	@echo "app на копии $(COPY_DB), worker остановлен: make copy-status; обратно на рабочую базу — make up-d"
 
-# Разовый пересчёт таблицы метрик дашборда (issue #371) мимо очереди — тем же сервисом, что
-# ночная задача воркера. Идёт в базу, на которой стоит app: в режиме копии (`make copy-up`) —
-# в копию, где воркер остановлен и таблицу наполняет только эта цель. Боевая — `prod-metrics-recompute`.
-metrics-recompute: ## Пересчитать таблицу метрик дашборда разово, в базу app (на копии — в копию)
+# Разовый пересчёт таблиц метрик дашборда (issues #371, #438) — поездок и денег — мимо очереди,
+# теми же сервисами, что задачи воркера. Идёт в базу, на которой стоит app: в режиме копии (`make copy-up`) —
+# в копию, где воркер остановлен и таблицы наполняет только эта цель. Боевая — `prod-metrics-recompute`.
+metrics-recompute: ## Пересчитать таблицы метрик дашборда: поездки и деньги — разово, в базу app (на копии — в копию)
 	$(COMPOSE) exec -T app npx tsx scripts/metrics-recompute.ts
 
 # Отчёт текстом мимо веба (issue #372) — теми же сервисами, что ручки. Идёт в базу, на которой
@@ -654,7 +662,7 @@ prod-fleet-transactions-check: ## Сверка комиссии парка с и
 # или минуты, поэтому не в фоне: сводка печатается в терминал.
 # Запускается на самой машине, руками, внутри `tmux`: CLI на серверы не ходит (CLAUDE.md →
 # «Важные ограничения»). Когда и зачем — docker/DEPLOY-MANUAL.md → «Разовый пересчёт метрик дашборда».
-prod-metrics-recompute: ## Пересчитать таблицу метрик дашборда разово (prod), не дожидаясь ночи — внутри tmux
+prod-metrics-recompute: ## Пересчитать таблицы метрик дашборда: поездки и деньги — разово (prod), не дожидаясь ночи — внутри tmux
 	$(COMPOSE_PROD) run --rm -T app node .output/metrics-recompute.mjs
 
 # Обе прод-цели миграций идут одноразовым контейнером, а не `exec`: так же мигрирует сам выкат

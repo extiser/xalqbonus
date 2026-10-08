@@ -63,3 +63,60 @@ export const pluralize = (count: number, one: string, few: string, many: string)
 
   return last >= 2 && last <= 4 ? few : many;
 };
+
+const COMPACT_UNITS: readonly { size: number; unit: string }[] = [
+  { size: 1_000_000_000, unit: 'млрд' },
+  { size: 1_000_000, unit: 'млн' },
+  { size: 1_000, unit: 'тыс.' },
+];
+
+/**
+ * Сумма сокращённо (issue #373): до тысячи — целым, дальше «тыс.», «млн», «млрд» с одним знаком
+ * после запятой — «1,8 млрд». Долг в сумах — оценка, и цифры за запятой у неё — шум.
+ *
+ * Разряд выбирается по уже округлённому числу: 999 960 — «1,0 млн», а не «1 000,0 тыс.».
+ * Общая с сервером с вкладки «Деньги» (issue #438): суммы во выводе словами — как на плитке.
+ */
+export const formatCompactSum = (value: number): string => {
+  const magnitude = Math.abs(value);
+
+  if (magnitude < 1_000) {
+    return formatNumber(Math.round(value));
+  }
+
+  for (const { size, unit } of COMPACT_UNITS) {
+    if (Math.round((magnitude / size) * 10) >= 10) {
+      return `${formatTenths(value / size)} ${unit}`;
+    }
+  }
+
+  return formatNumber(Math.round(value));
+};
+
+/** Сумма сокращённо со знаком: «−58,2 млн», «+39,7 тыс.». Минус — типографский. */
+export const formatSignedCompactSum = (value: number): string =>
+  `${value < 0 ? MINUS : '+'}${formatCompactSum(Math.abs(value))}`;
+
+/** Число с `digits` знаками после запятой, всегда с ними: «4,07», «4,608». */
+export const formatDecimal = (value: number, digits: number): string =>
+  value.toLocaleString('ru-RU', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+
+/**
+ * Комиссия парка процентом у периода и базы (issue #438): до сотой, а если у обоих до сотой
+ * она одна — до тысячной, иначе «4,61 против 4,61» не говорит, куда она сдвинулась.
+ * Вход — доли оплаты, `0.0461`. Базы нет — у периода до сотой.
+ */
+export const formatCommissionPair = (
+  current: number,
+  base: number | null,
+): { current: string; base: string | null } => {
+  const hundredths = (value: number): string => formatDecimal(value * 100, 2);
+
+  if (base === null) {
+    return { current: hundredths(current), base: null };
+  }
+
+  const digits = hundredths(current) === hundredths(base) ? 3 : 2;
+
+  return { current: formatDecimal(current * 100, digits), base: formatDecimal(base * 100, digits) };
+};

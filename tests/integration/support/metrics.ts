@@ -1,7 +1,8 @@
 import { db } from '#server/db';
 
 /**
- * Заказы истории, порции сбора и уборка таблиц метрик для теста пересчёта (issue #371).
+ * Заказы истории, порции сбора и уборка таблиц метрик для теста пересчёта (issue #371);
+ * транзакции с суммами и порции сбора транзакций — для пересчёта денег (issue #438).
  *
  * Таблицы метрик целиком производные: пересчёт стирает их и пишет заново, поэтому уборка
  * стирает их целиком тоже — иначе строки с людьми тестов держали бы внешний ключ, и уборка
@@ -142,6 +143,60 @@ export const insertTestTransaction = async (
     data: { id, eventAt, categoryId, amount: -1374, currencyCode: 'UZS', driverProfileId: profileId },
   });
   createdTransactionIds.add(id);
+};
+
+/**
+ * Транзакция с суммой — фикстура пересчёта денег (issue #438): доход и оплата складываются
+ * из сумм, и знак у них свой у каждой категории. Без профиля: деньги парка — не люди.
+ */
+export const insertTestMoneyTransaction = async (categoryId: string, eventAt: Date, amount: string): Promise<void> => {
+  nextTransactionNumber += 1;
+  const id = `test-metrics-transaction-${process.pid}-${nextTransactionNumber}`;
+
+  await db.fleetTransaction.create({
+    data: { id, eventAt, categoryId, amount, currencyCode: 'UZS', driverProfileId: null },
+  });
+  createdTransactionIds.add(id);
+};
+
+export type TestMoneyDay = { day: string; orders: number; income: string; payment: string };
+
+/** Строки таблицы денег за сутки `from`–`to`; суммы — строкой, как их хранит `numeric`. */
+export const readTestMoneyDays = async (from: string, to: string): Promise<TestMoneyDay[]> =>
+  db.$queryRaw<TestMoneyDay[]>`
+    SELECT to_char("day", 'YYYY-MM-DD') AS "day", "orders", "income"::text AS "income", "payment"::text AS "payment"
+      FROM xb.metric_money_days
+     WHERE "day" BETWEEN ${from}::date AND ${to}::date
+     ORDER BY "day"
+  `;
+
+/** Порция сбора истории транзакций `parkDay` (сутки UTC): закрытая, прерванная или с курсором. */
+export const upsertTestTransactionDay = async (
+  parkDay: string,
+  state: 'closed' | 'unfinished' | 'cursor',
+): Promise<void> => {
+  const day = new Date(`${parkDay}T00:00:00Z`);
+  const finishedAt = state === 'unfinished' ? null : new Date();
+  const nextCursor = state === 'cursor' ? 'test-cursor' : null;
+
+  await db.fleetTransactionDay.upsert({
+    where: { parkDay: day },
+    create: { parkDay: day, transactions: 0, malformed: 0, pages: 1, rateLimited: 0, startedAt: new Date(), finishedAt, nextCursor },
+    update: { finishedAt, nextCursor },
+  });
+};
+
+/** Таблица денег и её журнал — производные целиком, как таблицы поездок; порции сбора — по суткам. */
+export const cleanupTestMoney = async (transactionDays: readonly string[]): Promise<void> => {
+  const transactionIds = [...createdTransactionIds];
+  createdTransactionIds.clear();
+
+  await db.$executeRaw`DELETE FROM xb.metric_money_days`;
+  await db.$executeRaw`DELETE FROM xb.metric_money_runs`;
+  await db.$executeRaw`DELETE FROM xb.fleet_transactions WHERE "id" = ANY(${transactionIds}::text[])`;
+  await db.$executeRaw`
+    DELETE FROM xb.fleet_transaction_days WHERE "park_day" = ANY(${[...transactionDays]}::date[])
+  `;
 };
 
 export const countMetricPersonDays = async (): Promise<number> => {

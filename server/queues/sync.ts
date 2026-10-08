@@ -181,8 +181,15 @@ const jobTiming = (job: Job<SyncJobData>): ScheduledJobTiming => ({
   delay: job.opts.delay ?? 0,
 });
 
-export const createSyncWorker = (): Worker<SyncJobData> =>
-  new Worker<SyncJobData>(
+/**
+ * Исход задачи: прогон прошёл или задача пропущена как просроченная. По нему воркер отличает
+ * перечитывание транзакций, которое было, от пропущенного (issue #438): деньги дашборда
+ * пересчитываются только после настоящего.
+ */
+export type SyncJobOutcome = 'done' | 'skipped';
+
+export const createSyncWorker = (): Worker<SyncJobData, SyncJobOutcome> =>
+  new Worker<SyncJobData, SyncJobOutcome>(
     SYNC_QUEUE_NAME,
     async (job) => {
       const timing = jobTiming(job);
@@ -192,30 +199,31 @@ export const createSyncWorker = (): Worker<SyncJobData> =>
           kind: job.data.kind,
           lateSec: Math.round((Date.now() - timing.timestamp - timing.delay) / 1_000),
         });
-        return;
+        return 'skipped';
       }
 
       if (job.data.kind === 'registry') {
         await runRegistrySync('registry');
-        return;
+        return 'done';
       }
 
       if (job.data.kind === 'orders_catchup') {
         await runOrdersCatchup();
-        return;
+        return 'done';
       }
 
       if (job.data.kind === 'transactions') {
         await runTransactionsSync();
-        return;
+        return 'done';
       }
 
       if (job.data.kind === 'transactions_recheck') {
         await runTransactionsRecheck();
-        return;
+        return 'done';
       }
 
       await runOrdersSync();
+      return 'done';
     },
     {
       connection: getQueueConnection(),

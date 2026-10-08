@@ -1,5 +1,5 @@
 /**
- * Ответы ручек дашборда метрик (issues #371, #373, #392, #402, #407). Определения метрик — `shared/metrics.ts`.
+ * Ответы ручек дашборда метрик (issues #371, #373, #392, #402, #407, #438). Определения метрик — `shared/metrics.ts`.
  *
  * Даты — строки `YYYY-MM-DD`, месяцы — `YYYY-MM`: сутки и месяц метрик календарные
  * по Ташкенту, и зона показа сдвигать их не должна.
@@ -336,4 +336,76 @@ export type DashboardNewcomers = {
  */
 export type DashboardSegmentRequestBody = {
   month: string;
+};
+
+/**
+ * Значения «Денег» за период (issue #438): доход = заказы × оплата на заказ × комиссия парка,
+ * ровно. В сутки (`perDay` у сравнения) доход, заказы и оплата делятся на сутки периода.
+ */
+export type DashboardMoneyValues = {
+  /** Доход парка, сум целым: в сутки — доход ÷ суток, округлённый до сума. */
+  income: number;
+  /** Заказов; в сутки — дробное, как посчитано, округляет экран. */
+  orders: number;
+  /** Оплата на заказ, сум: оплата ÷ заказы. */
+  paymentPerOrder: number;
+  /** Комиссия парка — доля оплаты: доход ÷ оплата. */
+  commission: number;
+  /** Доход с заказа, сум: доход ÷ заказы. */
+  incomePerOrder: number;
+};
+
+/** Сколько сумов дохода прибавил или отнял каждый множитель. Целые, в сумме ровно `total`. */
+export type DashboardMoneyContributions = {
+  orders: number;
+  paymentPerOrder: number;
+  commission: number;
+  total: number;
+};
+
+/** «Почему изменилось» к одной базе: тот же месяц год назад или прошлый месяц. */
+export type DashboardMoneyComparison = {
+  basePeriod: DashboardPeriod;
+  /** Сравнение в сутки: к прошлому месяцу всегда, к году — когда у периода и базы суток разное число. */
+  perDay: boolean;
+  current: DashboardMoneyValues;
+  /** `null` — в базе нет ни одного заказа: сравнивать не с чем. */
+  base: DashboardMoneyValues | null;
+  /** `null` — разложения нет: базы нет или в периоде либо базе дохода ноль. */
+  contributions: DashboardMoneyContributions | null;
+  /** Вывод словами под уравнением; `null` — вывода нет. */
+  conclusion: string | null;
+};
+
+/** Столбец «Доход парка по месяцам». */
+export type DashboardMoneyMonth = {
+  /** `YYYY-MM`. */
+  month: string;
+  /** Доход за посчитанные сутки, сум целым. */
+  income: number;
+  /** Суток в столбце: у идущего месяца — посчитанные. */
+  days: number;
+  coveredDays: number;
+  /** Идущий месяц: доход за посчитанные сутки. */
+  partial: boolean;
+};
+
+/** Вкладка «Деньги» за месяц — `GET /api/dashboard/money?month=YYYY-MM`. */
+export type DashboardMoney = {
+  month: string;
+  /** Месяцы, которые можно выбрать. */
+  range: { firstMonth: string; lastMonth: string };
+  /** Когда кончился последний успешный пересчёт денег; `null` — ещё не считали. */
+  computedAt: string | null;
+  /** Период месяца с покрытием; у идущего — посчитанные сутки, ноль — ещё ни одних. */
+  period: DashboardPeriod;
+  /** Доход периода, сум целым. */
+  income: number;
+  orders: number;
+  /** Оплата периода, сум целым. */
+  payment: number;
+  /** Базы сравнения: тот же месяц год назад и прошлый месяц. */
+  bases: { year: DashboardMoneyComparison; month: DashboardMoneyComparison };
+  /** 13 месяцев, от месяца год назад по выбранный. */
+  byMonth: DashboardMoneyMonth[];
 };

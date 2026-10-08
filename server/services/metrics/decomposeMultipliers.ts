@@ -1,19 +1,17 @@
 import type { DashboardContributions, DashboardMultipliers } from '#shared/types/dashboard';
 
 /**
- * Вклад каждого множителя в изменение поездок — логарифмическое разложение (issue #371).
+ * Вклад каждого множителя в изменение результата — логарифмическое разложение (issue #371).
  *
- * Поездки `T = D × N × P`, поэтому `ln T₁ − ln T₀` раскладывается в сумму тех же разностей
- * по множителям. Умноженные на логарифмическое среднее `L(T₁, T₀)`, они дают вклады, которые
- * складываются ровно в `T₁ − T₀`, и порядок множителей на результат не влияет (docs/decisions.md
- * → «Метрики дашборда»). Формула одна на проект и живёт здесь, а не на странице.
+ * Результат `R = F₁ × F₂ × F₃`, поэтому `ln R₁ − ln R₀` раскладывается в сумму тех же разностей
+ * по множителям. Умноженные на логарифмическое среднее `L(R₁, R₀)`, они дают вклады, которые
+ * складываются ровно в `R₁ − R₀`, и порядок множителей на результат не влияет (docs/decisions.md
+ * → «Метрики дашборда»). Формула одна на проект и живёт здесь, а не на странице: ею раскладываются
+ * и поездки «Рычагов», и доход «Денег» (issue #438) — ключи множителей и результата задаёт
+ * вызывающий.
  *
- * Если в одном из периодов поездок ноль — разложения нет: логарифма нуля не бывает.
+ * Если в одном из периодов результат ноль — разложения нет: логарифма нуля не бывает.
  */
-
-type FactorKey = 'driversOnLine' | 'daysOnLine' | 'tripsPerDay';
-
-const FACTOR_KEYS: readonly FactorKey[] = ['driversOnLine', 'daysOnLine', 'tripsPerDay'];
 
 /** Логарифмическое среднее: `(a − b) ÷ (ln a − ln b)`, при равных — само число. */
 const logarithmicMean = (first: number, second: number): number =>
@@ -23,15 +21,19 @@ const logarithmicMean = (first: number, second: number): number =>
  * Округление до целых методом наибольшего остатка: все вниз, недостающие до `total` единицы —
  * тем, у кого дробная часть больше. Так округлённые вклады складываются ровно в изменение.
  */
-const roundToTotal = (values: Record<FactorKey, number>, total: number): Record<FactorKey, number> => {
-  const rounded = { driversOnLine: 0, daysOnLine: 0, tripsPerDay: 0 };
+const roundToTotal = <Key extends string>(
+  keys: readonly Key[],
+  values: Record<Key, number>,
+  total: number,
+): Record<Key, number> => {
+  const rounded = {} as Record<Key, number>;
 
-  for (const key of FACTOR_KEYS) {
+  for (const key of keys) {
     rounded[key] = Math.floor(values[key]);
   }
 
-  const shortfall = total - FACTOR_KEYS.reduce((sum, key) => sum + rounded[key], 0);
-  const byRemainder = [...FACTOR_KEYS].sort(
+  const shortfall = total - keys.reduce((sum, key) => sum + rounded[key], 0);
+  const byRemainder = [...keys].sort(
     (first, second) => values[second] - Math.floor(values[second]) - (values[first] - Math.floor(values[first])),
   );
 
@@ -42,21 +44,40 @@ const roundToTotal = (values: Record<FactorKey, number>, total: number): Record<
   return rounded;
 };
 
-export const decomposeMultipliers = (
-  current: DashboardMultipliers,
-  base: DashboardMultipliers,
-): DashboardContributions | null => {
-  if (current.trips <= 0 || base.trips <= 0) {
+/**
+ * Вклады множителей `factorKeys` в изменение `resultKey` от `base` к `current`. Результат —
+ * целый: вклады целые и в сумме ровно `total`. `null` — в одном из периодов результат ноль.
+ */
+export const decomposeProduct = <Key extends string, ResultKey extends string>(
+  current: Readonly<Record<Key | ResultKey, number>>,
+  base: Readonly<Record<Key | ResultKey, number>>,
+  resultKey: ResultKey,
+  factorKeys: readonly Key[],
+): (Record<Key, number> & { total: number }) | null => {
+  const currentResult = current[resultKey];
+  const baseResult = base[resultKey];
+
+  if (currentResult <= 0 || baseResult <= 0) {
     return null;
   }
 
-  const total = current.trips - base.trips;
-  const mean = logarithmicMean(current.trips, base.trips);
-  const exact = { driversOnLine: 0, daysOnLine: 0, tripsPerDay: 0 };
+  const total = currentResult - baseResult;
+  const mean = logarithmicMean(currentResult, baseResult);
+  const exact = {} as Record<Key, number>;
 
-  for (const key of FACTOR_KEYS) {
+  for (const key of factorKeys) {
     exact[key] = mean * Math.log(current[key] / base[key]);
   }
 
-  return { ...roundToTotal(exact, total), total };
+  return { ...roundToTotal(factorKeys, exact, total), total };
 };
+
+type TripsFactorKey = 'driversOnLine' | 'daysOnLine' | 'tripsPerDay';
+
+const TRIPS_FACTOR_KEYS: readonly TripsFactorKey[] = ['driversOnLine', 'daysOnLine', 'tripsPerDay'];
+
+/** Поездки `T = D × N × P` «Рычагов». */
+export const decomposeMultipliers = (
+  current: DashboardMultipliers,
+  base: DashboardMultipliers,
+): DashboardContributions | null => decomposeProduct(current, base, 'trips', TRIPS_FACTOR_KEYS);

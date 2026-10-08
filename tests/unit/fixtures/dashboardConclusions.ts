@@ -1,8 +1,10 @@
 import type {
   DriverFlowConclusionInput,
+  MoneyConclusionInput,
   MultipliersConclusionInput,
   ProgramEconomyConclusionInput,
 } from '#server/services/metrics/conclusions';
+import type { DashboardMoneyContributions, DashboardMoneyValues } from '#shared/types/dashboard';
 
 /**
  * Эталон выводов словами под плитками дашборда — таблицы
@@ -18,6 +20,11 @@ import type {
  * при числе, один довесок «против», 0 заказов в цене балла, выдано ≤ 0, поездок в базе ноль.
  * У потока водителей (issue #398) — границы из issue: ровно 2 %, `L = N + R`, `N = L`, `D₀ = 0`,
  * склонение при 1 и 21.
+ *
+ * У «Денег» (issue #438) — каждая строка обеих таблиц раздела «Деньги — „Почему изменилось“»,
+ * второй главный и довесок с границами (ровно половина, ровно четверть), комиссия до тысячной
+ * и оба примера сентября 2026 — дословно. Суммы — сокращённо, «58,2 млн»: между числом и единицей
+ * пробел обычный, как на плитке.
  */
 
 export type ConclusionCase<Input> = {
@@ -451,5 +458,276 @@ export const DRIVER_FLOW_CASES: readonly ConclusionCase<DriverFlowConclusionInpu
     input: { ...FLOW, newDrivers: 900, returned: 400, left: 1_050, previousOnLine: 10_000 },
     expected:
       'На линии на 250 водителей больше: пришло 1\u00a0300, ушло 1\u00a0050. Новых меньше, чем ушедших: убыль закрыли вернувшиеся — 400.',
+  },
+];
+
+const YEAR = { toBase: 'к сентябрю 2025', inBase: 'в сентябре 2025', perDay: false };
+
+/** Цифры сентября 2026 к сентябрю 2025 — прод, `product/metrics/park-income-by-month-2026-10.md`. */
+const SEPTEMBER_2026: MoneyConclusionInput = {
+  current: {
+    income: 122_231_177,
+    orders: 79_748,
+    paymentPerOrder: 2_652_699_234 / 79_748,
+    commission: 122_231_177 / 2_652_699_234,
+    incomePerOrder: 122_231_177 / 79_748,
+  },
+  base: {
+    income: 180_433_479,
+    orders: 99_430,
+    paymentPerOrder: 31_650,
+    commission: 0.0573,
+    incomePerOrder: 180_433_479 / 99_430,
+  },
+  contributions: { orders: -32_965_000, paymentPerOrder: 7_430_000, commission: -32_667_302, total: -58_202_302 },
+  ...YEAR,
+  ...COMPLETE,
+};
+
+/** База в 100 млн дохода: доля в процентах читается по Δ без деления в уме. */
+const MONEY_BASE: DashboardMoneyValues = {
+  income: 100_000_000,
+  orders: 100_000,
+  paymentPerOrder: 20_000,
+  commission: 0.05,
+  incomePerOrder: 1_000,
+};
+
+const MILLION = 1_000_000;
+
+/** Доход `income` против 100 млн; вклады в млн, в сумме — изменение. */
+const hundredMillion = (
+  income: number,
+  current: Partial<DashboardMoneyValues>,
+  contributions: Omit<DashboardMoneyContributions, 'total'>,
+): MoneyConclusionInput => ({
+  current: { ...MONEY_BASE, income, ...current },
+  base: MONEY_BASE,
+  contributions: {
+    orders: contributions.orders * MILLION,
+    paymentPerOrder: contributions.paymentPerOrder * MILLION,
+    commission: contributions.commission * MILLION,
+    total: income - MONEY_BASE.income,
+  },
+  ...YEAR,
+  ...COMPLETE,
+});
+
+export const MONEY_CASES: readonly ConclusionCase<MoneyConclusionInput>[] = [
+  // Примеры документа — отдельными случаями, текст до символа.
+  {
+    rule: 'пример на сентябре 2026, год: второй главный, довеска нет',
+    input: SEPTEMBER_2026,
+    expected:
+      'Доход меньше на 58,2 млн (−32,3\u00a0%) к сентябрю 2025. Главное — заказов меньше: 79\u00a0748 против 99\u00a0430, и парк берёт меньшую долю оплаты: 4,61\u00a0% против 5,73\u00a0%.',
+  },
+  {
+    rule: 'пример на сентябре 2026, месяц в сутки: +1,0 % — почти такой же',
+    input: {
+      current: { income: 4_074_373, orders: 2_658.3, paymentPerOrder: 33_263.5, commission: 0.04608, incomePerOrder: 1_532.7 },
+      base: { income: 4_034_701, orders: 2_573.3, paymentPerOrder: 34_013, commission: 0.04611, incomePerOrder: 1_568 },
+      contributions: { orders: 132_845, paymentPerOrder: -90_359, commission: -2_814, total: 39_672 },
+      toBase: 'к августу',
+      inBase: 'в августе',
+      perDay: true,
+      ...COMPLETE,
+    },
+    expected: 'Доход в сутки почти такой же, как в августе: +39,7 тыс.',
+  },
+
+  // Первая таблица — что с доходом.
+  {
+    rule: '|доля| < 2 %, спад',
+    input: hundredMillion(98_500_000, {}, { orders: -1.5, paymentPerOrder: 0, commission: 0 }),
+    expected: 'Доход почти такой же, как в сентябре 2025: −1,5 млн.',
+  },
+  {
+    rule: '|доля| < 2 %, без изменения — «+0»',
+    input: hundredMillion(100_000_000, {}, { orders: 0, paymentPerOrder: 0, commission: 0 }),
+    expected: 'Доход почти такой же, как в сентябре 2025: +0.',
+  },
+  {
+    rule: 'граница: доля ровно 2 % — уже «больше»',
+    input: hundredMillion(102_000_000, { orders: 102_000 }, { orders: 2, paymentPerOrder: 0, commission: 0 }),
+    expected: 'Доход больше на 2,0 млн (+2,0\u00a0%) к сентябрю 2025. Главное — заказов больше: 102\u00a0000 против 100\u00a0000.',
+  },
+  {
+    rule: 'граница: доля ровно −2 % — уже «меньше»',
+    input: hundredMillion(98_000_000, { orders: 98_000 }, { orders: -2, paymentPerOrder: 0, commission: 0 }),
+    expected: 'Доход меньше на 2,0 млн (−2,0\u00a0%) к сентябрю 2025. Главное — заказов меньше: 98\u00a0000 против 100\u00a0000.',
+  },
+  {
+    rule: 'в сутки — «Доход в сутки»',
+    input: {
+      ...hundredMillion(110_000_000, { orders: 110_000 }, { orders: 10, paymentPerOrder: 0, commission: 0 }),
+      perDay: true,
+      toBase: 'к августу',
+      inBase: 'в августе',
+    },
+    expected: 'Доход в сутки больше на 10,0 млн (+10,0\u00a0%) к августу. Главное — заказов больше: 110\u00a0000 против 100\u00a0000.',
+  },
+
+  // Вторая таблица — главный множитель.
+  {
+    rule: 'заказы, +',
+    input: hundredMillion(110_000_000, { orders: 110_000 }, { orders: 10, paymentPerOrder: 0, commission: 0 }),
+    expected: 'Доход больше на 10,0 млн (+10,0\u00a0%) к сентябрю 2025. Главное — заказов больше: 110\u00a0000 против 100\u00a0000.',
+  },
+  {
+    rule: 'заказы, −',
+    input: hundredMillion(90_000_000, { orders: 90_000 }, { orders: -10, paymentPerOrder: 0, commission: 0 }),
+    expected: 'Доход меньше на 10,0 млн (−10,0\u00a0%) к сентябрю 2025. Главное — заказов меньше: 90\u00a0000 против 100\u00a0000.',
+  },
+  {
+    rule: 'оплата на заказ, +',
+    input: hundredMillion(110_000_000, { paymentPerOrder: 22_000 }, { orders: 0, paymentPerOrder: 10, commission: 0 }),
+    expected: 'Доход больше на 10,0 млн (+10,0\u00a0%) к сентябрю 2025. Главное — заказы подорожали: 22\u00a0000 против 20\u00a0000 сум.',
+  },
+  {
+    rule: 'оплата на заказ, −',
+    input: hundredMillion(90_000_000, { paymentPerOrder: 18_000 }, { orders: 0, paymentPerOrder: -10, commission: 0 }),
+    expected: 'Доход меньше на 10,0 млн (−10,0\u00a0%) к сентябрю 2025. Главное — заказы подешевели: 18\u00a0000 против 20\u00a0000 сум.',
+  },
+  {
+    rule: 'комиссия, +',
+    input: hundredMillion(110_000_000, { commission: 0.055 }, { orders: 0, paymentPerOrder: 0, commission: 10 }),
+    expected:
+      'Доход больше на 10,0 млн (+10,0\u00a0%) к сентябрю 2025. Главное — парк берёт большую долю оплаты: 5,50\u00a0% против 5,00\u00a0%.',
+  },
+  {
+    rule: 'комиссия, −',
+    input: hundredMillion(90_000_000, { commission: 0.045 }, { orders: 0, paymentPerOrder: 0, commission: -10 }),
+    expected:
+      'Доход меньше на 10,0 млн (−10,0\u00a0%) к сентябрю 2025. Главное — парк берёт меньшую долю оплаты: 4,50\u00a0% против 5,00\u00a0%.',
+  },
+  {
+    rule: 'комиссия до сотой одна — до тысячной',
+    input: hundredMillion(
+      90_000_000,
+      { orders: 90_000, commission: 0.05004 },
+      { orders: -10.5, paymentPerOrder: 0, commission: -6 },
+    ),
+    expected:
+      'Доход меньше на 10,0 млн (−10,0\u00a0%) к сентябрю 2025. Главное — заказов меньше: 90\u00a0000 против 100\u00a0000, и парк берёт меньшую долю оплаты: 5,004\u00a0% против 5,000\u00a0%.',
+  },
+
+  // Второй главный.
+  {
+    rule: 'второй главный: вклад ровно половина главного — пишется',
+    input: hundredMillion(
+      85_000_000,
+      { orders: 90_000, paymentPerOrder: 18_000 },
+      { orders: -10, paymentPerOrder: -5, commission: 0 },
+    ),
+    expected:
+      'Доход меньше на 15,0 млн (−15,0\u00a0%) к сентябрю 2025. Главное — заказов меньше: 90\u00a0000 против 100\u00a0000, и заказы подешевели: 18\u00a0000 против 20\u00a0000 сум.',
+  },
+  {
+    rule: 'второй главный: вклад меньше половины — не пишется',
+    input: hundredMillion(
+      85_000_001,
+      { orders: 90_000, paymentPerOrder: 18_000 },
+      { orders: -10, paymentPerOrder: -4.999999, commission: 0 },
+    ),
+    expected: 'Доход меньше на 15,0 млн (−15,0\u00a0%) к сентябрю 2025. Главное — заказов меньше: 90\u00a0000 против 100\u00a0000.',
+  },
+  {
+    rule: 'второй главный — только того же знака',
+    input: hundredMillion(
+      95_000_000,
+      { orders: 90_000, paymentPerOrder: 21_000 },
+      { orders: -10, paymentPerOrder: 5, commission: 0 },
+    ),
+    expected: 'Доход меньше на 5,0 млн (−5,0\u00a0%) к сентябрю 2025. Главное — заказов меньше: 90\u00a0000 против 100\u00a0000; против — заказы подорожали: +5,0 млн.',
+  },
+  {
+    rule: 'третьего не бывает: подходят двое — берётся больший',
+    input: hundredMillion(
+      73_000_000,
+      { orders: 90_000, paymentPerOrder: 18_000, commission: 0.045 },
+      { orders: -10, paymentPerOrder: -8, commission: -9 },
+    ),
+    expected:
+      'Доход меньше на 27,0 млн (−27,0\u00a0%) к сентябрю 2025. Главное — заказов меньше: 90\u00a0000 против 100\u00a0000, и парк берёт меньшую долю оплаты: 4,50\u00a0% против 5,00\u00a0%.',
+  },
+
+  // Довесок.
+  {
+    rule: 'довесок: вклад ровно четверть |Δ| — пишется',
+    input: hundredMillion(
+      80_000_000,
+      { orders: 76_000, paymentPerOrder: 21_000 },
+      { orders: -25, paymentPerOrder: 5, commission: 0 },
+    ),
+    expected:
+      'Доход меньше на 20,0 млн (−20,0\u00a0%) к сентябрю 2025. Главное — заказов меньше: 76\u00a0000 против 100\u00a0000; против — заказы подорожали: +5,0 млн.',
+  },
+  {
+    rule: 'довесок: вклад меньше четверти |Δ| — не пишется',
+    input: hundredMillion(
+      80_000_001,
+      { orders: 76_000, paymentPerOrder: 21_000 },
+      { orders: -24.999999, paymentPerOrder: 4.999999, commission: 0 },
+    ),
+    expected: 'Доход меньше на 20,0 млн (−20,0\u00a0%) к сентябрю 2025. Главное — заказов меньше: 76\u00a0000 против 100\u00a0000.',
+  },
+  {
+    rule: 'довесок при росте — вклад со знаком минус',
+    input: hundredMillion(
+      120_000_000,
+      { orders: 130_000, commission: 0.045 },
+      { orders: 26, paymentPerOrder: 0, commission: -6 },
+    ),
+    expected:
+      'Доход больше на 20,0 млн (+20,0\u00a0%) к сентябрю 2025. Главное — заказов больше: 130\u00a0000 против 100\u00a0000; против — парк берёт меньшую долю оплаты: −6,0 млн.',
+  },
+  {
+    rule: 'второй главный и довесок вместе',
+    input: hundredMillion(
+      80_000_000,
+      { orders: 80_000, paymentPerOrder: 22_000, commission: 0.045 },
+      { orders: -20, paymentPerOrder: 10, commission: -10 },
+    ),
+    expected:
+      'Доход меньше на 20,0 млн (−20,0\u00a0%) к сентябрю 2025. Главное — заказов меньше: 80\u00a0000 против 100\u00a0000, и парк берёт меньшую долю оплаты: 4,50\u00a0% против 5,00\u00a0%; против — заказы подорожали: +10,0 млн.',
+  },
+  {
+    rule: 'довесок в тысячах — точка в конце одна',
+    input: {
+      current: { ...MONEY_BASE, income: 1_200_000, orders: 1_300 },
+      base: { ...MONEY_BASE, income: 1_000_000, orders: 1_000 },
+      contributions: { orders: 260_000, paymentPerOrder: 0, commission: -60_000, total: 200_000 },
+      ...YEAR,
+      ...COMPLETE,
+    },
+    expected:
+      'Доход больше на 200,0 тыс. (+20,0\u00a0%) к сентябрю 2025. Главное — заказов больше: 1\u00a0300 против 1\u00a0000; против — парк берёт меньшую долю оплаты: −60,0 тыс.',
+  },
+  {
+    rule: 'разложения нет — только первое предложение',
+    input: { ...hundredMillion(0, {}, { orders: 0, paymentPerOrder: 0, commission: 0 }), contributions: null },
+    expected: 'Доход меньше на 100,0 млн (−100,0\u00a0%) к сентябрю 2025.',
+  },
+
+  // Вывода нет.
+  {
+    rule: 'вывода нет: базы нет',
+    input: { ...SEPTEMBER_2026, base: null, contributions: null },
+    expected: null,
+  },
+  {
+    rule: 'вывода нет: в базе дохода ноль',
+    input: { ...SEPTEMBER_2026, base: { ...MONEY_BASE, income: 0 }, contributions: null },
+    expected: null,
+  },
+  {
+    rule: 'вывода нет: у периода собраны не все сутки',
+    input: { ...SEPTEMBER_2026, periodComplete: false },
+    expected: null,
+  },
+  {
+    rule: 'вывода нет: у базы собраны не все сутки',
+    input: { ...SEPTEMBER_2026, baseComplete: false },
+    expected: null,
   },
 ];

@@ -1,12 +1,20 @@
 import {
+  formatCommissionPair,
+  formatCompactSum,
   formatNumber,
+  formatSignedCompactSum,
   formatSignedNumber,
   formatSignedPercent,
   formatTenths,
   formatWholePercent,
   pluralize,
 } from '#shared/numberFormat';
-import type { DashboardContributions, DashboardMultipliers } from '#shared/types/dashboard';
+import type {
+  DashboardContributions,
+  DashboardMoneyContributions,
+  DashboardMoneyValues,
+  DashboardMultipliers,
+} from '#shared/types/dashboard';
 
 /**
  * Выводы словами под плитками дашборда (issue #383): одно-два предложения, которые читают
@@ -29,6 +37,18 @@ export const TRIPS_FLAT_PERCENT = 2;
 
 /** Довесок «против» — вклад не меньше этой части `|Δ|`: четверть. */
 export const COUNTER_SHARE_DIVISOR = 4;
+
+/**
+ * Изменение дохода меньше этой доли от базы, в процентах, — «почти такой же». Раздел
+ * «Деньги — „Почему изменилось“» в `_reference/design/web/dashboard/conclusions.md`.
+ */
+export const INCOME_FLAT_PERCENT = 2;
+
+/**
+ * Второй главный множитель — вклад того же знака не меньше этой части вклада главного: половина.
+ * Тот же раздел `conclusions.md`.
+ */
+export const SECOND_FACTOR_SHARE_DIVISOR = 2;
 
 /** Изменение долга меньше этой доли выданного, в процентах, — «почти не изменился». */
 export const DEBT_FLAT_PERCENT = 1;
@@ -290,4 +310,144 @@ export const driverFlowConclusion = (input: DriverFlowConclusionInput): string |
   const total = flowTotalSentence(input);
 
   return source === null ? total : `${total} ${source}`;
+};
+
+type MoneyFactorKey = 'orders' | 'paymentPerOrder' | 'commission';
+
+/** Порядок множителей в уравнении; при равных вкладах главным берётся тот, что левее. */
+const MONEY_FACTOR_KEYS: readonly MoneyFactorKey[] = ['orders', 'paymentPerOrder', 'commission'];
+
+/** Фраза множителя без «Главное —» по знаку вклада — вторая таблица раздела «Деньги». */
+const MONEY_FACTOR_PHRASES: Readonly<Record<MoneyFactorKey, { up: string; down: string }>> = {
+  orders: { up: 'заказов больше', down: 'заказов меньше' },
+  paymentPerOrder: { up: 'заказы подорожали', down: 'заказы подешевели' },
+  commission: { up: 'парк берёт большую долю оплаты', down: 'парк берёт меньшую долю оплаты' },
+};
+
+/**
+ * Значения множителя — как на карточках: заказы и оплата на заказ целым, комиссия до сотой,
+ * а если у периода и базы до сотой она одна — до тысячной.
+ */
+const moneyFactorValues = (
+  key: MoneyFactorKey,
+  current: DashboardMoneyValues,
+  base: DashboardMoneyValues,
+): string => {
+  if (key === 'orders') {
+    return `${formatNumber(Math.round(current.orders))} против ${formatNumber(Math.round(base.orders))}`;
+  }
+
+  if (key === 'paymentPerOrder') {
+    return `${formatNumber(Math.round(current.paymentPerOrder))} против ${formatNumber(Math.round(base.paymentPerOrder))} сум`;
+  }
+
+  const commission = formatCommissionPair(current.commission, base.commission);
+
+  return `${commission.current}\u00a0% против ${commission.base ?? ''}\u00a0%`;
+};
+
+/** Точка в конце предложения — одна: сумма «39,7 тыс.» свою уже несёт. */
+const endSentence = (text: string): string => (text.endsWith('.') ? text : `${text}.`);
+
+const moneyFactorPhrase = (key: MoneyFactorKey, contribution: number): string =>
+  contribution > 0 ? MONEY_FACTOR_PHRASES[key].up : MONEY_FACTOR_PHRASES[key].down;
+
+/** Множитель «Денег» с наибольшим по модулю вкладом среди подходящих; нет таких — `null`. */
+const largestMoneyFactor = (
+  contributions: DashboardMoneyContributions,
+  fits: (key: MoneyFactorKey, contribution: number) => boolean,
+): MoneyFactorKey | null => {
+  let largest: MoneyFactorKey | null = null;
+
+  for (const key of MONEY_FACTOR_KEYS) {
+    const contribution = contributions[key];
+
+    if (fits(key, contribution) && (largest === null || Math.abs(contribution) > Math.abs(contributions[largest]))) {
+      largest = key;
+    }
+  }
+
+  return largest;
+};
+
+export type MoneyConclusionInput = {
+  current: DashboardMoneyValues;
+  /** `null` — базы нет. */
+  base: DashboardMoneyValues | null;
+  /** `null` — разложения нет. */
+  contributions: DashboardMoneyContributions | null;
+  /** Сравнение в сутки: «Доход в сутки» вместо «Доход». */
+  perDay: boolean;
+  /** «к сентябрю 2025», «к августу». */
+  toBase: string;
+  /** «в сентябре 2025», «в августе». */
+  inBase: string;
+  /** У периода собраны все сутки. */
+  periodComplete: boolean;
+  /** У базы собраны все сутки. */
+  baseComplete: boolean;
+};
+
+/**
+ * Вывод под уравнением «Почему изменилось» вкладки «Деньги» (issue #438) — устроен как вывод
+ * множителей поездок, со вторым главным множителем. `null` — вывода нет: базы нет, в ней дохода
+ * ноль или у периода либо базы собраны не все сутки.
+ *
+ * Доход сравнивается целым сумом — тем, что разложено; суммы во фразе — сокращённо, как на плитке.
+ */
+export const moneyConclusion = (input: MoneyConclusionInput): string | null => {
+  const { current, base, contributions } = input;
+
+  if (base === null || base.income <= 0 || !input.periodComplete || !input.baseComplete) {
+    return null;
+  }
+
+  const subject = input.perDay ? 'Доход в сутки' : 'Доход';
+  const change = current.income - base.income;
+
+  if (Math.abs(change) * 100 < INCOME_FLAT_PERCENT * base.income) {
+    return endSentence(`${subject} почти такой же, как ${input.inBase}: ${formatSignedCompactSum(change)}`);
+  }
+
+  const share = formatSignedPercent((change / base.income) * 100);
+  const trend =
+    change > 0
+      ? `${subject} больше на ${formatCompactSum(change)} (${share}) ${input.toBase}.`
+      : `${subject} меньше на ${formatCompactSum(Math.abs(change))} (${share}) ${input.toBase}.`;
+
+  if (contributions === null) {
+    return trend;
+  }
+
+  const main = largestMoneyFactor(contributions, (_key, contribution) => contribution * change > 0);
+
+  if (main === null) {
+    return trend;
+  }
+
+  const mainContribution = contributions[main];
+  const second = largestMoneyFactor(
+    contributions,
+    (key, contribution) =>
+      key !== main &&
+      contribution * change > 0 &&
+      Math.abs(contribution) * SECOND_FACTOR_SHARE_DIVISOR >= Math.abs(mainContribution),
+  );
+  const counter = largestMoneyFactor(
+    contributions,
+    (_key, contribution) =>
+      contribution * change < 0 && Math.abs(contribution) * COUNTER_SHARE_DIVISOR >= Math.abs(change),
+  );
+
+  const clause = (key: MoneyFactorKey): string =>
+    `${moneyFactorPhrase(key, contributions[key])}: ${moneyFactorValues(key, current, base)}`;
+  const lever = second === null ? `Главное — ${clause(main)}` : `Главное — ${clause(main)}, и ${clause(second)}`;
+
+  if (counter === null) {
+    return `${trend} ${lever}.`;
+  }
+
+  return endSentence(
+    `${trend} ${lever}; против — ${moneyFactorPhrase(counter, contributions[counter])}: ${formatSignedCompactSum(contributions[counter])}`,
+  );
 };

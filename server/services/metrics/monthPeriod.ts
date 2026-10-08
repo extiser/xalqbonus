@@ -83,25 +83,72 @@ export const wholeMonthPeriod = (month: string): MonthPeriodDays => {
   return { from: dayOfMonth(month, 1), to: dayOfMonth(month, days), days, partial: false };
 };
 
+/**
+ * Первые `days` суток месяца. Ноль суток — пустой период: `to` раньше `from`, и запрос
+ * за такие сутки ничего не находит.
+ */
+const firstDaysOf = (month: string, days: number): MonthPeriodDays => {
+  const from = dayOfMonth(month, 1);
+
+  return {
+    from,
+    to: days > 0 ? dayOfMonth(month, days) : shiftDayKey(from, -1),
+    days,
+    partial: days < monthLength(month),
+  };
+};
+
+/**
+ * База сравнения для периода из `days` первых суток месяца — месяц на `shift` назад. Прошедший
+ * месяц — и тот, что кончился вчера, — сравнивается с базой целиком, даже если та длиннее:
+ * ноябрь — со всем октябрём. Идущий — с теми же первыми сутками, сколько их есть в базе.
+ */
+const basePeriodOf = (month: string, days: number, shift: number): MonthPeriodDays => {
+  const baseMonth = shiftMonth(month, shift);
+  const baseLength = monthLength(baseMonth);
+
+  return firstDaysOf(baseMonth, days === monthLength(month) ? baseLength : Math.min(days, baseLength));
+};
+
 /** Период месяца и база сравнения. Месяц уже проверен `readMetricsMonth`. */
 export const monthPeriods = (month: string, now: Date): MonthPeriods => {
   const yesterday = yesterdayOf(now);
-  const length = monthLength(month);
-  const days = yesterday.slice(0, 7) === month ? Number(yesterday.slice(8, 10)) : length;
+  const days = yesterday.slice(0, 7) === month ? Number(yesterday.slice(8, 10)) : monthLength(month);
 
-  const baseMonth = shiftMonth(month, -1);
-  const baseLength = monthLength(baseMonth);
-  // Прошедший месяц — и тот, что кончился вчера, — сравнивается с прошлым целиком, даже если
-  // тот длиннее: ноябрь — со всем октябрём.
-  const baseDays = days === length ? baseLength : Math.min(days, baseLength);
+  return { period: firstDaysOf(month, days), basePeriod: basePeriodOf(month, days, -1) };
+};
+
+/** Период вкладки «Деньги» и две её базы сравнения. */
+export type MoneyPeriods = {
+  period: MonthPeriodDays;
+  /** Тот же месяц год назад. */
+  yearBase: MonthPeriodDays;
+  /** Прошлый месяц. */
+  monthBase: MonthPeriodDays;
+};
+
+/**
+ * Периоды вкладки «Деньги» (issue #438). Закрытый месяц — целиком; идущий — с первого числа
+ * по последние сутки, которые таблица денег уже посчитала, но не позже вчерашних: до ночного
+ * пересчёта это позавчера, и экран не говорит «собраны не все сутки» каждую ночь. Посчитанных
+ * суток месяца ещё нет — в периоде ноль суток (docs/decisions.md → «Деньги на дашборде»).
+ *
+ * Базы — тот же месяц год назад и прошлый месяц, теми же правилами, что у `monthPeriods`.
+ * `lastComputedDay` — последние сутки успешного прогона денег; `null` — прогона не было.
+ */
+export const moneyPeriods = (month: string, now: Date, lastComputedDay: string | null): MoneyPeriods => {
+  const yesterday = yesterdayOf(now);
+  let days = monthLength(month);
+
+  if (yesterday.slice(0, 7) === month) {
+    const lastDay = lastComputedDay !== null && lastComputedDay < yesterday ? lastComputedDay : yesterday;
+
+    days = lastComputedDay !== null && lastDay.slice(0, 7) === month ? Number(lastDay.slice(8, 10)) : 0;
+  }
 
   return {
-    period: { from: dayOfMonth(month, 1), to: dayOfMonth(month, days), days, partial: days < length },
-    basePeriod: {
-      from: dayOfMonth(baseMonth, 1),
-      to: dayOfMonth(baseMonth, baseDays),
-      days: baseDays,
-      partial: baseDays < baseLength,
-    },
+    period: firstDaysOf(month, days),
+    yearBase: basePeriodOf(month, days, -12),
+    monthBase: basePeriodOf(month, days, -1),
   };
 };

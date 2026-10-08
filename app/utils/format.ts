@@ -1,4 +1,3 @@
-import { formatNumber, formatTenths } from '#shared/numberFormat';
 import { rewardDeadlineDay } from '#shared/reward';
 import type { RewardSource } from '#shared/types/rewards';
 
@@ -13,7 +12,15 @@ import type { RewardSource } from '#shared/types/rewards';
  * Вид чисел — общий с сервером (issue #383): выводы словами собирает сервер, и число во фразе
  * обязано выглядеть как на плитке.
  */
-export { formatNumber, formatSignedNumber, formatTenths, pluralize } from '#shared/numberFormat';
+export {
+  formatCompactSum,
+  formatNumber,
+  formatSignedCompactSum,
+  formatSignedNumber,
+  formatSignedPercent,
+  formatTenths,
+  pluralize,
+} from '#shared/numberFormat';
 
 /** Прочерк вместо пустого места: «ничего нет» и «поле не нарисовалось» обязаны различаться. */
 export const DASH = '—';
@@ -299,31 +306,3 @@ export const formatClock = (value: string): string =>
     minute: '2-digit',
     hourCycle: 'h23',
   });
-
-const COMPACT_UNITS: readonly { size: number; unit: string }[] = [
-  { size: 1_000_000_000, unit: 'млрд' },
-  { size: 1_000_000, unit: 'млн' },
-  { size: 1_000, unit: 'тыс.' },
-];
-
-/**
- * Сумма сокращённо (issue #373): до тысячи — целым, дальше «тыс.», «млн», «млрд» с одним знаком
- * после запятой — «1,8 млрд». Долг в сумах — оценка, и цифры за запятой у неё — шум.
- *
- * Разряд выбирается по уже округлённому числу: 999 960 — «1,0 млн», а не «1 000,0 тыс.».
- */
-export const formatCompactSum = (value: number): string => {
-  const magnitude = Math.abs(value);
-
-  if (magnitude < 1_000) {
-    return formatNumber(Math.round(value));
-  }
-
-  for (const { size, unit } of COMPACT_UNITS) {
-    if (Math.round((magnitude / size) * 10) >= 10) {
-      return `${formatTenths(value / size)} ${unit}`;
-    }
-  }
-
-  return formatNumber(Math.round(value));
-};
