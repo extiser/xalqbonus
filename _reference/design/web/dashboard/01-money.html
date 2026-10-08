@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Дашборд — деньги в кармане</title>
-<!-- Дашборд T99, экран 1: уровень 1 «деньги в кармане». Сессия 83, 04-10-2026. Собран по web/codex.html.
-     Объяснение — 01-money.md рядом. Все цифры условные: порядок величин взят из пробы транзакций
-     (комиссия парка 4,4–7,2 млн сум в сутки, T104), сами значения выдуманы. -->
+<title>Дашборд — деньги</title>
+<!-- Дашборд T99, экран 1: «Деньги». Сессия 83, 04-10-2026, собран по web/codex.html; сессия 100, 08-10-2026 —
+     перерисован на живых цифрах прода за сентябрь 2026: без «Цены программы», «Заказы» вместо «Поездок»,
+     разбор на три множителя. Сессия 101, 09-10-2026 — сверен с «Рычагами» и «Глубиной» и кодексом: ряд 120, множители уравнением, переключатель как на «Глубине». Объяснение — 01-money.md рядом, цифры — product/metrics/park-income-by-month-2026-10.md. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Unbounded:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -78,16 +78,39 @@ body { color: var(--text); font: 400 15px/1.45 Manrope, system-ui, sans-serif; }
 .verdict { display: inline-flex; align-items: center; gap: 10px; margin-top: 18px; font: 600 15px Manrope; color: var(--text); background: rgba(71,203,74,.10); border-radius: 999px; padding: 8px 16px 8px 10px; align-self: flex-start; }
 .verdict i { width: 22px; height: 22px; border-radius: 50%; background: var(--green); display: grid; place-items: center; }
 .verdict i svg { width: 12px; height: 12px; stroke: var(--page); }
+.verdict.bad { background: rgba(255,92,120,.10); } .verdict.bad i { background: var(--scarlet); }
 .small-delta { font: 600 14px Manrope; color: var(--title); margin-top: 6px; } .small-delta b { font-weight: 700; }
 
 /* Разбор */
-.why { display: flex; flex-direction: column; gap: 12px; margin-top: 18px; }
-.why-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; font: 500 15px Manrope; color: var(--title); }
-.why-row b { font-weight: 700; text-align: right; } .pos { color: var(--green); } .neg { color: var(--scarlet); }
-.why-row .hint { display: block; font: 300 12px Manrope; color: var(--grey); margin-top: 2px; }
-.why-row.total { border-top: 1px solid var(--line); padding-top: 12px; color: var(--text); }
-.why-row .gold-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--gold); margin-right: 8px; vertical-align: 1px; }
+.pos { color: var(--green); } .neg { color: var(--scarlet); }
 
+.info { display: inline-grid; place-items: center; width: 28px; height: 28px; margin: -6px 0 -6px 2px; vertical-align: middle; border: 0; border-radius: 50%; background: none; color: var(--axis); cursor: pointer; padding: 0; }
+.info svg { width: 18px; height: 18px; }
+.glue { white-space: nowrap; } /* значок держится за последнее слово подписи и не уходит на строку один */
+.info:hover, .info[aria-expanded="true"] { color: var(--cyan); background: var(--raised); }
+.tip { position: fixed; z-index: 50; width: max-content; max-width: 300px; background: var(--raised); border-radius: 16px; padding: 14px 16px; font: 400 13px/1.45 Manrope; color: var(--title); box-shadow: 0 16px 40px rgba(0,0,0,.5), inset 0 0 0 1px var(--line); display: none; }
+.tip.on { display: block; }
+.tip { white-space: pre-line; }
+.tip b { display: block; color: var(--text); font: 600 14px/1.3 Manrope; margin-bottom: 4px; }
+.tip .how { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); color: var(--grey); font-size: 12px; }
+/* Переключатель базы разбора: год назад / прошлый месяц — как «По темпу · Программа» на «Глубине» */
+.seg { display: inline-flex; flex: none; gap: 4px; background: var(--raised); border-radius: 999px; padding: 4px; }
+.seg span { font: 600 13px Manrope; color: var(--title); padding: 6px 12px; border-radius: 999px; white-space: nowrap; cursor: pointer; }
+.seg span.on { background: var(--tile); color: var(--text); }
+[data-why-panel][hidden] { display: none; }
+/* Главная цифра во всю ширину: изменения и вердикт — одной строкой */
+.hero-row { display: flex; align-items: center; gap: 12px 28px; flex-wrap: wrap; margin-top: 14px; }
+.hero-row .deltas, .hero-row .verdict { margin-top: 0; }
+/* Уравнение множителей — как «За счёт чего изменились поездки» на «Рычагах» */
+.eq { display: grid; grid-template-columns: 1.15fr auto 1fr auto 1fr auto 1fr; align-items: stretch; gap: 14px; margin-top: 18px; }
+.eq .op { align-self: center; font: 600 26px Manrope; color: var(--axis); }
+.factor { background: var(--raised); border-radius: 22px; padding: 18px 20px; display: flex; flex-direction: column; }
+.factor.result { background: rgba(156,238,255,.08); }
+.factor .name { font: 500 14px/1.3 Manrope; color: var(--title); min-height: 2.6em; } /* две строки под подпись у всех множителей: значения стоят на одной высоте */
+.factor .val { font: 700 30px/1.05 Unbounded; letter-spacing: -1px; margin-top: 10px; }
+.factor .was { font: 400 13px Manrope; color: var(--grey); margin-top: 6px; }
+.factor .contrib { margin-top: auto; padding-top: 12px; font: 600 14px Manrope; color: var(--title); }
+.factor .contrib b { font-weight: 700; }
 /* График */
 .legend { display: flex; gap: 18px; flex-wrap: wrap; font: 500 13px Manrope; color: var(--title); margin-top: 8px; }
 .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 4px; vertical-align: -1px; margin-right: 6px; }
@@ -118,6 +141,9 @@ body { color: var(--text); font: 400 15px/1.45 Manrope, system-ui, sans-serif; }
   .tile { grid-column: auto !important; grid-row: auto !important; min-height: 120px; padding: 24px; }
   .t-hero { font-size: 44px; letter-spacing: -2px; }
   .chart-tile { min-height: 300px; }
+  .head { flex-wrap: wrap; } /* переключатель уходит под подпись, как на «Глубине» */
+  .eq { grid-template-columns: 1fr 1fr; } .eq .op { display: none; }
+  .factor .val { font-size: 24px; }
   .levels { overflow-x: auto; }
   .chart-desk { display: none; } .chart-mob { display: block; flex: none; height: auto; }
   .legend span:nth-child(3) { display: none; }
@@ -156,11 +182,11 @@ body { color: var(--text); font: 400 15px/1.45 Manrope, system-ui, sans-serif; }
         <div class="levels"><span class="lvl on">Деньги</span><span class="lvl">Рычаги</span><span class="lvl">Глубина</span></div>
       </div>
       <div style="display:flex;align-items:center;gap:12px">
-        <span class="badge">цифры условные</span>
+        <span class="badge">прод, 08-10-2026</span>
         <div class="period">
-          <span>Октябрь 2026</span>
+          <span>Сентябрь 2026</span>
           <span class="arr"><svg viewBox="0 0 16 16" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8l5 5"/></svg></span>
-          <span class="arr" style="opacity:.4"><svg viewBox="0 0 16 16" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg></span>
+          <span class="arr"><svg viewBox="0 0 16 16" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg></span>
         </div>
       </div>
     </div>
@@ -168,95 +194,106 @@ body { color: var(--text); font: 400 15px/1.45 Manrope, system-ui, sans-serif; }
     <div class="bento">
 
       <!-- Главная цифра -->
-      <section class="tile c8 r3">
-        <div class="head"><span class="t-title">Доход за вычетом программы</span></div>
-        <div class="t-hero">134,6<span class="t-unit">млн сум</span></div>
-        <div class="deltas">
-          <span class="delta up"><b>+8,3 млн</b> к сентябрю <svg viewBox="0 0 18 12" fill="none" stroke="#47CB4A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 11l5-5 4 3 7-7M12 2h5v5"/></svg></span>
-          <span class="delta up"><b>+21,4 млн</b> к октябрю 2025</span>
+      <section class="tile c12 r2">
+        <div class="head"><span class="t-title">Доход <span class="glue">парка<button class="info" type="button" aria-label="Что это: Доход парка" aria-expanded="false" data-tip-title="Доход парка" data-tip-text="Сколько парк заработал на комиссии с заказов за месяц." data-tip-how="Комиссия парка с каждого оплаченного заказа по транзакциям Яндекса, месяц по Ташкенту. Оплата поездок, комиссия Яндекса, налоги и выводы денег — не доход парка. Расходы парка не введены, поэтому это не прибыль."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span></div>
+        <div class="t-hero">122,2<span class="t-unit">млн сум</span></div>
+        <div class="hero-row">
+          <div class="deltas">
+            <span class="delta down"><b>−58,2 млн</b> к сентябрю 2025, −32 % <svg viewBox="0 0 18 12" fill="none" stroke="#FF5C78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l5 5 4-3 7 7M12 10h5V5"/></svg></span>
+            <span class="delta up"><b>+1,0 %</b> к августу в сутки</span>
+          </div>
+          <div class="verdict bad"><i><svg viewBox="0 0 12 12" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.5v7M3 6.5l3 3 3-3"/></svg></i>Парк стал беднее, чем год назад</div>
         </div>
-        <div class="verdict"><i><svg viewBox="0 0 12 12" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.2l2.3 2.3 4.7-5"/></svg></i>Парк стал богаче, чем год назад</div>
-        <div class="t-sub">Доход парка — комиссия с каждой поездки по данным Яндекса, минус цена программы. Расходы парка не введены, поэтому это не «прибыль». Посчитано сегодня в 05:00.</div>
+        <div class="t-sub">Комиссия парка с оплаченных заказов по транзакциям Яндекса. Расходы парка не введены, поэтому это не «прибыль». Посчитано сегодня в 05:00.</div>
       </section>
 
-      <!-- Почему изменилось -->
-      <section class="tile c4 r3">
-        <div class="head"><span class="t-title">Почему изменилось</span><span class="go"><svg viewBox="0 0 16 16" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg></span></div>
-        <div class="why">
-          <div class="why-row"><span>Поездок больше<span class="hint">83 120 против 79 400</span></span><b class="pos">+6,2 млн</b></div>
-          <div class="why-row"><span>Доход с поездки<span class="hint">1 689 против 1 659 сум</span></span><b class="pos">+2,5 млн</b></div>
-          <div class="why-row"><span><span class="gold-dot"></span>Программа дороже<span class="hint">выдано баллов на 5,8 млн</span></span><b class="neg">−0,4 млн</b></div>
-          <div class="why-row total"><span>К сентябрю</span><b class="pos">+8,3 млн</b></div>
+      <!-- Почему изменилось: доход = заказы × оплата на заказ × комиссия -->
+      <section class="tile c12 r3">
+        <div class="head"><span class="t-title">Почему <span class="glue">изменилось<button class="info" type="button" aria-label="Что это: Почему изменилось" aria-expanded="false" data-tip-title="Почему изменилось" data-tip-text="Изменение дохода разложено на три множителя: сколько заказов, сколько пассажир платит за заказ и какую долю оплаты берёт парк. Под каждым — сколько он прибавил или отнял. Вместе они дают всё изменение." data-tip-how="Доход = заказы × оплата на заказ × комиссия. Вклад множителя = изменение дохода × ln(новое ÷ прошлое значение) ÷ ln(новый ÷ прошлый доход). Порядок множителей на результат не влияет. К прошлому месяцу — в сутки: месяцы разной длины."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span><div class="seg" role="tablist"><span class="on" role="tab" aria-selected="true" aria-label="К сентябрю 2025" data-why="year">год</span><span role="tab" aria-selected="false" aria-label="К августу" data-why="month">месяц</span></div></div>
+        <div class="eq" data-why-panel="year">
+          <div class="factor result"><span class="name">Доход парка, млн <span class="glue">сум<button class="info" type="button" aria-label="Что это: Доход парка" aria-expanded="false" data-tip-title="Доход парка" data-tip-text="Сколько парк заработал на комиссии с заказов за месяц." data-tip-how="Комиссия парка с каждого оплаченного заказа по транзакциям Яндекса, месяц по Ташкенту. Оплата поездок, комиссия Яндекса, налоги и выводы денег — не доход парка. Расходы парка не введены, поэтому это не прибыль."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span><span class="val">122,2</span><span class="was">в сентябре 2025 — 180,4 млн</span><span class="contrib"><b class="neg">−58,2 млн</b> всего</span></div>
+          <span class="op">=</span>
+          <div class="factor"><span class="name"><span class="glue">Заказов<button class="info" type="button" aria-label="Что это: Заказов" aria-expanded="false" data-tip-title="Заказов" data-tip-text="Сколько заказов оплачено за месяц." data-tip-how="Заказ с комиссией парка — у каждого оплаченного заказа она одна. Завершённых поездок на «Рычагах» меньше на доли процента."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span><span class="val">79 748</span><span class="was">было 99 430</span><span class="contrib"><b class="neg">−33,0 млн</b></span></div>
+          <span class="op">×</span>
+          <div class="factor"><span class="name">Оплата на заказ, <span class="glue">сум<button class="info" type="button" aria-label="Что это: Оплата на заказ" aria-expanded="false" data-tip-title="Оплата на заказ" data-tip-text="Сколько в среднем пассажир платит за заказ." data-tip-how="Наличные, карта, корпоративная оплата, промокоды и компенсации за месяц ÷ заказы. Чаевые не входят."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span><span class="val">33 264</span><span class="was">было 31 650</span><span class="contrib"><b class="pos">+7,4 млн</b></span></div>
+          <span class="op">×</span>
+          <div class="factor"><span class="name">Комиссия парка, <span class="glue">%<button class="info" type="button" aria-label="Что это: Комиссия парка" aria-expanded="false" data-tip-title="Комиссия парка" data-tip-text="Какую долю оплаты парк в среднем берёт себе с заказа." data-tip-how="Комиссия парка ÷ оплата за месяц. Ставка — самая частая доля комиссии в цене заказа. Часть заказов идёт по сниженной ставке, поэтому среднее ниже ставки."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span><span class="val">4,61</span><span class="was">было 5,73</span><span class="was">с заказа 1 533 сум, было 1 815</span><span class="contrib"><b class="neg">−32,7 млн</b></span></div>
         </div>
-        <div class="t-sub">Нажмите — тот же разбор к октябрю 2025</div>
-      </section>
-
-      <!-- Слагаемые -->
-      <section class="tile c3 r1">
-        <div class="head"><span class="t-title">Доход парка</span></div>
-        <div class="t-big">140,4<span class="t-unit">млн</span></div>
-      </section>
-      <section class="tile c3 r1">
-        <div class="head"><span class="t-title"><span class="gold-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#F7BC3E;margin-right:8px;vertical-align:1px"></span>Цена программы</span></div>
-        <div class="t-big">5,8<span class="t-unit">млн</span></div>
-      </section>
-      <section class="tile c3 r1">
-        <div class="head"><span class="t-title">Поездок</span></div>
-        <div class="t-big">83 120</div>
-      </section>
-      <section class="tile c3 r1">
-        <div class="head"><span class="t-title">Доход с поездки</span></div>
-        <div class="t-big">1 689<span class="t-unit">сум</span></div>
+        <div class="eq" data-why-panel="month" hidden>
+          <div class="factor result"><span class="name">Доход в сутки, млн <span class="glue">сум<button class="info" type="button" aria-label="Что это: Доход в сутки" aria-expanded="false" data-tip-title="Доход в сутки" data-tip-text="Доход парка за месяц ÷ дней в месяце." data-tip-how="Сентябрь — 30 суток, август — 31: сравнивать месяцы разной длины целиком нельзя."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span><span class="val">4,07</span><span class="was">в августе 4,03 млн</span><span class="contrib"><b class="pos">+39,7 тыс.</b> всего</span></div>
+          <span class="op">=</span>
+          <div class="factor"><span class="name">Заказов в <span class="glue">сутки<button class="info" type="button" aria-label="Что это: Заказов в сутки" aria-expanded="false" data-tip-title="Заказов в сутки" data-tip-text="Сколько заказов в среднем оплачено за сутки." data-tip-how="Заказы за месяц ÷ дней в месяце."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span><span class="val">2 658</span><span class="was">было 2 573</span><span class="contrib"><b class="pos">+132,8 тыс.</b></span></div>
+          <span class="op">×</span>
+          <div class="factor"><span class="name">Оплата на заказ, <span class="glue">сум<button class="info" type="button" aria-label="Что это: Оплата на заказ" aria-expanded="false" data-tip-title="Оплата на заказ" data-tip-text="Сколько в среднем пассажир платит за заказ." data-tip-how="Наличные, карта, корпоративная оплата, промокоды и компенсации за месяц ÷ заказы. Чаевые не входят."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span><span class="val">33 264</span><span class="was">было 34 013</span><span class="contrib"><b class="neg">−90,4 тыс.</b></span></div>
+          <span class="op">×</span>
+          <div class="factor"><span class="name">Комиссия парка, <span class="glue">%<button class="info" type="button" aria-label="Что это: Комиссия парка" aria-expanded="false" data-tip-title="Комиссия парка" data-tip-text="Какую долю оплаты парк в среднем берёт себе с заказа." data-tip-how="Комиссия парка ÷ оплата за месяц. Ставка — самая частая доля комиссии в цене заказа. Часть заказов идёт по сниженной ставке, поэтому среднее ниже ставки."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span><span class="val">4,608</span><span class="was">было 4,611</span><span class="was">с заказа 1 533 сум, было 1 568</span><span class="contrib"><b class="neg">−2,8 тыс.</b></span></div>
+        </div>
+        <div class="t-sub" data-why-panel="year">Доход меньше на 58,2 млн (−32 %) к сентябрю 2025. Главное — заказов меньше: −33,0 млн, и парк берёт меньшую долю оплаты: −32,7 млн; заказы подорожали: +7,4 млн. Ставка парка 4,74 %, 4,5 % заказов — по 2 %.</div>
+        <div class="t-sub" data-why-panel="month" hidden>К августу — в сутки: в сентябре 30 суток, в августе 31. Доход в сутки больше на 39,7 тыс. (+1,0 %): заказов в сутки больше, +132,8 тыс.; заказы подешевели, −90,4 тыс.; доля парка почти не изменилась, −2,8 тыс.</div>
       </section>
 
       <!-- По месяцам -->
       <section class="tile c12 r3 chart-tile">
-        <div class="head"><span class="t-title">Доход за вычетом программы по месяцам</span><span class="go"><svg viewBox="0 0 16 16" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg></span></div>
-        <div class="legend"><span><i style="background:#9CEEFF"></i>октябрь 2026</span><span><i style="background:#4F6C73"></i>октябрь 2025</span><span><i style="background:#1C4A58"></i>остальные месяцы</span><span><i style="background:#E8365D;width:2px;border-radius:1px"></i>событие</span></div>
-        <svg class="chart chart-desk" viewBox="0 0 1120 250" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Доход за вычетом программы по месяцам, октябрь 2025 — октябрь 2026">
-          <g stroke="rgba(156,238,255,.06)" stroke-width="1"><line x1="56" y1="20" x2="1110" y2="20"/><line x1="56" y1="85" x2="1110" y2="85"/><line x1="56" y1="150" x2="1110" y2="150"/><line x1="56" y1="215" x2="1110" y2="215"/></g>
-          <g font-family="Manrope" font-size="12" font-weight="500" fill="#566E74" text-anchor="end"><text x="46" y="24">150 млн</text><text x="46" y="89">100 млн</text><text x="46" y="154">50 млн</text><text x="46" y="219">0</text></g>
-          <!-- 13 месяцев: окт 2025 … окт 2026; шаг 80, столбец 40 -->
+        <div class="head"><span class="t-title">Доход парка по <span class="glue">месяцам<button class="info" type="button" aria-label="Что это: Доход парка по месяцам" aria-expanded="false" data-tip-title="Доход парка по месяцам" data-tip-text="Доход парка за каждый из последних 13 месяцев." data-tip-how="Тот же доход, что в главной цифре. Выбранный месяц — голубым, тот же месяц год назад — серым."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span></div>
+        <div class="legend"><span><i style="background:#9CEEFF"></i>сентябрь 2026</span><span><i style="background:#4F6C73"></i>сентябрь 2025</span><span><i style="background:#1C4A58"></i>остальные месяцы</span></div>
+        <svg class="chart chart-desk" viewBox="0 0 1120 250" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Доход парка по месяцам, сентябрь 2025 — сентябрь 2026">
+          <g stroke="rgba(156,238,255,.06)" stroke-width="1"><line x1="56" y1="20" x2="1110" y2="20"/><line x1="56" y1="69" x2="1110" y2="69"/><line x1="56" y1="118" x2="1110" y2="118"/><line x1="56" y1="166" x2="1110" y2="166"/><line x1="56" y1="215" x2="1110" y2="215"/></g>
+          <g font-family="Manrope" font-size="12" font-weight="500" fill="#566E74" text-anchor="end"><text x="46" y="24">200 млн</text><text x="46" y="73">150 млн</text><text x="46" y="122">100 млн</text><text x="46" y="170">50 млн</text><text x="46" y="219">0</text></g>
+          <!-- 13 месяцев: сен 2025 … сен 2026; шаг 80, столбец 40; 0,975 px на млн -->
           <g>
-            <rect x="80" y="68" width="40" height="147" rx="6" fill="#4F6C73"/>
-            <rect x="160" y="88" width="40" height="127" rx="6" fill="#1C4A58"/>
-            <rect x="240" y="96" width="40" height="119" rx="6" fill="#1C4A58"/>
-            <rect x="320" y="106" width="40" height="109" rx="6" fill="#1C4A58"/>
-            <rect x="400" y="101" width="40" height="114" rx="6" fill="#1C4A58"/>
-            <rect x="480" y="92" width="40" height="123" rx="6" fill="#1C4A58"/>
-            <rect x="560" y="86" width="40" height="129" rx="6" fill="#1C4A58"/>
-            <rect x="640" y="83" width="40" height="132" rx="6" fill="#1C4A58"/>
-            <rect x="720" y="80" width="40" height="135" rx="6" fill="#1C4A58"/>
-            <rect x="800" y="84" width="40" height="131" rx="6" fill="#1C4A58"/>
-            <rect x="880" y="78" width="40" height="137" rx="6" fill="#1C4A58"/>
-            <rect x="960" y="51" width="40" height="164" rx="6" fill="#1C4A58"/>
-            <rect x="1040" y="40" width="40" height="175" rx="6" fill="#9CEEFF"/>
+            <rect x="80" y="39" width="40" height="176" rx="6" fill="#4F6C73"/>
+            <rect x="160" y="46" width="40" height="169" rx="6" fill="#1C4A58"/>
+            <rect x="240" y="63" width="40" height="152" rx="6" fill="#1C4A58"/>
+            <rect x="320" y="90" width="40" height="125" rx="6" fill="#1C4A58"/>
+            <rect x="400" y="74" width="40" height="141" rx="6" fill="#1C4A58"/>
+            <rect x="480" y="113" width="40" height="102" rx="6" fill="#1C4A58"/>
+            <rect x="560" y="96" width="40" height="119" rx="6" fill="#1C4A58"/>
+            <rect x="640" y="105" width="40" height="110" rx="6" fill="#1C4A58"/>
+            <rect x="720" y="104" width="40" height="111" rx="6" fill="#1C4A58"/>
+            <rect x="800" y="103" width="40" height="112" rx="6" fill="#1C4A58"/>
+            <rect x="880" y="102" width="40" height="113" rx="6" fill="#1C4A58"/>
+            <rect x="960" y="93" width="40" height="122" rx="6" fill="#1C4A58"/>
+            <rect x="1040" y="96" width="40" height="119" rx="6" fill="#9CEEFF"/>
           </g>
-          <line x1="940" y1="20" x2="940" y2="215" stroke="#E8365D" stroke-width="1.5"/>
-          <text x="934" y="34" text-anchor="end" font-family="Manrope" font-size="12" font-weight="600" fill="#9DB1B5">Новый бот, 28 сен</text>
-          <text x="1060" y="32" text-anchor="middle" font-family="Manrope" font-size="13" font-weight="700" fill="#F4F9FA">134,6</text>
-          <text x="100" y="58" text-anchor="middle" font-family="Manrope" font-size="13" font-weight="700" fill="#9DB1B5">113,2</text>
+          <!-- Доход месяца над каждым столбцом, млн -->
+          <g font-family="Manrope" font-size="13" text-anchor="middle">
+            <text x="100" y="31" fill="#9DB1B5" font-weight="700">180,4</text>
+            <text x="180" y="38" fill="#7E9399" font-weight="600">173,5</text>
+            <text x="260" y="55" fill="#7E9399" font-weight="600">156,2</text>
+            <text x="340" y="82" fill="#7E9399" font-weight="600">128,1</text>
+            <text x="420" y="66" fill="#7E9399" font-weight="600">144,4</text>
+            <text x="500" y="105" fill="#7E9399" font-weight="600">104,8</text>
+            <text x="580" y="88" fill="#7E9399" font-weight="600">122,5</text>
+            <text x="660" y="97" fill="#7E9399" font-weight="600">113,3</text>
+            <text x="740" y="96" fill="#7E9399" font-weight="600">113,9</text>
+            <text x="820" y="95" fill="#7E9399" font-weight="600">114,4</text>
+            <text x="900" y="94" fill="#7E9399" font-weight="600">116,1</text>
+            <text x="980" y="85" fill="#7E9399" font-weight="600">125,1</text>
+            <text x="1060" y="88" fill="#F4F9FA" font-weight="700">122,2</text>
+          </g>
           <g font-family="Manrope" font-size="12" font-weight="500" fill="#566E74" text-anchor="middle">
-            <text x="100" y="238">окт</text><text x="180" y="238">ноя</text><text x="260" y="238">дек</text><text x="340" y="238">янв</text><text x="420" y="238">фев</text><text x="500" y="238">мар</text><text x="580" y="238">апр</text><text x="660" y="238">май</text><text x="740" y="238">июн</text><text x="820" y="238">июл</text><text x="900" y="238">авг</text><text x="980" y="238">сен</text><text x="1060" y="238" fill="#F4F9FA">окт</text>
+            <text x="100" y="238">сен</text><text x="180" y="238">окт</text><text x="260" y="238">ноя</text><text x="340" y="238">дек</text><text x="420" y="238">янв</text><text x="500" y="238">фев</text><text x="580" y="238">мар</text><text x="660" y="238">апр</text><text x="740" y="238">май</text><text x="820" y="238">июн</text><text x="900" y="238">июл</text><text x="980" y="238">авг</text><text x="1060" y="238" fill="#F4F9FA">сен</text>
           </g>
         </svg>
-        <!-- Телефон: тот же год назад + последние 4 месяца, разрыв помечен -->
-        <svg class="chart chart-mob" viewBox="0 0 340 230" role="img" aria-label="Доход за вычетом программы: октябрь 2025 и июль — октябрь 2026">
-          <g stroke="rgba(156,238,255,.06)" stroke-width="1"><line x1="0" y1="20" x2="340" y2="20"/><line x1="0" y1="85" x2="340" y2="85"/><line x1="0" y1="150" x2="340" y2="150"/><line x1="0" y1="200" x2="340" y2="200"/></g>
-          <rect x="10" y="61" width="44" height="139" rx="6" fill="#4F6C73"/>
-          <text x="32" y="52" text-anchor="middle" font-family="Manrope" font-size="13" font-weight="700" fill="#9DB1B5">113,2</text>
+        <!-- Телефон: тот же месяц год назад + последние 4 месяца, разрыв помечен; 0,9 px на млн -->
+        <svg class="chart chart-mob" viewBox="0 0 340 230" role="img" aria-label="Доход парка: сентябрь 2025 и июнь — сентябрь 2026">
+          <g stroke="rgba(156,238,255,.06)" stroke-width="1"><line x1="0" y1="20" x2="340" y2="20"/><line x1="0" y1="110" x2="340" y2="110"/><line x1="0" y1="200" x2="340" y2="200"/></g>
+          <rect x="10" y="38" width="44" height="162" rx="6" fill="#4F6C73"/>
+          <text x="32" y="30" text-anchor="middle" font-family="Manrope" font-size="13" font-weight="700" fill="#9DB1B5">180,4</text>
           <text x="84" y="140" text-anchor="middle" font-family="Manrope" font-size="18" font-weight="700" fill="#566E74">⋯</text>
-          <rect x="114" y="76" width="44" height="124" rx="6" fill="#1C4A58"/>
-          <rect x="170" y="70" width="44" height="130" rx="6" fill="#1C4A58"/>
-          <rect x="226" y="45" width="44" height="155" rx="6" fill="#1C4A58"/>
-          <rect x="282" y="35" width="44" height="165" rx="6" fill="#9CEEFF"/>
-          <text x="304" y="26" text-anchor="middle" font-family="Manrope" font-size="13" font-weight="700" fill="#F4F9FA">134,6</text>
-          <line x1="220" y1="20" x2="220" y2="200" stroke="#E8365D" stroke-width="1.5"/>
+          <rect x="114" y="97" width="44" height="103" rx="6" fill="#1C4A58"/>
+          <rect x="170" y="96" width="44" height="104" rx="6" fill="#1C4A58"/>
+          <rect x="226" y="87" width="44" height="113" rx="6" fill="#1C4A58"/>
+          <rect x="282" y="90" width="44" height="110" rx="6" fill="#9CEEFF"/>
+          <g font-family="Manrope" font-size="13" font-weight="600" fill="#7E9399" text-anchor="middle"><text x="136" y="89">114,4</text><text x="192" y="88">116,1</text><text x="248" y="79">125,1</text></g>
+          <text x="304" y="82" text-anchor="middle" font-family="Manrope" font-size="13" font-weight="700" fill="#F4F9FA">122,2</text>
           <g font-family="Manrope" font-size="12" font-weight="500" fill="#566E74" text-anchor="middle">
-            <text x="32" y="220">окт 25</text><text x="136" y="220">июл</text><text x="192" y="220">авг</text><text x="248" y="220">сен</text><text x="304" y="220" fill="#F4F9FA">окт</text>
+            <text x="32" y="220">сен 25</text><text x="136" y="220">июн</text><text x="192" y="220">июл</text><text x="248" y="220">авг</text><text x="304" y="220" fill="#F4F9FA">сен</text>
           </g>
         </svg>
       </section>
+
+
 
     </div>
   </main>
@@ -270,6 +307,43 @@ document.querySelectorAll('.side').forEach(function (side) {
 });
 document.addEventListener('click', function () {
   document.querySelectorAll('.side.open').forEach(function (side) { side.classList.remove('open'); });
+});
+/* Подсказка метрики: одна на страницу, ставится под значком и не выходит за край окна */
+var tip = document.createElement('div'); tip.className = 'tip'; tip.setAttribute('role', 'tooltip'); document.body.appendChild(tip);
+var openInfo = null;
+function closeTip() { tip.classList.remove('on'); if (openInfo) openInfo.setAttribute('aria-expanded', 'false'); openInfo = null; }
+function openTip(btn) {
+  tip.innerHTML = '';
+  var title = document.createElement('b'); title.textContent = btn.dataset.tipTitle; tip.appendChild(title);
+  tip.appendChild(document.createTextNode(btn.dataset.tipText));
+  if (btn.dataset.tipHow) { var how = document.createElement('div'); how.className = 'how'; how.textContent = btn.dataset.tipHow; tip.appendChild(how); }
+  tip.classList.add('on');
+  btn.setAttribute('aria-expanded', 'true'); openInfo = btn;
+  placeTip();
+}
+/* Под значком; не влезает снизу — над ним; у края окна сдвигается внутрь */
+function placeTip() {
+  if (!openInfo) return;
+  var box = openInfo.getBoundingClientRect(), width = tip.offsetWidth, height = tip.offsetHeight;
+  var left = Math.min(Math.max(12, box.left + box.width / 2 - 24), window.innerWidth - width - 12);
+  var top = box.bottom + 8; if (top + height > window.innerHeight - 12) top = box.top - height - 8;
+  tip.style.left = left + 'px'; tip.style.top = top + 'px';
+}
+document.querySelectorAll('.info').forEach(function (btn) {
+  btn.addEventListener('click', function (event) { event.stopPropagation(); if (openInfo === btn) closeTip(); else { closeTip(); openTip(btn); } });
+});
+tip.addEventListener('click', function (event) { event.stopPropagation(); });
+document.addEventListener('click', closeTip);
+document.addEventListener('keydown', function (event) { if (event.key === 'Escape') closeTip(); });
+/* Прокрутка и смена размера окна подсказку не закрывают, а двигают за значком: на телефоне окно меняет высоту, когда прячется строка адреса */
+window.addEventListener('scroll', placeTip, true); window.addEventListener('resize', placeTip);
+/* Переключатель разбора: показывает один из двух разборов */
+document.querySelectorAll('.seg span').forEach(function (tab) {
+  tab.addEventListener('click', function () {
+    var tile = tab.closest('.tile');
+    tile.querySelectorAll('.seg span').forEach(function (other) { var on = other === tab; other.classList.toggle('on', on); other.setAttribute('aria-selected', on ? 'true' : 'false'); });
+    tile.querySelectorAll('[data-why-panel]').forEach(function (panel) { panel.hidden = panel.dataset.whyPanel !== tab.dataset.why; });
+  });
 });
 </script>
 </body>
