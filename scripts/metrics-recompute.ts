@@ -1,5 +1,6 @@
 /**
- * Разовый пересчёт таблицы метрик дашборда, мимо очереди (issues #371, #387).
+ * Разовый пересчёт таблиц метрик дашборда, мимо очереди (issues #371, #387, #438): поездки
+ * `metric_person_days` и деньги `metric_money_days`, подряд, сводка — по каждой.
  *
  * Тонкая обвязка над сервисом: вызов и сводка. Тем же кодом ходит ночная задача воркера —
  * второй реализации пересчёта не существует (docs/principles.md → «Слои и зависимости»).
@@ -15,19 +16,33 @@
 import { consola } from 'consola';
 
 import { db } from '#server/db';
+import { recomputeMoneyDays } from '#server/services/metrics/recomputeMoneyDays';
 import { recomputePersonDays } from '#server/services/metrics/recomputePersonDays';
 
 const log = consola.withTag('metrics-recompute');
 
+const seconds = (durationMs: number): number => Math.round(durationMs / 100) / 10;
+
 const main = async (): Promise<void> => {
-  const summary = await recomputePersonDays();
+  const trips = await recomputePersonDays();
 
   log.info('Сводка пересчёта', {
-    daysFrom: summary.daysFrom,
-    daysTo: summary.daysTo,
-    rows: summary.rows,
-    unattributedOrders: summary.unattributedOrders,
-    durationSec: Math.round(summary.durationMs / 100) / 10,
+    daysFrom: trips.daysFrom,
+    daysTo: trips.daysTo,
+    rows: trips.rows,
+    unattributedOrders: trips.unattributedOrders,
+    durationSec: seconds(trips.durationMs),
+  });
+
+  // Деньги — после поездок, тем же запуском: упали поездки — до денег дело не доходит,
+  // и терминал говорит об одной ошибке, а не о двух.
+  const money = await recomputeMoneyDays();
+
+  log.info('Сводка пересчёта денег', {
+    daysFrom: money.daysFrom,
+    daysTo: money.daysTo,
+    rows: money.rows,
+    durationSec: seconds(money.durationMs),
   });
 };
 

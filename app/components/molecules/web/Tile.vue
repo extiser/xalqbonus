@@ -18,7 +18,8 @@ import type { MetricKey, MetricValues } from '#shared/metrics';
  * Плитка с `to` нажимается целиком — так в кодексе: «кнопка-вход — круг 40 на поднятом цвете,
  * вся плитка нажимается». Круг тогда только знак, что плитка ведёт дальше, и других действий
  * внутри такой плитки нет: ссылка в ссылке — ошибка разметки. Без `to` справа в шапке стоит
- * слот `aside` — бейдж «цифры условные» или кнопка действия.
+ * слот `aside` — бейдж «цифры условные», кнопка действия или переключатель; на телефоне шапка
+ * с ним переносится, и он уходит под название (`01-money.html`, issue #438).
  *
  * Растёт плитка только с `grow` — таблица, у которой число строк заранее неизвестно (issue #380):
  * её содержимое растит ряд сетки (`MoleculesWebBento`), и соседи по ряду растут вместе с ней.
@@ -78,7 +79,7 @@ const ROWS_CLASSES: Record<TileRows, string> = {
       grow ? '' : 'web:[contain:size]',
     ]"
   >
-    <div class="flex items-center justify-between gap-3">
+    <div class="flex items-center justify-between gap-3" :class="!to && $slots.aside ? 'max-web:flex-wrap' : ''">
       <AtomsWebTileTitle :label="title" :marker="marker" :metric="metric" :metric-values="metricValues" />
       <span v-if="to" class="grid size-10 shrink-0 place-items-center rounded-full bg-web-raised" aria-hidden="true">
         <svg

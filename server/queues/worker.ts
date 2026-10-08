@@ -177,13 +177,29 @@ const metricsQueue = createMetricsQueue();
 const metricsWorker = createMetricsWorker();
 
 metricsWorker.on('failed', (job, error) => {
-  // Прогон уже закрыт в `metric_recompute_runs` текстом ошибки, таблица осталась прежней:
-  // пересчёт пишет её одной транзакцией. Повторит следующая ночь.
+  // Прогон уже закрыт в `metric_recompute_runs` или `metric_money_runs` текстом ошибки, таблица
+  // осталась прежней: пересчёт пишет её одной транзакцией. Повторит следующая ночь.
   log.error('пересчёт метрик упал', { kind: job?.data.kind, error: error.message });
 });
 
 metricsWorker.on('error', (error: Error) => {
   log.warn('очередь метрик сообщила об ошибке', { error: error.message });
+});
+
+// Деньги дашборда пересчитываются после ночного перечитывания транзакций, а не по часам
+// (issue #438, docs/decisions.md → «Деньги на дашборде»): опоздавшие транзакции добирает
+// перечитывание, и цифра должна их видеть. Упало, выключено или пропущено как просроченное —
+// деньги в эту ночь не пересчитываются, экран показывает прежнюю таблицу со временем её прогона.
+syncWorker.on('completed', (job, outcome) => {
+  if (job.data.kind !== 'transactions_recheck' || outcome !== 'done') {
+    return;
+  }
+
+  metricsQueue.add('money', { kind: 'money' }).catch((error: unknown) => {
+    log.error('пересчёт денег не поставлен в очередь', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
 });
 
 // Прошлый процесс мог уйти по SIGKILL, не закрыв свою строку прогона: `syncWorker.close()`

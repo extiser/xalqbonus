@@ -10,9 +10,8 @@ import { toLoadState } from '~/utils/loadState';
  *
  * Дашборд строится срезами, и это первый: плитка множителей, под ней — поток водителей по месяцам
  * и панель месяца (issue #392), под потоком — три плитки лидеров и список тех, кого парк может
- * потерять (issue #402). «Глубина» сделана вторым срезом (issue #373), «Деньги» видна
- * и не нажимается. Пункта «Дашборд» в меню нет — появится, когда дашборд будет готов, —
- * страница открывается адресом.
+ * потерять (issue #402). «Глубина» сделана вторым срезом (issue #373), «Деньги» — третьим
+ * (issue #438), и дашборд открывается ею.
  *
  * Месяц живёт в адресе (`?month=2026-10`): ссылку на месяц можно переслать. Его меняют
  * переключатель месяца и нажатие на месяц графика потока — одним переходом. Без месяца
@@ -57,7 +56,7 @@ const changeMonth = (month: string): void => {
     <div class="flex flex-wrap items-end justify-between gap-4 px-1 pt-1.5 pb-5 max-web:px-0.5 max-web:pt-1 max-web:pb-3.5">
       <div class="flex min-w-0 flex-col gap-3.5">
         <AtomsWebPageTitle label="Дашборд" />
-        <MoleculesWebLevelTabs current="levers" :available="['levers', 'depth']" :month="monthQuery" />
+        <MoleculesWebLevelTabs current="levers" :available="['money', 'levers', 'depth']" :month="monthQuery" />
       </div>
       <MoleculesWebMonthPicker
         v-if="levers"

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { formatClock, formatMomentDate, formatNumber, formatTenths } from '~/utils/format';
+import { formatClock, formatMomentDate, formatNumber, formatSignedNumber, formatTenths } from '~/utils/format';
 import { monthForms, periodMonthWord, shiftMonth } from '#shared/monthNames';
 import type { LoadState } from '~/types/loadState';
 import type { DashboardLevers } from '#shared/types/dashboard';
@@ -78,7 +78,7 @@ const cards = computed(() => {
       metric: 'trips',
       value: formatNumber(current.trips),
       was: base ? `в ${periodMonthWord(basePeriod, 'prepositional')} ${formatNumber(base.trips)}` : null,
-      contribution: contributions?.total ?? null,
+      contribution: contributions ? formatSignedNumber(contributions.total) : null,
       contributionLabel: 'всего',
     },
     {
@@ -88,7 +88,7 @@ const cards = computed(() => {
       metric: 'driversOnLine',
       value: formatNumber(current.driversOnLine),
       was: base ? `было ${formatNumber(base.driversOnLine)}` : null,
-      contribution: contributions?.driversOnLine ?? null,
+      contribution: contributions ? formatSignedNumber(contributions.driversOnLine) : null,
       contributionLabel: 'поездок',
     },
     {
@@ -98,7 +98,7 @@ const cards = computed(() => {
       metric: 'daysOnLine',
       value: formatTenths(current.daysOnLine),
       was: base ? `было ${formatTenths(base.daysOnLine)}` : null,
-      contribution: contributions?.daysOnLine ?? null,
+      contribution: contributions ? formatSignedNumber(contributions.daysOnLine) : null,
       contributionLabel: 'поездок',
     },
     {
@@ -110,7 +110,7 @@ const cards = computed(() => {
       metric: 'tripsPerDay',
       value: formatTenths(current.tripsPerDay),
       was: base ? `было ${formatTenths(base.tripsPerDay)}` : null,
-      contribution: contributions?.tripsPerDay ?? null,
+      contribution: contributions ? formatSignedNumber(contributions.tripsPerDay) : null,
       contributionLabel: 'поездок',
     },
   ] as const;

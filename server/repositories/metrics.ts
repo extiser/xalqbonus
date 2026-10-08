@@ -818,3 +818,163 @@ export const listNewcomerWindows = async (
        AND person_day."day" <= ${asOfDay}::date
      GROUP BY newcomers."person_id", newcomers."first_day"
   `;
+
+/**
+ * Деньги парка по суткам — вкладка «Деньги» (issue #438): готовая таблица `metric_money_days`
+ * из транзакций Fleet и журнал её пересчёта `metric_money_runs`. Устроено как пересчёт поездок
+ * выше: таблица целиком заново одной транзакцией, прогон — строкой журнала.
+ *
+ * Какие категории — комиссия парка, а какие — оплата, решает сервис метрик и передаёт сюда:
+ * определения денег живут в `server/services/metrics/constants.ts`.
+ */
+
+/** Категории транзакций, из которых складываются деньги суток. */
+export type MoneyCategories = {
+  /** Комиссия парка: строка на оплаченный заказ, сумма со знаком баланса водителя. */
+  parkFee: string;
+  /** Оплата заказа, суммы как есть. */
+  payment: readonly string[];
+};
+
+/** Заводит строку прогона денег: упавший пересчёт остаётся в журнале видимым. */
+export const startMetricMoneyRun = async (daysFrom: string, daysTo: string): Promise<string> => {
+  const rows = await db.$queryRaw<{ id: string }[]>`
+    INSERT INTO xb.metric_money_runs ("days_from", "days_to")
+    VALUES (${daysFrom}::date, ${daysTo}::date)
+    RETURNING "id"
+  `;
+  const id = rows[0]?.id;
+
+  if (id === undefined) {
+    throw new Error('строка прогона пересчёта денег не завелась');
+  }
+
+  return id;
+};
+
+/**
+ * Считает `metric_money_days` целиком заново за сутки `daysFrom`–`daysTo` включительно
+ * и закрывает прогон числом строк — одной транзакцией. Строка — на каждые сутки окна, пустые
+ * сутки — с нулями: ряд суток задаёт `generate_series`, а не транзакции.
+ *
+ * Транзакции берутся по индексу `(category_id, event_at)`: категории — списком, окно — моментами
+ * начала первых и конца последних суток по Ташкенту. Доход — сумма комиссии с обратным знаком:
+ * в транзакции она со знаком баланса водителя и отрицательная. `DELETE`, а не `TRUNCATE`, —
+ * по той же причине, что у `replaceMetricPersonDays`: экран посреди пересчёта видит прежнюю таблицу.
+ */
+export const replaceMetricMoneyDays = async (
+  runId: string,
+  daysFrom: string,
+  daysTo: string,
+  categories: MoneyCategories,
+): Promise<number> => {
+  const windowStart = parkDayStartSql(Prisma.sql`${daysFrom}`);
+  const windowEnd = parkDayStartSql(Prisma.sql`${daysTo}::date + 1`);
+  const allCategories = [categories.parkFee, ...categories.payment];
+
+  return db.$transaction(
+    async (transaction) => {
+      await transaction.$executeRaw`DELETE FROM xb.metric_money_days`;
+
+      // Ряд суток — от `timestamp` без зоны: у даты `generate_series` привёл бы её к моменту
+      // в зоне сеанса. `GROUP BY 1` — по той же причине, что у `replaceMetricPersonDays`.
+      const rows = await transaction.$executeRaw`
+        INSERT INTO xb.metric_money_days ("day", "orders", "income", "payment")
+        SELECT series."day"::date,
+               coalesce(totals."orders", 0),
+               coalesce(totals."income", 0),
+               coalesce(totals."payment", 0)
+          FROM generate_series(${daysFrom}::timestamp, ${daysTo}::timestamp, interval '1 day') AS series("day")
+          LEFT JOIN (
+                 SELECT ${parkDaySql(Prisma.sql`entry."event_at"`)} AS "day",
+                        count(*) FILTER (WHERE entry."category_id" = ${categories.parkFee})::int AS "orders",
+                        -coalesce(sum(entry."amount") FILTER (WHERE entry."category_id" = ${categories.parkFee}), 0)
+                          AS "income",
+                        coalesce(sum(entry."amount") FILTER (
+                          WHERE entry."category_id" = ANY(${[...categories.payment]}::text[])
+                        ), 0) AS "payment"
+                   FROM xb.fleet_transactions AS entry
+                  WHERE entry."category_id" = ANY(${allCategories}::text[])
+                    AND entry."event_at" >= ${windowStart}
+                    AND entry."event_at" < ${windowEnd}
+                  GROUP BY 1
+               ) AS totals ON totals."day" = series."day"::date
+      `;
+
+      await transaction.$executeRaw`
+        UPDATE xb.metric_money_runs
+           SET "finished_at" = now(),
+               "rows" = ${rows}::int
+         WHERE "id" = ${runId}::uuid
+      `;
+
+      return rows;
+    },
+    { timeout: RECOMPUTE_TRANSACTION_TIMEOUT_MS, maxWait: RECOMPUTE_TRANSACTION_TIMEOUT_MS },
+  );
+};
+
+/** Закрывает прогон денег отказом: `finished_at` остаётся пустым, текст ошибки — в `error`. */
+export const failMetricMoneyRun = async (runId: string, error: string): Promise<void> => {
+  await db.$executeRaw`
+    UPDATE xb.metric_money_runs SET "error" = ${error} WHERE "id" = ${runId}::uuid
+  `;
+};
+
+export type MetricMoneyRun = {
+  /** Последние посчитанные сутки, `YYYY-MM-DD`. */
+  daysTo: string;
+  finishedAt: Date;
+};
+
+/** Последний успешный прогон денег. `null` — успешных ещё не было. */
+export const readLastMetricMoneyRun = async (): Promise<MetricMoneyRun | null> => {
+  const run = await db.metricMoneyRun.findFirst({
+    where: { finishedAt: { not: null } },
+    orderBy: { finishedAt: 'desc' },
+    select: { daysTo: true, finishedAt: true },
+  });
+
+  if (run?.finishedAt == null) {
+    return null;
+  }
+
+  return { daysTo: run.daysTo.toISOString().slice(0, 10), finishedAt: run.finishedAt };
+};
+
+/** Деньги за сутки `from`–`to` включительно. Суммы — сумами, с копейками, как в таблице. */
+export type MetricMoneyTotals = {
+  orders: number;
+  income: number;
+  payment: number;
+};
+
+export const readMetricMoneyTotals = async (from: string, to: string): Promise<MetricMoneyTotals> => {
+  const rows = await db.$queryRaw<MetricMoneyTotals[]>`
+    SELECT coalesce(sum("orders"), 0)::int        AS "orders",
+           coalesce(sum("income"), 0)::float8     AS "income",
+           coalesce(sum("payment"), 0)::float8    AS "payment"
+      FROM xb.metric_money_days
+     WHERE "day" BETWEEN ${from}::date AND ${to}::date
+  `;
+
+  return rows[0] ?? { orders: 0, income: 0, payment: 0 };
+};
+
+/**
+ * Закрытые порции сбора истории транзакций (`fleet_transaction_days`, сутки по UTC) с `from`
+ * по `to` включительно — днями `YYYY-MM-DD`. Закрыта — обход дошёл до конца: `finished_at`
+ * стоит и продолжать не с чего.
+ */
+export const listClosedTransactionDays = async (from: string, to: string): Promise<string[]> => {
+  const days = await db.fleetTransactionDay.findMany({
+    where: {
+      parkDay: { gte: new Date(`${from}T00:00:00Z`), lte: new Date(`${to}T00:00:00Z`) },
+      finishedAt: { not: null },
+      nextCursor: null,
+    },
+    select: { parkDay: true },
+  });
+
+  return days.map((day) => day.parkDay.toISOString().slice(0, 10));
+};

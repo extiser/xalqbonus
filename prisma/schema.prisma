@@ -2693,6 +2693,44 @@ model MetricRecomputeRun {
   @@schema("xb")
 }
 
+/// Деньги парка за сутки — готовая таблица вкладки «Деньги» (issue #438), из транзакций Fleet.
+///
+/// Строка на каждые сутки от `MONEY_FIRST_DAY` по последние посчитанные, в том числе с нулями:
+/// пустые сутки — тоже ответ. Считается целиком заново после ночного перечитывания транзакций
+/// (`server/services/metrics/recomputeMoneyDays.ts`), экран читает только её (docs/decisions.md →
+/// «Деньги на дашборде»).
+model MetricMoneyDay {
+  /// Сутки по Ташкенту, календарные: `event_at AT TIME ZONE 'Asia/Tashkent'`.
+  day     DateTime @id @db.Date
+  /// Строк комиссии парка `partner_ride_fee` — оплаченных заказов: у каждого комиссия одна.
+  orders  Int
+  /// Доход парка, сум: комиссия с обратным знаком — в транзакции она со знаком баланса водителя.
+  income  Decimal  @db.Decimal(18, 4)
+  /// Оплата заказов, сум: платёжные категории как есть, без чаевых.
+  payment Decimal  @db.Decimal(18, 4)
+
+  @@map("metric_money_days")
+  @@schema("xb")
+}
+
+/// Журнал прогонов пересчёта денег (issue #438), как `MetricRecomputeRun`: по нему экран
+/// говорит, когда посчитано и по какие сутки. `finished_at = null` — идёт или упал; у упавшего — `error`.
+model MetricMoneyRun {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  startedAt  DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  finishedAt DateTime? @map("finished_at") @db.Timestamptz(6)
+  /// Первые и последние сутки пересчёта, по Ташкенту.
+  daysFrom   DateTime  @map("days_from") @db.Date
+  daysTo     DateTime  @map("days_to") @db.Date
+  /// Строк `metric_money_days` записано.
+  rows       Int?
+  error      String?
+
+  @@index([finishedAt])
+  @@map("metric_money_runs")
+  @@schema("xb")
+}
+
 // ---------------------------------------------------------------------------
 // Промо-метки
 // ---------------------------------------------------------------------------
