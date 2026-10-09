@@ -23,6 +23,8 @@ import { parkDaySql, parkDayStartSql } from '#server/utils/parkDaySql';
  */
 const RECOMPUTE_TRANSACTION_TIMEOUT_MS = 10 * 60 * 1_000;
 
+type Executor = Prisma.TransactionClient;
+
 export type MetricRecomputeResult = {
   rows: number;
   unattributedOrders: number;
@@ -822,7 +824,8 @@ export const listNewcomerWindows = async (
 /**
  * Деньги парка по суткам — вкладка «Деньги» (issue #438): готовая таблица `metric_money_days`
  * из транзакций Fleet и журнал её пересчёта `metric_money_runs`. Устроено как пересчёт поездок
- * выше: таблица целиком заново одной транзакцией, прогон — строкой журнала.
+ * выше: таблица целиком заново одной транзакцией, прогон — строкой журнала. В той же транзакции —
+ * деньги людей по месяцам `metric_person_months` (issue #442).
  *
  * Какие категории — комиссия парка, а какие — оплата, решает сервис метрик и передаёт сюда:
  * определения денег живут в `server/services/metrics/constants.ts`.
@@ -853,9 +856,17 @@ export const startMetricMoneyRun = async (daysFrom: string, daysTo: string): Pro
 };
 
 /**
- * Считает `metric_money_days` целиком заново за сутки `daysFrom`–`daysTo` включительно
- * и закрывает прогон числом строк — одной транзакцией. Строка — на каждые сутки окна, пустые
- * сутки — с нулями: ряд суток задаёт `generate_series`, а не транзакции.
+ * Транзакция пересчёта денег: таблица суток, таблица месяцев людей и закрытие прогона пишутся
+ * одной транзакцией, чтобы экран не увидел одну таблицу новой, а другую прежней. Таймаут —
+ * тот же, что у пересчёта поездок: удаление и вставка таблиц целиком идут минуты.
+ */
+export const inMetricMoneyTransaction = <Result>(work: (transaction: Executor) => Promise<Result>): Promise<Result> =>
+  db.$transaction(work, { timeout: RECOMPUTE_TRANSACTION_TIMEOUT_MS, maxWait: RECOMPUTE_TRANSACTION_TIMEOUT_MS });
+
+/**
+ * Считает `metric_money_days` целиком заново за сутки `daysFrom`–`daysTo` включительно и отдаёт
+ * число строк. Строка — на каждые сутки окна, пустые сутки — с нулями: ряд суток задаёт
+ * `generate_series`, а не транзакции.
  *
  * Транзакции берутся по индексу `(category_id, event_at)`: категории — списком, окно — моментами
  * начала первых и конца последних суток по Ташкенту. Доход — сумма комиссии с обратным знаком:
@@ -863,7 +874,7 @@ export const startMetricMoneyRun = async (daysFrom: string, daysTo: string): Pro
  * по той же причине, что у `replaceMetricPersonDays`: экран посреди пересчёта видит прежнюю таблицу.
  */
 export const replaceMetricMoneyDays = async (
-  runId: string,
+  transaction: Executor,
   daysFrom: string,
   daysTo: string,
   categories: MoneyCategories,
@@ -872,46 +883,138 @@ export const replaceMetricMoneyDays = async (
   const windowEnd = parkDayStartSql(Prisma.sql`${daysTo}::date + 1`);
   const allCategories = [categories.parkFee, ...categories.payment];
 
-  return db.$transaction(
-    async (transaction) => {
-      await transaction.$executeRaw`DELETE FROM xb.metric_money_days`;
+  await transaction.$executeRaw`DELETE FROM xb.metric_money_days`;
 
-      // Ряд суток — от `timestamp` без зоны: у даты `generate_series` привёл бы её к моменту
-      // в зоне сеанса. `GROUP BY 1` — по той же причине, что у `replaceMetricPersonDays`.
-      const rows = await transaction.$executeRaw`
-        INSERT INTO xb.metric_money_days ("day", "orders", "income", "payment")
-        SELECT series."day"::date,
-               coalesce(totals."orders", 0),
-               coalesce(totals."income", 0),
-               coalesce(totals."payment", 0)
-          FROM generate_series(${daysFrom}::timestamp, ${daysTo}::timestamp, interval '1 day') AS series("day")
-          LEFT JOIN (
-                 SELECT ${parkDaySql(Prisma.sql`entry."event_at"`)} AS "day",
-                        count(*) FILTER (WHERE entry."category_id" = ${categories.parkFee})::int AS "orders",
-                        -coalesce(sum(entry."amount") FILTER (WHERE entry."category_id" = ${categories.parkFee}), 0)
-                          AS "income",
-                        coalesce(sum(entry."amount") FILTER (
-                          WHERE entry."category_id" = ANY(${[...categories.payment]}::text[])
-                        ), 0) AS "payment"
-                   FROM xb.fleet_transactions AS entry
-                  WHERE entry."category_id" = ANY(${allCategories}::text[])
-                    AND entry."event_at" >= ${windowStart}
-                    AND entry."event_at" < ${windowEnd}
-                  GROUP BY 1
-               ) AS totals ON totals."day" = series."day"::date
-      `;
+  // Ряд суток — от `timestamp` без зоны: у даты `generate_series` привёл бы её к моменту
+  // в зоне сеанса. `GROUP BY 1` — по той же причине, что у `replaceMetricPersonDays`.
+  return transaction.$executeRaw`
+    INSERT INTO xb.metric_money_days ("day", "orders", "income", "payment")
+    SELECT series."day"::date,
+           coalesce(totals."orders", 0),
+           coalesce(totals."income", 0),
+           coalesce(totals."payment", 0)
+      FROM generate_series(${daysFrom}::timestamp, ${daysTo}::timestamp, interval '1 day') AS series("day")
+      LEFT JOIN (
+             SELECT ${parkDaySql(Prisma.sql`entry."event_at"`)} AS "day",
+                    count(*) FILTER (WHERE entry."category_id" = ${categories.parkFee})::int AS "orders",
+                    -coalesce(sum(entry."amount") FILTER (WHERE entry."category_id" = ${categories.parkFee}), 0)
+                      AS "income",
+                    coalesce(sum(entry."amount") FILTER (
+                      WHERE entry."category_id" = ANY(${[...categories.payment]}::text[])
+                    ), 0) AS "payment"
+               FROM xb.fleet_transactions AS entry
+              WHERE entry."category_id" = ANY(${allCategories}::text[])
+                AND entry."event_at" >= ${windowStart}
+                AND entry."event_at" < ${windowEnd}
+              GROUP BY 1
+           ) AS totals ON totals."day" = series."day"::date
+  `;
+};
 
-      await transaction.$executeRaw`
-        UPDATE xb.metric_money_runs
-           SET "finished_at" = now(),
-               "rows" = ${rows}::int
-         WHERE "id" = ${runId}::uuid
-      `;
+/**
+ * Считает `metric_person_months` целиком заново за сутки `daysFrom`–`daysTo` включительно
+ * и отдаёт число строк (issue #442): строка — на человека и месяц по Ташкенту с хоть одной
+ * комиссией парка.
+ *
+ * Заказ собирается по `order_id` из строк комиссии: у части заказов их две-три, и оплата,
+ * присоединённая к каждой строке, посчиталась бы дважды — в сентябре 2026 таких 159 заказов.
+ * Сутки заказа — его первой комиссии, профиль — наименьший из профилей его комиссий (у заказа
+ * он один); `orders` — по-прежнему строк комиссии, как у «Денег». Человек — через профиль в реестре: заказ без профиля или с профилем вне реестра
+ * пропускается, демо не входит. Оплата — платёжные категории с тем же `order_id`, когда бы они
+ * ни пришли: месяц и человек у неё — комиссии.
+ *
+ * Окно ставки новичка — сутки комиссии по Ташкенту минус дата найма профиля этой комиссии,
+ * от 0 до `newcomerRateDays − 1`. Нет даты найма — заказ вне окна.
+ *
+ * Сутки комиссии считаются во внутреннем запросе один раз, наружу идут колонкой: выражение суток
+ * несёт зону параметром, и его повтор Postgres считал бы другим выражением.
+ *
+ * Оплата сворачивается по `order_id` вся, а не фильтром «заказы из комиссий»: с фильтром
+ * планировщик уходил в поиск по индексу на каждый из миллионов заказов, и запрос шёл
+ * дольше десяти минут против двадцати секунд хеш-соединением на копии боевой базы.
+ */
+export const replaceMetricPersonMonths = async (
+  transaction: Executor,
+  daysFrom: string,
+  daysTo: string,
+  categories: MoneyCategories,
+  newcomerRateDays: number,
+): Promise<number> => {
+  const windowStart = parkDayStartSql(Prisma.sql`${daysFrom}`);
+  const windowEnd = parkDayStartSql(Prisma.sql`${daysTo}::date + 1`);
 
-      return rows;
-    },
-    { timeout: RECOMPUTE_TRANSACTION_TIMEOUT_MS, maxWait: RECOMPUTE_TRANSACTION_TIMEOUT_MS },
-  );
+  await transaction.$executeRaw`DELETE FROM xb.metric_person_months`;
+
+  return transaction.$executeRaw`
+    INSERT INTO xb.metric_person_months
+           ("month", "person_id", "orders", "fee", "payment", "fee_newcomer_rate", "payment_newcomer_rate")
+    WITH fees AS (
+           SELECT count(*)::int AS "rows",
+                  -sum(fee."amount") AS "fee",
+                  min(fee."event_at") AS "event_at",
+                  min(fee."driver_profile_id") AS "profile_id",
+                  min(fee."order_id") AS "order_id"
+             FROM xb.fleet_transactions AS fee
+            WHERE fee."category_id" = ${categories.parkFee}
+              AND fee."event_at" >= ${windowStart}
+              AND fee."event_at" < ${windowEnd}
+            GROUP BY coalesce(fee."order_id", fee."id")
+         ),
+         payments AS (
+           SELECT entry."order_id", sum(entry."amount") AS "payment"
+             FROM xb.fleet_transactions AS entry
+            WHERE entry."category_id" = ANY(${[...categories.payment]}::text[])
+              AND entry."order_id" IS NOT NULL
+            GROUP BY entry."order_id"
+         ),
+         dated AS (
+           SELECT profile."person_id",
+                  profile."hire_date",
+                  fees."rows",
+                  fees."fee",
+                  coalesce(payments."payment", 0) AS "payment",
+                  ${parkDaySql(Prisma.sql`fees."event_at"`)} AS "day"
+             FROM fees
+             JOIN xb.park_profiles AS profile ON profile."profile_id" = fees."profile_id"
+             JOIN xb.persons AS person ON person."id" = profile."person_id"
+             LEFT JOIN payments ON payments."order_id" = fees."order_id"
+            WHERE NOT person."is_demo"
+         ),
+         orders AS (
+           SELECT date_trunc('month', dated."day")::date AS "month",
+                  dated."person_id",
+                  dated."rows",
+                  dated."fee",
+                  dated."payment",
+                  coalesce(dated."day" - dated."hire_date" BETWEEN 0 AND ${newcomerRateDays - 1}::int, false)
+                    AS "newcomer_rate"
+             FROM dated
+         )
+    SELECT orders."month",
+           orders."person_id",
+           sum(orders."rows")::int,
+           sum(orders."fee"),
+           sum(orders."payment"),
+           coalesce(sum(orders."fee") FILTER (WHERE orders."newcomer_rate"), 0),
+           coalesce(sum(orders."payment") FILTER (WHERE orders."newcomer_rate"), 0)
+      FROM orders
+     GROUP BY orders."month", orders."person_id"
+  `;
+};
+
+/** Закрывает прогон денег итогами: сколько строк записано в каждую таблицу. */
+export const finishMetricMoneyRun = async (
+  transaction: Executor,
+  runId: string,
+  rows: { rows: number; personMonthRows: number },
+): Promise<void> => {
+  await transaction.$executeRaw`
+    UPDATE xb.metric_money_runs
+       SET "finished_at" = now(),
+           "rows" = ${rows.rows}::int,
+           "person_month_rows" = ${rows.personMonthRows}::int
+     WHERE "id" = ${runId}::uuid
+  `;
 };
 
 /** Закрывает прогон денег отказом: `finished_at` остаётся пустым, текст ошибки — в `error`. */
@@ -977,4 +1080,184 @@ export const listClosedTransactionDays = async (from: string, to: string): Promi
   });
 
   return days.map((day) => day.parkDay.toISOString().slice(0, 10));
+};
+
+/**
+ * Цена водителя за год — плитка «Глубины» (issue #442), только из готовой таблицы
+ * `metric_person_months`: транзакции на открытии экрана не читаются.
+ *
+ * Месяцы ходят первым числом, `YYYY-MM-01`. Какие месяцы, ставки и доля лидеров — решает сервис
+ * (`server/services/metrics/readDriverValue.ts`), здесь только суммы.
+ *
+ * Цена человека в месяце = основная ставка × оплата вне окна ставки новичка + ставка новичка ×
+ * оплата в окне. Лидер месяца — первая группа `ntile` по заказам по убыванию; при равенстве
+ * порядок задаёт `person_id`, чтобы граница группы не зависела от плана запроса.
+ */
+
+/** Суммы месяца для ставок: комиссия и оплата целиком и в окне ставки новичка, сумами. */
+export type PersonMonthRateTotals = {
+  fee: number;
+  payment: number;
+  feeNewcomerRate: number;
+  paymentNewcomerRate: number;
+};
+
+export const readPersonMonthRateTotals = async (month: string): Promise<PersonMonthRateTotals> => {
+  const rows = await db.$queryRaw<PersonMonthRateTotals[]>`
+    SELECT coalesce(sum("fee"), 0)::float8                   AS "fee",
+           coalesce(sum("payment"), 0)::float8               AS "payment",
+           coalesce(sum("fee_newcomer_rate"), 0)::float8     AS "feeNewcomerRate",
+           coalesce(sum("payment_newcomer_rate"), 0)::float8 AS "paymentNewcomerRate"
+      FROM xb.metric_person_months
+     WHERE "month" = ${month}::date
+  `;
+
+  return rows[0] ?? { fee: 0, payment: 0, feeNewcomerRate: 0, paymentNewcomerRate: 0 };
+};
+
+/** Ставки цены: доли оплаты. */
+export type DriverValueRates = { main: number; newcomer: number };
+
+/** Цена человека в месяце выражением SQL над строкой `metric_person_months` с псевдонимом `row`. */
+const personMonthValueSql = (rates: DriverValueRates): Prisma.Sql => Prisma.sql`
+  (${rates.main}::float8 * (row."payment" - row."payment_newcomer_rate")::float8
+   + ${rates.newcomer}::float8 * row."payment_newcomer_rate"::float8)
+`;
+
+/** Наборы лидеров и остальных: месяцы `fromMonth`–`toMonth`, горизонт — месяцев после месяца набора. */
+export type DriverValueCohortQuery = {
+  fromMonth: string;
+  toMonth: string;
+  horizonMonths: number;
+  /** Сколько групп у `ntile`: лидеры — первая. */
+  leaderTiles: number;
+};
+
+/** Итог группы по людям-месяцам набора. */
+export type DriverValueGroupRow = {
+  leader: boolean;
+  people: number;
+  /** Средняя цена за горизонт, сум. */
+  value: number;
+  /** Сколько людей-месяцев ездили через 12 месяцев после месяца набора. */
+  ridingAfterYear: number;
+};
+
+/**
+ * Лидеры и остальные по людям-месяцам наборов: средняя цена за `m + 1 … m + horizonMonths` —
+ * месяца без строки дают ноль — и сколько из них со строкой в `m + 12`.
+ */
+export const listDriverValueGroups = async (
+  query: DriverValueCohortQuery,
+  rates: DriverValueRates,
+): Promise<DriverValueGroupRow[]> =>
+  db.$queryRaw<DriverValueGroupRow[]>`
+    WITH cohort AS (
+           SELECT row."month",
+                  row."person_id",
+                  ntile(${query.leaderTiles}::int) OVER (
+                    PARTITION BY row."month" ORDER BY row."orders" DESC, row."person_id"
+                  ) = 1 AS "leader"
+             FROM xb.metric_person_months AS row
+            WHERE row."month" BETWEEN ${query.fromMonth}::date AND ${query.toMonth}::date
+         ),
+         valued AS (
+           SELECT row."month", row."person_id", ${personMonthValueSql(rates)} AS "value"
+             FROM xb.metric_person_months AS row
+            WHERE row."month" > ${query.fromMonth}::date
+              AND row."month" <= ${query.toMonth}::date + make_interval(months => ${query.horizonMonths}::int)
+         ),
+         person AS (
+           SELECT cohort."leader",
+                  coalesce(sum(valued."value"), 0) AS "value",
+                  bool_or(valued."month" = cohort."month" + interval '12 months') AS "riding"
+             FROM cohort
+             LEFT JOIN valued
+               ON valued."person_id" = cohort."person_id"
+              AND valued."month" > cohort."month"
+              AND valued."month" <= cohort."month" + make_interval(months => ${query.horizonMonths}::int)
+            GROUP BY cohort."month", cohort."person_id", cohort."leader"
+         )
+    SELECT person."leader",
+           count(*)::int                                   AS "people",
+           avg(person."value")::float8                     AS "value",
+           count(*) FILTER (WHERE person."riding")::int    AS "ridingAfterYear"
+      FROM person
+     GROUP BY person."leader"
+  `;
+
+/** Наборы новичков: месяцы `fromMonth`–`toMonth`. */
+export type DriverValueNewcomerQuery = {
+  fromMonth: string;
+  toMonth: string;
+  leaderTiles: number;
+};
+
+export type DriverValueNewcomerTotals = {
+  people: number;
+  /** Средняя цена за 12 месяцев с месяца прихода, сум; `null` — новичков нет. */
+  value: number | null;
+  median: number | null;
+  /** Со строкой в `m + 11`. */
+  ridingAfterYear: number;
+  /** Лидер хоть в одном месяце `m … m + 11`. */
+  becameLeader: number;
+  /** Среднее «первый месяц лидерства − m» у доросших; `null` — доросших нет. */
+  monthsToLeader: number | null;
+};
+
+/**
+ * Новички по наборам: человек, чья первая строка в таблице — месяц `m` из окна. Цена — сумма
+ * за `m … m + 11`; лидерство — по всем людям каждого месяца, как у лидеров наборов.
+ */
+export const readDriverValueNewcomers = async (
+  query: DriverValueNewcomerQuery,
+  rates: DriverValueRates,
+): Promise<DriverValueNewcomerTotals> => {
+  const rows = await db.$queryRaw<DriverValueNewcomerTotals[]>`
+    WITH first_month AS (
+           SELECT row."person_id", min(row."month") AS "month"
+             FROM xb.metric_person_months AS row
+            GROUP BY row."person_id"
+         ),
+         newcomer AS (
+           SELECT first_month."person_id", first_month."month"
+             FROM first_month
+            WHERE first_month."month" BETWEEN ${query.fromMonth}::date AND ${query.toMonth}::date
+         ),
+         ranked AS (
+           SELECT row."month",
+                  row."person_id",
+                  ${personMonthValueSql(rates)} AS "value",
+                  ntile(${query.leaderTiles}::int) OVER (
+                    PARTITION BY row."month" ORDER BY row."orders" DESC, row."person_id"
+                  ) = 1 AS "leader"
+             FROM xb.metric_person_months AS row
+            WHERE row."month" BETWEEN ${query.fromMonth}::date AND ${query.toMonth}::date + interval '11 months'
+         ),
+         person AS (
+           SELECT newcomer."person_id",
+                  sum(ranked."value") AS "value",
+                  bool_or(ranked."month" = newcomer."month" + interval '11 months') AS "riding",
+                  min(ranked."month") FILTER (WHERE ranked."leader") AS "leader_month",
+                  newcomer."month"
+             FROM newcomer
+             JOIN ranked
+               ON ranked."person_id" = newcomer."person_id"
+              AND ranked."month" BETWEEN newcomer."month" AND newcomer."month" + interval '11 months'
+            GROUP BY newcomer."person_id", newcomer."month"
+         )
+    SELECT count(*)::int                                                      AS "people",
+           avg(person."value")::float8                                        AS "value",
+           percentile_cont(0.5) WITHIN GROUP (ORDER BY person."value")::float8 AS "median",
+           count(*) FILTER (WHERE person."riding")::int                       AS "ridingAfterYear",
+           count(person."leader_month")::int                                  AS "becameLeader",
+           avg(
+             (extract(year FROM age(person."leader_month", person."month")) * 12
+              + extract(month FROM age(person."leader_month", person."month")))
+           )::float8                                                          AS "monthsToLeader"
+      FROM person
+  `;
+
+  return rows[0] ?? { people: 0, value: null, median: null, ridingAfterYear: 0, becameLeader: 0, monthsToLeader: null };
 };

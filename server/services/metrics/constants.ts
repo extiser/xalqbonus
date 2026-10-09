@@ -89,3 +89,17 @@ export const PAYMENT_CATEGORY_IDS: readonly string[] = [
   'promotion_discount',
   'compensation',
 ];
+
+/**
+ * Цена водителя за год на «Глубине» (issue #442) — docs/decisions.md → «Цена водителя на дашборде».
+ */
+
+/**
+ * Ставка новичка парка действует столько суток с даты найма профиля (`park_profiles.hire_date`):
+ * сутки найма и `PARK_NEWCOMER_RATE_DAYS − 1` следующих. Не путать с `NEWCOMER_FIRST_DAYS` —
+ * те считаются от первой поездки. Из данных окно не выводится.
+ */
+export const PARK_NEWCOMER_RATE_DAYS = 14;
+
+/** Первый набор новичков цены водителя: перед ним шесть месяцев транзакций без заказов. */
+export const DRIVER_VALUE_NEWCOMER_FROM = '2024-10';

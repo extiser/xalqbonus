@@ -1,9 +1,17 @@
 import {
   failMetricMoneyRun,
+  finishMetricMoneyRun,
+  inMetricMoneyTransaction,
   replaceMetricMoneyDays,
+  replaceMetricPersonMonths,
   startMetricMoneyRun,
 } from '#server/repositories/metrics';
-import { MONEY_FIRST_DAY, PARK_FEE_CATEGORY_ID, PAYMENT_CATEGORY_IDS } from '#server/services/metrics/constants';
+import {
+  MONEY_FIRST_DAY,
+  PARK_FEE_CATEGORY_ID,
+  PARK_NEWCOMER_RATE_DAYS,
+  PAYMENT_CATEGORY_IDS,
+} from '#server/services/metrics/constants';
 import { previousDayKey } from '#server/utils/parkTime';
 
 /**
@@ -11,7 +19,9 @@ import { previousDayKey } from '#server/utils/parkTime';
  * `recomputePersonDays.ts`.
  *
  * Сутки — с первых суток денег по вчерашние по Ташкенту включительно: сегодняшние ещё идут.
- * Таблица считается целиком заново, прогон пишется в журнал: по нему экран говорит, когда
+ * Следом, в той же транзакции, — деньги людей по месяцам `metric_person_months` для «Цены
+ * водителя за год» (issue #442): своего расписания у неё нет, она живёт вместе с деньгами.
+ * Таблицы считаются целиком заново, прогон пишется в журнал: по нему экран говорит, когда
  * и по какие сутки посчитано. Упавший прогон остаётся в журнале с текстом ошибки и уходит
  * наверх исключением.
  *
@@ -25,6 +35,8 @@ export type MoneyRecomputeSummary = {
   daysFrom: string;
   daysTo: string;
   rows: number;
+  /** Строк `metric_person_months`. */
+  personMonthRows: number;
   durationMs: number;
 };
 
@@ -38,12 +50,23 @@ export const recomputeMoneyDays = async (now: Date = new Date()): Promise<MoneyR
   const runId = await startMetricMoneyRun(daysFrom, daysTo);
 
   try {
-    const rows = await replaceMetricMoneyDays(runId, daysFrom, daysTo, {
-      parkFee: PARK_FEE_CATEGORY_ID,
-      payment: PAYMENT_CATEGORY_IDS,
+    const categories = { parkFee: PARK_FEE_CATEGORY_ID, payment: PAYMENT_CATEGORY_IDS };
+    const written = await inMetricMoneyTransaction(async (transaction) => {
+      const rows = await replaceMetricMoneyDays(transaction, daysFrom, daysTo, categories);
+      const personMonthRows = await replaceMetricPersonMonths(
+        transaction,
+        daysFrom,
+        daysTo,
+        categories,
+        PARK_NEWCOMER_RATE_DAYS,
+      );
+
+      await finishMetricMoneyRun(transaction, runId, { rows, personMonthRows });
+
+      return { rows, personMonthRows };
     });
 
-    return { runId, daysFrom, daysTo, rows, durationMs: Date.now() - startedAt };
+    return { runId, daysFrom, daysTo, ...written, durationMs: Date.now() - startedAt };
   } catch (error) {
     await failMetricMoneyRun(runId, describeError(error));
     throw error;

@@ -1,5 +1,5 @@
 /**
- * Ответы ручек дашборда метрик (issues #371, #373, #392, #402, #407, #438). Определения метрик — `shared/metrics.ts`.
+ * Ответы ручек дашборда метрик (issues #371, #373, #392, #402, #407, #438, #442). Определения метрик — `shared/metrics.ts`.
  *
  * Даты — строки `YYYY-MM-DD`, месяцы — `YYYY-MM`: сутки и месяц метрик календарные
  * по Ташкенту, и зона показа сдвигать их не должна.
@@ -235,6 +235,60 @@ export type DashboardDepth = {
   outside: DashboardOutsideProgram;
   /** Новички: сколько остаётся, первые 14 дней и список (issue #407). */
   newcomers: DashboardNewcomers;
+  /** Цена водителя за год (issue #442). */
+  driverValue: DashboardDriverValue;
+};
+
+/**
+ * Лидер или остальные на линии в «Цене водителя за год»: среднее по людям-месяцам наборов.
+ * `null` у значений — цифр нет: собраны не все сутки или в месяце плитки нет оплаты.
+ */
+export type DashboardDriverValueGroup = {
+  /** Людей-месяцев в наборах «за год». */
+  people: number | null;
+  /** Доход парка за 12 месяцев после месяца набора, сум целым. */
+  value12: number | null;
+  /** За 24 месяца; `null` — наборов «за два года» ещё нет или цифр нет. */
+  value24: number | null;
+  /** Сколько из 100 ездят через 12 месяцев, целым. */
+  ridingAfterYearPercent: number | null;
+};
+
+/** Новичок в «Цене водителя за год»: за 12 месяцев с месяца прихода, считая его. */
+export type DashboardDriverValueNewcomer = {
+  people: number | null;
+  /** Среднее по всем пришедшим, сум целым. */
+  value12: number | null;
+  /** Медиана — обычный новичок, сум целым. */
+  median12: number | null;
+  ridingAfterYearPercent: number | null;
+  /** Сколько из 100 хоть раз были лидером за первый год, целым. */
+  becameLeaderPercent: number | null;
+  /** Среднее месяцев до первого лидерства у доросших; `null` — доросших нет. */
+  monthsToLeader: number | null;
+};
+
+/**
+ * Плитка «Цена водителя за год» на «Глубине» (issue #442) — docs/decisions.md → «Цена водителя
+ * на дашборде». Считается по нынешним ставкам месяца плитки из готовой таблицы.
+ */
+export type DashboardDriverValue = {
+  /** Месяц плитки `YYYY-MM`: выбранный закрытый или, у идущего, прошлый. */
+  month: string;
+  /** Выбран идущий месяц — плитка показывает последний закрытый. */
+  ongoing: boolean;
+  /** Первый и последний набор «за год», `YYYY-MM`. */
+  cohortsFrom: string;
+  cohortsTo: string;
+  /** Когда кончился последний успешный пересчёт денег; `null` — ещё не считали. */
+  computedAt: string | null;
+  /** Месяцы от первого набора по месяц плитки; собраны не все сутки — цифр нет. */
+  coverage: DashboardPeriod[];
+  /** Ставки месяца плитки — доли оплаты; `null` — цифр нет. */
+  rates: { main: number | null; newcomer: number | null };
+  leader: DashboardDriverValueGroup;
+  others: DashboardDriverValueGroup;
+  newcomer: DashboardDriverValueNewcomer;
 };
 
 /**

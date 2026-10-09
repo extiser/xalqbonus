@@ -12,8 +12,10 @@ import { toLoadState } from '~/utils/loadState';
  * подробных страниц нет.
  *
  * Новички (issue #407, `03-depth-newbies.html`) — первым рядом «Сколько остаётся» и «Первые 14 дней»,
- * последней плиткой экрана — список тех, у кого меньше 20 поездок за 14 дней. Остальные плитки
- * «Глубины» — LTV и прочее — ждут транзакций.
+ * последней плиткой экрана — список тех, у кого меньше 20 поездок за 14 дней.
+ *
+ * «Цена водителя за год» (issue #442) — сразу после «Вне программы», на пустых 8 колонках справа
+ * от неё. Первым рядом, как в эталоне, она встанет вместе с «Окупается ли найм».
  *
  * Шапка и месяц — как у «Рычагов»: месяц живёт в адресе (`?month=2026-10`) и переходит между
  * вкладками.
@@ -87,6 +89,7 @@ const changeMonth = (month: string): void => {
       </MoleculesWebTile>
       <OrganismsWebDashboardProgramEconomy :state="state" :month="depth?.month ?? null" :economy="depth?.economy ?? null" />
       <OrganismsWebDashboardOutsideProgram :state="state" :month="depth?.month ?? null" :outside="depth?.outside ?? null" />
+      <OrganismsWebDashboardDriverValue :state="state" :month="depth?.month ?? null" :driver-value="depth?.driverValue ?? null" />
       <OrganismsWebDashboardNewcomersList
         :state="state"
         :month="depth?.month ?? null"

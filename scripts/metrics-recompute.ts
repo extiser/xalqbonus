@@ -1,6 +1,6 @@
 /**
- * Разовый пересчёт таблиц метрик дашборда, мимо очереди (issues #371, #387, #438): поездки
- * `metric_person_days` и деньги `metric_money_days`, подряд, сводка — по каждой.
+ * Разовый пересчёт таблиц метрик дашборда, мимо очереди (issues #371, #387, #438, #442): поездки
+ * `metric_person_days` и деньги — `metric_money_days` и `metric_person_months`, подряд, сводка — по каждой.
  *
  * Тонкая обвязка над сервисом: вызов и сводка. Тем же кодом ходит ночная задача воркера —
  * второй реализации пересчёта не существует (docs/principles.md → «Слои и зависимости»).
@@ -42,6 +42,7 @@ const main = async (): Promise<void> => {
     daysFrom: money.daysFrom,
     daysTo: money.daysTo,
     rows: money.rows,
+    personMonthRows: money.personMonthRows,
     durationSec: seconds(money.durationMs),
   });
 };

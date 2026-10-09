@@ -25,6 +25,10 @@
  *
  * Деньги (issue #438) — подсказки `_reference/design/web/dashboard/01-money.html`, дословно.
  * «Доход парка» одна у главной цифры и у результата уравнения: одна метрика — одно определение.
+ *
+ * Цена водителя за год (issue #442) — подсказка `03-depth.html`; «как считается» поправлена
+ * под docs/decisions.md → «Цена водителя на дашборде»: ставки — месяца экрана, лидер и новичок —
+ * по оплаченным заказам. Окно наборов — подстановки `{driverValueFrom}` и `{driverValueTo}`.
  */
 
 export type MetricDefinition = {
@@ -45,7 +49,9 @@ export type MetricPlaceholder =
   | 'streakPlus'
   | 'newcomerDays'
   | 'newcomerDaysAfter'
-  | 'newcomerTrips';
+  | 'newcomerTrips'
+  | 'driverValueFrom'
+  | 'driverValueTo';
 
 export type MetricValues = Readonly<Partial<Record<MetricPlaceholder, string>>>;
 
@@ -96,7 +102,8 @@ export type MetricKey =
   | 'moneyIncomePerDay'
   | 'moneyPaymentPerOrder'
   | 'moneyCommission'
-  | 'moneyIncomeByMonth';
+  | 'moneyIncomeByMonth'
+  | 'driverValue';
 
 export const METRICS: Readonly<Record<MetricKey, MetricDefinition>> = {
   trips: {
@@ -310,6 +317,11 @@ export const METRICS: Readonly<Record<MetricKey, MetricDefinition>> = {
     title: 'Доход парка по месяцам',
     text: 'Доход парка за каждый из последних 13 месяцев.',
     how: 'Тот же доход, что в главной цифре. Выбранный месяц — голубым, тот же месяц год назад — серым.',
+  },
+  driverValue: {
+    title: 'Цена водителя за год',
+    text: 'Сколько дохода парк получил с водителя за 12 месяцев: в среднем, вместе с теми, кто перестал ездить.',
+    how: 'Доход — комиссия парка по нынешним ставкам: оплата заказа × ставку месяца — основную, а в первые 14 дней с найма — ставку новичка; у идущего месяца — ставки прошлого. Так цифра показывает, сколько водитель стоит сейчас, а не при прежней ставке. Лидер — в верхних 20 % месяца по оплаченным заказам; остальные — все прочие, у кого в этом месяце был заказ; новичок — с первого оплаченного заказа в парке. Считается по водителям с {driverValueFrom} по {driverValueTo}: у них 12 месяцев уже прошли.',
   },
 };
 

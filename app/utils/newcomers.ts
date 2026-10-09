@@ -21,11 +21,14 @@ export const newcomersMetricValues = (thresholds: DashboardNewcomersThresholds):
 export const percentOf = (part: number, whole: number): number | null =>
   whole === 0 ? null : Math.round((part / whole) * 100);
 
-/** «Сентябрь — последний закрытый месяц; октябрь ещё идёт» — у идущего месяца. */
-export const ongoingNote = (newcomers: DashboardNewcomers, month: string): string | null => {
-  if (!newcomers.ongoing) return null;
+/**
+ * «Сентябрь — последний закрытый месяц; октябрь ещё идёт» — у идущего месяца, под названием
+ * плитки, которая показывает последний закрытый: новички и цена водителя (issue #442).
+ */
+export const ongoingNote = (ongoing: boolean, closedMonth: string, month: string): string | null => {
+  if (!ongoing) return null;
 
-  const closed = monthForms(newcomers.curveMonth).nominative;
+  const closed = monthForms(closedMonth).nominative;
 
   return `${closed.charAt(0).toUpperCase()}${closed.slice(1)} — последний закрытый месяц; ${monthForms(month).nominative} ещё идёт`;
 };

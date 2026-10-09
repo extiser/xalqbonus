@@ -590,6 +590,7 @@ model Person {
   segmentMemberships SegmentMember[]
   metricDays    MetricPersonDay[]
   metricPrior   MetricPersonPrior?
+  metricMonths  MetricPersonMonth[]
   promoTouches  PromoTouch[]
 
   @@map("persons")
@@ -2716,18 +2717,52 @@ model MetricMoneyDay {
 /// Журнал прогонов пересчёта денег (issue #438), как `MetricRecomputeRun`: по нему экран
 /// говорит, когда посчитано и по какие сутки. `finished_at = null` — идёт или упал; у упавшего — `error`.
 model MetricMoneyRun {
-  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  startedAt  DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
-  finishedAt DateTime? @map("finished_at") @db.Timestamptz(6)
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  startedAt       DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  finishedAt      DateTime? @map("finished_at") @db.Timestamptz(6)
   /// Первые и последние сутки пересчёта, по Ташкенту.
-  daysFrom   DateTime  @map("days_from") @db.Date
-  daysTo     DateTime  @map("days_to") @db.Date
+  daysFrom        DateTime  @map("days_from") @db.Date
+  daysTo          DateTime  @map("days_to") @db.Date
   /// Строк `metric_money_days` записано.
-  rows       Int?
-  error      String?
+  rows            Int?
+  /// Строк `metric_person_months` записано (issue #442).
+  personMonthRows Int?      @map("person_month_rows")
+  error           String?
 
   @@index([finishedAt])
   @@map("metric_money_runs")
+  @@schema("xb")
+}
+
+/// Деньги человека за месяц — готовая таблица плитки «Цена водителя за год» (issue #442),
+/// из транзакций Fleet.
+///
+/// Строка на человека и календарный месяц по Ташкенту, в котором у него был хоть один оплаченный
+/// заказ. Заказ — строка комиссии парка `partner_ride_fee` с её `order_id`; человек — через профиль
+/// комиссии в реестре, комиссия без профиля в реестре сюда не идёт. Оплата заказа берётся по тому же
+/// `order_id` и уходит в месяц и к человеку его комиссии. Считается целиком заново тем же прогоном
+/// и в той же транзакции, что `metric_money_days` (`server/services/metrics/recomputeMoneyDays.ts`);
+/// демо-людей нет (docs/decisions.md → «Цена водителя на дашборде»).
+model MetricPersonMonth {
+  /// Первое число календарного месяца по Ташкенту.
+  month               DateTime @db.Date
+  personId            String   @map("person_id") @db.Uuid
+  /// Оплаченных заказов — строк комиссии парка.
+  orders              Int
+  /// Комиссия парка, сум: сумма комиссии с обратным знаком.
+  fee                 Decimal  @db.Decimal(18, 4)
+  /// Оплата этих заказов, сум: платёжные категории как есть, без чаевых.
+  payment             Decimal  @db.Decimal(18, 4)
+  /// То же по заказам в окне ставки новичка: сутки комиссии — с даты найма профиля
+  /// по `PARK_NEWCOMER_RATE_DAYS − 1` суток после неё. Нет даты найма — заказ вне окна.
+  feeNewcomerRate     Decimal  @map("fee_newcomer_rate") @db.Decimal(18, 4)
+  paymentNewcomerRate Decimal  @map("payment_newcomer_rate") @db.Decimal(18, 4)
+
+  person Person @relation(fields: [personId], references: [id])
+
+  @@id([month, personId])
+  @@index([personId])
+  @@map("metric_person_months")
   @@schema("xb")
 }
 
