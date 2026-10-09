@@ -167,6 +167,17 @@ body { color: var(--text); font: 400 15px/1.45 Manrope, system-ui, sans-serif; }
 .seg { display: inline-flex; gap: 4px; background: var(--raised); border-radius: 999px; padding: 4px; }
 .seg span { font: 600 13px Manrope; color: var(--title); padding: 6px 12px; border-radius: 999px; white-space: nowrap; }
 .seg span.on { background: var(--tile); color: var(--text); }
+.price-rows { display: flex; flex-direction: column; gap: 16px; margin-top: 18px; }
+.price-top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.price-name { font: 500 15px Manrope; color: var(--title); }
+.price-top b { font: 700 20px Manrope; color: var(--text); white-space: nowrap; }
+.price-bar { height: 8px; border-radius: 4px; background: rgba(156,238,255,.07); margin-top: 8px; overflow: hidden; }
+.price-bar i { display: block; height: 100%; border-radius: 4px; }
+.price-row .hint { display: block; font: 300 12px Manrope; color: var(--grey); margin-top: 6px; }
+.pool { display: grid; grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr); gap: 32px; margin-top: 14px; flex: 1; }
+.pool-rows { display: flex; flex-direction: column; gap: 10px; }
+.pool-row.muted .price-name, .pool-row.muted b { color: var(--grey); }
+@media (max-width: 760px) { .pool { grid-template-columns: 1fr; gap: 20px; } }
 .ltv-rows { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
 .ltv-row { display: grid; grid-template-columns: 14px 1fr auto; gap: 10px; align-items: baseline; font: 500 15px Manrope; color: var(--title); }
 .ltv-row i { width: 12px; height: 12px; border-radius: 4px; align-self: center; }
@@ -240,7 +251,7 @@ body { color: var(--text); font: 400 15px/1.45 Manrope, system-ui, sans-serif; }
         <div class="levels"><span class="lvl">Деньги</span><span class="lvl">Рычаги</span><span class="lvl on">Глубина</span></div>
       </div>
       <div style="display:flex;align-items:center;gap:12px">
-        <span class="badge">новички — живые цифры апреля 2026, остальные плитки — условные из эталона</span>
+        <span class="badge">новички — живые цифры апреля 2026; цена водителя и найм — живые, как на экране сентября 2026; «Можно вернуть» — живые на 07-10; остальные плитки — условные</span>
         <div class="period">
           <span>Апрель 2026</span>
           <span class="arr"><svg viewBox="0 0 16 16" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8l5 5"/></svg></span>
@@ -251,45 +262,36 @@ body { color: var(--text); font: 400 15px/1.45 Manrope, system-ui, sans-serif; }
 
     <div class="bento">
 
-      <!-- LTV: главное число -->
-      <section class="tile c4 r3">
-        <div class="head"><span class="t-title">LTV водителя · прогноз</span><span class="go"><svg viewBox="0 0 16 16" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg></span></div>
-        <div class="t-hero">4,1<span class="t-unit">млн сум</span></div>
-        <span class="small-delta">доход парка с водителя за 24 месяца</span>
-        <span class="small-delta"><b class="pos">+0,3 млн</b> к марту</span>
-        <div class="t-sub">Средний водитель на линии: 326 тыс. сум в месяц, уходит 11 % в месяц. Считается по группам ниже, итог — среднее по водителям.</div>
-      </section>
-
-      <!-- LTV по группам: график -->
-      <section class="tile c8 r3 chart-tile">
-        <div class="head"><span class="t-title">Накопленный доход с водителя</span><span class="seg"><span class="on">По темпу</span><span>Программа</span></span></div>
-        <div class="legend"><span><i style="background:#9CEEFF"></i>тяжёлые</span><span><i style="background:#137B9C"></i>средние</span><span><i style="background:#9DB1B5"></i>лёгкие</span><span style="color:#7E9399">— набрано · - - прогноз</span></div>
-        <svg class="chart" viewBox="0 0 720 256" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Накопленный доход парка с водителя по группам темпа: набрано за 12 месяцев и прогноз до 24">
-          <g stroke="rgba(156,238,255,.07)" stroke-width="1"><line x1="60" y1="162.9" x2="640" y2="162.9"/><line x1="60" y1="105.7" x2="640" y2="105.7"/><line x1="60" y1="48.6" x2="640" y2="48.6"/></g>
-          <line x1="60" y1="220" x2="640" y2="220" stroke="#566E74" stroke-width="1"/>
-          <line x1="350.0" y1="20" x2="350.0" y2="220" stroke="#566E74" stroke-width="1" stroke-dasharray="2 4"/>
-          <text x="342.0" y="32" text-anchor="end" font-family="Manrope" font-size="12" font-weight="600" fill="#9DB1B5">набрано</text>
-          <text x="358.0" y="32" font-family="Manrope" font-size="12" font-weight="600" fill="#9DB1B5">прогноз</text>
-          <g font-family="Manrope" font-size="12" font-weight="500" fill="#566E74" text-anchor="end"><text x="50" y="224.0">0 млн</text><text x="50" y="166.9">4 млн</text><text x="50" y="109.7">8 млн</text><text x="50" y="52.6">12 млн</text></g>
-          <g font-family="Manrope" font-size="12" font-weight="500" fill="#566E74" text-anchor="middle"><text x="60.0" y="244">0</text><text x="132.5" y="244">3</text><text x="205.0" y="244">6</text><text x="277.5" y="244">9</text><text x="350.0" y="244">12</text><text x="422.5" y="244">15</text><text x="495.0" y="244">18</text><text x="567.5" y="244">21</text><text x="640.0" y="244">24</text></g>
-          <text x="640" y="256" text-anchor="end" font-family="Manrope" font-size="11" font-weight="500" fill="#566E74">месяцев с первой поездки</text>
-          <polyline points="60.0,220.0 84.2,209.0 108.3,198.5 132.5,188.2 156.7,178.4 180.8,168.8 205.0,159.6 229.2,150.7 253.3,142.1 277.5,133.8 301.7,125.8 325.8,118.0 350.0,110.5" fill="none" stroke="#9CEEFF" stroke-width="2"/><polyline points="350.0,110.5 374.2,103.3 398.3,96.3 422.5,89.5 446.7,83.0 470.8,76.7 495.0,70.6 519.2,64.8 543.3,59.1 567.5,53.6 591.7,48.3 615.8,43.2 640.0,38.2" fill="none" stroke="#9CEEFF" stroke-width="2" stroke-dasharray="5 5"/><polyline points="60.0,220.0 84.2,214.6 108.3,209.5 132.5,204.9 156.7,200.7 180.8,196.8 205.0,193.2 229.2,189.9 253.3,186.9 277.5,184.1 301.7,181.5 325.8,179.2 350.0,177.0" fill="none" stroke="#137B9C" stroke-width="2"/><polyline points="350.0,177.0 374.2,175.0 398.3,173.1 422.5,171.4 446.7,169.9 470.8,168.5 495.0,167.1 519.2,165.9 543.3,164.8 567.5,163.8 591.7,162.8 615.8,162.0 640.0,161.2" fill="none" stroke="#137B9C" stroke-width="2" stroke-dasharray="5 5"/><polyline points="60.0,220.0 84.2,218.3 108.3,216.9 132.5,215.7 156.7,214.8 180.8,213.9 205.0,213.2 229.2,212.6 253.3,212.1 277.5,211.7 301.7,211.4 325.8,211.1 350.0,210.8" fill="none" stroke="#9DB1B5" stroke-width="2"/><polyline points="350.0,210.8 374.2,210.6 398.3,210.5 422.5,210.3 446.7,210.2 470.8,210.1 495.0,210.0 519.2,209.9 543.3,209.9 567.5,209.8 591.7,209.8 615.8,209.7 640.0,209.7" fill="none" stroke="#9DB1B5" stroke-width="2" stroke-dasharray="5 5"/><text x="646" y="42.2" font-family="Manrope" font-size="12" font-weight="700" fill="#9CEEFF">12,7</text><text x="646" y="165.2" font-family="Manrope" font-size="12" font-weight="700" fill="#137B9C">4,1</text><text x="646" y="213.7" font-family="Manrope" font-size="12" font-weight="700" fill="#9DB1B5">0,7</text>
-        </svg>
-      </section>
-
-      <!-- LTV по группам: числа -->
-      <section class="tile c8 r2">
-        <div class="head"><span class="t-title">LTV по группам · за 24 месяца</span></div>
-        <div class="ltv-rows">
-          <div class="ltv-row"><i style="background:#9CEEFF"></i><span>Тяжёлые<span class="hint">верхние 20 % · 86 водителей · 767 тыс. в месяц, уходит 3,4 % в месяц</span></span><b>12,7 млн</b></div><div class="ltv-row"><i style="background:#137B9C"></i><span>Средние<span class="hint">следующие 30 % · 129 · 381 тыс. в месяц, уходит 8 % в месяц</span></span><b>4,1 млн</b></div><div class="ltv-row"><i style="background:#9DB1B5"></i><span>Лёгкие<span class="hint">нижние 50 % · 216 · 117 тыс. в месяц, уходит 16 % в месяц</span></span><b>0,7 млн</b></div>
+      <!-- Цена водителя за год — живые цифры, как на экране сентября 2026 (прод, замер 08-10, сессия 99) -->
+      <section class="tile c8 r3">
+        <div class="head"><span class="t-title">Цена водителя за <span class="glue">год<button class="info" type="button" aria-label="Что это: Цена водителя за год" aria-expanded="false" data-tip-title="Цена водителя за год" data-tip-text="Сколько дохода парк получил с водителя за 12 месяцев: в среднем, вместе с теми, кто перестал ездить." data-tip-how="Доход — комиссия парка по нынешним ставкам: оплата поездки × ставку прошлого месяца — основную, а в первые 14 дней с найма — ставку новичка. Так цифра показывает, сколько водитель стоит сейчас, а не при прежней ставке. Лидер — в верхних 20 % месяца по поездкам; остальные — все прочие, кто ездил в этом месяце; новичок — с первой поездки в парке. Считается по водителям с октября 2024 по сентябрь 2025: у них 12 месяцев уже прошли."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span></div>
+        <div class="price-rows">
+          <div class="price-row">
+            <div class="price-top"><span class="price-name">Лидер</span><b>2,8 млн</b></div>
+            <div class="price-bar"><i style="width:100%;background:#9CEEFF"></i></div>
+            <span class="hint">через год ездят 43 % · за два года — 4,0 млн</span>
+          </div>
+          <div class="price-row">
+            <div class="price-top"><span class="price-name">Остальные на линии</span><b>575,0 тыс.</b></div>
+            <div class="price-bar"><i style="width:20.6%;background:#137B9C"></i></div>
+            <span class="hint">через год ездят 22 % · за два года — 696,0 тыс.</span>
+          </div>
+          <div class="price-row">
+            <div class="price-top"><span class="price-name">Новичок</span><b>349,0 тыс.</b></div>
+            <div class="price-bar"><i style="width:12.5%;background:#9DB1B5"></i></div>
+            <span class="hint">среднее по всем пришедшим · обычный новичок — 48,0 тыс. · через год ездят 10 из 100</span>
+          </div>
         </div>
+        <div class="t-sub">Лидер приносит парку в 4,8 раза больше остальных. Новичков до лидера за год дорастает 15 %.</div>
       </section>
 
-      <!-- CAC -->
-      <section class="tile c4 r2">
-        <div class="head"><span class="t-title">LTV : CAC</span></div>
-        <p class="empty-note">Стоимость привлечения водителя не задана — без неё отношения нет.</p>
-        <div class="t-sub" style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px"><span>CAC — расходы на привлечение за месяц / новых водителей</span><span class="btn">Задать</span></div>
+      <!-- LTV : CAC — стоимость найма не задана -->
+      <section class="tile c4 r3">
+        <div class="head"><span class="t-title">Окупается ли <span class="glue">найм<button class="info" type="button" aria-label="Что это: Окупается ли найм" aria-expanded="false" data-tip-title="Окупается ли найм" data-tip-text="Сколько раз за год возвращается сум, потраченный на привлечение нового водителя." data-tip-how="Доход новичка за 12 месяцев с первой поездки ÷ стоимость привлечения одного водителя. Доход — комиссия парка по нынешним ставкам, а не прибыль: расходы парка на водителя не учтены."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span></div>
+        <div class="t-big">349,0&nbsp;тыс.</div>
+        <div style="font:500 15px/1.35 Manrope;color:var(--title);margin-top:8px">новичок приносит парку за первый год</div>
+        <p class="empty-note">Стоимость привлечения водителя не задана. Найм окупается за год, если стоит меньше 349,0&nbsp;тыс.</p>
+        <div class="t-sub" style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-top:auto"><span>Впишите, сколько парк тратит на найм за месяц, — разделим на новичков месяца</span><span class="btn">Задать</span></div>
       </section>
 
       <!-- Новички: сколько остаётся — живые цифры апреля 2026 (прод, замер 06-10, сессия 89) -->
@@ -345,22 +347,38 @@ body { color: var(--text); font: 400 15px/1.45 Manrope, system-ui, sans-serif; }
         <div class="t-sub">Выдаём больше, чем тратят: долг за месяц вырос на 15&nbsp;100 баллов.</div>
       </section>
 
-      <!-- Вне программы: график -->
-      <section class="tile c8 r3 chart-tile">
-        <div class="head"><span class="t-title">Держатся ли средние: в программе и вне</span><span class="go"><svg viewBox="0 0 16 16" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg></span></div>
-        <div class="legend"><span><i style="background:#F7BC3E"></i>участники</span><span><i style="background:#7E9399"></i>вне программы</span><span style="color:#7E9399">месяцев с первой поездки</span></div>
-        <svg class="chart" viewBox="0 0 720 240" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Доля средних водителей на линии по месяцам с первой поездки: участники программы и вне её">
-          <g stroke="rgba(156,238,255,.07)" stroke-width="1"><line x1="60" y1="165" x2="680" y2="165"/><line x1="60" y1="120" x2="680" y2="120"/><line x1="60" y1="75" x2="680" y2="75"/><line x1="60" y1="30" x2="680" y2="30"/></g>
-          <line x1="60" y1="210" x2="680" y2="210" stroke="#566E74" stroke-width="1"/>
-          <g font-family="Manrope" font-size="12" font-weight="500" fill="#566E74" text-anchor="end"><text x="50" y="214">0</text><text x="50" y="169">25 %</text><text x="50" y="124">50 %</text><text x="50" y="79">75 %</text><text x="50" y="34">100 %</text></g>
-          <g font-family="Manrope" font-size="12" font-weight="500" fill="#566E74" text-anchor="middle"><text x="60" y="230">0</text><text x="116" y="230">1</text><text x="172" y="230">2</text><text x="228" y="230">3</text><text x="284" y="230">4</text><text x="340" y="230">5</text><text x="396" y="230">6</text><text x="452" y="230">7</text><text x="508" y="230">8</text><text x="564" y="230">9</text><text x="620" y="230">10</text><text x="676" y="230">11</text></g>
-          <polyline points="60,30.0 116,80.4 172,96.6 228,105.6 284,112.8 340,118.2 396,123.6 452,127.2 508,130.8 564,132.6 620,134.4 676,136.2" fill="none" stroke="#F7BC3E" stroke-width="2"/>
-          <polyline points="60,30.0 116,102.0 172,123.6 228,134.4 284,143.4 340,150.6 396,156.0 452,159.6 508,163.2 564,165.0 620,166.8 676,168.6" fill="none" stroke="#7E9399" stroke-width="2"/>
-          <circle cx="676" cy="136.2" r="4" fill="#F7BC3E"/><circle cx="676" cy="168.6" r="4" fill="#7E9399"/>
-          <text x="684" y="140.2" font-family="Manrope" font-size="12" font-weight="700" fill="#F7BC3E">41 %</text>
-          <text x="684" y="172.6" font-family="Manrope" font-size="12" font-weight="700" fill="#9DB1B5">23 %</text>
-        </svg>
-        <div class="t-sub">Участники держатся лучше, но в программу приходят те, кто и так собирался ездить. Сколько даёт сама программа, покажет контрольная половина в акциях.</div>
+      <!-- Можно вернуть — пул возврата (T128); живые цифры, прод на 07-10-2026 (замер сессии 95) -->
+      <section class="tile c8 r3">
+        <div class="head"><span class="t-title">Можно <span class="glue">вернуть<button class="info" type="button" aria-label="Что это: Можно вернуть" aria-expanded="false" data-tip-title="Можно вернуть" data-tip-text="Водители, которые ездили в парке и перестали, — по тому, как давно была последняя поездка. Кому звонить, чтобы вернуть." data-tip-how="Ушёл — последняя поездка 30 дней назад и раньше, по комиссиям парка с апреля 2024. «Ездили много» — 100 поездок и больше за всё время. «Сами возвращаются» — какая часть тех, кто не ездил столько же, снова поехала в ближайшие 30 дней без касаний программы; по снимкам на 1-е число месяца с апреля 2025. «Больше года» — в основном случайные водители, медиана 37 поездок."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,128a96,96,0,1,1-96-96A96,96,0,0,1,224,128Z" opacity="0.2"/><path d="M144,176a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176Zm88-48A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128ZM124,96a12,12,0,1,0-12-12A12,12,0,0,0,124,96Z"/></svg></button></span></span><span class="btn">Выгрузить для обзвона</span></div>
+        <div class="pool">
+          <div style="display:flex;flex-direction:column">
+            <div class="t-big">1&nbsp;559</div>
+            <div style="font:500 15px/1.35 Manrope;color:var(--title);margin-top:8px">водителей ушли за последний год</div>
+            <div class="t-sub" style="margin-top:6px;padding-top:0">942 из них сделали 100+ поездок</div>
+            <div class="t-sub" style="margin-top:auto">Чем дольше водитель не ездит, тем реже возвращается сам: из не ездящих 1–3 месяца за месяц снова выходят 11&nbsp;%, из не ездящих 3–12 месяцев — 2–4&nbsp;%.</div>
+          </div>
+          <div class="pool-rows">
+            <div class="pool-row price-row">
+              <div class="price-top"><span class="price-name">Не ездит 1–3 месяца</span><b>271</b></div>
+              <div class="price-bar"><i style="width:29.7%;background:#1C4A58;position:relative"><i style="width:66.8%;background:#9CEEFF;position:absolute;left:0;top:0;bottom:0"></i></i></div>
+              <span class="hint">ездили много — 181 · сами возвращаются 11 % за месяц</span>
+            </div>
+            <div class="pool-row price-row">
+              <div class="price-top"><span class="price-name">3–6 месяцев</span><b>377</b></div>
+              <div class="price-bar"><i style="width:41.4%;background:#1C4A58;position:relative"><i style="width:63.4%;background:#9CEEFF;position:absolute;left:0;top:0;bottom:0"></i></i></div>
+              <span class="hint">ездили много — 239 · сами возвращаются 4 % за месяц</span>
+            </div>
+            <div class="pool-row price-row">
+              <div class="price-top"><span class="price-name">6–12 месяцев</span><b>911</b></div>
+              <div class="price-bar"><i style="width:100.0%;background:#1C4A58;position:relative"><i style="width:57.3%;background:#9CEEFF;position:absolute;left:0;top:0;bottom:0"></i></i></div>
+              <span class="hint">ездили много — 522 · сами возвращаются 2 % за месяц</span>
+            </div>
+            <div class="pool-row price-row muted">
+              <div class="price-top"><span class="price-name">Больше года</span><b>3&nbsp;824</b></div>
+              <span class="hint">ездили много — 1&nbsp;322 · сами возвращаются 0,7&nbsp;% за месяц</span>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- Вне программы: числа -->
