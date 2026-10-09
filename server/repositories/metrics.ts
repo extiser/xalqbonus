@@ -1261,3 +1261,116 @@ export const readDriverValueNewcomers = async (
 
   return rows[0] ?? { people: 0, value: null, median: null, ridingAfterYear: 0, becameLeader: 0, monthsToLeader: null };
 };
+
+/**
+ * «Можно вернуть» — плитка «Глубины» (issue #446), только из готовых таблиц: транзакции на открытии
+ * экрана не читаются. Кто в какой полосе давности и какие снимки, решает сервис
+ * (`server/services/metrics/readWinbackPool.ts`), здесь только выборки.
+ *
+ * Сутки с поездкой человека — строки `metric_person_days` и последние сутки с комиссией парка
+ * до истории заказов из `metric_person_prior`: так видны и ушедшие до 2025-10-01
+ * (docs/decisions.md → «Пул возврата на дашборде»). Сутки до истории всегда раньше сутки таблицы,
+ * и ряд по человеку от их склейки не ломается. Демо в обеих таблицах нет по построению, но человек
+ * мог стать демо после ночного пересчёта — он отсекается признаком.
+ */
+const winbackTripDaysSql = Prisma.sql`
+  (
+    SELECT person_day."person_id", person_day."day"
+      FROM xb.metric_person_days AS person_day
+    UNION ALL
+    SELECT prior_trips."person_id", prior_trips."last_day" AS "day"
+      FROM xb.metric_person_prior AS prior_trips
+  )
+`;
+
+export type WinbackPersonRow = {
+  personId: string;
+  /** Последние сутки с поездкой не позже дня отсчёта, `YYYY-MM-DD`. */
+  lastDay: string;
+  /** Оплаченных заказов из `metric_person_months` по месяц дня отсчёта включительно. */
+  rides: number;
+};
+
+/**
+ * Все люди с поездкой не позже суток `asOfDay`: последняя поездка и поездки с апреля 2024
+ * по месяц `asOfMonth` (`YYYY-MM-01`) включительно. Человек без строки денег — с нулём поездок.
+ */
+export const listWinbackPeople = async (asOfDay: string, asOfMonth: string): Promise<WinbackPersonRow[]> =>
+  db.$queryRaw<WinbackPersonRow[]>`
+    WITH last_trip AS (
+           SELECT trip_day."person_id", max(trip_day."day") AS "last_day"
+             FROM ${winbackTripDaysSql} AS trip_day
+            WHERE trip_day."day" <= ${asOfDay}::date
+            GROUP BY trip_day."person_id"
+         ),
+         rides AS (
+           SELECT row."person_id", sum(row."orders")::int AS "rides"
+             FROM xb.metric_person_months AS row
+            WHERE row."month" <= ${asOfMonth}::date
+            GROUP BY row."person_id"
+         )
+    SELECT last_trip."person_id"                       AS "personId",
+           to_char(last_trip."last_day", 'YYYY-MM-DD')  AS "lastDay",
+           coalesce(rides."rides", 0)::int              AS "rides"
+      FROM last_trip
+      JOIN xb.persons AS person ON person."id" = last_trip."person_id"
+      LEFT JOIN rides ON rides."person_id" = last_trip."person_id"
+     WHERE NOT person."is_demo"
+  `;
+
+export type WinbackSnapshotBandRow = {
+  /** Номер полосы с единицы — по порядку `bandStarts`. */
+  band: number;
+  /** Наблюдений по всем снимкам: один человек на разных снимках — разные наблюдения. */
+  observed: number;
+  /** Из них с поездкой в окне возврата. */
+  returned: number;
+};
+
+/**
+ * Самовозврат по снимкам `snapshots` (`YYYY-MM-DD`): на каждом снимке S — люди с последней поездкой
+ * строго до S, по полосам давности `S − последняя поездка`; вернулся — есть поездка с S
+ * по S + `returnDays − 1`. Полоса — `width_bucket` по нижним границам `bandStarts`, по возрастанию;
+ * давность меньше первой границы — не ушёл и в наблюдения не идёт.
+ *
+ * Последняя поездка до S и первая с S — соседние сутки ряда человека: `lead` даёт к каждым суткам
+ * следующие, и снимок S попадает в промежуток, если последние до него сутки — начало промежутка,
+ * а следующие — не раньше S. Промежутки короче первой границы ни в одну полосу не попадают
+ * и отсекаются до соединения со снимками.
+ */
+export const listWinbackSnapshotBands = async (
+  snapshots: readonly string[],
+  bandStarts: readonly number[],
+  returnDays: number,
+): Promise<WinbackSnapshotBandRow[]> => {
+  if (snapshots.length === 0) {
+    return [];
+  }
+
+  return db.$queryRaw<WinbackSnapshotBandRow[]>`
+    WITH gaps AS (
+           SELECT trip_day."person_id",
+                  trip_day."day" AS "last_day",
+                  lead(trip_day."day") OVER (PARTITION BY trip_day."person_id" ORDER BY trip_day."day") AS "next_day"
+             FROM ${winbackTripDaysSql} AS trip_day
+         ),
+         observations AS (
+           SELECT width_bucket(snapshot."day" - gaps."last_day", ${[...bandStarts]}::int[]) AS "band",
+                  coalesce(gaps."next_day" < snapshot."day" + ${returnDays}::int, false) AS "returned"
+             FROM gaps
+             JOIN unnest(${[...snapshots]}::date[]) AS snapshot("day")
+               ON gaps."last_day" < snapshot."day"
+              AND (gaps."next_day" IS NULL OR gaps."next_day" >= snapshot."day")
+             JOIN xb.persons AS person ON person."id" = gaps."person_id"
+            WHERE NOT person."is_demo"
+              AND (gaps."next_day" IS NULL OR gaps."next_day" - gaps."last_day" >= ${bandStarts[0] ?? 0}::int)
+         )
+    SELECT observations."band",
+           count(*)::int                                          AS "observed",
+           count(*) FILTER (WHERE observations."returned")::int    AS "returned"
+      FROM observations
+     WHERE observations."band" > 0
+     GROUP BY observations."band"
+     ORDER BY observations."band"
+  `;
+};

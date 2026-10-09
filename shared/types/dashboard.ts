@@ -237,6 +237,45 @@ export type DashboardDepth = {
   newcomers: DashboardNewcomers;
   /** Цена водителя за год (issue #442). */
   driverValue: DashboardDriverValue;
+  /** Можно вернуть — пул возврата (issue #446). */
+  winback: DashboardWinbackPool;
+};
+
+/** Полоса давности последней поездки: 1–3, 3–6, 6–12 месяцев и больше года. */
+export type DashboardWinbackBandKey = 'months1to3' | 'months3to6' | 'months6to12' | 'overYear';
+
+/** Полоса «Можно вернуть». `null` у значений — цифр нет. */
+export type DashboardWinbackBand = {
+  key: DashboardWinbackBandKey;
+  /** Ушедших в полосе на день отсчёта. */
+  people: number | null;
+  /** Из них 100+ поездок с апреля 2024. */
+  many: number | null;
+  /**
+   * Какая доля не ездивших столько же снова поехала за 30 суток, процентом, как на экране:
+   * целым, ниже 1 % — до десятой. `null` — снимков нет или цифр нет.
+   */
+  selfReturnPercent: number | null;
+};
+
+/**
+ * «Можно вернуть» на «Глубине» (issue #446): ушедшие по давности последней поездки на день
+ * отсчёта и доля тех, кто возвращается сам (docs/decisions.md → «Пул возврата на дашборде»).
+ */
+export type DashboardWinbackPool = {
+  /** День отсчёта: последний день месяца, у идущего — вчера. */
+  asOfDay: string;
+  /** Месяцы поездок от начала истории по день отсчёта; собраны не все сутки — цифр нет. */
+  coverage: DashboardPeriod[];
+  /** Когда кончился последний успешный пересчёт денег; `null` — ещё не считали, цифр нет. */
+  computedAt: string | null;
+  /** Ушли за последний год — полосы 1–3, 3–6 и 6–12 месяцев вместе. */
+  leftYear: number | null;
+  leftYearMany: number | null;
+  /** Четыре полосы по порядку давности. */
+  bands: DashboardWinbackBand[];
+  /** Медиана поездок с апреля 2024 у полосы «Больше года». */
+  overYearMedianRides: number | null;
 };
 
 /**

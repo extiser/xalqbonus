@@ -11,11 +11,10 @@ import { toLoadState } from '~/utils/loadState';
  * по неделям, экономика программы и водители вне программы. Кнопок-входов у плиток нет:
  * подробных страниц нет.
  *
- * Новички (issue #407, `03-depth-newbies.html`) — первым рядом «Сколько остаётся» и «Первые 14 дней»,
- * последней плиткой экрана — список тех, у кого меньше 20 поездок за 14 дней.
- *
- * «Цена водителя за год» (issue #442) — сразу после «Вне программы», на пустых 8 колонках справа
- * от неё. Первым рядом, как в эталоне, она встанет вместе с «Окупается ли найм».
+ * Сетка — как в эталоне (issue #446): первым рядом «Цена водителя за год» (issue #442), справа
+ * от неё до «Окупается ли найм» — пустые 4 колонки. Ниже — новички (issue #407, `03-depth-newbies.html`):
+ * «Сколько остаётся» и «Первые 14 дней»; «Баллы по неделям» и «Экономика программы»; «Можно вернуть»
+ * и «Вне программы»; последней плиткой экрана — список новичков, у кого меньше 20 поездок за 14 дней.
  *
  * Шапка и месяц — как у «Рычагов»: месяц живёт в адресе (`?month=2026-10`) и переходит между
  * вкладками.
@@ -73,6 +72,7 @@ const changeMonth = (month: string): void => {
     </div>
 
     <MoleculesWebBento>
+      <OrganismsWebDashboardDriverValue :state="state" :month="depth?.month ?? null" :driver-value="depth?.driverValue ?? null" />
       <OrganismsWebDashboardNewcomersRetention :state="state" :month="depth?.month ?? null" :newcomers="depth?.newcomers ?? null" />
       <OrganismsWebDashboardNewcomersFirstDays :state="state" :month="depth?.month ?? null" :newcomers="depth?.newcomers ?? null" />
       <MoleculesWebTile :cols="8" :rows="3" title="Баллы по неделям" metric="pointsWeekly" class="max-web:min-h-[300px]">
@@ -88,8 +88,8 @@ const changeMonth = (month: string): void => {
         <OrganismsWebPointsWeeklyChart v-else :weeks="weeks" />
       </MoleculesWebTile>
       <OrganismsWebDashboardProgramEconomy :state="state" :month="depth?.month ?? null" :economy="depth?.economy ?? null" />
+      <OrganismsWebDashboardWinbackPool :state="state" :month="depth?.month ?? null" :winback="depth?.winback ?? null" />
       <OrganismsWebDashboardOutsideProgram :state="state" :month="depth?.month ?? null" :outside="depth?.outside ?? null" />
-      <OrganismsWebDashboardDriverValue :state="state" :month="depth?.month ?? null" :driver-value="depth?.driverValue ?? null" />
       <OrganismsWebDashboardNewcomersList
         :state="state"
         :month="depth?.month ?? null"

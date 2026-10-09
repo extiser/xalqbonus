@@ -5,25 +5,27 @@ import { readNewcomers } from '#server/services/metrics/readNewcomers';
 import { readOutsideProgram } from '#server/services/metrics/readOutsideProgram';
 import { readPointsWeekly } from '#server/services/metrics/readPointsWeekly';
 import { readProgramEconomy } from '#server/services/metrics/readProgramEconomy';
+import { readWinbackPool } from '#server/services/metrics/readWinbackPool';
 import type { DashboardDepth } from '#shared/types/dashboard';
 
 /**
  * Вкладка «Глубина» дашборда за месяц (issue #373): баллы по неделям, экономика программы,
- * водители вне программы, новички (issue #407) и цена водителя за год (issue #442). Период — тот же,
- * что у «Рычагов»: текущий месяц по вчерашние сутки.
+ * водители вне программы, новички (issue #407), цена водителя за год (issue #442) и «Можно вернуть»
+ * (issue #446). Период — тот же, что у «Рычагов»: текущий месяц по вчерашние сутки.
  *
  * Месяц приходит из запроса как есть; негодный — `MetricsMonthError` (`monthPeriod.ts`).
  */
 export const readDashboardDepth = async (monthParam: unknown, now: Date = new Date()): Promise<DashboardDepth> => {
   const month = readMetricsMonth(monthParam, now);
   const { period } = monthPeriods(month, now);
-  const [coveredPeriod, weeks, economy, outside, newcomers, driverValue] = await Promise.all([
+  const [coveredPeriod, weeks, economy, outside, newcomers, driverValue, winback] = await Promise.all([
     withCoverage(period),
     readPointsWeekly(period.to, now),
     readProgramEconomy(period),
     readOutsideProgram(period),
     readNewcomers(month, now),
     readDriverValue(month, now),
+    readWinbackPool(month, now),
   ]);
 
   return {
@@ -35,5 +37,6 @@ export const readDashboardDepth = async (monthParam: unknown, now: Date = new Da
     outside,
     newcomers: newcomers.dashboard,
     driverValue,
+    winback,
   };
 };
