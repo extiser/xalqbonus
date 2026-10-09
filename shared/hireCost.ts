@@ -34,7 +34,7 @@ const HIRE_COST_DENIAL_TEXTS: Readonly<
   hire_cost_amount_invalid: { ru: () => 'Впишите сумму больше нуля' },
   hire_cost_month_invalid: {
     ru: ({ firstMonth, lastMonth }) =>
-      `Месяц — с ${monthYear(firstMonth, 'nominative')} по ${monthYear(lastMonth, 'nominative')}`,
+      `Месяц — с ${monthYear(firstMonth, 'genitive')} по ${monthYear(lastMonth, 'nominative')}`,
   },
 };
 
