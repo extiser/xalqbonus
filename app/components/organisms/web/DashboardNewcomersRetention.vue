@@ -39,7 +39,7 @@ const note = computed(() => {
 
   if (!value || !props.month || !cohortMonth.value) return null;
 
-  const ongoing = ongoingNote(value, props.month);
+  const ongoing = ongoingNote(value.ongoing, value.curveMonth, props.month);
 
   if (ongoing) return ongoing;
 

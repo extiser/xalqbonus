@@ -19,6 +19,7 @@ export {
   formatSignedNumber,
   formatSignedPercent,
   formatTenths,
+  formatWholePercent,
   pluralize,
 } from '#shared/numberFormat';
 

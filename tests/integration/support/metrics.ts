@@ -2,7 +2,8 @@ import { db } from '#server/db';
 
 /**
  * Заказы истории, порции сбора и уборка таблиц метрик для теста пересчёта (issue #371);
- * транзакции с суммами и порции сбора транзакций — для пересчёта денег (issue #438).
+ * транзакции с суммами и порции сбора транзакций — для пересчёта денег (issue #438); заказы
+ * с профилем и деньги людей по месяцам — для цены водителя (issue #442).
  *
  * Таблицы метрик целиком производные: пересчёт стирает их и пишет заново, поэтому уборка
  * стирает их целиком тоже — иначе строки с людьми тестов держали бы внешний ключ, и уборка
@@ -159,6 +160,119 @@ export const insertTestMoneyTransaction = async (categoryId: string, eventAt: Da
   createdTransactionIds.add(id);
 };
 
+export type TestOrderTransactionInput = {
+  profileId: string | null;
+  categoryId: string;
+  eventAt: Date;
+  amount: string;
+  orderId: string;
+};
+
+/** Транзакция заказа: с профилем и `order_id` — фикстура денег людей по месяцам (issue #442). */
+export const insertTestOrderTransaction = async (input: TestOrderTransactionInput): Promise<void> => {
+  nextTransactionNumber += 1;
+  const id = `test-metrics-transaction-${process.pid}-${nextTransactionNumber}`;
+
+  await db.fleetTransaction.create({
+    data: {
+      id,
+      eventAt: input.eventAt,
+      categoryId: input.categoryId,
+      amount: input.amount,
+      currencyCode: 'UZS',
+      driverProfileId: input.profileId,
+      orderId: input.orderId,
+    },
+  });
+  createdTransactionIds.add(id);
+};
+
+/** Дата найма профиля, `YYYY-MM-DD`; `null` — даты нет. */
+export const setTestHireDate = async (profileId: string, day: string | null): Promise<void> => {
+  await db.parkProfile.update({
+    where: { profileId },
+    data: { hireDate: day === null ? null : new Date(`${day}T00:00:00Z`) },
+  });
+};
+
+/** Делает человека демо-водителем: в метрики он не входит. */
+export const markTestPersonDemo = async (personId: string): Promise<void> => {
+  await db.person.update({ where: { id: personId }, data: { isDemo: true } });
+};
+
+export type TestPersonMonth = {
+  month: string;
+  personId: string;
+  orders: number;
+  fee: string;
+  payment: string;
+  feeNewcomerRate: string;
+  paymentNewcomerRate: string;
+};
+
+/** Строки `metric_person_months` людей; суммы — строкой, как их хранит `numeric`. */
+export const readTestPersonMonths = async (personIds: readonly string[]): Promise<TestPersonMonth[]> =>
+  db.$queryRaw<TestPersonMonth[]>`
+    SELECT to_char("month", 'YYYY-MM-DD') AS "month",
+           "person_id"::text AS "personId",
+           "orders",
+           "fee"::text AS "fee",
+           "payment"::text AS "payment",
+           "fee_newcomer_rate"::text AS "feeNewcomerRate",
+           "payment_newcomer_rate"::text AS "paymentNewcomerRate"
+      FROM xb.metric_person_months
+     WHERE "person_id" = ANY(${[...personIds]}::uuid[])
+     ORDER BY "person_id", "month"
+  `;
+
+export const countTestPersonMonths = async (): Promise<number> => {
+  const rows = await db.$queryRaw<{ total: number }[]>`
+    SELECT count(*)::int AS "total" FROM xb.metric_person_months
+  `;
+
+  return rows[0]?.total ?? 0;
+};
+
+/** Фикстура таблицы напрямую: расчёт плитки читает только её. */
+export const insertTestPersonMonths = async (rows: readonly TestPersonMonth[]): Promise<void> => {
+  await db.metricPersonMonth.createMany({
+    data: rows.map((row) => ({
+      month: new Date(`${row.month}T00:00:00Z`),
+      personId: row.personId,
+      orders: row.orders,
+      fee: row.fee,
+      payment: row.payment,
+      feeNewcomerRate: row.feeNewcomerRate,
+      paymentNewcomerRate: row.paymentNewcomerRate,
+    })),
+  });
+};
+
+/** Успешный прогон денег по сутки `daysTo`: по нему считается покрытие. */
+export const insertTestMoneyRun = async (daysTo: string, finishedAt: Date): Promise<void> => {
+  await db.metricMoneyRun.create({
+    data: {
+      startedAt: finishedAt,
+      finishedAt,
+      daysFrom: new Date('2024-04-01T00:00:00Z'),
+      daysTo: new Date(`${daysTo}T00:00:00Z`),
+      rows: 0,
+      personMonthRows: 0,
+    },
+  });
+};
+
+/** Сколько строк `metric_person_months` записал последний прогон денег. */
+export const readLastPersonMonthRows = async (): Promise<number | null> => {
+  const run = await db.metricMoneyRun.findFirst({
+    where: { finishedAt: { not: null } },
+    orderBy: { finishedAt: 'desc' },
+    select: { personMonthRows: true },
+  });
+
+  return run?.personMonthRows ?? null;
+};
+
 export type TestMoneyDay = { day: string; orders: number; income: string; payment: string };
 
 /** Строки таблицы денег за сутки `from`–`to`; суммы — строкой, как их хранит `numeric`. */
@@ -192,6 +306,7 @@ export const cleanupTestMoney = async (transactionDays: readonly string[]): Prom
   createdTransactionIds.clear();
 
   await db.$executeRaw`DELETE FROM xb.metric_money_days`;
+  await db.$executeRaw`DELETE FROM xb.metric_person_months`;
   await db.$executeRaw`DELETE FROM xb.metric_money_runs`;
   await db.$executeRaw`DELETE FROM xb.fleet_transactions WHERE "id" = ANY(${transactionIds}::text[])`;
   await db.$executeRaw`
@@ -216,6 +331,7 @@ export const cleanupTestMetrics = async (
 
   await db.$executeRaw`DELETE FROM xb.metric_person_days`;
   await db.$executeRaw`DELETE FROM xb.metric_person_prior`;
+  await db.$executeRaw`DELETE FROM xb.metric_person_months`;
   await db.$executeRaw`DELETE FROM xb.metric_recompute_runs`;
   await db.$executeRaw`DELETE FROM xb.fleet_transactions WHERE "id" = ANY(${transactionIds}::text[])`;
   await db.$executeRaw`

@@ -6,8 +6,8 @@ import { recomputePersonDays } from '#server/services/metrics/recomputePersonDay
 
 /**
  * Очередь метрик дашборда (issue #371). Задач два вида: `recompute` — ночной пересчёт готовой
- * таблицы поездок `metric_person_days` по расписанию, и `money` — пересчёт таблицы денег
- * `metric_money_days` (issue #438). Своего расписания у денег нет: их ставит воркер после
+ * таблицы поездок `metric_person_days` по расписанию, и `money` — пересчёт таблиц денег
+ * `metric_money_days` (issue #438) и `metric_person_months` (issue #442). Своего расписания у денег нет: их ставит воркер после
  * успешного ночного перечитывания транзакций (`server/queues/worker.ts`), иначе опоздавшие
  * транзакции не попали бы в цифру (docs/decisions.md → «Деньги на дашборде»).
  *
