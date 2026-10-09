@@ -1263,6 +1263,69 @@ export const readDriverValueNewcomers = async (
 };
 
 /**
+ * «Окупается ли найм» на «Глубине» (issue #445). Только реестр и готовая таблица
+ * `metric_person_months`: транзакции не читаются.
+ *
+ * Нанятый — человек с профилем, у которого `park_profiles.hire_date` в окне; несколько профилей
+ * в одном месяце — один раз, демо не входит. Месяц нанятого — месяц даты найма, первым числом.
+ * Окно — сутки `fromDay`–`toDay` включительно, `YYYY-MM-DD`.
+ */
+const hiredSql = (fromDay: string, toDay: string): Prisma.Sql => Prisma.sql`
+  SELECT DISTINCT date_trunc('month', profile."hire_date")::date AS "month", profile."person_id"
+    FROM xb.park_profiles AS profile
+    JOIN xb.persons AS person ON person."id" = profile."person_id"
+   WHERE NOT person."is_demo"
+     AND profile."hire_date" BETWEEN ${fromDay}::date AND ${toDay}::date
+`;
+
+/** Нанятых с `fromDay` по `toDay` включительно — сутки одного месяца. */
+export const countHired = async (fromDay: string, toDay: string): Promise<number> => {
+  const rows = await db.$queryRaw<{ hired: number }[]>`
+    SELECT count(*)::int AS "hired" FROM (${hiredSql(fromDay, toDay)}) AS hired
+  `;
+
+  return rows[0]?.hired ?? 0;
+};
+
+export type HireCohortTotals = {
+  /** Нанятых во всех наборах: человек в двух наборах — дважды. */
+  hired: number;
+  /** Из них без единой строки в таблице за `m … m + 11`. */
+  notRode: number;
+  /** Средняя цена нанятого за `m … m + 11`, сум, с нулями непоехавших; `null` — нанятых нет. */
+  value: number | null;
+};
+
+/**
+ * Наборы найма — нанятые с `fromDay` по `toDay`, сутки целых месяцев: цена каждого нанятого —
+ * сумма за 12 месяцев с месяца найма.
+ */
+export const readHireCohortTotals = async (
+  fromDay: string,
+  toDay: string,
+  rates: DriverValueRates,
+): Promise<HireCohortTotals> => {
+  const rows = await db.$queryRaw<HireCohortTotals[]>`
+    WITH hired AS (${hiredSql(fromDay, toDay)}),
+         person AS (
+           SELECT coalesce(sum(${personMonthValueSql(rates)}), 0) AS "value",
+                  count(row."month")                               AS "rows"
+             FROM hired
+             LEFT JOIN xb.metric_person_months AS row
+               ON row."person_id" = hired."person_id"
+              AND row."month" BETWEEN hired."month" AND hired."month" + interval '11 months'
+            GROUP BY hired."month", hired."person_id"
+         )
+    SELECT count(*)::int                                  AS "hired",
+           count(*) FILTER (WHERE person."rows" = 0)::int AS "notRode",
+           avg(person."value")::float8                    AS "value"
+      FROM person
+  `;
+
+  return rows[0] ?? { hired: 0, notRode: 0, value: null };
+};
+
+/**
  * «Можно вернуть» — плитка «Глубины» (issue #446), только из готовых таблиц: транзакции на открытии
  * экрана не читаются. Кто в какой полосе давности и какие снимки, решает сервис
  * (`server/services/metrics/readWinbackPool.ts`), здесь только выборки.

@@ -2,19 +2,25 @@ import {
   listDriverValueGroups,
   readDriverValueNewcomers,
   readLastMetricMoneyRun,
-  readPersonMonthRateTotals,
   type DriverValueGroupRow,
-  type DriverValueRates,
 } from '#server/repositories/metrics';
-import { DRIVER_VALUE_NEWCOMER_FROM, LEADERS_SHARE, MONEY_FIRST_DAY } from '#server/services/metrics/constants';
+import { DRIVER_VALUE_NEWCOMER_FROM, LEADERS_SHARE } from '#server/services/metrics/constants';
 import { moneyCoverageByMonth } from '#server/services/metrics/moneyCoverage';
-import { formatDayKey } from '#server/utils/parkTime';
+import {
+  FIRST_MONEY_MONTH,
+  isMoneyComplete,
+  laterMonth,
+  monthDate,
+  readValueRates,
+  valueMonthOf,
+  YEAR_MONTHS,
+  yearCohorts,
+} from '#server/services/metrics/personMonthValue';
 import { shiftMonth } from '#shared/monthNames';
 import type {
   DashboardDriverValue,
   DashboardDriverValueGroup,
   DashboardDriverValueNewcomer,
-  DashboardPeriod,
 } from '#shared/types/dashboard';
 
 /**
@@ -31,42 +37,19 @@ import type {
  *
  * Цифры считаются, только если собраны все сутки от первого месяца наборов по конец T: пропуск
  * суток дал бы ушедшему нули, а лидеров выбрал бы по неполному месяцу.
+ *
+ * Месяц плитки, окно «за год» и ставки — общие с «Окупается ли найм» (`personMonthValue.ts`).
  */
-
-const FIRST_MONEY_MONTH = MONEY_FIRST_DAY.slice(0, 7);
 
 /** Групп у `ntile`: лидеры — первая из них. */
 const LEADER_TILES = Math.round(1 / LEADERS_SHARE);
 
-const YEAR_MONTHS = 12;
-
 const TWO_YEARS_MONTHS = 24;
-
-/** Первое число месяца — так месяц лежит в таблице. */
-const monthDate = (month: string): string => `${month}-01`;
-
-const laterMonth = (first: string, second: string): string => (first > second ? first : second);
 
 const percent = (part: number, whole: number): number | null =>
   whole > 0 ? Math.round((part / whole) * 100) : null;
 
 const roundOrNull = (value: number | null): number | null => (value === null ? null : Math.round(value));
-
-const isComplete = (coverage: readonly DashboardPeriod[]): boolean =>
-  coverage.every((period) => period.coveredDays >= period.days);
-
-/** Ставки месяца; оплаты вне окна новичка нет — цены нет. */
-const ratesOf = async (month: string): Promise<DriverValueRates | null> => {
-  const totals = await readPersonMonthRateTotals(monthDate(month));
-  const mainPayment = totals.payment - totals.paymentNewcomerRate;
-
-  if (mainPayment <= 0) return null;
-
-  const main = (totals.fee - totals.feeNewcomerRate) / mainPayment;
-  const newcomer = totals.paymentNewcomerRate > 0 ? totals.feeNewcomerRate / totals.paymentNewcomerRate : main;
-
-  return { main, newcomer };
-};
 
 const EMPTY_GROUP: DashboardDriverValueGroup = {
   people: null,
@@ -103,11 +86,8 @@ const groupOf = (
 };
 
 export const readDriverValue = async (month: string, now: Date = new Date()): Promise<DashboardDriverValue> => {
-  const ongoing = month >= formatDayKey(now).slice(0, 7);
-  const valueMonth = ongoing ? shiftMonth(month, -1) : month;
-
-  const cohortsFrom = laterMonth(shiftMonth(valueMonth, -(2 * YEAR_MONTHS - 1)), FIRST_MONEY_MONTH);
-  const cohortsTo = shiftMonth(valueMonth, -YEAR_MONTHS);
+  const { month: valueMonth, ongoing } = valueMonthOf(month, now);
+  const { from: cohortsFrom, to: cohortsTo } = yearCohorts(valueMonth);
   const twoYearsFrom = laterMonth(shiftMonth(valueMonth, -(3 * YEAR_MONTHS - 1)), FIRST_MONEY_MONTH);
   const twoYearsTo = shiftMonth(valueMonth, -TWO_YEARS_MONTHS);
   const hasTwoYears = twoYearsTo >= twoYearsFrom;
@@ -129,7 +109,7 @@ export const readDriverValue = async (month: string, now: Date = new Date()): Pr
     coverage,
   };
 
-  const rates = isComplete(coverage) ? await ratesOf(valueMonth) : null;
+  const rates = isMoneyComplete(coverage) ? await readValueRates(valueMonth) : null;
 
   if (rates === null) {
     return {

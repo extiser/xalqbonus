@@ -239,6 +239,8 @@ export type DashboardDepth = {
   driverValue: DashboardDriverValue;
   /** Можно вернуть — пул возврата (issue #446). */
   winback: DashboardWinbackPool;
+  /** Окупается ли найм (issue #445). */
+  hirePayback: DashboardHirePayback;
 };
 
 /** Полоса давности последней поездки: 1–3, 3–6, 6–12 месяцев и больше года. */
@@ -328,6 +330,63 @@ export type DashboardDriverValue = {
   leader: DashboardDriverValueGroup;
   others: DashboardDriverValueGroup;
   newcomer: DashboardDriverValueNewcomer;
+};
+
+/** Расходы на найм за месяц плитки: за закрытый — по факту, на идущий — бюджет. */
+export type DashboardHireCost = {
+  /** Сум за месяц. */
+  amount: number;
+  /** Стоимость найма одного: расходы ÷ нанятых в месяце плитки, сум; нанятых нет — `null`. */
+  perHired: number | null;
+};
+
+/**
+ * «Окупается ли найм» на «Глубине» (issue #445): доход с нанятого за год ÷ стоимость найма одного.
+ * `null` у значений — цифр нет.
+ */
+export type DashboardHirePayback = {
+  /** Месяц плитки `YYYY-MM` — месяц экрана, и идущий тоже. */
+  month: string;
+  /** Месяц плитки идёт: нанятые — с 1-го по вчера, расходы — бюджет. */
+  ongoing: boolean;
+  /** Месяц цены, `YYYY-MM`: закрытый месяц плитки, у идущего — прошлый. */
+  valueMonth: string;
+  /** Первый и последний набор найма, `YYYY-MM`. */
+  cohortsFrom: string;
+  cohortsTo: string;
+  /** Месяцы от первого набора по месяц цены; собраны не все сутки — цифр дохода нет. */
+  coverage: DashboardPeriod[];
+  /** Средний доход с нанятого за 12 месяцев с месяца найма, сум, с нулями непоехавших. */
+  valuePerHired: number | null;
+  /** Нанятых во всех наборах. */
+  hired: number | null;
+  /** Из них не поехали ни разу за 12 месяцев. */
+  notRode: number | null;
+  notRodePercent: number | null;
+  /** Нанятых в месяце плитки: от реестра, от прогона денег не зависит. */
+  monthHired: number;
+  /** Последние посчитанные сутки нанятых, `YYYY-MM-DD`: у идущего — вчера, у закрытого — последний день. */
+  monthHiredTo: string;
+  /** Расходы за месяц плитки не заданы — `null`. */
+  cost: DashboardHireCost | null;
+  /** Во сколько раз доход с нанятого больше стоимости найма одного, до десятой. */
+  payback: number | null;
+};
+
+/** Тело `PUT /api/dashboard/hire-cost`. */
+export type DashboardHireCostRequestBody = {
+  /** Месяц, за который сумма, `YYYY-MM`. */
+  month: string;
+  /** Сум за месяц; пустая сумма окна уходит `null` — отказ про неё говорит ручка. */
+  amount: number | null;
+};
+
+/** Сохранённая запись расходов на найм. */
+export type DashboardHireCostRecord = {
+  month: string;
+  amount: number;
+  updatedBy: string;
+  updatedAt: string;
 };
 
 /**
