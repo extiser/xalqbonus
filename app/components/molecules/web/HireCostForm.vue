@@ -2,50 +2,47 @@
 import { computed, nextTick, ref, watch } from 'vue';
 import { PhWarningCircle } from '@phosphor-icons/vue';
 import { endSentence, formatCompactSum, formatNumber, formatTenths } from '~/utils/format';
-import { formatMonthTitle, monthForms, shiftMonth } from '#shared/monthNames';
-import { hireCostPerHired, hirePaybackOf, type HireCostField } from '#shared/hireCost';
-import { pluralize } from '#shared/numberFormat';
-import type { SelectOption } from '~/types/selectOption';
+import { hiredCount, hiredWhen, noHiredText } from '~/utils/hirePayback';
+import { monthForms, monthYear } from '#shared/monthNames';
+import { hireCostPerHired, hirePaybackOf } from '#shared/hireCost';
 
 /**
  * Форма окна «Расходы на найм» плитки «Окупается ли найм» (issue #445) —
- * `_reference/design/web/dashboard/03-depth-hire-dialog.html`. Ставится в `MoleculesWebDialog`.
+ * `_reference/design/web/dashboard/03-depth-hire-dialog.html` без поля месяца. Ставится
+ * в `MoleculesWebDialog`.
  *
- * Два поля — сумма за месяц и месяц, с которого она действует, — и расчёт под ними по месяцу
- * из «Действует с»: нанятые этого месяца — из `hiredByMonth`, доход с нанятого — тот же, что
- * на плитке. Считается здесь, без запроса, той же функцией, что окупаемость плитки на сервере.
+ * Одно поле — сумма за месяц плитки: за закрытый — сколько потрачено, на идущий — бюджет. Под ним
+ * расчёт по этому месяцу: нанятые и доход с нанятого — те же, что на плитке, стоимость одного
+ * и окупаемость — той же функцией, что у сервера. Считается здесь, без запроса.
  *
  * Формы по кодексу (`docs/frontend.md` → «Обязательное поле — свойство поля»): `novalidate`
- * и своей проверки нет — ошибки присылает сервер по полю (`fieldErrors`), первое поле с ошибкой
- * получает фокус, правка поля снимает его ошибку (`edit`). Ошибка не про поле — плашкой над
- * полями, введённое не теряется.
+ * и своей проверки нет — отказ по сумме присылает сервер, он встаёт под поле, и поле получает
+ * фокус; правка поля снимает его ошибку (`edit`). Отказ не про поле — и про месяц, поля для
+ * которого здесь нет, — плашкой над полем, введённое не теряется.
  *
- * Сумма вводится цифрами, разряды встают сами. Запросов форма не делает: значения уходят
- * событием `submit`; пустая сумма уходит `null` — отказ про неё скажет сервер.
+ * Сумма вводится цифрами, разряды встают сами. Запросов форма не делает: сумма уходит событием
+ * `submit`; пустая уходит `null` — отказ про неё скажет сервер.
  */
-export type HireCostFormValues = {
-  month: string;
-  amount: number | null;
-};
-
 const props = defineProps<{
-  initialMonth: string;
+  /** Месяц плитки `YYYY-MM`, за который сумма. */
+  month: string;
+  /** Месяц идёт: сумма — бюджет, нанятые — по вчера. */
+  ongoing: boolean;
+  /** Нанятых в месяце и последние посчитанные сутки, `YYYY-MM-DD`. */
+  monthHired: number;
+  monthHiredTo: string;
   initialAmount: number | null;
-  /** Месяцы «Действует с»: от первого месяца дашборда по месяц плитки. */
-  firstMonth: string;
-  lastMonth: string;
-  hiredByMonth: { month: string; hired: number }[];
   /** Доход с нанятого за год, сум; `null` — цифр нет, вторую половину расчёта не пишем. */
   valuePerHired: number | null;
-  fieldErrors: Partial<Record<HireCostField, string>>;
+  amountError: string | null;
   formError: string | null;
   submitting: boolean;
 }>();
 
 const emit = defineEmits<{
-  submit: [values: HireCostFormValues];
+  submit: [amount: number | null];
   cancel: [];
-  edit: [field: HireCostField];
+  edit: [];
 }>();
 
 /** Больше цифр сумма не бывает: дальше число теряет точность, а сумов столько не тратят. */
@@ -54,7 +51,6 @@ const AMOUNT_MAX_DIGITS = 15;
 const digitsOf = (text: string): string => text.replace(/\D/g, '').slice(0, AMOUNT_MAX_DIGITS);
 
 const amountText = ref(props.initialAmount === null ? '' : formatNumber(props.initialAmount));
-const month = ref(props.initialMonth);
 
 const amount = computed((): number | null => {
   const digits = digitsOf(amountText.value);
@@ -67,53 +63,51 @@ watch(amountText, (text) => {
   const formatted = amount.value === null ? '' : formatNumber(amount.value);
 
   if (formatted !== text) amountText.value = formatted;
-  emit('edit', 'amount');
+  emit('edit');
 });
 
-watch(month, () => emit('edit', 'month'));
+const label = computed(() =>
+  props.ongoing
+    ? `Бюджет на найм на ${monthYear(props.month, 'nominative')}, сум`
+    : `Потрачено на найм за ${monthYear(props.month, 'nominative')}, сум`,
+);
 
-const monthOptions = computed((): SelectOption[] => {
-  const options: SelectOption[] = [];
+const hint = computed(() =>
+  props.ongoing
+    ? 'Сколько парк выделил на найм в этом месяце. Когда месяц закончится, поправьте на то, что потратили на самом деле.'
+    : 'Сколько парк потратил на привлечение водителей за месяц: реклама, бонусы за приход, работа менеджеров — как парк считает сам.',
+);
 
-  for (let item = props.lastMonth; item >= props.firstMonth; item = shiftMonth(item, -1)) {
-    options.push({ value: item, label: formatMonthTitle(item) });
-  }
-
-  return options;
-});
-
-/** Расчёт под полями: нанятых в месяце нет — или стоимость одного и окупаемость, числами для экрана. */
+/** Расчёт под полем: нанятых в месяце нет — или стоимость одного и окупаемость, числами для экрана. */
 type HireCostCalc =
-  | { kind: 'noHired'; monthWord: string }
+  | { kind: 'noHired'; text: string }
   | {
       kind: 'cost';
       monthWord: string;
-      sum: string;
-      hired: string;
+      division: string;
       perHired: string;
       /** Доход с нанятого и окупаемость; цифр дохода нет — `null`, вторую фразу не пишем. */
       payback: { value: string; times: string } | null;
     };
 
-/** «Найм одного в сентябре: …» — по месяцу из «Действует с»; суммы нет — строки нет. */
+/** «Найм одного в сентябре: 9,0 млн ÷ 72 нанятых = …» — по месяцу плитки; суммы нет — строки нет. */
 const calc = computed((): HireCostCalc | null => {
   const sum = amount.value;
 
   if (sum === null || sum <= 0) return null;
 
-  const monthWord = monthForms(month.value).prepositional;
-  const hired = props.hiredByMonth.find((row) => row.month === month.value)?.hired ?? 0;
-  const perHired = hireCostPerHired(sum, hired);
+  const perHired = hireCostPerHired(sum, props.monthHired);
 
-  if (perHired === null) return { kind: 'noHired', monthWord };
+  if (perHired === null) return { kind: 'noHired', text: noHiredText(props) };
 
-  const payback = props.valuePerHired === null ? null : hirePaybackOf(props.valuePerHired, sum, hired);
+  const payback = props.valuePerHired === null ? null : hirePaybackOf(props.valuePerHired, sum, props.monthHired);
+  // У идущего нанятые — не все за месяц, и делитель говорит, за какие сутки.
+  const days = props.ongoing ? ` ${hiredWhen(props)}` : '';
 
   return {
     kind: 'cost',
-    monthWord,
-    sum: formatCompactSum(sum),
-    hired: `${formatNumber(hired)} ${pluralize(hired, 'нанятого', 'нанятых', 'нанятых')}`,
+    monthWord: monthForms(props.month).prepositional,
+    division: `${formatCompactSum(sum)} ÷ ${hiredCount(props.monthHired)}${days}`,
     perHired: formatCompactSum(perHired),
     payback:
       props.valuePerHired === null || payback === null
@@ -123,25 +117,19 @@ const calc = computed((): HireCostCalc | null => {
 });
 
 const amountField = ref<{ focus: () => void } | null>(null);
-const monthField = ref<{ focus: () => void } | null>(null);
-
-/** Порядок полей на форме — в нём ищется первое поле с ошибкой. */
-const FIELD_ORDER: readonly HireCostField[] = ['amount', 'month'];
 
 watch(
-  () => props.fieldErrors,
-  async (errors) => {
-    const first = FIELD_ORDER.find((field) => errors[field] !== undefined);
-
-    if (first === undefined) return;
+  () => props.amountError,
+  async (error) => {
+    if (error === null) return;
 
     await nextTick();
-    (first === 'amount' ? amountField : monthField).value?.focus();
+    amountField.value?.focus();
   },
 );
 
 const submit = (): void => {
-  emit('submit', { month: month.value, amount: amount.value });
+  emit('submit', amount.value);
 };
 </script>
 
@@ -159,23 +147,11 @@ const submit = (): void => {
       <MoleculesWebTextField
         ref="amountField"
         v-model="amountText"
-        label="Сколько парк тратит на найм в месяц, сум"
+        :label="label"
         required
         autofocus
-        hint="Всё, что уходит на привлечение водителей за месяц: реклама, бонусы за приход, работа менеджеров — как парк считает сам."
-        :error="fieldErrors.amount ?? null"
-      />
-    </div>
-
-    <div class="mt-5">
-      <MoleculesWebSelectField
-        ref="monthField"
-        v-model="month"
-        label="Действует с"
-        required
-        :options="monthOptions"
-        hint="С этого месяца и дальше, пока не введёте новую сумму. Месяцы до него считаются по прежней записи."
-        :error="fieldErrors.month ?? null"
+        :hint="hint"
+        :error="amountError"
       />
     </div>
 
@@ -184,9 +160,9 @@ const submit = (): void => {
       aria-live="polite"
       class="m-0 mt-5 rounded-xl bg-web-cyan/4 px-3.5 py-3 font-manrope text-[13px] leading-[1.45] text-web-title"
     >
-      <template v-if="calc.kind === 'noHired'">В {{ calc.monthWord }} нанятых нет — стоимость одного не посчитать</template>
+      <template v-if="calc.kind === 'noHired'">{{ calc.text }}</template>
       <template v-else>
-        Найм одного в {{ calc.monthWord }}: {{ calc.sum }} ÷ {{ calc.hired }} =
+        Найм одного в {{ calc.monthWord }}: {{ calc.division }} =
         <b class="font-semibold text-web-text">{{ endSentence(calc.perHired) }}</b>
         <template v-if="calc.payback">
           Нанятый приносит за год {{ calc.payback.value }} — найм окупается

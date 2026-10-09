@@ -1,7 +1,7 @@
-import { readHireCostAt } from '#server/repositories/dashboardHireCosts';
-import { listHiredByMonth, readHireCohortTotals, readLastMetricMoneyRun } from '#server/repositories/metrics';
+import { readHireCost } from '#server/repositories/dashboardHireCosts';
+import { countHired, readHireCohortTotals, readLastMetricMoneyRun } from '#server/repositories/metrics';
 import { moneyCoverageByMonth } from '#server/services/metrics/moneyCoverage';
-import { metricsMonthRange } from '#server/services/metrics/monthPeriod';
+import { monthPeriods, wholeMonthPeriod } from '#server/services/metrics/monthPeriod';
 import {
   isMoneyComplete,
   monthDate,
@@ -13,46 +13,47 @@ import { hireCostPerHired, hirePaybackOf } from '#shared/hireCost';
 import type { DashboardHireCost, DashboardHirePayback } from '#shared/types/dashboard';
 
 /**
- * «Окупается ли найм» на «Глубине» (issue #445) — docs/decisions.md → «Окупаемость найма
- * на дашборде». Только реестр, таблица `metric_person_months` и записи расходов: транзакции
- * не читаются.
+ * «Окупается ли найм» на «Глубине» (issue #445). Только реестр, таблица `metric_person_months`
+ * и запись расходов: транзакции не читаются.
  *
- * Месяц плитки T, наборы `T − 23 … T − 12`, ставки месяца T и покрытие — как у «Цены водителя
- * за год», общим модулем `personMonthValue.ts`. Доход с нанятого — среднее по всем нанятым
- * наборов, вместе с теми, кто так и не поехал: на них парк тоже тратил.
+ * Месяц плитки T — месяц экрана, и идущий тоже: у идущего нанятые считаются с 1-го по вчерашние
+ * сутки, а расходы — бюджет месяца. Расходы — только запись месяца T: записи других месяцев
+ * на него не действуют. Стоимость одного — расходы ÷ нанятых в T.
  *
- * Расходы — запись, действующая в T; стоимость одного — они ÷ нанятых в T. Нанятые по месяцам
- * от первого месяца дашборда по T идут в ответ целиком: окно считает по ним стоимость в любом
- * месяце из «Действует с» без запроса.
+ * Доход с нанятого — тем же расчётом, что «Цена водителя за год» (`personMonthValue.ts`): месяц
+ * цены — закрытый T, у идущего — прошлый; наборы найма, ставки и покрытие — по нему. Среднее —
+ * по всем нанятым наборов, вместе с теми, кто так и не поехал: на них парк тоже тратил.
+ * Нанятые и расходы от прогона денег не зависят и есть всегда.
  */
 export const readHirePayback = async (month: string, now: Date = new Date()): Promise<DashboardHirePayback> => {
   const { month: valueMonth, ongoing } = valueMonthOf(month, now);
   const { from: cohortsFrom, to: cohortsTo } = yearCohorts(valueMonth);
-  const { firstMonth } = metricsMonthRange(now);
+  // Месяц экрана уже проверен `readMetricsMonth`: у идущего период кончается вчерашними сутками.
+  const { period } = monthPeriods(month, now);
 
-  const [lastRun, hiredByMonth, costRow] = await Promise.all([
+  const [lastRun, monthHired, costRow] = await Promise.all([
     readLastMetricMoneyRun(),
-    firstMonth <= valueMonth ? listHiredByMonth(monthDate(firstMonth), monthDate(valueMonth)) : Promise.resolve([]),
-    readHireCostAt(valueMonth),
+    countHired(period.from, period.to),
+    readHireCost(month),
   ]);
 
   const coverage = await moneyCoverageByMonth(cohortsFrom, valueMonth, lastRun?.daysTo ?? null);
   const rates = isMoneyComplete(coverage) ? await readValueRates(valueMonth) : null;
   const totals =
-    rates === null ? null : await readHireCohortTotals(monthDate(cohortsFrom), monthDate(cohortsTo), rates);
+    rates === null
+      ? null
+      : await readHireCohortTotals(monthDate(cohortsFrom), wholeMonthPeriod(cohortsTo).to, rates);
 
-  const hiredInMonth = hiredByMonth.find((row) => row.month === valueMonth)?.hired ?? 0;
   // Нанятых в наборах нет — среднего нет: ноль на плитке читался бы как «нанятый ничего не приносит».
   const valuePerHired = totals?.value == null ? null : Math.round(totals.value);
 
   const cost: DashboardHireCost | null =
-    costRow === null
-      ? null
-      : { amount: costRow.amount, fromMonth: costRow.month, perHired: hireCostPerHired(costRow.amount, hiredInMonth) };
+    costRow === null ? null : { amount: costRow.amount, perHired: hireCostPerHired(costRow.amount, monthHired) };
 
   return {
-    month: valueMonth,
+    month,
     ongoing,
+    valueMonth,
     cohortsFrom,
     cohortsTo,
     coverage,
@@ -61,8 +62,9 @@ export const readHirePayback = async (month: string, now: Date = new Date()): Pr
     notRode: totals?.notRode ?? null,
     notRodePercent:
       totals === null || totals.hired === 0 ? null : Math.round((totals.notRode / totals.hired) * 100),
-    hiredByMonth,
+    monthHired,
+    monthHiredTo: period.to,
     cost,
-    payback: cost === null || valuePerHired === null ? null : hirePaybackOf(valuePerHired, cost.amount, hiredInMonth),
+    payback: cost === null || valuePerHired === null ? null : hirePaybackOf(valuePerHired, cost.amount, monthHired),
   };
 };

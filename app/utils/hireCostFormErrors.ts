@@ -1,27 +1,32 @@
-import { failureDetails, failureField, failureMessage } from '~/utils/requestError';
-import { isHireCostField, type HireCostField } from '#shared/hireCost';
+import { failureDetails, failureField, failureMessage, failureText } from '~/utils/requestError';
+import type { HireCostField } from '#shared/hireCost';
 
 /**
- * Ошибки окна «Расходы на найм» по полям из отказа ручки (issue #445), как у формы метки
- * (`promoFormErrors.ts`). Ручка называет все негодные поля сразу (`fields`), а если их нет —
- * одно. `null` — отказ не про поля: сеть, сервер; его форма показывает плашкой над полями.
+ * Отказ ручки расходов на найм, разложенный по окну «Расходы на найм» (issue #445). Поле в окне
+ * одно — сумма: её текст встаёт под поле. Месяц приходит из плитки, поля для него нет, и его
+ * отказ, как и отказ не про поля — сеть, сервер, — идёт плашкой над полем.
  *
  * Тексты — те, что прислал сервер: они из словаря `shared/hireCost.ts`, своих у формы нет.
  */
-export const readHireCostFieldErrors = (error: unknown): Partial<Record<HireCostField, string>> | null => {
-  const errors: Partial<Record<HireCostField, string>> = {};
+export type HireCostFormErrors = {
+  amount: string | null;
+  form: string | null;
+};
+
+/** Текст отказа по полю: из `fields`, а если их нет — из самого отказа, когда он про это поле. */
+const fieldText = (error: unknown, field: HireCostField): string | null => {
   const fields = failureDetails(error)?.fields;
+  const entries = typeof fields === 'object' && fields !== null ? Object.entries(fields) : [];
+  const text = entries.find(([key]) => key === field)?.[1];
 
-  if (typeof fields === 'object' && fields !== null) {
-    for (const [field, text] of Object.entries(fields)) {
-      if (isHireCostField(field) && typeof text === 'string') errors[field] = text;
-    }
-  }
+  if (typeof text === 'string') return text;
 
-  const field = failureField(error);
-  const message = failureMessage(error);
+  return failureField(error) === field ? failureMessage(error) : null;
+};
 
-  if (isHireCostField(field) && message !== null) errors[field] ??= message;
+export const readHireCostErrors = (error: unknown): HireCostFormErrors => {
+  const amount = fieldText(error, 'amount');
+  const month = fieldText(error, 'month');
 
-  return Object.keys(errors).length > 0 ? errors : null;
+  return { amount, form: amount === null && month === null ? failureText(error) : month };
 };

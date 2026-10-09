@@ -1,31 +1,29 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { DASH, endSentence, formatCompactSum, formatNumber, formatTenths, formatWholePercent } from '~/utils/format';
-import { ongoingNote } from '~/utils/newcomers';
+import { hiredCount, hiredWhen, noHiredText, ongoingHireNote } from '~/utils/hirePayback';
 import { monthForms, monthYear } from '#shared/monthNames';
-import { pluralize } from '#shared/numberFormat';
 import type { LoadState } from '~/types/loadState';
 import type { DashboardHirePayback } from '#shared/types/dashboard';
 
 /**
  * Плитка «Окупается ли найм» вкладки «Глубина» (issue #445), 4 × 3 — экраны
  * `_reference/design/web/dashboard/03-depth.html` (расходы не заданы)
- * и `03-depth-hire-set.html` (заданы); docs/decisions.md → «Окупаемость найма на дашборде».
+ * и `03-depth-hire-set.html` (заданы).
  *
- * Расходов нет — крупно доход с нанятого за первый год и при какой цене найм окупается, внизу
- * «Задать». Есть — крупно окупаемость, во сколько раз за год возвращается сум найма, под ней
- * из чего она, внизу откуда стоимость и «Изменить». Кнопки открывают окно «Расходы на найм» —
+ * Месяц плитки — месяц экрана, и идущий тоже: у идущего нанятые — с 1-го по вчера, расходы —
+ * бюджет, это говорит строка под названием. Расходы за месяц не заданы — крупно доход с нанятого
+ * за первый год и при какой цене найм окупается, внизу «Задать». Заданы — крупно окупаемость, под
+ * ней из чего она, внизу откуда стоимость и «Изменить». Кнопки открывают окно «Расходы на найм» —
  * его держит страница, плитка только говорит `edit`. Числа считает сервер, здесь только подписи.
  *
- * Идущий месяц показывает последний закрытый — строка под названием, как у «Цены водителя».
- * Собраны не все сутки наборов — вместо дохода прочерк и строка покрытия.
+ * Собраны не все сутки наборов — вместо дохода прочерк и строка покрытия; нанятые и расходы
+ * от прогона денег не зависят и остаются.
  *
  * Данные — свойством: сама плитка в сеть не ходит (docs/frontend.md).
  */
 const props = defineProps<{
   state: LoadState;
-  /** Выбранный месяц `YYYY-MM`: у идущего плитка говорит, что показывает прошлый. */
-  month: string | null;
   hirePayback: DashboardHirePayback | null;
 }>();
 
@@ -33,9 +31,7 @@ const emit = defineEmits<{ edit: [] }>();
 
 const ready = computed(() => (props.state === 'ready' ? props.hirePayback : null));
 
-const note = computed(() =>
-  ready.value && props.month ? ongoingNote(ready.value.ongoing, ready.value.month, props.month) : null,
-);
+const note = computed(() => (ready.value ? ongoingHireNote(ready.value) : null));
 
 const value = computed(() =>
   ready.value?.valuePerHired == null ? DASH : formatCompactSum(ready.value.valuePerHired),
@@ -50,20 +46,28 @@ const notRodeText = computed(() => {
   return `из нанятых не поехали ни разу ${formatWholePercent(payback.notRodePercent)} — ${formatNumber(payback.notRode)} из ${formatNumber(payback.hired)}`;
 });
 
-/** Нанятых в месяце плитки — делитель стоимости одного. */
-const hiredInMonth = computed(
-  () => ready.value?.hiredByMonth.find((row) => row.month === ready.value?.month)?.hired ?? 0,
-);
-
-/** «Расходы на найм — 9,0 млн в месяц с сентября 2026 ÷ 72 нанятых в сентябре». */
+/**
+ * Строка внизу: откуда стоимость одного — или просьба её задать. У закрытого месяца расходы —
+ * потраченные по факту, у идущего — бюджет.
+ */
 const costText = computed(() => {
   const payback = ready.value;
 
-  if (!payback?.cost) return null;
+  if (!payback) return null;
 
-  const hired = hiredInMonth.value;
+  const { nominative, prepositional } = monthForms(payback.month);
 
-  return `Расходы на найм — ${formatCompactSum(payback.cost.amount)} в месяц с ${monthYear(payback.cost.fromMonth, 'genitive')} ÷ ${formatNumber(hired)} ${pluralize(hired, 'нанятого', 'нанятых', 'нанятых')} в ${monthForms(payback.month).prepositional}`;
+  if (!payback.cost) {
+    return payback.ongoing
+      ? `Впишите бюджет на найм на ${nominative} — разделим на нанятых с начала месяца`
+      : `Впишите, сколько парк потратил на найм за ${nominative}, — разделим на нанятых в ${prepositional}`;
+  }
+
+  const division = `${formatCompactSum(payback.cost.amount)} ÷ ${hiredCount(payback.monthHired)} ${hiredWhen(payback)}`;
+
+  return payback.ongoing
+    ? `Бюджет на найм на ${nominative} — ${division}`
+    : `Потрачено на найм за ${nominative} — ${division}`;
 });
 
 /** «Собраны не все сутки: июль 2025 — 28 из 31. Доход с нанятого не считаем». */
@@ -108,7 +112,7 @@ const coverageText = computed(() => {
 
       <template v-else-if="ready.cost.perHired === null">
         <p class="m-0 mt-3 font-manrope text-[15px] leading-[1.35] font-medium text-web-title">
-          В {{ monthForms(ready.month).prepositional }} нанятых нет — стоимость одного не посчитать
+          {{ noHiredText(ready) }}
         </p>
         <div class="mt-3">
           <AtomsWebHint :text="`нанятый приносит ${value}`" />
@@ -146,7 +150,7 @@ const coverageText = computed(() => {
       </div>
 
       <div class="mt-auto flex items-end justify-between gap-3 pt-2.5">
-        <AtomsWebHint :text="costText ?? 'Впишите, сколько парк тратит на найм за месяц, — разделим на нанятых в месяце'" />
+        <AtomsWebHint :text="costText ?? ''" />
         <AtomsWebActionButton :label="ready.cost ? 'Изменить' : 'Задать'" @click="emit('edit')" />
       </div>
     </template>

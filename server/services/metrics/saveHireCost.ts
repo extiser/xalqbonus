@@ -1,17 +1,15 @@
 import { upsertHireCost } from '#server/repositories/dashboardHireCosts';
 import { metricsMonthRange, MetricsMonthError, readMetricsMonth } from '#server/services/metrics/monthPeriod';
-import { valueMonthOf } from '#server/services/metrics/personMonthValue';
 import type { HireCostDenialCode, HireCostMonthRange } from '#shared/hireCost';
 import type { DashboardHireCostRecord } from '#shared/types/dashboard';
 
 /**
- * Запись расходов на найм из окна «Расходы на найм» (issue #445) — docs/decisions.md →
- * «Окупаемость найма на дашборде»: сумма действует с выбранного месяца и дальше, запись на тот же
- * месяц заменяется, удаления нет.
+ * Запись расходов на найм из окна «Расходы на найм» (issue #445): сумма за один месяц — за закрытый
+ * по факту, на идущий бюджетом. Запись на тот же месяц заменяется, удаления нет.
  *
  * Проверка — здесь, а не в форме (docs/frontend.md → «Обязательное поле — свойство поля»), и отказ
- * называет все негодные поля сразу. Месяц — по правилу `readMetricsMonth` и не позже последнего
- * закрытого: в идущем месяце нанятых ещё не все. Сумма — целое число сумов больше нуля.
+ * называет все негодные поля сразу. Месяц — любой по правилу `readMetricsMonth`: от первого месяца
+ * дашборда по идущий включительно. Сумма — целое число сумов больше нуля.
  */
 export class HireCostInputError extends Error {
   constructor(
@@ -25,12 +23,7 @@ export class HireCostInputError extends Error {
 }
 
 /** Месяц записи; негодный — `null`, беда уже в списке. */
-const readHireCostMonth = (
-  value: unknown,
-  range: HireCostMonthRange,
-  now: Date,
-  problems: HireCostDenialCode[],
-): string | null => {
+const readHireCostMonth = (value: unknown, now: Date, problems: HireCostDenialCode[]): string | null => {
   // Пустой месяц `readMetricsMonth` прочитал бы как последний — у записи он обязателен.
   if (typeof value !== 'string' || value === '') {
     problems.push('hire_cost_month_invalid');
@@ -39,9 +32,7 @@ const readHireCostMonth = (
   }
 
   try {
-    const month = readMetricsMonth(value, now);
-
-    if (month <= range.lastMonth) return month;
+    return readMetricsMonth(value, now);
   } catch (error) {
     if (!(error instanceof MetricsMonthError)) throw error;
   }
@@ -63,12 +54,11 @@ export const saveHireCost = async (
   input: { month: unknown; amount: unknown; employeeId: string },
   now: Date = new Date(),
 ): Promise<DashboardHireCostRecord> => {
-  const { firstMonth, lastMonth } = metricsMonthRange(now);
-  const range: HireCostMonthRange = { firstMonth, lastMonth: valueMonthOf(lastMonth, now).month };
+  const range: HireCostMonthRange = metricsMonthRange(now);
   const problems: HireCostDenialCode[] = [];
 
   const amount = readHireCostAmount(input.amount, problems);
-  const month = readHireCostMonth(input.month, range, now, problems);
+  const month = readHireCostMonth(input.month, now, problems);
   const [first, ...rest] = problems;
 
   if (first !== undefined) {

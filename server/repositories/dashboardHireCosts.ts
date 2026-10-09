@@ -1,8 +1,8 @@
 import { db } from '#server/db';
 
 /**
- * Расходы парка на найм — записи «с какого месяца действует» (issue #445). Месяцы ходят
- * `YYYY-MM`, в таблице — первым числом.
+ * Расходы парка на найм — сумма за один месяц (issue #445): за закрытый — по факту, на идущий —
+ * бюджет. На другие месяцы запись не действует. Месяцы ходят `YYYY-MM`, в таблице — первым числом.
  */
 
 export type HireCostRow = {
@@ -23,12 +23,9 @@ const toRow = (row: { month: Date; amount: bigint; updatedBy: string; updatedAt:
   updatedAt: row.updatedAt,
 });
 
-/** Запись, действующая в месяце: наибольший `month` не позже него. `null` — расходы не заданы. */
-export const readHireCostAt = async (month: string): Promise<HireCostRow | null> => {
-  const row = await db.dashboardHireCost.findFirst({
-    where: { month: { lte: new Date(`${month}-01T00:00:00Z`) } },
-    orderBy: { month: 'desc' },
-  });
+/** Запись месяца. `null` — расходы за него не заданы. */
+export const readHireCost = async (month: string): Promise<HireCostRow | null> => {
+  const row = await db.dashboardHireCost.findUnique({ where: { month: new Date(`${month}-01T00:00:00Z`) } });
 
   return row === null ? null : toRow(row);
 };

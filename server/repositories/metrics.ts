@@ -1263,34 +1263,29 @@ export const readDriverValueNewcomers = async (
 };
 
 /**
- * «Окупается ли найм» на «Глубине» (issue #445) — docs/decisions.md → «Окупаемость найма
- * на дашборде». Только реестр и готовая таблица `metric_person_months`: транзакции не читаются.
+ * «Окупается ли найм» на «Глубине» (issue #445). Только реестр и готовая таблица
+ * `metric_person_months`: транзакции не читаются.
  *
- * Нанятый месяца `m` — человек с профилем, у которого `park_profiles.hire_date` в `m`; несколько
- * профилей в одном месяце — один раз, демо не входит. Месяцы ходят первым числом, `YYYY-MM-01`.
+ * Нанятый — человек с профилем, у которого `park_profiles.hire_date` в окне; несколько профилей
+ * в одном месяце — один раз, демо не входит. Месяц нанятого — месяц даты найма, первым числом.
+ * Окно — сутки `fromDay`–`toDay` включительно, `YYYY-MM-DD`.
  */
-const hiredSql = (fromMonth: string, toMonth: string): Prisma.Sql => Prisma.sql`
+const hiredSql = (fromDay: string, toDay: string): Prisma.Sql => Prisma.sql`
   SELECT DISTINCT date_trunc('month', profile."hire_date")::date AS "month", profile."person_id"
     FROM xb.park_profiles AS profile
     JOIN xb.persons AS person ON person."id" = profile."person_id"
    WHERE NOT person."is_demo"
-     AND profile."hire_date" >= ${fromMonth}::date
-     AND profile."hire_date" < ${toMonth}::date + interval '1 month'
+     AND profile."hire_date" BETWEEN ${fromDay}::date AND ${toDay}::date
 `;
 
-export type HiredMonthRow = { month: string; hired: number };
-
-/** Нанятых в каждом месяце `fromMonth`–`toMonth` по возрастанию, месяц — `YYYY-MM`; без найма — ноль. */
-export const listHiredByMonth = async (fromMonth: string, toMonth: string): Promise<HiredMonthRow[]> =>
-  db.$queryRaw<HiredMonthRow[]>`
-    WITH hired AS (${hiredSql(fromMonth, toMonth)})
-    SELECT to_char(series."month", 'YYYY-MM')   AS "month",
-           count(hired."person_id")::int         AS "hired"
-      FROM generate_series(${fromMonth}::date, ${toMonth}::date, interval '1 month') AS series("month")
-      LEFT JOIN hired ON hired."month" = series."month"::date
-     GROUP BY series."month"
-     ORDER BY series."month"
+/** Нанятых с `fromDay` по `toDay` включительно — сутки одного месяца. */
+export const countHired = async (fromDay: string, toDay: string): Promise<number> => {
+  const rows = await db.$queryRaw<{ hired: number }[]>`
+    SELECT count(*)::int AS "hired" FROM (${hiredSql(fromDay, toDay)}) AS hired
   `;
+
+  return rows[0]?.hired ?? 0;
+};
 
 export type HireCohortTotals = {
   /** Нанятых во всех наборах: человек в двух наборах — дважды. */
@@ -1301,14 +1296,17 @@ export type HireCohortTotals = {
   value: number | null;
 };
 
-/** Наборы найма `fromMonth`–`toMonth`: цена каждого нанятого — сумма за 12 месяцев с месяца найма. */
+/**
+ * Наборы найма — нанятые с `fromDay` по `toDay`, сутки целых месяцев: цена каждого нанятого —
+ * сумма за 12 месяцев с месяца найма.
+ */
 export const readHireCohortTotals = async (
-  fromMonth: string,
-  toMonth: string,
+  fromDay: string,
+  toDay: string,
   rates: DriverValueRates,
 ): Promise<HireCohortTotals> => {
   const rows = await db.$queryRaw<HireCohortTotals[]>`
-    WITH hired AS (${hiredSql(fromMonth, toMonth)}),
+    WITH hired AS (${hiredSql(fromDay, toDay)}),
          person AS (
            SELECT coalesce(sum(${personMonthValueSql(rates)}), 0) AS "value",
                   count(row."month")                               AS "rows"

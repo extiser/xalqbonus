@@ -1,12 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { HireCostFormValues } from '~/components/molecules/web/HireCostForm.vue';
 import { useDashboardSegment } from '~/composables/useDashboardSegment';
-import { readHireCostFieldErrors } from '~/utils/hireCostFormErrors';
+import { readHireCostErrors } from '~/utils/hireCostFormErrors';
 import { toLoadState } from '~/utils/loadState';
-import { failureText } from '~/utils/requestError';
-import type { HireCostField } from '#shared/hireCost';
 import type { DashboardHireCostRecord, DashboardHireCostRequestBody } from '#shared/types/dashboard';
 
 /**
@@ -17,8 +14,8 @@ import type { DashboardHireCostRecord, DashboardHireCostRequestBody } from '#sha
  * подробных страниц нет.
  *
  * Сетка — как в эталоне (issue #446): первым рядом «Цена водителя за год» (issue #442) и справа
- * от неё «Окупается ли найм» (issue #445) с окном «Расходы на найм». Ниже — новички (issue #407, `03-depth-newbies.html`):
- * «Сколько остаётся» и «Первые 14 дней»; «Баллы по неделям» и «Экономика программы»; «Можно вернуть»
+ * от неё «Окупается ли найм» (issue #445) с окном «Расходы на найм». Ниже — новички (issue #407,
+ * `03-depth-newbies.html`): «Сколько остаётся» и «Первые 14 дней»; «Баллы по неделям» и «Экономика программы»; «Можно вернуть»
  * и «Вне программы»; последней плиткой экрана — список новичков, у кого меньше 20 поездок за 14 дней.
  *
  * Шапка и месяц — как у «Рычагов»: месяц живёт в адресе (`?month=2026-10`) и переходит между
@@ -59,13 +56,13 @@ const changeMonth = (month: string): void => {
   void router.push({ query: { ...route.query, month } });
 };
 
-// Окно «Расходы на найм» (issue #445): «Задать» и «Изменить» на плитке «Окупается ли найм».
-// Сохранили — окно закрывается, и «Глубина» перечитывается: плитка считает по новой записи.
+// Окно «Расходы на найм» (issue #445): «Задать» и «Изменить» на плитке «Окупается ли найм» —
+// сумма за месяц плитки. Сохранили — окно закрывается, и «Глубина» перечитывается.
 
 const hireCostOpen = ref(false);
 /** Ключ формы: новое открытие окна — чистая форма, без прошлых значений и ошибок. */
 const hireCostKey = ref(0);
-const hireCostFieldErrors = ref<Partial<Record<HireCostField, string>>>({});
+const hireCostAmountError = ref<string | null>(null);
 const hireCostError = ref<string | null>(null);
 const hireCostSaving = ref(false);
 
@@ -73,7 +70,7 @@ const hirePayback = computed(() => (state.value === 'ready' ? (depth.value?.hire
 
 const openHireCost = (): void => {
   hireCostKey.value += 1;
-  hireCostFieldErrors.value = {};
+  hireCostAmountError.value = null;
   hireCostError.value = null;
   hireCostOpen.value = true;
 };
@@ -82,16 +79,14 @@ const closeHireCost = (): void => {
   hireCostOpen.value = false;
 };
 
-const clearHireCostFieldError = (field: HireCostField): void => {
-  if (hireCostFieldErrors.value[field] === undefined) return;
-
-  const next = { ...hireCostFieldErrors.value };
-  delete next[field];
-  hireCostFieldErrors.value = next;
+const clearHireCostAmountError = (): void => {
+  hireCostAmountError.value = null;
 };
 
-const saveHireCost = async (values: HireCostFormValues): Promise<void> => {
-  if (hireCostSaving.value) return;
+const saveHireCost = async (amount: number | null): Promise<void> => {
+  const month = hirePayback.value?.month;
+
+  if (hireCostSaving.value || !month) return;
 
   hireCostSaving.value = true;
   hireCostError.value = null;
@@ -99,19 +94,16 @@ const saveHireCost = async (values: HireCostFormValues): Promise<void> => {
   try {
     await $fetch<DashboardHireCostRecord>('/api/dashboard/hire-cost', {
       method: 'PUT',
-      body: values satisfies DashboardHireCostRequestBody,
+      body: { month, amount } satisfies DashboardHireCostRequestBody,
     });
 
     hireCostOpen.value = false;
     await refresh();
   } catch (error) {
-    const errors = readHireCostFieldErrors(error);
+    const errors = readHireCostErrors(error);
 
-    if (errors !== null) {
-      hireCostFieldErrors.value = errors;
-    } else {
-      hireCostError.value = failureText(error);
-    }
+    hireCostAmountError.value = errors.amount;
+    hireCostError.value = errors.form;
   } finally {
     hireCostSaving.value = false;
   }
@@ -138,7 +130,6 @@ const saveHireCost = async (values: HireCostFormValues): Promise<void> => {
       <OrganismsWebDashboardDriverValue :state="state" :month="depth?.month ?? null" :driver-value="depth?.driverValue ?? null" />
       <OrganismsWebDashboardHirePayback
         :state="state"
-        :month="depth?.month ?? null"
         :hire-payback="depth?.hirePayback ?? null"
         @edit="openHireCost"
       />
@@ -174,18 +165,18 @@ const saveHireCost = async (values: HireCostFormValues): Promise<void> => {
       <MoleculesWebHireCostForm
         v-if="hirePayback"
         :key="hireCostKey"
-        :initial-month="hirePayback.cost?.fromMonth ?? hirePayback.month"
+        :month="hirePayback.month"
+        :ongoing="hirePayback.ongoing"
+        :month-hired="hirePayback.monthHired"
+        :month-hired-to="hirePayback.monthHiredTo"
         :initial-amount="hirePayback.cost?.amount ?? null"
-        :first-month="depth?.range.firstMonth ?? hirePayback.month"
-        :last-month="hirePayback.month"
-        :hired-by-month="hirePayback.hiredByMonth"
         :value-per-hired="hirePayback.valuePerHired"
-        :field-errors="hireCostFieldErrors"
+        :amount-error="hireCostAmountError"
         :form-error="hireCostError"
         :submitting="hireCostSaving"
         @submit="saveHireCost"
         @cancel="closeHireCost"
-        @edit="clearHireCostFieldError"
+        @edit="clearHireCostAmountError"
       />
     </MoleculesWebDialog>
   </div>

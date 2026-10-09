@@ -7,7 +7,8 @@ import { monthYear } from './monthNames';
  *
  * Словарь отдельный от `shared/denials.ts`, как `shared/promo.ts`: там — отказы двери, здесь —
  * предмет разговора (docs/decisions.md → «Граница словаря — дверь»). Сервер кладёт текст
- * в ответ отказавшей ручки, форма ставит его под поле из `HIRE_COST_DENIAL_FIELDS`.
+ * в ответ отказавшей ручки с полем из `HIRE_COST_DENIAL_FIELDS`: отказ суммы окно ставит под поле,
+ * отказ месяца — плашкой, поля месяца в окне нет.
  *
  * Относительными путями, а не через `#shared`: так подключаются соседние файлы `shared/`.
  */
@@ -18,14 +19,12 @@ export type HireCostDenialCode = 'hire_cost_amount_invalid' | 'hire_cost_month_i
 /** Поле формы расходов, к которому относится отказ. */
 export type HireCostField = 'amount' | 'month';
 
-export const isHireCostField = (value: unknown): value is HireCostField => value === 'amount' || value === 'month';
-
 export const HIRE_COST_DENIAL_FIELDS: Readonly<Record<HireCostDenialCode, HireCostField>> = {
   hire_cost_amount_invalid: 'amount',
   hire_cost_month_invalid: 'month',
 };
 
-/** Месяцы, которые можно выбрать в «Действует с»: от первого месяца дашборда по месяц плитки. */
+/** Месяцы, за которые можно записать расходы: от первого месяца дашборда по идущий (`metricsMonthRange`). */
 export type HireCostMonthRange = { firstMonth: string; lastMonth: string };
 
 const HIRE_COST_DENIAL_TEXTS: Readonly<
@@ -47,7 +46,7 @@ export const hireCostDenialText = (
 /**
  * Стоимость найма одного — расходы месяца ÷ нанятых в нём, сум; и окупаемость — доход с нанятого
  * ÷ эта стоимость, до десятой. Общие у плитки (считает сервер) и у расчёта в окне (считает
- * клиент по месяцу из «Действует с»): одно число на экране не должно расходиться с окном.
+ * клиент по вписанной сумме): одно число на экране не должно расходиться с окном.
  * Нанятых нет — ни стоимости, ни окупаемости.
  */
 export const hireCostPerHired = (amount: number, hired: number): number | null =>
