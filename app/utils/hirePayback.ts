@@ -11,6 +11,8 @@ import type { DashboardHirePayback } from '#shared/types/dashboard';
 
 type HireMonth = Pick<DashboardHirePayback, 'month' | 'ongoing' | 'monthHiredTo'>;
 
+type HireNoteMonth = HireMonth & Pick<DashboardHirePayback, 'valueMonth'>;
+
 /** «с 1 по 9 октября»; первые сутки месяца — «за 1 октября». */
 const hiredDays = (monthHiredTo: string): string =>
   monthHiredTo.endsWith('-01') ? `за ${dayWord(monthHiredTo)}` : `с 1 по ${dayWord(monthHiredTo)}`;
@@ -23,13 +25,16 @@ export const hiredCount = (count: number): string =>
 export const hiredWhen = ({ month, ongoing, monthHiredTo }: HireMonth): string =>
   ongoing ? hiredDays(monthHiredTo) : `в ${monthForms(month).prepositional}`;
 
-/** «Октябрь ещё идёт — нанятые с 1 по 9 октября» — строка под названием у идущего месяца. */
-export const ongoingHireNote = ({ month, ongoing, monthHiredTo }: HireMonth): string | null => {
+/**
+ * «Октябрь ещё идёт — нанятые с 1 по 9 октября, доход с нанятого — по сентябрю» — строка под названием
+ * у идущего месяца: нанятые и расходы — этого месяца, а доход — по последнему закрытому.
+ */
+export const ongoingHireNote = ({ month, ongoing, monthHiredTo, valueMonth }: HireNoteMonth): string | null => {
   if (!ongoing) return null;
 
   const name = monthForms(month).nominative;
 
-  return `${name.charAt(0).toUpperCase()}${name.slice(1)} ещё идёт — нанятые ${hiredDays(monthHiredTo)}`;
+  return `${name.charAt(0).toUpperCase()}${name.slice(1)} ещё идёт — нанятые ${hiredDays(monthHiredTo)}, доход с нанятого — по ${monthForms(valueMonth).dative}`;
 };
 
 /** Нанятых в месяце нет — стоимость одного не посчитать; у идущего их «пока нет». */
