@@ -1,3 +1,5 @@
+import type { DashboardWinbackBandKey } from '#shared/types/dashboard';
+
 /**
  * Границы данных метрик дашборда (issue #371).
  *
@@ -103,3 +105,43 @@ export const PARK_NEWCOMER_RATE_DAYS = 14;
 
 /** Первый набор новичков цены водителя: перед ним шесть месяцев транзакций без заказов. */
 export const DRIVER_VALUE_NEWCOMER_FROM = '2024-10';
+
+/**
+ * «Можно вернуть» на «Глубине» (issue #446) — docs/decisions.md → «Пул возврата на дашборде».
+ */
+
+/** Ушёл: от последней поездки до дня отсчёта столько суток и больше. */
+export const WINBACK_LEFT_DAYS = 30;
+
+/** Полоса давности: ключ экрана, подпись выгрузки и сколько суток от последней поездки — от. */
+export type WinbackBand = {
+  key: DashboardWinbackBandKey;
+  /** С этого числа суток от последней поездки; до — начало следующей полосы. */
+  fromDays: number;
+  label: string;
+  /** Входит в «ушли за последний год» и в выгрузку для обзвона. */
+  inYear: boolean;
+};
+
+/** Полосы давности по порядку; последняя — без верхней границы. */
+export const WINBACK_BANDS: readonly WinbackBand[] = [
+  { key: 'months1to3', fromDays: WINBACK_LEFT_DAYS, label: '1–3 месяца', inYear: true },
+  { key: 'months3to6', fromDays: 90, label: '3–6 месяцев', inYear: true },
+  { key: 'months6to12', fromDays: 180, label: '6–12 месяцев', inYear: true },
+  { key: 'overYear', fromDays: 365, label: 'Больше года', inYear: false },
+];
+
+/** «Ездил много»: оплаченных заказов с апреля 2024 столько и больше. */
+export const WINBACK_MANY_RIDES = 100;
+
+/** Снимков самовозврата: последние столько первых чисел месяца, у которых 30 суток уже прошли. */
+export const WINBACK_SNAPSHOTS = 12;
+
+/**
+ * Первый возможный снимок самовозврата: раньше последняя поездка видна только до 2025-10-01 —
+ * начала истории заказов, дальше по комиссиям лишь последние сутки до неё.
+ */
+export const WINBACK_SNAPSHOT_FROM = '2025-11-01';
+
+/** Окно самовозврата, суток: со снимка по 29-е сутки после него. */
+export const WINBACK_RETURN_DAYS = 30;

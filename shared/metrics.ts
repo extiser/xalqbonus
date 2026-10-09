@@ -29,6 +29,9 @@
  * Цена водителя за год (issue #442) — подсказка `03-depth.html`; «как считается» поправлена
  * под docs/decisions.md → «Цена водителя на дашборде»: ставки — месяца экрана, лидер и новичок —
  * по оплаченным заказам. Окно наборов — подстановки `{driverValueFrom}` и `{driverValueTo}`.
+ *
+ * Можно вернуть (issue #446) — подсказка `03-depth.html`, дословно; медиана поездок «Больше года» —
+ * подстановка `{winbackOverYearRides}`.
  */
 
 export type MetricDefinition = {
@@ -51,7 +54,8 @@ export type MetricPlaceholder =
   | 'newcomerDaysAfter'
   | 'newcomerTrips'
   | 'driverValueFrom'
-  | 'driverValueTo';
+  | 'driverValueTo'
+  | 'winbackOverYearRides';
 
 export type MetricValues = Readonly<Partial<Record<MetricPlaceholder, string>>>;
 
@@ -103,7 +107,8 @@ export type MetricKey =
   | 'moneyPaymentPerOrder'
   | 'moneyCommission'
   | 'moneyIncomeByMonth'
-  | 'driverValue';
+  | 'driverValue'
+  | 'winbackPool';
 
 export const METRICS: Readonly<Record<MetricKey, MetricDefinition>> = {
   trips: {
@@ -322,6 +327,11 @@ export const METRICS: Readonly<Record<MetricKey, MetricDefinition>> = {
     title: 'Цена водителя за год',
     text: 'Сколько дохода парк получил с водителя за 12 месяцев: в среднем, вместе с теми, кто перестал ездить.',
     how: 'Доход — комиссия парка по нынешним ставкам: оплата заказа × ставку месяца — основную, а в первые 14 дней с найма — ставку новичка; у идущего месяца — ставки прошлого. Так цифра показывает, сколько водитель стоит сейчас, а не при прежней ставке. Лидер — в верхних 20 % месяца по оплаченным заказам; остальные — все прочие, у кого в этом месяце был заказ; новичок — с первого оплаченного заказа в парке. Считается по водителям с {driverValueFrom} по {driverValueTo}: у них 12 месяцев уже прошли.',
+  },
+  winbackPool: {
+    title: 'Можно вернуть',
+    text: 'Водители, которые ездили в парке и перестали, — по тому, как давно была последняя поездка. Кому звонить, чтобы вернуть.',
+    how: 'Ушёл — последняя поездка 30 дней назад и раньше; поездки — с апреля 2024. Считается на последний день месяца, у идущего — на вчера. «Ездили много» — 100 поездок и больше за всё время. «Сами возвращаются» — какая часть тех, кто не ездил столько же, снова поехала в ближайшие 30 дней без касаний программы; по 12 последним снимкам на 1-е число месяца. «Больше года» — в основном случайные водители, медиана {winbackOverYearRides} поездок.',
   },
 };
 
