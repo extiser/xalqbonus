@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { moneyCoverageByMonth, withMoneyCoverage } from '#server/services/metrics/moneyCoverage';
+import { wholeMonthPeriod } from '#server/services/metrics/monthPeriod';
 import { readDriverValue } from '#server/services/metrics/readDriverValue';
 import { recomputeMoneyDays } from '#server/services/metrics/recomputeMoneyDays';
 import type { DashboardDriverValue } from '#shared/types/dashboard';
@@ -14,6 +16,7 @@ import {
   readLastPersonMonthRows,
   readTestPersonMonths,
   setTestHireDate,
+  upsertTestTransactionDay,
   type TestPersonMonth,
 } from '../support/metrics';
 
@@ -187,6 +190,31 @@ describe('пересчёт денег людей по месяцам', () => {
 
   it('прогон пишет число строк таблицы', async () => {
     expect(await readLastPersonMonthRows()).toBe(await countTestPersonMonths());
+  });
+});
+
+describe('покрытие первых суток денег', () => {
+  // Порция 2024-03-31 по UTC не собрана: первые сутки денег плитке хватает своей порции,
+  // «Деньгам» — нет. Вторые сутки по-прежнему требуют обеих.
+  const DAYS = ['2024-04-01', '2024-04-02'];
+
+  beforeAll(async () => {
+    await cleanupTestMoney(DAYS);
+    for (const day of DAYS) {
+      await upsertTestTransactionDay(day, 'closed');
+    }
+  });
+
+  afterAll(async () => {
+    await cleanupTestMoney(DAYS);
+  });
+
+  it('плитке — сутки 1 и 2 апреля 2024, «Деньгам» — только 2 апреля', async () => {
+    const [april] = await moneyCoverageByMonth('2024-04', '2024-04', '2024-04-30');
+    const money = await withMoneyCoverage(wholeMonthPeriod('2024-04'), '2024-04-30');
+
+    expect(april?.coveredDays).toBe(2);
+    expect(money.coveredDays).toBe(1);
   });
 });
 

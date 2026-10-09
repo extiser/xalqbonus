@@ -1,5 +1,5 @@
 import { listClosedTransactionDays } from '#server/repositories/metrics';
-import { TRANSACTIONS_COMPLETE_FROM } from '#server/services/metrics/constants';
+import { MONEY_FIRST_DAY, TRANSACTIONS_COMPLETE_FROM } from '#server/services/metrics/constants';
 import { wholeMonthPeriod, type MonthPeriodDays } from '#server/services/metrics/monthPeriod';
 import { shiftDayKey } from '#server/utils/parkTime';
 import { shiftMonth } from '#shared/monthNames';
@@ -17,11 +17,23 @@ import type { DashboardPeriod } from '#shared/types/dashboard';
  * `lastComputedDay` — последние сутки успешного прогона денег; `null` — прогона не было,
  * и не покрыто ничего.
  */
-const countCovered = (period: MonthPeriodDays, lastComputedDay: string, closed: ReadonlySet<string>): number => {
+/** Сутки, которым вместо двух порций сбора хватает своей одной: `day` из UTC-порции `day`. */
+type OwnPortionDays = ReadonlySet<string>;
+
+const NO_OWN_PORTION_DAYS: OwnPortionDays = new Set();
+
+const countCovered = (
+  period: MonthPeriodDays,
+  lastComputedDay: string,
+  closed: ReadonlySet<string>,
+  ownPortionDays: OwnPortionDays = NO_OWN_PORTION_DAYS,
+): number => {
   let covered = 0;
 
   for (let day = period.from; day <= period.to && day <= lastComputedDay; day = shiftDayKey(day, 1)) {
-    if (day >= TRANSACTIONS_COMPLETE_FROM || (closed.has(shiftDayKey(day, -1)) && closed.has(day))) {
+    const previousClosed = ownPortionDays.has(day) || closed.has(shiftDayKey(day, -1));
+
+    if (day >= TRANSACTIONS_COMPLETE_FROM || (previousClosed && closed.has(day))) {
       covered += 1;
     }
   }
@@ -50,6 +62,12 @@ export const withMoneyCoverage = async (
 /**
  * Покрытие деньгами месяцев `fromMonth`–`toMonth` целиком, по месяцу на период — «Цена водителя
  * за год» (issue #442): журнал сбора читается один раз на всё окно, а не по запросу на месяц.
+ *
+ * Первые сутки денег `MONEY_FIRST_DAY` здесь полны, когда закрыта их собственная порция по UTC:
+ * порция 2024-03-31 не собрана, и 1 апреля 2024 по Ташкенту остаётся без первых пяти часов.
+ * Иначе плитка не считалась бы ни за один месяц, чьи наборы «за два года» начинаются с апреля 2024.
+ * Плитке это почти не важно: апрель 2024 — только месяц набора, по нему выбираются лидеры, а доход
+ * набора берётся с мая. «Деньги» правило не меняет — там апрель 2024 остаётся неполным.
  */
 export const moneyCoverageByMonth = async (
   fromMonth: string,
@@ -71,5 +89,10 @@ export const moneyCoverageByMonth = async (
 
   const closed = new Set(await listClosedTransactionDays(shiftDayKey(first.from, -1), last.to));
 
-  return periods.map((period) => ({ ...period, coveredDays: countCovered(period, lastComputedDay, closed) }));
+  const ownPortionDays = new Set([MONEY_FIRST_DAY]);
+
+  return periods.map((period) => ({
+    ...period,
+    coveredDays: countCovered(period, lastComputedDay, closed, ownPortionDays),
+  }));
 };
