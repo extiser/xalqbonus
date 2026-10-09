@@ -968,6 +968,7 @@ model Employee {
   accessLinks       EmployeeAccessLink[] @relation("access_link_employee")
   accessLinksIssued EmployeeAccessLink[] @relation("access_link_issued_by")
   promoLinks        PromoLink[]
+  hireCosts         DashboardHireCost[]
 
   @@map("employees")
   @@schema("xb")
@@ -2763,6 +2764,25 @@ model MetricPersonMonth {
   @@id([month, personId])
   @@index([personId])
   @@map("metric_person_months")
+  @@schema("xb")
+}
+
+/// Расходы парка на найм за месяц — плитка «Окупается ли найм» на «Глубине» (issue #445).
+///
+/// Запись «с какого месяца действует»: сумма месяца `M` — строка с наибольшим `month` не позже `M`;
+/// такой нет — расходы не заданы. Запись на тот же месяц заменяется, удаления нет: прошлые месяцы
+/// считаются по своим записям (docs/decisions.md → «Окупаемость найма на дашборде»).
+model DashboardHireCost {
+  /// Первое число месяца, с которого действует сумма.
+  month     DateTime @id @db.Date
+  /// Расходы на найм за месяц, сум; больше нуля.
+  amount    BigInt
+  updatedBy String   @map("updated_by") @db.Uuid
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  employee Employee @relation(fields: [updatedBy], references: [id])
+
+  @@map("dashboard_hire_costs")
   @@schema("xb")
 }
 

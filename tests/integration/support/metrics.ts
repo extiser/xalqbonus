@@ -414,3 +414,21 @@ export const backdateTestOrderIssue = async (orderId: string, issuedAt: Date): P
     UPDATE xb.orders SET "issued_at" = ${issuedAt} WHERE "id" = ${orderId}::uuid
   `;
 };
+
+export type TestHireCost = { month: string; amount: string; updatedBy: string };
+
+/** Записи расходов на найм (issue #445) по возрастанию месяца; сумма — строкой, как `bigint`. */
+export const readTestHireCosts = async (): Promise<TestHireCost[]> =>
+  db.$queryRaw<TestHireCost[]>`
+    SELECT to_char("month", 'YYYY-MM') AS "month", "amount"::text AS "amount", "updated_by"::text AS "updatedBy"
+      FROM xb.dashboard_hire_costs
+     ORDER BY "month"
+  `;
+
+/**
+ * Записи расходов на найм — целиком: в тестовой базе их пишут только тесты. Уходят до уборки
+ * сотрудников: `updated_by` держит учётку ключом `RESTRICT`.
+ */
+export const cleanupTestHireCosts = async (): Promise<void> => {
+  await db.$executeRaw`DELETE FROM xb.dashboard_hire_costs`;
+};

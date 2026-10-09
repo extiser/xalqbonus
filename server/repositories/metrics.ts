@@ -1263,6 +1263,71 @@ export const readDriverValueNewcomers = async (
 };
 
 /**
+ * «Окупается ли найм» на «Глубине» (issue #445) — docs/decisions.md → «Окупаемость найма
+ * на дашборде». Только реестр и готовая таблица `metric_person_months`: транзакции не читаются.
+ *
+ * Нанятый месяца `m` — человек с профилем, у которого `park_profiles.hire_date` в `m`; несколько
+ * профилей в одном месяце — один раз, демо не входит. Месяцы ходят первым числом, `YYYY-MM-01`.
+ */
+const hiredSql = (fromMonth: string, toMonth: string): Prisma.Sql => Prisma.sql`
+  SELECT DISTINCT date_trunc('month', profile."hire_date")::date AS "month", profile."person_id"
+    FROM xb.park_profiles AS profile
+    JOIN xb.persons AS person ON person."id" = profile."person_id"
+   WHERE NOT person."is_demo"
+     AND profile."hire_date" >= ${fromMonth}::date
+     AND profile."hire_date" < ${toMonth}::date + interval '1 month'
+`;
+
+export type HiredMonthRow = { month: string; hired: number };
+
+/** Нанятых в каждом месяце `fromMonth`–`toMonth` по возрастанию, месяц — `YYYY-MM`; без найма — ноль. */
+export const listHiredByMonth = async (fromMonth: string, toMonth: string): Promise<HiredMonthRow[]> =>
+  db.$queryRaw<HiredMonthRow[]>`
+    WITH hired AS (${hiredSql(fromMonth, toMonth)})
+    SELECT to_char(series."month", 'YYYY-MM')   AS "month",
+           count(hired."person_id")::int         AS "hired"
+      FROM generate_series(${fromMonth}::date, ${toMonth}::date, interval '1 month') AS series("month")
+      LEFT JOIN hired ON hired."month" = series."month"::date
+     GROUP BY series."month"
+     ORDER BY series."month"
+  `;
+
+export type HireCohortTotals = {
+  /** Нанятых во всех наборах: человек в двух наборах — дважды. */
+  hired: number;
+  /** Из них без единой строки в таблице за `m … m + 11`. */
+  notRode: number;
+  /** Средняя цена нанятого за `m … m + 11`, сум, с нулями непоехавших; `null` — нанятых нет. */
+  value: number | null;
+};
+
+/** Наборы найма `fromMonth`–`toMonth`: цена каждого нанятого — сумма за 12 месяцев с месяца найма. */
+export const readHireCohortTotals = async (
+  fromMonth: string,
+  toMonth: string,
+  rates: DriverValueRates,
+): Promise<HireCohortTotals> => {
+  const rows = await db.$queryRaw<HireCohortTotals[]>`
+    WITH hired AS (${hiredSql(fromMonth, toMonth)}),
+         person AS (
+           SELECT coalesce(sum(${personMonthValueSql(rates)}), 0) AS "value",
+                  count(row."month")                               AS "rows"
+             FROM hired
+             LEFT JOIN xb.metric_person_months AS row
+               ON row."person_id" = hired."person_id"
+              AND row."month" BETWEEN hired."month" AND hired."month" + interval '11 months'
+            GROUP BY hired."month", hired."person_id"
+         )
+    SELECT count(*)::int                                  AS "hired",
+           count(*) FILTER (WHERE person."rows" = 0)::int AS "notRode",
+           avg(person."value")::float8                    AS "value"
+      FROM person
+  `;
+
+  return rows[0] ?? { hired: 0, notRode: 0, value: null };
+};
+
+/**
  * «Можно вернуть» — плитка «Глубины» (issue #446), только из готовых таблиц: транзакции на открытии
  * экрана не читаются. Кто в какой полосе давности и какие снимки, решает сервис
  * (`server/services/metrics/readWinbackPool.ts`), здесь только выборки.
