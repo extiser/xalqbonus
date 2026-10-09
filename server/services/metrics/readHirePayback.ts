@@ -38,11 +38,11 @@ export const readHirePayback = async (month: string, now: Date = new Date()): Pr
   ]);
 
   const coverage = await moneyCoverageByMonth(cohortsFrom, valueMonth, lastRun?.daysTo ?? null);
-  const rates = isMoneyComplete(coverage) ? await readValueRates(valueMonth) : null;
+  const pricing = isMoneyComplete(coverage) ? await readValueRates(valueMonth) : null;
   const totals =
-    rates === null
+    pricing === null
       ? null
-      : await readHireCohortTotals(monthDate(cohortsFrom), wholeMonthPeriod(cohortsTo).to, rates);
+      : await readHireCohortTotals(monthDate(cohortsFrom), wholeMonthPeriod(cohortsTo).to, pricing);
 
   // Нанятых в наборах нет — среднего нет: ноль на плитке читался бы как «нанятый ничего не приносит».
   const valuePerHired = totals?.value == null ? null : Math.round(totals.value);

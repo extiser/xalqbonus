@@ -109,9 +109,9 @@ export const readDriverValue = async (month: string, now: Date = new Date()): Pr
     coverage,
   };
 
-  const rates = isMoneyComplete(coverage) ? await readValueRates(valueMonth) : null;
+  const pricing = isMoneyComplete(coverage) ? await readValueRates(valueMonth) : null;
 
-  if (rates === null) {
+  if (pricing === null) {
     return {
       ...base,
       rates: { main: null, newcomer: null },
@@ -129,7 +129,7 @@ export const readDriverValue = async (month: string, now: Date = new Date()): Pr
         horizonMonths: YEAR_MONTHS,
         leaderTiles: LEADER_TILES,
       },
-      rates,
+      pricing,
     ),
     hasTwoYears
       ? listDriverValueGroups(
@@ -139,20 +139,20 @@ export const readDriverValue = async (month: string, now: Date = new Date()): Pr
             horizonMonths: TWO_YEARS_MONTHS,
             leaderTiles: LEADER_TILES,
           },
-          rates,
+          pricing,
         )
       : Promise.resolve(null),
     newcomersFrom <= cohortsTo
       ? readDriverValueNewcomers(
           { fromMonth: monthDate(newcomersFrom), toMonth: monthDate(cohortsTo), leaderTiles: LEADER_TILES },
-          rates,
+          pricing,
         )
       : Promise.resolve(null),
   ]);
 
   return {
     ...base,
-    rates,
+    rates: pricing.rates,
     leader: groupOf(yearRows, twoYearRows, true),
     others: groupOf(yearRows, twoYearRows, false),
     newcomer:

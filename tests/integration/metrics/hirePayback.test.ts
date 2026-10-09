@@ -58,6 +58,10 @@ describe('окупаемость найма', () => {
     payment,
     feeNewcomerRate: '0',
     paymentNewcomerRate: '0',
+    feeNewcomerRateLatest: '0',
+    paymentNewcomerRateLatest: '0',
+    paymentHireDays14: '0',
+    paymentHireDays28: '0',
   });
 
   /** Человек с датой найма; `extraHireDay` — второй профиль того же человека. */

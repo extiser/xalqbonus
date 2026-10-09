@@ -2746,18 +2746,30 @@ model MetricMoneyRun {
 /// демо-людей нет (docs/decisions.md → «Цена водителя на дашборде»).
 model MetricPersonMonth {
   /// Первое число календарного месяца по Ташкенту.
-  month               DateTime @db.Date
-  personId            String   @map("person_id") @db.Uuid
+  month                     DateTime @db.Date
+  personId                  String   @map("person_id") @db.Uuid
   /// Оплаченных заказов — строк комиссии парка.
-  orders              Int
+  orders                    Int
   /// Комиссия парка, сум: сумма комиссии с обратным знаком.
-  fee                 Decimal  @db.Decimal(18, 4)
+  fee                       Decimal  @db.Decimal(18, 4)
   /// Оплата этих заказов, сум: платёжные категории как есть, без чаевых.
-  payment             Decimal  @db.Decimal(18, 4)
-  /// То же по заказам в окне ставки новичка: сутки комиссии — с даты найма профиля
-  /// по `PARK_NEWCOMER_RATE_DAYS − 1` суток после неё. Нет даты найма — заказ вне окна.
-  feeNewcomerRate     Decimal  @map("fee_newcomer_rate") @db.Decimal(18, 4)
-  paymentNewcomerRate Decimal  @map("payment_newcomer_rate") @db.Decimal(18, 4)
+  payment                   Decimal  @db.Decimal(18, 4)
+  /// Комиссия по заказам в фактическом окне ставки новичка: сутки комиссии — с даты найма профиля
+  /// по `days − 1` суток после неё, `days` — условий заказа по его дате найма
+  /// (`PARK_NEWCOMER_RATE_TERMS`). Нет даты найма — заказ вне окна.
+  feeNewcomerRate           Decimal  @map("fee_newcomer_rate") @db.Decimal(18, 4)
+  /// Оплата заказов в фактическом окне ставки новичка, как у `feeNewcomerRate`.
+  paymentNewcomerRate       Decimal  @map("payment_newcomer_rate") @db.Decimal(18, 4)
+  /// Комиссия в фактическом окне только у заказов последних условий списка — по ней ставка новичка
+  /// месяца с этими условиями.
+  feeNewcomerRateLatest     Decimal  @map("fee_newcomer_rate_latest") @db.Decimal(18, 4)
+  /// Оплата в фактическом окне только у заказов последних условий списка.
+  paymentNewcomerRateLatest Decimal  @map("payment_newcomer_rate_latest") @db.Decimal(18, 4)
+  /// Оплата заказов в первые 14 суток с даты найма, какие бы условия у заказа ни были: окно цены
+  /// на экране месяца с 14 сутками. Нет даты найма — ноль.
+  paymentHireDays14         Decimal  @map("payment_hire_days_14") @db.Decimal(18, 4)
+  /// То же за первые 28 суток: окно цены на экране месяца с 28 сутками.
+  paymentHireDays28         Decimal  @map("payment_hire_days_28") @db.Decimal(18, 4)
 
   person Person @relation(fields: [personId], references: [id])
 

@@ -1,4 +1,5 @@
 import { db } from '#server/db';
+import { shiftDayKey } from '#server/utils/parkTime';
 
 /**
  * Заказы истории, порции сбора и уборка таблиц метрик для теста пересчёта (issue #371);
@@ -208,6 +209,10 @@ export type TestPersonMonth = {
   payment: string;
   feeNewcomerRate: string;
   paymentNewcomerRate: string;
+  feeNewcomerRateLatest: string;
+  paymentNewcomerRateLatest: string;
+  paymentHireDays14: string;
+  paymentHireDays28: string;
 };
 
 /** Строки `metric_person_months` людей; суммы — строкой, как их хранит `numeric`. */
@@ -219,7 +224,11 @@ export const readTestPersonMonths = async (personIds: readonly string[]): Promis
            "fee"::text AS "fee",
            "payment"::text AS "payment",
            "fee_newcomer_rate"::text AS "feeNewcomerRate",
-           "payment_newcomer_rate"::text AS "paymentNewcomerRate"
+           "payment_newcomer_rate"::text AS "paymentNewcomerRate",
+           "fee_newcomer_rate_latest"::text AS "feeNewcomerRateLatest",
+           "payment_newcomer_rate_latest"::text AS "paymentNewcomerRateLatest",
+           "payment_hire_days_14"::text AS "paymentHireDays14",
+           "payment_hire_days_28"::text AS "paymentHireDays28"
       FROM xb.metric_person_months
      WHERE "person_id" = ANY(${[...personIds]}::uuid[])
      ORDER BY "person_id", "month"
@@ -244,6 +253,10 @@ export const insertTestPersonMonths = async (rows: readonly TestPersonMonth[]): 
       payment: row.payment,
       feeNewcomerRate: row.feeNewcomerRate,
       paymentNewcomerRate: row.paymentNewcomerRate,
+      feeNewcomerRateLatest: row.feeNewcomerRateLatest,
+      paymentNewcomerRateLatest: row.paymentNewcomerRateLatest,
+      paymentHireDays14: row.paymentHireDays14,
+      paymentHireDays28: row.paymentHireDays28,
     })),
   });
 };
@@ -298,6 +311,36 @@ export const upsertTestTransactionDay = async (
     create: { parkDay: day, transactions: 0, malformed: 0, pages: 1, rateLimited: 0, startedAt: new Date(), finishedAt, nextCursor },
     update: { finishedAt, nextCursor },
   });
+};
+
+/**
+ * Закрытые порции сбора за сутки `from`–`to` включительно, одной вставкой: покрытие денег
+ * за многие месяцы. Отдаёт сутки — их потом убирает `cleanupTestMoney`.
+ */
+export const closeTestTransactionDays = async (from: string, to: string): Promise<string[]> => {
+  const days: string[] = [];
+
+  for (let day = from; day <= to; day = shiftDayKey(day, 1)) {
+    days.push(day);
+  }
+
+  const now = new Date();
+
+  await db.fleetTransactionDay.createMany({
+    data: days.map((day) => ({
+      parkDay: new Date(`${day}T00:00:00Z`),
+      transactions: 0,
+      malformed: 0,
+      pages: 1,
+      rateLimited: 0,
+      startedAt: now,
+      finishedAt: now,
+      nextCursor: null,
+    })),
+    skipDuplicates: true,
+  });
+
+  return days;
 };
 
 /** Таблица денег и её журнал — производные целиком, как таблицы поездок; порции сбора — по суткам. */

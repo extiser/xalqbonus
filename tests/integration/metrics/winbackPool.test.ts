@@ -53,6 +53,10 @@ const monthRow = (person: TestPerson, month: string, orders: number): TestPerson
   payment: '0',
   feeNewcomerRate: '0',
   paymentNewcomerRate: '0',
+  feeNewcomerRateLatest: '0',
+  paymentNewcomerRateLatest: '0',
+  paymentHireDays14: '0',
+  paymentHireDays28: '0',
 });
 
 describe('снимки самовозврата', () => {
