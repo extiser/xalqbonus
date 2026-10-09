@@ -5,18 +5,6 @@ import { shiftDayKey } from '#server/utils/parkTime';
 import { shiftMonth } from '#shared/monthNames';
 import type { DashboardPeriod } from '#shared/types/dashboard';
 
-/**
- * Покрытие суток периода деньгами (issue #438) — устроено как `countCoveredDays`
- * в `periodCoverage.ts`.
- *
- * Сутки `d` по Ташкенту полны, только если таблица денег их уже посчитала — `d` не позже
- * последних суток успешного прогона, — и транзакции за них собраны: с `TRANSACTIONS_COMPLETE_FROM`
- * их держит живой сбор, раньше — обе порции прогона истории по UTC, `d − 1` и `d`, закрыты
- * в `fleet_transaction_days` (docs/decisions.md → «Деньги на дашборде», абзац о полных сутках).
- *
- * `lastComputedDay` — последние сутки успешного прогона денег; `null` — прогона не было,
- * и не покрыто ничего.
- */
 /** Сутки, которым вместо двух порций сбора хватает своей одной: `day` из UTC-порции `day`. */
 type OwnPortionDays = ReadonlySet<string>;
 
@@ -41,6 +29,18 @@ const countCovered = (
   return covered;
 };
 
+/**
+ * Покрытие суток периода деньгами (issue #438) — устроено как `countCoveredDays`
+ * в `periodCoverage.ts`.
+ *
+ * Сутки `d` по Ташкенту полны, только если таблица денег их уже посчитала — `d` не позже
+ * последних суток успешного прогона, — и транзакции за них собраны: с `TRANSACTIONS_COMPLETE_FROM`
+ * их держит живой сбор, раньше — обе порции прогона истории по UTC, `d − 1` и `d`, закрыты
+ * в `fleet_transaction_days` (docs/decisions.md → «Деньги на дашборде», абзац о полных сутках).
+ *
+ * `lastComputedDay` — последние сутки успешного прогона денег; `null` — прогона не было,
+ * и не покрыто ничего.
+ */
 const countCoveredDays = async (period: MonthPeriodDays, lastComputedDay: string | null): Promise<number> => {
   if (lastComputedDay === null || period.days === 0) {
     return 0;
