@@ -9,7 +9,7 @@ import {
 import {
   MONEY_FIRST_DAY,
   PARK_FEE_CATEGORY_ID,
-  PARK_NEWCOMER_RATE_DAYS,
+  PARK_NEWCOMER_RATE_TERMS,
   PAYMENT_CATEGORY_IDS,
 } from '#server/services/metrics/constants';
 import { previousDayKey } from '#server/utils/parkTime';
@@ -58,7 +58,7 @@ export const recomputeMoneyDays = async (now: Date = new Date()): Promise<MoneyR
         daysFrom,
         daysTo,
         categories,
-        PARK_NEWCOMER_RATE_DAYS,
+        PARK_NEWCOMER_RATE_TERMS,
       );
 
       await finishMetricMoneyRun(transaction, runId, { rows, personMonthRows });

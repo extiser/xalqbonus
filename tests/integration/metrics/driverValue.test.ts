@@ -2,12 +2,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { moneyCoverageByMonth, withMoneyCoverage } from '#server/services/metrics/moneyCoverage';
 import { wholeMonthPeriod } from '#server/services/metrics/monthPeriod';
+import { readValueRates } from '#server/services/metrics/personMonthValue';
 import { readDriverValue } from '#server/services/metrics/readDriverValue';
+import { readHirePayback } from '#server/services/metrics/readHirePayback';
 import { recomputeMoneyDays } from '#server/services/metrics/recomputeMoneyDays';
 import type { DashboardDriverValue } from '#shared/types/dashboard';
 import { cleanupTestData, createTestPerson, disconnectDatabase, type TestPerson } from '../support/database';
 import {
   cleanupTestMoney,
+  closeTestTransactionDays,
   countTestPersonMonths,
   insertTestMoneyRun,
   insertTestOrderTransaction,
@@ -89,7 +92,8 @@ describe('пересчёт денег людей по месяцам', () => {
     await markTestPersonDemo(demo.personId);
 
     // Комиссия в 19:30Z 31.10 — 00:30 1 ноября по Ташкенту: месяц — ноябрь. Оплата пришла
-    // в 23:00 31 октября по Ташкенту и уходит за комиссией в ноябрь. Сутки 27 с найма — вне окна.
+    // в 23:00 31 октября по Ташкенту и уходит за комиссией в ноябрь. Сутки 27 с найма — вне окна
+    // условий найма, но в первых 28 сутках.
     await insertOrder(
       rider.profileId,
       [{ at: '2025-10-31T19:30:00Z', amount: '-100' }],
@@ -161,6 +165,10 @@ describe('пересчёт денег людей по месяцам', () => {
         payment: '6800.0000',
         feeNewcomerRate: '70.0000',
         paymentNewcomerRate: '3500.0000',
+        feeNewcomerRateLatest: '0.0000',
+        paymentNewcomerRateLatest: '0.0000',
+        paymentHireDays14: '3500.0000',
+        paymentHireDays28: '6800.0000',
       },
       {
         month: '2025-11-01',
@@ -170,6 +178,10 @@ describe('пересчёт денег людей по месяцам', () => {
         payment: '3000.0000',
         feeNewcomerRate: '0.0000',
         paymentNewcomerRate: '0.0000',
+        feeNewcomerRateLatest: '0.0000',
+        paymentNewcomerRateLatest: '0.0000',
+        paymentHireDays14: '0.0000',
+        paymentHireDays28: '3000.0000',
       },
     ]);
   });
@@ -184,12 +196,151 @@ describe('пересчёт денег людей по месяцам', () => {
         payment: '1000.0000',
         feeNewcomerRate: '0.0000',
         paymentNewcomerRate: '0.0000',
+        feeNewcomerRateLatest: '0.0000',
+        paymentNewcomerRateLatest: '0.0000',
+        paymentHireDays14: '0.0000',
+        paymentHireDays28: '0.0000',
       },
     ]);
   });
 
   it('прогон пишет число строк таблицы', async () => {
     expect(await readLastPersonMonthRows()).toBe(await countTestPersonMonths());
+  });
+});
+
+describe('условия ставки новичка по дате найма', () => {
+  /**
+   * «Сейчас» — 15 ноября 2026: сентябрь и октябрь закрыты, деньги — по 14 ноября. Условия
+   * сентября 2026 — 14 суток, октября — 28 (`PARK_NEWCOMER_RATE_TERMS`).
+   *
+   * - `beforeTerms` нанят 09-10-2026, условия — 14 суток: сутки 13 в окне, сутки 14 — нет
+   * - `latestTerms` нанят 10-10-2026, условия — 28 суток, последние: сутки 14 и 27 в окне,
+   *   сутки 28 — нет
+   * - `veteran` нанят 01-03-2025: сутки 0 и 19 с найма — в первых 28 сутках, в первых 14 —
+   *   только сутки 0; ездит и в сентябре, и в октябре 2026 вне окна
+   * - `noHire` без даты найма — вне любого окна
+   * - `septemberHire` нанят 20-09-2026: сутки 1 — в окне, ставка новичка сентября
+   *
+   * Ставки сентября: основная = 50 ÷ 1 000 = 5 %, новичка = 20 ÷ 1 000 = 2 %. Октября: вне
+   * фактического окна — 150 ÷ 3 000 = 5 %; новичка — только по нанятым с 10-10-2026,
+   * 30 ÷ 1 000 = 3 %, а по всему окну было бы 50 ÷ 2 000 = 2,5 %.
+   */
+  const NOW = new Date('2026-11-15T12:00:00Z');
+
+  let beforeTerms: TestPerson;
+  let latestTerms: TestPerson;
+  let veteran: TestPerson;
+  let noHire: TestPerson;
+  let septemberHire: TestPerson;
+  let closedDays: string[] = [];
+
+  /** Заказ в 13:00 по Ташкенту суток `day`: комиссия и оплата картой. */
+  const insertDayOrder = (person: TestPerson, day: string, fee: string, payment: string): Promise<void> =>
+    insertOrder(
+      person.profileId,
+      [{ at: `${day}T08:00:00Z`, amount: `-${fee}` }],
+      [{ at: `${day}T08:00:00Z`, categoryId: 'card', amount: payment }],
+    );
+
+  beforeAll(async () => {
+    await cleanupTestMoney([]);
+
+    beforeTerms = await createTestPerson({ inProgram: false });
+    latestTerms = await createTestPerson({ inProgram: false });
+    veteran = await createTestPerson({ inProgram: false });
+    noHire = await createTestPerson({ inProgram: false });
+    septemberHire = await createTestPerson({ inProgram: false });
+
+    await setTestHireDate(beforeTerms.profileId, '2026-10-09');
+    await setTestHireDate(latestTerms.profileId, '2026-10-10');
+    await setTestHireDate(veteran.profileId, '2025-03-01');
+    await setTestHireDate(noHire.profileId, null);
+    await setTestHireDate(septemberHire.profileId, '2026-09-20');
+
+    await insertDayOrder(beforeTerms, '2026-10-22', '20', '1000');
+    await insertDayOrder(beforeTerms, '2026-10-23', '50', '1000');
+    await insertDayOrder(latestTerms, '2026-10-24', '30', '1000');
+    await insertDayOrder(latestTerms, '2026-11-06', '30', '1000');
+    await insertDayOrder(latestTerms, '2026-11-07', '50', '1000');
+    await insertDayOrder(veteran, '2025-03-01', '20', '1000');
+    await insertDayOrder(veteran, '2025-03-20', '20', '1000');
+    await insertDayOrder(veteran, '2026-09-10', '50', '1000');
+    await insertDayOrder(veteran, '2026-10-15', '50', '1000');
+    await insertDayOrder(noHire, '2026-10-15', '50', '1000');
+    await insertDayOrder(septemberHire, '2026-09-21', '20', '1000');
+
+    // Покрытие наборов найма обоих экранов — с октября 2024; сутки с 07-10-2026 держит живой сбор.
+    closedDays = await closeTestTransactionDays('2024-09-30', '2026-10-06');
+
+    await recomputeMoneyDays(NOW);
+  });
+
+  afterAll(async () => {
+    await cleanupTestMoney(closedDays);
+    await cleanupTestData();
+  });
+
+  it('фактическое окно — по условиям даты найма: 14 суток до 10-10-2026, 28 — с него', async () => {
+    const rows = await readTestPersonMonths([beforeTerms.personId, latestTerms.personId, noHire.personId]);
+    const windowOf = (person: TestPerson, month: string) =>
+      rows
+        .filter((row) => row.personId === person.personId && row.month === month)
+        .map((row) => ({
+          paymentNewcomerRate: row.paymentNewcomerRate,
+          paymentNewcomerRateLatest: row.paymentNewcomerRateLatest,
+        }));
+
+    // Сутки 13 — в окне, 14 — нет; заказы до смены условий в `…_latest` не идут.
+    expect(windowOf(beforeTerms, '2026-10-01')).toEqual([
+      { paymentNewcomerRate: '1000.0000', paymentNewcomerRateLatest: '0.0000' },
+    ]);
+    // Сутки 14 и 27 — в окне, 28 — нет; все в окне — последних условий.
+    expect(windowOf(latestTerms, '2026-10-01')).toEqual([
+      { paymentNewcomerRate: '1000.0000', paymentNewcomerRateLatest: '1000.0000' },
+    ]);
+    expect(windowOf(latestTerms, '2026-11-01')).toEqual([
+      { paymentNewcomerRate: '1000.0000', paymentNewcomerRateLatest: '1000.0000' },
+    ]);
+    expect(windowOf(noHire, '2026-10-01')).toEqual([
+      { paymentNewcomerRate: '0.0000', paymentNewcomerRateLatest: '0.0000' },
+    ]);
+  });
+
+  it('первые 14 и 28 суток с найма — какие бы условия у заказа ни были', async () => {
+    const [march] = await readTestPersonMonths([veteran.personId]);
+
+    // Сутки 0 и 19: в первых 28 — оба, в первых 14 и в фактическом окне 14 суток — только сутки 0.
+    expect(march).toMatchObject({
+      month: '2025-03-01',
+      paymentNewcomerRate: '1000.0000',
+      paymentHireDays14: '1000.0000',
+      paymentHireDays28: '2000.0000',
+    });
+  });
+
+  it('ставки октября 2026 — по новым условиям, сентября — прежние', async () => {
+    const september = await readValueRates('2026-09');
+    const october = await readValueRates('2026-10');
+
+    expect(september?.windowDays).toBe(14);
+    expect(september?.rates.main).toBeCloseTo(0.05, 10);
+    expect(september?.rates.newcomer).toBeCloseTo(0.02, 10);
+    expect(october?.windowDays).toBe(28);
+    expect(october?.rates.main).toBeCloseTo(0.05, 10);
+    expect(october?.rates.newcomer).toBeCloseTo(0.03, 10);
+  });
+
+  it('цена — по окну месяца экрана: у сентября 14 суток, у октября 28', async () => {
+    // `veteran` — единственный нанятый в наборах обоих экранов; в его год — только март 2025:
+    // оплата 2 000, из неё 1 000 в первых 14 сутках и 2 000 — в первых 28.
+    const september = await readHirePayback('2026-09', NOW);
+    const october = await readHirePayback('2026-10', NOW);
+
+    // 0,05 × (2 000 − 1 000) + 0,02 × 1 000 = 70.
+    expect(september).toMatchObject({ hired: 1, valuePerHired: 70 });
+    // 0,05 × (2 000 − 2 000) + 0,03 × 2 000 = 60.
+    expect(october).toMatchObject({ hired: 1, valuePerHired: 60 });
   });
 });
 
@@ -227,7 +378,7 @@ describe('расчёт плитки «Цена водителя за год»', 
    * - набор ноября 2028: лидер `leader` (50 заказов) и четверо остальных — `others[0..3]`
    *   (40, 30, 20, 10); пятёрка `ntile(5)` даёт лидером одного
    * - `leader` в декабре 2028 — оплата 1 000, в ноябре 2029 (через 12 месяцев) — 1 000, из них
-   *   200 в окне новичка: ездит через год
+   *   200 в окне новичка и в первых 28 сутках с найма — окне цены ноября 2029: ездит через год
    * - `others[0]` в январе 2029 — 2 000, `others[1]` в декабре 2028 — 800; двое ушли и дают нули
    * - `veteran` — набор ноября 2027 «за два года», один в месяце, лидер; в октябре 2029 — 1 000
    *
@@ -244,7 +395,7 @@ describe('расчёт плитки «Цена водителя за год»', 
     month: string,
     person: TestPerson,
     orders: number,
-    money: { fee?: string; payment?: string; feeNewcomerRate?: string; paymentNewcomerRate?: string } = {},
+    money: Partial<Omit<TestPersonMonth, 'month' | 'personId' | 'orders'>> = {},
   ): TestPersonMonth => ({
     month,
     personId: person.personId,
@@ -253,6 +404,10 @@ describe('расчёт плитки «Цена водителя за год»', 
     payment: money.payment ?? '0',
     feeNewcomerRate: money.feeNewcomerRate ?? '0',
     paymentNewcomerRate: money.paymentNewcomerRate ?? '0',
+    feeNewcomerRateLatest: money.feeNewcomerRateLatest ?? '0',
+    paymentNewcomerRateLatest: money.paymentNewcomerRateLatest ?? '0',
+    paymentHireDays14: money.paymentHireDays14 ?? '0',
+    paymentHireDays28: money.paymentHireDays28 ?? '0',
   });
 
   beforeAll(async () => {
@@ -281,6 +436,8 @@ describe('расчёт плитки «Цена водителя за год»', 
         payment: '1000',
         feeNewcomerRate: '4',
         paymentNewcomerRate: '200',
+        paymentHireDays14: '200',
+        paymentHireDays28: '200',
       }),
       row('2027-11-01', veteran, 10),
       row('2029-10-01', veteran, 10, { fee: '50', payment: '1000' }),

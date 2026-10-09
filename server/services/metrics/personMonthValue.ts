@@ -1,5 +1,6 @@
-import { readPersonMonthRateTotals, type DriverValueRates } from '#server/repositories/metrics';
-import { MONEY_FIRST_DAY } from '#server/services/metrics/constants';
+import { readPersonMonthRateTotals, type PersonMonthPricing } from '#server/repositories/metrics';
+import { MONEY_FIRST_DAY, PARK_NEWCOMER_RATE_TERMS } from '#server/services/metrics/constants';
+import { wholeMonthPeriod } from '#server/services/metrics/monthPeriod';
 import { formatDayKey } from '#server/utils/parkTime';
 import { shiftMonth } from '#shared/monthNames';
 import type { DashboardPeriod } from '#shared/types/dashboard';
@@ -46,18 +47,47 @@ export const yearCohorts = (valueMonth: string): { from: string; to: string } =>
   to: shiftMonth(valueMonth, -YEAR_MONTHS),
 });
 
+type NewcomerRateTerm = (typeof PARK_NEWCOMER_RATE_TERMS)[number];
+
+/** Условия ставки новичка месяца и последние ли они в списке. */
+export type MonthNewcomerRateTerm = { term: NewcomerRateTerm; latest: boolean };
+
+/** Условия месяца — последние с `hiredFrom` не позже его последнего дня. */
+export const newcomerRateTermOf = (month: string): MonthNewcomerRateTerm => {
+  const lastDay = wholeMonthPeriod(month).to;
+  const index = PARK_NEWCOMER_RATE_TERMS.findLastIndex((term) => term.hiredFrom === null || term.hiredFrom <= lastDay);
+  const term = PARK_NEWCOMER_RATE_TERMS[index];
+
+  if (term === undefined) {
+    throw new Error(`Нет условий ставки новичка на ${month}`);
+  }
+
+  return { term, latest: index === PARK_NEWCOMER_RATE_TERMS.length - 1 };
+};
+
 /**
- * Ставки месяца: основная = комиссия ÷ оплата вне окна ставки новичка, новичка — внутри; оплаты
- * новичков нет — ставка новичка равна основной. Оплаты вне окна новичка нет — цены нет.
+ * Цена по условиям месяца: ставки — из его данных, окно — его условий
+ * (docs/decisions.md → «Цена водителя на дашборде»).
+ *
+ * Основная = комиссия ÷ оплата вне фактического окна заказов. Новичка — по заказам условий
+ * месяца: у месяца с последними условиями и оплатой новичков этих условий — только по ним
+ * (`…_latest`), иначе — по всему фактическому окну; оплаты новичков нет — ставка новичка равна
+ * основной. Оплаты вне окна новичка нет — цены нет.
  */
-export const readValueRates = async (month: string): Promise<DriverValueRates | null> => {
+export const readValueRates = async (month: string): Promise<PersonMonthPricing | null> => {
+  const { term, latest } = newcomerRateTermOf(month);
   const totals = await readPersonMonthRateTotals(monthDate(month));
   const mainPayment = totals.payment - totals.paymentNewcomerRate;
 
   if (mainPayment <= 0) return null;
 
   const main = (totals.fee - totals.feeNewcomerRate) / mainPayment;
-  const newcomer = totals.paymentNewcomerRate > 0 ? totals.feeNewcomerRate / totals.paymentNewcomerRate : main;
+  const newcomer =
+    latest && totals.paymentNewcomerRateLatest > 0
+      ? totals.feeNewcomerRateLatest / totals.paymentNewcomerRateLatest
+      : totals.paymentNewcomerRate > 0
+        ? totals.feeNewcomerRate / totals.paymentNewcomerRate
+        : main;
 
-  return { main, newcomer };
+  return { rates: { main, newcomer }, windowDays: term.days };
 };

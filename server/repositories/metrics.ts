@@ -839,6 +839,27 @@ export type MoneyCategories = {
   payment: readonly string[];
 };
 
+/**
+ * Окна ставки новичка, суток, и колонки оплаты в первые столько суток с найма
+ * в `metric_person_months`: колонка — на каждое окно из условий, новое окно — новая колонка
+ * миграцией. Окно не из этого списка в условиях не пройдёт проверку типов.
+ */
+const HIRE_WINDOW_COLUMNS = {
+  14: 'payment_hire_days_14',
+  28: 'payment_hire_days_28',
+} as const;
+
+export type HireWindowDays = keyof typeof HIRE_WINDOW_COLUMNS;
+
+/** Условия ставки новичка: с какой даты найма, `YYYY-MM-DD` (`null` — с начала), и окно. */
+export type NewcomerRateTerm = { hiredFrom: string | null; days: HireWindowDays };
+
+/** Профиль нанят не раньше `hiredFrom` условий; `null` — любая дата найма. */
+const hiredFromSql = (term: NewcomerRateTerm): Prisma.Sql =>
+  term.hiredFrom === null
+    ? Prisma.sql`dated."hire_date" IS NOT NULL`
+    : Prisma.sql`dated."hire_date" >= ${term.hiredFrom}::date`;
+
 /** Заводит строку прогона денег: упавший пересчёт остаётся в журнале видимым. */
 export const startMetricMoneyRun = async (daysFrom: string, daysTo: string): Promise<string> => {
   const rows = await db.$queryRaw<{ id: string }[]>`
@@ -923,8 +944,11 @@ export const replaceMetricMoneyDays = async (
  * пропускается, демо не входит. Оплата — платёжные категории с тем же `order_id`, когда бы они
  * ни пришли: месяц и человек у неё — комиссии.
  *
- * Окно ставки новичка — сутки комиссии по Ташкенту минус дата найма профиля этой комиссии,
- * от 0 до `newcomerRateDays − 1`. Нет даты найма — заказ вне окна.
+ * Фактическое окно ставки новичка — сутки комиссии по Ташкенту минус дата найма профиля этой
+ * комиссии, от 0 до `days − 1` условий заказа: последних в `terms` с `hiredFrom` не позже даты
+ * найма. Нет даты найма — заказ вне окна. Колонки `…_latest` — то же у заказов последних условий
+ * списка; `payment_hire_days_N` — оплата в первые `N` суток с найма, какие бы условия у заказа
+ * ни были: по ним считается цена по условиям месяца экрана.
  *
  * Сутки комиссии считаются во внутреннем запросе один раз, наружу идут колонкой: выражение суток
  * несёт зону параметром, и его повтор Postgres считал бы другим выражением.
@@ -938,16 +962,28 @@ export const replaceMetricPersonMonths = async (
   daysFrom: string,
   daysTo: string,
   categories: MoneyCategories,
-  newcomerRateDays: number,
+  terms: readonly NewcomerRateTerm[],
 ): Promise<number> => {
   const windowStart = parkDayStartSql(Prisma.sql`${daysFrom}`);
   const windowEnd = parkDayStartSql(Prisma.sql`${daysTo}::date + 1`);
+  const latestTerm = terms.at(-1);
+
+  if (latestTerm === undefined) {
+    throw new Error('Нет условий ставки новичка');
+  }
+
+  // Условия заказа — последние подходящие: CASE берёт первую ветку, поэтому список идёт с конца.
+  const termDaysSql = Prisma.join(
+    terms.toReversed().map((term) => Prisma.sql`WHEN ${hiredFromSql(term)} THEN ${term.days}::int`),
+    ' ',
+  );
 
   await transaction.$executeRaw`DELETE FROM xb.metric_person_months`;
 
   return transaction.$executeRaw`
     INSERT INTO xb.metric_person_months
-           ("month", "person_id", "orders", "fee", "payment", "fee_newcomer_rate", "payment_newcomer_rate")
+           ("month", "person_id", "orders", "fee", "payment", "fee_newcomer_rate", "payment_newcomer_rate",
+            "fee_newcomer_rate_latest", "payment_newcomer_rate_latest", "payment_hire_days_14", "payment_hire_days_28")
     WITH fees AS (
            SELECT count(*)::int AS "rows",
                   -sum(fee."amount") AS "fee",
@@ -980,15 +1016,21 @@ export const replaceMetricPersonMonths = async (
              LEFT JOIN payments ON payments."order_id" = fees."order_id"
             WHERE NOT person."is_demo"
          ),
-         orders AS (
+         termed AS (
            SELECT date_trunc('month', dated."day")::date AS "month",
                   dated."person_id",
                   dated."rows",
                   dated."fee",
                   dated."payment",
-                  coalesce(dated."day" - dated."hire_date" BETWEEN 0 AND ${newcomerRateDays - 1}::int, false)
-                    AS "newcomer_rate"
+                  dated."day" - dated."hire_date" AS "hire_offset",
+                  CASE ${termDaysSql} END AS "term_days",
+                  coalesce(${hiredFromSql(latestTerm)}, false) AS "latest_term"
              FROM dated
+         ),
+         orders AS (
+           SELECT termed.*,
+                  coalesce(termed."hire_offset" BETWEEN 0 AND termed."term_days" - 1, false) AS "newcomer_rate"
+             FROM termed
          )
     SELECT orders."month",
            orders."person_id",
@@ -996,7 +1038,12 @@ export const replaceMetricPersonMonths = async (
            sum(orders."fee"),
            sum(orders."payment"),
            coalesce(sum(orders."fee") FILTER (WHERE orders."newcomer_rate"), 0),
-           coalesce(sum(orders."payment") FILTER (WHERE orders."newcomer_rate"), 0)
+           coalesce(sum(orders."payment") FILTER (WHERE orders."newcomer_rate"), 0),
+           coalesce(sum(orders."fee") FILTER (WHERE orders."newcomer_rate" AND orders."latest_term"), 0),
+           coalesce(sum(orders."payment") FILTER (WHERE orders."newcomer_rate" AND orders."latest_term"), 0),
+           -- Окна цены — по колонке на каждое окно HIRE_WINDOW_COLUMNS: сутки 0 … N − 1 с найма.
+           coalesce(sum(orders."payment") FILTER (WHERE orders."hire_offset" BETWEEN 0 AND 13), 0),
+           coalesce(sum(orders."payment") FILTER (WHERE orders."hire_offset" BETWEEN 0 AND 27), 0)
       FROM orders
      GROUP BY orders."month", orders."person_id"
   `;
@@ -1090,39 +1137,66 @@ export const listClosedTransactionDays = async (from: string, to: string): Promi
  * (`server/services/metrics/readDriverValue.ts`), здесь только суммы.
  *
  * Цена человека в месяце = основная ставка × оплата вне окна ставки новичка + ставка новичка ×
- * оплата в окне. Лидер месяца — первая группа `ntile` по заказам по убыванию; при равенстве
- * порядок задаёт `person_id`, чтобы граница группы не зависела от плана запроса.
+ * оплата в окне; окно — условий месяца экрана, одно на все строки истории. Лидер месяца — первая
+ * группа `ntile` по заказам по убыванию; при равенстве порядок задаёт `person_id`, чтобы граница
+ * группы не зависела от плана запроса.
  */
 
-/** Суммы месяца для ставок: комиссия и оплата целиком и в окне ставки новичка, сумами. */
+/**
+ * Суммы месяца для ставок, сумами: комиссия и оплата целиком, в фактическом окне ставки новичка
+ * и в нём же у заказов последних условий.
+ */
 export type PersonMonthRateTotals = {
   fee: number;
   payment: number;
   feeNewcomerRate: number;
   paymentNewcomerRate: number;
+  feeNewcomerRateLatest: number;
+  paymentNewcomerRateLatest: number;
 };
 
 export const readPersonMonthRateTotals = async (month: string): Promise<PersonMonthRateTotals> => {
   const rows = await db.$queryRaw<PersonMonthRateTotals[]>`
-    SELECT coalesce(sum("fee"), 0)::float8                   AS "fee",
-           coalesce(sum("payment"), 0)::float8               AS "payment",
-           coalesce(sum("fee_newcomer_rate"), 0)::float8     AS "feeNewcomerRate",
-           coalesce(sum("payment_newcomer_rate"), 0)::float8 AS "paymentNewcomerRate"
+    SELECT coalesce(sum("fee"), 0)::float8                          AS "fee",
+           coalesce(sum("payment"), 0)::float8                      AS "payment",
+           coalesce(sum("fee_newcomer_rate"), 0)::float8            AS "feeNewcomerRate",
+           coalesce(sum("payment_newcomer_rate"), 0)::float8        AS "paymentNewcomerRate",
+           coalesce(sum("fee_newcomer_rate_latest"), 0)::float8     AS "feeNewcomerRateLatest",
+           coalesce(sum("payment_newcomer_rate_latest"), 0)::float8 AS "paymentNewcomerRateLatest"
       FROM xb.metric_person_months
      WHERE "month" = ${month}::date
   `;
 
-  return rows[0] ?? { fee: 0, payment: 0, feeNewcomerRate: 0, paymentNewcomerRate: 0 };
+  return (
+    rows[0] ?? {
+      fee: 0,
+      payment: 0,
+      feeNewcomerRate: 0,
+      paymentNewcomerRate: 0,
+      feeNewcomerRateLatest: 0,
+      paymentNewcomerRateLatest: 0,
+    }
+  );
 };
 
 /** Ставки цены: доли оплаты. */
 export type DriverValueRates = { main: number; newcomer: number };
 
-/** Цена человека в месяце выражением SQL над строкой `metric_person_months` с псевдонимом `row`. */
-const personMonthValueSql = (rates: DriverValueRates): Prisma.Sql => Prisma.sql`
-  (${rates.main}::float8 * (row."payment" - row."payment_newcomer_rate")::float8
-   + ${rates.newcomer}::float8 * row."payment_newcomer_rate"::float8)
-`;
+/** Цена по условиям месяца экрана: его ставки и окно ставки новичка, суток с найма. */
+export type PersonMonthPricing = { rates: DriverValueRates; windowDays: HireWindowDays };
+
+/**
+ * Цена человека в месяце выражением SQL над строкой `metric_person_months` с псевдонимом `row`.
+ * Колонка окна — из `HIRE_WINDOW_COLUMNS`, не из ввода.
+ */
+const personMonthValueSql = ({ rates, windowDays }: PersonMonthPricing): Prisma.Sql => {
+  const windowPayment = Prisma.raw(`row."${HIRE_WINDOW_COLUMNS[windowDays]}"`);
+
+  return Prisma.sql`
+    (${rates.main}::float8 * (row."payment" - ${windowPayment})::float8
+     + ${rates.newcomer}::float8 * ${windowPayment}::float8)
+  `;
+};
 
 /** Наборы лидеров и остальных: месяцы `fromMonth`–`toMonth`, горизонт — месяцев после месяца набора. */
 export type DriverValueCohortQuery = {
@@ -1149,7 +1223,7 @@ export type DriverValueGroupRow = {
  */
 export const listDriverValueGroups = async (
   query: DriverValueCohortQuery,
-  rates: DriverValueRates,
+  pricing: PersonMonthPricing,
 ): Promise<DriverValueGroupRow[]> =>
   db.$queryRaw<DriverValueGroupRow[]>`
     WITH cohort AS (
@@ -1162,7 +1236,7 @@ export const listDriverValueGroups = async (
             WHERE row."month" BETWEEN ${query.fromMonth}::date AND ${query.toMonth}::date
          ),
          valued AS (
-           SELECT row."month", row."person_id", ${personMonthValueSql(rates)} AS "value"
+           SELECT row."month", row."person_id", ${personMonthValueSql(pricing)} AS "value"
              FROM xb.metric_person_months AS row
             WHERE row."month" > ${query.fromMonth}::date
               AND row."month" <= ${query.toMonth}::date + make_interval(months => ${query.horizonMonths}::int)
@@ -1212,7 +1286,7 @@ export type DriverValueNewcomerTotals = {
  */
 export const readDriverValueNewcomers = async (
   query: DriverValueNewcomerQuery,
-  rates: DriverValueRates,
+  pricing: PersonMonthPricing,
 ): Promise<DriverValueNewcomerTotals> => {
   const rows = await db.$queryRaw<DriverValueNewcomerTotals[]>`
     WITH first_month AS (
@@ -1228,7 +1302,7 @@ export const readDriverValueNewcomers = async (
          ranked AS (
            SELECT row."month",
                   row."person_id",
-                  ${personMonthValueSql(rates)} AS "value",
+                  ${personMonthValueSql(pricing)} AS "value",
                   ntile(${query.leaderTiles}::int) OVER (
                     PARTITION BY row."month" ORDER BY row."orders" DESC, row."person_id"
                   ) = 1 AS "leader"
@@ -1303,12 +1377,12 @@ export type HireCohortTotals = {
 export const readHireCohortTotals = async (
   fromDay: string,
   toDay: string,
-  rates: DriverValueRates,
+  pricing: PersonMonthPricing,
 ): Promise<HireCohortTotals> => {
   const rows = await db.$queryRaw<HireCohortTotals[]>`
     WITH hired AS (${hiredSql(fromDay, toDay)}),
          person AS (
-           SELECT coalesce(sum(${personMonthValueSql(rates)}), 0) AS "value",
+           SELECT coalesce(sum(${personMonthValueSql(pricing)}), 0) AS "value",
                   count(row."month")                               AS "rows"
              FROM hired
              LEFT JOIN xb.metric_person_months AS row

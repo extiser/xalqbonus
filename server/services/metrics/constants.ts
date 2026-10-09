@@ -97,11 +97,19 @@ export const PAYMENT_CATEGORY_IDS: readonly string[] = [
  */
 
 /**
- * Ставка новичка парка действует столько суток с даты найма профиля (`park_profiles.hire_date`):
- * сутки найма и `PARK_NEWCOMER_RATE_DAYS − 1` следующих. Не путать с `NEWCOMER_FIRST_DAYS` —
- * те считаются от первой поездки. Из данных окно не выводится.
+ * Условия ставки новичка парка по дате найма профиля (`park_profiles.hire_date`) — docs/decisions.md →
+ * «Цена водителя на дашборде». Ставка действует `days` суток: сутки найма и `days − 1` следующих.
+ * Условия заказа — последние с `hiredFrom` не позже его даты найма; условия месяца — последние
+ * с `hiredFrom` не позже его последнего дня. Не путать с `NEWCOMER_FIRST_DAYS` — те считаются
+ * от первой поездки.
+ *
+ * Только даты и окна: ставки меряются по данным месяца, окно из данных не выводится. Новое окно
+ * в списке — новая колонка `payment_hire_days_N` в `metric_person_months` миграцией.
  */
-export const PARK_NEWCOMER_RATE_DAYS = 14;
+export const PARK_NEWCOMER_RATE_TERMS = [
+  { hiredFrom: null, days: 14 }, // нанятые до 10-10-2026: 2 %
+  { hiredFrom: '2026-10-10', days: 28 }, // нанятые с 10-10-2026: 3 %
+] as const;
 
 /** Первый набор новичков цены водителя: перед ним шесть месяцев транзакций без заказов. */
 export const DRIVER_VALUE_NEWCOMER_FROM = '2024-10';
