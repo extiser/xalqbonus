@@ -92,7 +92,10 @@ export class InvalidManualRewardError extends RewardsError {
   }
 }
 
-/** Награды с таким идентификатором нет вовсе — или это баллы, которым у стойки делать нечего. */
+/**
+ * Награды с таким идентификатором нет вовсе, это баллы, которым у стойки делать нечего, —
+ * или, при отмене из карточки, награда чужого водителя (issue #270).
+ */
 export class UnknownRewardError extends RewardsError {
   constructor(public readonly rewardId: string) {
     super(`награды ${rewardId} нет`);
@@ -109,5 +112,18 @@ export class RewardNotAwaitingError extends RewardsError {
     public readonly status: RewardStatus | null,
   ) {
     super(`награда ${rewardId} уже не ждёт выдачи: ${status ?? 'неизвестно'}`);
+  }
+}
+
+/**
+ * Отменить можно только ждущую — в офисе или незабранный подарок (issue #270). Эта уже выдана,
+ * зачислена, сгорела или отменена: исход повторного нажатия и гонки с выдачей на стойке.
+ */
+export class RewardNotCancellableError extends RewardsError {
+  constructor(
+    public readonly rewardId: string,
+    public readonly status: RewardStatus,
+  ) {
+    super(`награду ${rewardId} не отменить: ${status}`);
   }
 }

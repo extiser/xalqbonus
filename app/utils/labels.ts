@@ -187,6 +187,13 @@ export const stockMovementKindLabel = (kind: StockMovementEntry['kind']): string
   STOCK_MOVEMENT_KIND_LABELS[kind];
 
 /**
+ * Подпись строки движения. Отмена награды (issue #270) возвращает штуку тем же движением, что
+ * сгорание, но «сгорела» про неё — неправда.
+ */
+export const stockMovementLabel = (movement: Pick<StockMovementEntry, 'kind' | 'rewardCancelled'>): string =>
+  movement.rewardCancelled ? 'награда отменена, товар в остатках' : stockMovementKindLabel(movement.kind);
+
+/**
  * Подписи наград у стойки (issue #172). Полным `Record` — новый статус обязан уронить проверку
  * типов здесь.
  */
@@ -197,6 +204,7 @@ const REWARD_STATUS_LABELS: Record<OfficeReward['status'], string> = {
   awaiting: 'ждёт выдачи',
   issued: 'выдана',
   expired: 'сгорела',
+  cancelled: 'отменена',
 };
 
 export const rewardStatusLabel = (status: OfficeReward['status']): string =>
@@ -213,6 +221,7 @@ const DRIVER_REWARD_STATUS_LABELS: Record<OfficeReward['status'], string> = {
   awaiting: 'ждёт в офисе',
   issued: 'получена',
   expired: 'срок вышел',
+  cancelled: 'отменена',
 };
 
 export const driverRewardStatusLabel = (status: OfficeReward['status']): string =>
@@ -223,6 +232,7 @@ const OFFICE_REWARD_EVENT_LABELS: Record<OfficeRewardEvent, string> = {
   granted: 'награда вручена',
   issued: 'выдача награды',
   expired: 'награда сгорела',
+  cancelled: 'награда отменена',
 };
 
 export const officeRewardEventLabel = (event: OfficeRewardEvent): string =>

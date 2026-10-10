@@ -42,6 +42,7 @@ const toGiftGrant = (row: GiftGrantRow): GiftGrant => ({
   claimedByDriver: row.claimedByDriver,
   creditedAuto: row.creditedAuto,
   waiting: row.waiting,
+  cancelled: row.cancelled,
 });
 
 export const readGiftGrants = async (): Promise<GiftGrantsResponse> => {

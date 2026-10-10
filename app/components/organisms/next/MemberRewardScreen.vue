@@ -34,6 +34,7 @@ const TONES: Record<MemberRewardDetailView['status'], Exclude<MemberItemTone, 'c
   awaiting: 'waiting',
   issued: 'issued',
   expired: 'cancelled',
+  cancelled: 'cancelled',
 };
 </script>
 

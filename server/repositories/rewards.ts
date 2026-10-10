@@ -211,6 +211,46 @@ export const markRewardExpired = async (
   `;
 
 /**
+ * Награда человека по идентификатору, под блокировку, — в любом статусе: отмена (issue #270)
+ * сама отвечает, что с наградой, которая уже не ждёт. Человек входит в условие: чужая награда
+ * не блокируется и не читается.
+ */
+export const lockPersonRewardById = async (
+  client: Executor,
+  rewardId: string,
+  personId: string,
+): Promise<RewardRow | null> => {
+  const rows = await client.$queryRaw<RewardRow[]>`
+    SELECT ${REWARD_COLUMNS}
+      FROM xb.rewards
+     WHERE "id" = ${rewardId}::uuid
+       AND "person_id" = ${personId}::uuid
+       FOR UPDATE
+  `;
+
+  return rows[0] ?? null;
+};
+
+/**
+ * Переводит ждущую награду — в офисе или незабранный подарок — в `cancelled`. Условие на ждущий
+ * статус — как у выдачи и сгорания.
+ */
+export const markRewardCancelled = async (
+  client: Executor,
+  rewardId: string,
+  employeeId: string,
+  cancelledAt: Date,
+): Promise<number> =>
+  client.$executeRaw`
+    UPDATE xb.rewards
+       SET "status" = 'cancelled'::xb.reward_status,
+           "cancelled_at" = ${cancelledAt},
+           "cancelled_by_employee_id" = ${employeeId}::uuid,
+           "updated_at" = now()
+     WHERE "id" = ${rewardId}::uuid AND "status" IN ('awaiting', 'claimable')
+  `;
+
+/**
  * Ждущие награды с истёкшим сроком — вход прогона сгорания. Только идентификаторы: каждая
  * сгорает своей транзакцией и перечитывается под блокировкой. Срок сверяется с часами базы,
  * которыми он и записан.
@@ -237,6 +277,8 @@ type PersonRewardColumns = {
   expiredAt: Date | null;
   /** Когда подарок лёг на баланс. Пусто у всех, кроме зачисленного подарка. */
   claimedAt: Date | null;
+  /** Когда отменена сотрудником (issue #270). Пусто у всех, кроме отменённой. */
+  cancelledAt: Date | null;
   source: RewardSource;
   sourceNote: string | null;
   campaignTitle: string | null;
@@ -284,7 +326,7 @@ type PersonRewardQueryRow = Omit<PersonRewardRow, 'office'> & {
  * и своя выборка (`listPersonClaimableGifts`, issue #219).
  *
  * Ждущие первыми, дальше — по последнему событию награды: выдаче, сгоранию, зачислению
- * подарка или вручению.
+ * подарка, отмене или вручению.
  * По вручению выданная у стойки уезжала в истории ниже баллов, вручённых позже неё, хотя
  * случилась последней (прогон PR #222, 25-09-2026). Порядок стоит в запросе, а не на экране:
  * иначе потолок срезал бы не то. Карточка водителя в админке сортируется по-своему.
@@ -305,6 +347,7 @@ export const listPersonRewards = async (
            reward."issued_at"    AS "issuedAt",
            reward."expired_at"   AS "expiredAt",
            reward."claimed_at"   AS "claimedAt",
+           reward."cancelled_at" AS "cancelledAt",
            reward."source",
            reward."source_note"  AS "sourceNote",
            reward."source_note_uz" AS "sourceNoteUz",
@@ -332,7 +375,8 @@ export const listPersonRewards = async (
      WHERE reward."person_id" = ${personId}::uuid
        AND reward."status" <> 'claimable'
      ORDER BY (reward."status" = 'awaiting') DESC,
-              COALESCE(reward."issued_at", reward."expired_at", reward."claimed_at", reward."created_at") DESC,
+              COALESCE(reward."issued_at", reward."expired_at", reward."claimed_at", reward."cancelled_at",
+                       reward."created_at") DESC,
               reward."created_at" DESC
      LIMIT ${limit}
   `;
@@ -521,13 +565,46 @@ export type DriverRewardRow = PersonRewardColumns & {
   issuedByName: string | null;
   /** Кто вручил. Пусто у наград акции. */
   grantedByName: string | null;
+  /** Кто отменил (issue #270). Пусто у всех, кроме отменённой. */
+  cancelledByName: string | null;
   /** Как лёг на баланс подарок — вместе с `claimedAt`. */
   claimMode: GiftClaimMode | null;
 };
 
+/** Награда глазами сотрудника в карточке водителя: сама награда, офис и имена сотрудников. */
+const DRIVER_REWARD_SELECT = Prisma.sql`
+  SELECT reward."id",
+         reward."kind",
+         reward."title",
+         reward."points",
+         reward."code",
+         reward."status",
+         reward."expires_at"   AS "expiresAt",
+         reward."issued_at"    AS "issuedAt",
+         reward."expired_at"   AS "expiredAt",
+         reward."claimed_at"   AS "claimedAt",
+         reward."claim_mode"   AS "claimMode",
+         reward."cancelled_at" AS "cancelledAt",
+         reward."source",
+         reward."source_note"  AS "sourceNote",
+         campaign."title"      AS "campaignTitle",
+         office."name"         AS "officeName",
+         office."address"      AS "officeAddress",
+         issuer."full_name"    AS "issuedByName",
+         granter."full_name"   AS "grantedByName",
+         canceller."full_name" AS "cancelledByName",
+         reward."created_at"   AS "createdAt"
+    FROM xb.rewards AS reward
+    LEFT JOIN xb.offices   AS office    ON office."id" = reward."office_id"
+    LEFT JOIN xb.campaigns AS campaign  ON campaign."id" = reward."campaign_id"
+    LEFT JOIN xb.employees AS issuer    ON issuer."id" = reward."issued_by_employee_id"
+    LEFT JOIN xb.employees AS granter   ON granter."id" = reward."granted_by_employee_id"
+    LEFT JOIN xb.employees AS canceller ON canceller."id" = reward."cancelled_by_employee_id"
+`;
+
 /**
  * Награды человека глазами сотрудника в карточке водителя (issue #175): те же поля, что
- * у раздела водителя, плюс имена сотрудников — кто вручил и кто выдал.
+ * у раздела водителя, плюс имена сотрудников — кто вручил, кто выдал и кто отменил.
  *
  * Ждущие — в офисе и подарки, которые водитель ещё не забрал, — идут первыми независимо
  * от даты: про них водитель и звонит, остальное история. Порядок стоит в запросе, а не на экране:
@@ -539,31 +616,23 @@ export const listDriverRewards = async (
   client: Executor = db,
 ): Promise<DriverRewardRow[]> =>
   client.$queryRaw<DriverRewardRow[]>`
-    SELECT reward."id",
-           reward."kind",
-           reward."title",
-           reward."points",
-           reward."code",
-           reward."status",
-           reward."expires_at"  AS "expiresAt",
-           reward."issued_at"   AS "issuedAt",
-           reward."expired_at"  AS "expiredAt",
-           reward."claimed_at"  AS "claimedAt",
-           reward."claim_mode"  AS "claimMode",
-           reward."source",
-           reward."source_note" AS "sourceNote",
-           campaign."title"     AS "campaignTitle",
-           office."name"        AS "officeName",
-           office."address"     AS "officeAddress",
-           issuer."full_name"   AS "issuedByName",
-           granter."full_name"  AS "grantedByName",
-           reward."created_at"  AS "createdAt"
-      FROM xb.rewards AS reward
-      LEFT JOIN xb.offices   AS office   ON office."id" = reward."office_id"
-      LEFT JOIN xb.campaigns AS campaign ON campaign."id" = reward."campaign_id"
-      LEFT JOIN xb.employees AS issuer   ON issuer."id" = reward."issued_by_employee_id"
-      LEFT JOIN xb.employees AS granter  ON granter."id" = reward."granted_by_employee_id"
+    ${DRIVER_REWARD_SELECT}
      WHERE reward."person_id" = ${personId}::uuid
      ORDER BY (reward."status" IN ('awaiting', 'claimable')) DESC, reward."created_at" DESC
      LIMIT ${limit}
   `;
+
+/** Одна награда человека для карточки водителя — ответ отмены (issue #270). Чужая не читается. */
+export const findDriverReward = async (
+  personId: string,
+  rewardId: string,
+  client: Executor = db,
+): Promise<DriverRewardRow | null> => {
+  const rows = await client.$queryRaw<DriverRewardRow[]>`
+    ${DRIVER_REWARD_SELECT}
+     WHERE reward."person_id" = ${personId}::uuid
+       AND reward."id" = ${rewardId}::uuid
+  `;
+
+  return rows[0] ?? null;
+};

@@ -221,7 +221,7 @@ const rewardOffice = (reward: MemberReward, texts: MemberScreenTexts): string | 
     : undefined;
 
 /**
- * Строка-действие: ждущая зовёт за кодом, полученная и сгоревшая — посмотреть. У баллов действия
+ * Строка-действие: ждущая зовёт за кодом, полученная, сгоревшая и отменённая — посмотреть. У баллов действия
  * нет — карточка не нажимается: экран награды баллам не нужен.
  */
 const rewardAction = (reward: MemberReward, texts: MemberScreenTexts): string | undefined => {
@@ -230,6 +230,7 @@ const rewardAction = (reward: MemberReward, texts: MemberScreenTexts): string | 
       return texts.orderActionCode;
     case 'issued':
     case 'expired':
+    case 'cancelled':
       return texts.orderActionView;
     case 'credited':
       return undefined;
@@ -327,6 +328,7 @@ const rewardDetailHint = (reward: MemberReward, texts: MemberScreenTexts): strin
     case 'issued':
       return reward.office === null ? reward.stateHint : `${reward.stateHint} · ${officeLine(reward.office.name, texts)}`;
     case 'expired':
+    case 'cancelled':
     case 'credited':
       return reward.stateHint;
   }

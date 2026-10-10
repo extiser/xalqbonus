@@ -13,8 +13,8 @@ import type { MemberRewardView } from '~/types/memberView';
  *
  * `full` — ждущих нет, но награды были: одна последняя целиком — что, откуда, состояние и офис
  * (сцена 3 блока). «Получена» и «На балансе» — зелёной строкой, как «Выдан» у заказа (issue #266).
- * Сгоревшая гаснет целиком, строка у неё спокойная, но остаётся читаемой: пустота вместо неё
- * выглядела бы так, будто награды и не было.
+ * Сгоревшая и отменённая (issue #270) гаснут целиком, строка у них спокойная, но остаётся читаемой:
+ * пустота вместо неё выглядела бы так, будто награды и не было.
  *
  * Карточка обязана открываться — в обоих вариантах, тем же `open`: экран награды у товара
  * и произвольной есть всегда. Кроме баллов: они на балансе, экран им
@@ -32,7 +32,8 @@ defineEmits<{ open: [] }>();
 
 const isAwaiting = computed(() => props.reward.status === 'awaiting');
 
-const isExpired = computed(() => props.reward.status === 'expired');
+/** Отменённая выглядит как сгоревшая — другим словом, которое уже лежит в `state`. */
+const isGone = computed(() => props.reward.status === 'expired' || props.reward.status === 'cancelled');
 
 const opens = computed(() => props.reward.kind !== 'points');
 </script>
@@ -52,7 +53,7 @@ const opens = computed(() => props.reward.kind !== 'points');
   <AtomsNextMemberCard
     v-else
     :tone="isAwaiting ? 'green' : 'plain'"
-    :dimmed="isExpired"
+    :dimmed="isGone"
     :clickable="opens"
     @click="$emit('open')"
   >
@@ -62,7 +63,7 @@ const opens = computed(() => props.reward.kind !== 'points');
       </span>
       <span v-if="reward.origin" class="text-[13px] font-light text-xb-grey">{{ reward.origin }}</span>
       <span class="mt-1">
-        <AtomsNextMemberStateLine :tone="isExpired ? 'quiet' : 'green'" :state="reward.state" />
+        <AtomsNextMemberStateLine :tone="isGone ? 'quiet' : 'green'" :state="reward.state" />
       </span>
       <span v-if="reward.office" class="text-[13px] font-light text-xb-grey">{{ reward.office }}</span>
     </span>

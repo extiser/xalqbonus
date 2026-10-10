@@ -253,14 +253,19 @@ export type StockMovementEntry = {
   orderNumber: number | null;
   /** Награда, которой вызвано движение, — её название. Пусто у всех, кроме трёх видов награды. */
   rewardTitle: string | null;
+  /**
+   * Штука вернулась в остаток отменой награды, а не сгоранием (issue #270): вид движения у них
+   * один — `reward_release`.
+   */
+  rewardCancelled: boolean;
   /** Кто сделал. Пуст у движения, сделанного водителем из Mini App или воркером просрочки. */
   employeeName: string | null;
   note: string | null;
   createdAt: string;
 };
 
-/** Что случилось с произвольной наградой: вручена, выдана у стойки, сгорела. */
-export type OfficeRewardEvent = 'granted' | 'issued' | 'expired';
+/** Что случилось с произвольной наградой: вручена, выдана у стойки, сгорела, отменена сотрудником. */
+export type OfficeRewardEvent = 'granted' | 'issued' | 'expired' | 'cancelled';
 
 /**
  * Событие произвольной награды в ленте офиса (issue #175). Движения у неё нет — на складе
@@ -275,7 +280,7 @@ export type OfficeRewardEventEntry = {
   campaignTitle: string | null;
   /** Кто сделал. Пуст у сгорания — его делает воркер — и у вручения акцией. */
   employeeName: string | null;
-  /** Пояснение к вручению. У выдачи и сгорания пусто. */
+  /** Пояснение к вручению. У выдачи, сгорания и отмены пусто. */
   note: string | null;
   createdAt: string;
 };

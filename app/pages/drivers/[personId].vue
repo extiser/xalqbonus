@@ -12,6 +12,7 @@ import type {
   ManualPointsRequestBody,
   ManualPointsResponse,
 } from '#shared/types/driver';
+import type { DriverReward } from '#shared/types/rewards';
 
 /**
  * Карточка водителя: после неё на вопрос «откуда у водителя столько баллов» отвечают
@@ -54,6 +55,7 @@ const {
 const {
   data: rewards,
   status: rewardsStatus,
+  refresh: refreshRewards,
 } = await useFetch(() => `/api/drivers/${personId.value}/rewards`);
 
 // Устройства — своей ручкой, как награды: с чего водитель открывал приложение (issue #223).
@@ -158,6 +160,51 @@ const canGrant = computed(
     card.value?.membership !== null &&
     card.value?.membership !== undefined,
 );
+
+/**
+ * Отмена ждущей награды (issue #270) — тем же списком ролей, что выдача: кто вручает, тот
+ * и отменяет вручённое по ошибке. В отличие от выдачи, членство не проверяется: награда уже
+ * вручена, и отменить её можно, даже если водитель из программы вышел. Решает ручка.
+ */
+const canCancelRewards = computed(
+  () => employee.value !== null && REWARD_GRANT_ROLES.includes(employee.value.role),
+);
+
+const cancellingRewardId = ref<string | null>(null);
+const cancelRewardError = ref<string | null>(null);
+
+/**
+ * Подтверждение спрашивается: отмена не возвращается, а водитель о ней не узнает. После
+ * отмены список перечитывается — отменённая уходит из ждущих вниз, в историю.
+ */
+const cancelReward = async (reward: DriverReward, title: string): Promise<void> => {
+  const shelfLine =
+    reward.kind === 'product' ? `\nШтука вернётся в остатки офиса ${reward.officeName ?? 'выдачи'}.` : '';
+
+  if (
+    !window.confirm(
+      `Отменить награду «${title}»? Водителю ничего не придёт, награда уйдёт в отменённые.${shelfLine}`,
+    )
+  ) {
+    return;
+  }
+
+  cancellingRewardId.value = reward.rewardId;
+  cancelRewardError.value = null;
+
+  try {
+    await $fetch<DriverReward>(`/api/drivers/${personId.value}/rewards/${reward.rewardId}/cancel`, {
+      method: 'POST',
+    });
+    await refreshRewards();
+  } catch (error) {
+    cancelRewardError.value = failureText(error);
+    // Награду могли выдать или отменить в другом окне: список показывает, что с ней стало.
+    await refreshRewards();
+  } finally {
+    cancellingRewardId.value = null;
+  }
+};
 </script>
 
 <template>
@@ -228,7 +275,14 @@ const canGrant = computed(
           @click="navigateTo({ path: '/rewards', query: { personId } })"
         />
       </div>
-      <OrganismsDriverRewards :state="rewardsState" :data="rewards ?? null" />
+      <OrganismsDriverRewards
+        :state="rewardsState"
+        :data="rewards ?? null"
+        :can-cancel="canCancelRewards"
+        :cancelling-id="cancellingRewardId"
+        :cancel-error="cancelRewardError"
+        @cancel="cancelReward"
+      />
       <OrganismsDriverParkProfiles :card="card" />
       <OrganismsDriverDevices :state="devicesState" :data="devices ?? null" />
       <OrganismsDriverOperations

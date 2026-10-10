@@ -10,12 +10,22 @@ import type { DriverReward } from '#shared/types/rewards';
  *
  * Строка отвечает водителю, позвонившему с вопросом «что мне положено и где мой приз»:
  * у ждущей — код, офис и срок, которые сотрудник называет вслух; у полученной — когда и кто
- * выдал; у сгоревшей — когда. Автор ручной выдачи показан всегда: вручение без следа —
- * то, чего в программе быть не должно.
+ * выдал; у сгоревшей — когда; у отменённой — когда и кто отменил. Автор ручной выдачи показан
+ * всегда: вручение без следа — то, чего в программе быть не должно.
+ *
+ * Ждущую — в офисе или незабранный подарок — можно отменить (issue #270), если роль позволяет.
+ * Подтверждение спрашивает страница: строка только сообщает, что нажали, и отдаёт название,
+ * которым награда названа здесь.
  */
 const props = defineProps<{
   reward: DriverReward;
+  /** Роль сотрудника позволяет отменять награды. Ждёт ли награда, строка решает сама. */
+  canCancel: boolean;
+  /** Отмена этой награды уже ушла: второе нажатие не отправляется. */
+  cancelling: boolean;
 }>();
+
+const emit = defineEmits<{ cancel: [reward: DriverReward, title: string] }>();
 
 type Tone = 'ok' | 'warn' | 'muted';
 
@@ -25,6 +35,7 @@ const STATUS_TONES: Record<DriverReward['status'], Tone> = {
   awaiting: 'warn',
   issued: 'ok',
   expired: 'muted',
+  cancelled: 'muted',
 };
 
 /** Что выдано: у баллов — сумма, у остальных — сохранённое название. */
@@ -58,6 +69,11 @@ const deadlineDay = computed(() =>
     : formatCalendarDate(rewardDeadlineDay(new Date(props.reward.expiresAt), props.reward.source)),
 );
 
+/** Отменяется только ждущая: выданная, зачисленная и сгоревшая остаются как есть. */
+const cancellable = computed(
+  () => props.canCancel && (props.reward.status === 'awaiting' || props.reward.status === 'claimable'),
+);
+
 /** Как подарок лёг на баланс — сотрудник отвечает водителю «вы забрали его сами». */
 const claimText = computed(() =>
   props.reward.claimMode === 'driver' ? 'забрал сам' : 'зачислено по сроку',
@@ -78,6 +94,14 @@ const claimText = computed(() =>
       >
         {{ reward.code }}
       </span>
+      <span v-if="cancellable" class="ml-auto">
+        <AtomsActionButton
+          label="Отменить"
+          tone="danger"
+          :disabled="cancelling"
+          @click="emit('cancel', reward, title)"
+        />
+      </span>
     </div>
 
     <p v-if="reward.status === 'awaiting'" class="mt-1 text-sm text-slate-700">
@@ -89,6 +113,9 @@ const claimText = computed(() =>
     </p>
     <p v-else-if="reward.status === 'expired'" class="mt-1 text-sm text-slate-700">
       Срок вышел {{ formatDateTime(reward.expiredAt) }}
+    </p>
+    <p v-else-if="reward.status === 'cancelled'" class="mt-1 text-sm text-slate-700">
+      Отменена {{ formatDateTime(reward.cancelledAt) }} · {{ reward.cancelledByName ?? DASH }}
     </p>
     <p v-else-if="reward.status === 'claimable'" class="mt-1 text-sm text-slate-700">
       Ждёт в приложении · зачислится сам {{ formatDateTime(reward.expiresAt) }}

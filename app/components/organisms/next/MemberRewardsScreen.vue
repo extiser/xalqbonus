@@ -65,6 +65,7 @@ const TONES: Record<MemberRewardStatus, MemberItemTone> = {
   credited: 'credited',
   issued: 'issued',
   expired: 'cancelled',
+  cancelled: 'cancelled',
 };
 
 /** Награда — свойствами карточки: тон по состоянию, остальное как есть. */

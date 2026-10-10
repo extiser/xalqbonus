@@ -210,6 +210,7 @@ export type TextKey =
   | 'reward_word_awaiting'
   | 'reward_word_issued'
   | 'reward_word_expired'
+  | 'reward_state_cancelled'
   | 'reward_until'
   | 'reward_claim_until'
   | 'reward_expired_reason'
@@ -1279,6 +1280,11 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   reward_word_expired: {
     ru: 'Срок вышел',
     uz: 'Muddati tugadi',
+  },
+  /** Отменена сотрудником, пока ждала (issue #270): выглядит как сгоревшая, только другим словом. */
+  reward_state_cancelled: {
+    ru: 'Отменена',
+    uz: 'Bekor qilindi',
   },
   /** Срок ждущей после слова состояния в разделе: «Ждёт в офисе · до 5 октября». */
   reward_until: {

@@ -17,10 +17,16 @@ import { createProduct } from '#server/services/products/createProduct';
 import {
   InvalidManualRewardError,
   RewardNotAwaitingError,
+  RewardNotCancellableError,
   RewardStockShortError,
+  UnknownRewardError,
 } from '#server/services/rewards/errors';
+import { GiftNotClaimableError } from '#server/services/gifts/errors';
+import { creditDueGifts } from '#server/services/gifts/creditDueGifts';
 import { claimGift } from '#server/services/gifts/creditGift';
+import { cancelReward } from '#server/services/rewards/cancelReward';
 import { grantGift } from '#server/services/gifts/grantGift';
+import { readGiftGrant } from '#server/services/gifts/readGiftGrants';
 import { expireRewards } from '#server/services/rewards/expireRewards';
 import { grantManualReward } from '#server/services/rewards/grantManualReward';
 import { issueOfficeReward } from '#server/services/rewards/issueOfficeReward';
@@ -43,7 +49,13 @@ import {
   trackTestProduct,
 } from '../support/database';
 import { cleanupTestEmployees, createTestEmployee, setTestProfilePhone } from '../support/employees';
-import { backdateTestGift, findGiftRewardId } from '../support/gifts';
+import {
+  backdateTestGift,
+  expireTestGift,
+  findGiftRewardId,
+  readGift,
+  readGiftGrantCounters,
+} from '../support/gifts';
 import { grantPoints } from '../support/points';
 import { disconnectQueues } from '../support/queues';
 import {
@@ -753,5 +765,160 @@ describe('награды', () => {
     const secondPage = await readOfficeFeed(scenario.officeId, 4, 4);
 
     expect([...firstPage.entries, ...secondPage.entries]).toEqual(feed.entries);
+  });
+
+  it('отмена товара: штука возвращается в остаток, у водителя «Отменена» без причины, повторная не проходит (issue #270)', async () => {
+    const scenario = await prizeScenario();
+    const prize = await grantPrize(scenario);
+    const { employeeId: ownerId } = await createTestEmployee({ role: 'owner' });
+    const actor = { employeeId: ownerId, role: 'owner' as const };
+
+    expect(await readStock(scenario.officeId, scenario.productId)).toEqual({ onHand: 2, reserved: 1 });
+
+    const cancelled = await cancelReward({ actor, personId: scenario.personId, rewardId: prize.id });
+
+    expect(cancelled).toMatchObject({
+      rewardId: prize.id,
+      status: 'cancelled',
+      code: null,
+      cancelledAt: expect.any(String),
+      cancelledByName: expect.any(String),
+    });
+    expect(await listRewardMovements(prize.id)).toEqual([
+      { kind: 'reward_reserve', deltaOnHand: -1, deltaReserved: 1 },
+      { kind: 'reward_release', deltaOnHand: 1, deltaReserved: -1 },
+    ]);
+    expect(await readStock(scenario.officeId, scenario.productId)).toEqual({ onHand: 3, reserved: 0 });
+
+    // Водитель видит её как сгоревшую, другим словом и без строки-причины; кода нет.
+    const { rewards, sheetRewards } = await readMemberRewards({ personId: scenario.personId, language: 'ru' });
+    const shown = rewards.find((reward) => reward.rewardId === prize.id);
+
+    expect(shown).toMatchObject({ status: 'cancelled', stateWord: 'Отменена', reasonText: null, reasonTextFull: null, code: null });
+    expect(shown?.stateText).toMatch(/^Отменена · \d{2}\.\d{2}\.\d{4}$/);
+    expect(sheetRewards.map((reward) => reward.rewardId)).not.toContain(prize.id);
+
+    const { rewards: uzRewards } = await readMemberRewards({ personId: scenario.personId, language: 'uz' });
+
+    expect(uzRewards.find((reward) => reward.rewardId === prize.id)?.stateWord).toBe('Bekor qilindi');
+
+    // Повтор — штатный отказ, остаток второй раз не растёт.
+    await expect(
+      cancelReward({ actor, personId: scenario.personId, rewardId: prize.id }),
+    ).rejects.toBeInstanceOf(RewardNotCancellableError);
+    expect(await readStock(scenario.officeId, scenario.productId)).toEqual({ onHand: 3, reserved: 0 });
+
+    // Стойка: код не находится, выдача по открытой награде не проходит.
+    await expect(
+      findDeskItemByCode(worker(scenario), scenario.officeId, prize.code ?? ''),
+    ).rejects.toBeInstanceOf(DeskCodeNotFoundError);
+    await expect(issueOfficeReward(worker(scenario), prize.id)).rejects.toBeInstanceOf(RewardNotAwaitingError);
+
+    // Лента офиса: возврат штуки подписан отменой, а не сгоранием, и несёт отменившего.
+    const feed = await readOfficeFeed(scenario.officeId, 100, 0);
+    const release = feed.entries.find(
+      (entry) => entry.type === 'movement' && entry.movement.kind === 'reward_release',
+    );
+
+    expect(release).toMatchObject({ movement: { rewardCancelled: true, employeeName: expect.any(String) } });
+
+    await expectStockInvariantsHold();
+  });
+
+  it('отмена подарка: журнал не пишется, баланс не меняется, по сроку не зачисляется (issue #270)', async () => {
+    const scenario = await prizeScenario();
+    const { giftGrantId } = await grantGift({
+      recipient: { kind: 'person', personId: scenario.personId },
+      points: 100,
+      reasonRu: 'компенсация',
+      reasonUz: 'компенсация',
+      messageRu: '',
+      messageUz: '',
+      coverRu: null,
+      coverUz: null,
+      sendNow: false,
+      untilDate: FAR_UNTIL_DATE,
+      employeeId: scenario.employeeId,
+    });
+    const gift = await findGiftRewardId(giftGrantId, scenario.personId);
+    const balanceBefore = await readAccountBalance(scenario.personId);
+    const campaignTransfersBefore = await countTransfersByReason(scenario.personId, 'campaign');
+    const grantBefore = await readGiftGrant(giftGrantId);
+
+    const cancelled = await cancelReward({
+      actor: { employeeId: scenario.employeeId, role: 'senior_manager' },
+      personId: scenario.personId,
+      rewardId: gift,
+    });
+
+    expect(cancelled.status).toBe('cancelled');
+    expect(await readAccountBalance(scenario.personId)).toBe(balanceBefore);
+
+    // Таблица раздач: из «ждут» в «отменено», и исходы снова складываются в число наград раздачи.
+    const grantAfter = await readGiftGrant(giftGrantId);
+
+    expect(grantAfter?.waiting).toBe((grantBefore?.waiting ?? 0) - 1);
+    expect(grantAfter?.cancelled).toBe((grantBefore?.cancelled ?? 0) + 1);
+    expect(
+      (grantAfter?.claimedByDriver ?? 0) +
+        (grantAfter?.creditedAuto ?? 0) +
+        (grantAfter?.waiting ?? 0) +
+        (grantAfter?.cancelled ?? 0),
+    ).toBe((await readGiftGrantCounters(giftGrantId))?.rewards);
+    expect(await countTransfersByReason(scenario.personId, 'campaign')).toBe(campaignTransfersBefore);
+
+    const { gifts, rewards } = await readMemberRewards({ personId: scenario.personId, language: 'ru' });
+
+    expect(gifts.map((item) => item.rewardId)).not.toContain(gift);
+    expect(rewards.find((reward) => reward.rewardId === gift)?.stateWord).toBe('Отменена');
+
+    // Наступил день раздачи — зачислять нечего.
+    await expireTestGift(gift);
+    await creditDueGifts();
+
+    expect((await readGift(gift))?.status).toBe('cancelled');
+    expect(await readAccountBalance(scenario.personId)).toBe(balanceBefore);
+    expect(await countTransfersByReason(scenario.personId, 'campaign')).toBe(campaignTransfersBefore);
+    await expect(claimGift(gift, scenario.personId)).rejects.toBeInstanceOf(GiftNotClaimableError);
+  });
+
+  it('отмена: чужая награда — «нет», выданная — «не отменить»; своя награда в ленте офиса — событием (issue #270)', async () => {
+    const scenario = await prizeScenario();
+    const stranger = await createTestPerson({ inProgram: true });
+    const handed = await grantPrize(scenario);
+    const custom = await grantCustom(scenario, 'Сертификат на мойку');
+    const actor = { employeeId: scenario.employeeId, role: 'admin' as const };
+
+    await issueOfficeReward(worker(scenario), handed.id);
+
+    await expect(
+      cancelReward({ actor, personId: stranger.personId, rewardId: custom.id }),
+    ).rejects.toBeInstanceOf(UnknownRewardError);
+    expect((await readReward(custom.id))?.status).toBe('awaiting');
+
+    await expect(
+      cancelReward({ actor, personId: scenario.personId, rewardId: handed.id }),
+    ).rejects.toBeInstanceOf(RewardNotCancellableError);
+    expect((await readReward(handed.id))?.status).toBe('issued');
+
+    await cancelReward({ actor, personId: scenario.personId, rewardId: custom.id });
+
+    const { rewards } = await readDriverRewards(scenario.personId);
+
+    expect(rewards.find((reward) => reward.rewardId === custom.id)).toMatchObject({
+      status: 'cancelled',
+      code: null,
+      cancelledByName: expect.any(String),
+    });
+
+    const feed = await readOfficeFeed(scenario.officeId, 100, 0);
+    const events = feed.entries.flatMap((entry) =>
+      entry.type === 'reward' && entry.reward.rewardId === custom.id ? [entry.reward.event] : [],
+    );
+
+    expect(events.sort()).toEqual(['cancelled', 'granted']);
+    expect(feed.total).toBe(feed.entries.length);
+
+    await expectStockInvariantsHold();
   });
 });
