@@ -162,7 +162,7 @@ const PILL_CLASSES = 'inline-block rounded-full px-2.5 py-[3px] font-manrope tex
         />
         <AtomsWebActionButton
           :label="segmentLabel"
-          :title="segmentHint"
+          :tooltip="segmentHint"
           :disabled="!segmentEnabled"
           @click="emit('createSegment')"
         />

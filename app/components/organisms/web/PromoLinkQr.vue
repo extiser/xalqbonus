@@ -34,14 +34,14 @@ const qrPath = computed(() => `/api/promo/${encodeURIComponent(props.code)}/qr`)
         size="page"
         :icon="PhDownloadSimple"
         :download="`${qrPath}.png`"
-        title="Скачать PNG — для сообщений и просмотра"
+        tooltip="Скачать PNG для сообщений и просмотра"
       />
       <AtomsWebActionButton
         label="SVG"
         size="page"
         :icon="PhDownloadSimple"
         :download="`${qrPath}.svg`"
-        title="Скачать SVG — для печати любого размера"
+        tooltip="Скачать SVG для печати любого размера"
       />
     </div>
   </MoleculesWebTile>
