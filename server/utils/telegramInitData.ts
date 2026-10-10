@@ -81,6 +81,18 @@ export type InitDataUser = {
   allowsWriteToPrivateMessages: boolean;
 };
 
+/**
+ * Запуск приложения — то, что Telegram подписал при открытии: кто открыл, с каким параметром
+ * ссылки и когда.
+ */
+export type TelegramLaunch = {
+  user: InitDataUser;
+  /** `start_param` — код из ссылки `?startapp=`. Нет — приложение открыли не такой ссылкой. */
+  startParam: string | null;
+  /** `auth_date` — момент открытия. По нему узнаётся запуск: строка выписывается раз на открытие. */
+  authDate: Date;
+};
+
 /** Причины отказа. Все, кроме `valid`, означают «личность не установлена». */
 export type InitDataOutcome =
   | 'valid'

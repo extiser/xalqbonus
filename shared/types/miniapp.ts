@@ -924,10 +924,94 @@ export type MiniAppEmployeeDeniedScreen = {
   texts: Record<Language, RegistrationScreenTexts>;
 };
 
+/**
+ * Тексты экранов заявки кандидата на одном языке (issue #456) — поле на ключ словаря. Подстановки
+ * `{name}`, `{phone}` и `{date}` ставит экран: имя и номер он рисует по-своему, а день заявки
+ * знает только он — ответ ручки заявки текстов не несёт.
+ */
+export type ApplicationScreenTexts = {
+  /** Экран заявки. */
+  title: string;
+  lead: string;
+  nameLabel: string;
+  namePlaceholder: string;
+  phoneLabel: string;
+  ask: string;
+  declined: string;
+  send: string;
+  sending: string;
+  /** Строка условий под кнопкой и сноска к ней. */
+  termsCommission: string;
+  termsCommissionNote: string;
+  termsBonus: string;
+  termsBonusNote: string;
+  termsLegend: string;
+  /** «Заявка принята» и «Заявка уже отправлена»: заголовок с `{name}`, строка с `{phone}`. */
+  acceptedTitle: string;
+  leadWrite: string;
+  leadCall: string;
+  repeatTitle: string;
+  repeatLeadWrite: string;
+  repeatLeadCall: string;
+  /** День заявки на «Заявка уже отправлена»: сегодня, вчера или `{date}` — день словом. */
+  dateToday: string;
+  dateYesterday: string;
+  dateDay: string;
+  /** Сбой отправки. */
+  failedTitle: string;
+  failedLead: string;
+  failedSend: string;
+  failedError: string;
+  /** Офис под исходами: подпись над карточкой, «Офис · …» и строка карты. */
+  officeTitle: string;
+  officeLabel: string;
+  mapLabel: string;
+  writeManager: string;
+};
+
+/** Общее у экранов заявки: тексты на обоих языках, офисы и чат «Написать менеджеру». */
+type ApplicationScreenBase = {
+  /** Оба языка сразу: переключатель работает без запроса. */
+  texts: Record<Language, ApplicationScreenTexts>;
+  offices: MemberOffice[];
+  /** `https://t.me/<бот>` — «Написать менеджеру» открывает чат с ботом. */
+  managerChatUrl: string;
+};
+
+/** Заявка, какой её видит кандидат: «Заявка принята» и «Заявка уже отправлена». */
+export type CandidateApplicationView = {
+  /** Имя из заявки. */
+  name: string;
+  /** Номер заявки для показа: «+998 90 123-45-67». */
+  phone: string;
+  /** Когда подана, ISO. */
+  submittedAt: string;
+  /** Бот может писать: «напишет в Telegram», иначе «позвонит». */
+  writeAllowed: boolean;
+};
+
+/**
+ * Экран заявки (issue #456) — приложение открыто ссылкой метки рекламы в Telegram человеком,
+ * который не участник и не сотрудник. `language` — `uz`, если язык Telegram узбекский, иначе `ru`.
+ */
+export type MiniAppApplicationScreen = ApplicationScreenBase & {
+  screen: 'application';
+  language: Language;
+};
+
+/** У этого Telegram открытая заявка — «Заявка уже отправлена», с меткой и без. Язык — заявки. */
+export type MiniAppApplicationSentScreen = ApplicationScreenBase &
+  CandidateApplicationView & {
+    screen: 'application_sent';
+    language: Language;
+  };
+
 export type MiniAppStateResponse =
   | MiniAppMemberScreen
   | MiniAppEmployeeScreen
   | MiniAppEmployeeDeniedScreen
+  | MiniAppApplicationScreen
+  | MiniAppApplicationSentScreen
   | {
       screen: 'registration';
       /**
@@ -936,6 +1020,31 @@ export type MiniAppStateResponse =
        */
       texts: Record<Language, RegistrationScreenTexts>;
     };
+
+/**
+ * Заявка кандидата: `POST /api/miniapp/applications` (issue #456).
+ *
+ * Кто подаёт и по какой метке — из проверенной `initData`, а не из тела. Номер — ровно одно
+ * из двух: подписанная строка `requestContact` или, на Telegram, где этого вызова нет, девять
+ * цифр после `+998`, введённые руками.
+ */
+export type MiniAppApplicationRequestBody = {
+  name: string;
+  /** Поле `response` из ответа `requestContact`. */
+  contactData: string | null;
+  /** Девять цифр после `+998`; пробелы и дефисы допустимы. */
+  manualPhone: string | null;
+  /** Что ответило окно `requestWriteAccess`. Окна не было — `false`. */
+  writeAccessGranted: boolean;
+  /** Язык, на котором заполнена заявка. Сверяется со словарём. */
+  language: Language;
+};
+
+export type MiniAppApplicationResponse = CandidateApplicationView & {
+  /** `accepted` — заявка заведена; `repeat` — открытая заявка уже была, новая не заводилась. */
+  outcome: 'accepted' | 'repeat';
+  language: Language;
+};
 
 export type MiniAppRegisterRequestBody = {
   /**

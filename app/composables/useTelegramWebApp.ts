@@ -62,6 +62,20 @@ export type TelegramWebApp = {
   requestContact?: (
     callback: (shared: boolean, result?: TelegramContactResponse) => void,
   ) => void;
+  /**
+   * Разобранная `initData` — без проверки подписи, поэтому только для решений экрана, а не для
+   * доверия: можно ли боту уже писать этому человеку (issue #456).
+   */
+  initDataUnsafe?: { user?: { allows_write_to_pm?: boolean } };
+  /** Сравнение версии Bot API клиента. Доступно с 6.1 — у клиентов постарше нет вовсе. */
+  isVersionAtLeast?: (version: string) => boolean;
+  /**
+   * Окно «Разрешить боту писать вам?». Доступно с Bot API 6.9. Колбэк получает ответ человека —
+   * у заявки кандидата по нему решается, напишет менеджер или позвонит (issue #456).
+   */
+  requestWriteAccess?: (callback?: (granted: boolean) => void) => void;
+  /** Открывает ссылку `t.me` внутри Telegram — чат с ботом у «Написать менеджеру». */
+  openTelegramLink?: (url: string) => void;
 };
 
 declare global {

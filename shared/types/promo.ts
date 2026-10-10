@@ -37,8 +37,10 @@ export type PromoList = {
 
 export type PromoNewCode = {
   code: string;
-  /** Ссылка в бота с этим кодом — форма показывает её до создания метки. */
+  /** Ссылка в чат бота с этим кодом — форма показывает её до создания метки. */
   link: string;
+  /** Ссылка в Mini App с этим кодом — у носителя «Реклама в Telegram» форма показывает её. */
+  appLink: string;
 };
 
 export type PromoCreated = {
@@ -73,7 +75,7 @@ export type PromoCard = {
     /** Имя сотрудника, заведшего метку; `null` — заведена миграцией при выкате. */
     createdBy: string | null;
   };
-  /** Ссылка в бота с кодом метки. */
+  /** Ссылка метки: в чат бота, а у рекламы в Telegram — в Mini App. */
   link: string;
   funnel: PromoFunnelCounts & {
     /** Все открытия бота по метке, с повторами. */

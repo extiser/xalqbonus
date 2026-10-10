@@ -129,5 +129,17 @@ export const useMetrika = () => {
     call('userParams', { personId });
   };
 
-  return { init, hit, setPersonId };
+  /**
+   * Цель Метрики — `reachGoal` (issue #456): экран заявки показан, заявка принята. Без счётчика
+   * молча ничего не делает, как остальные вызовы.
+   */
+  const goal = (name: string, params?: Record<string, string>): void => {
+    if (!initialized) {
+      return;
+    }
+
+    call('reachGoal', name, params);
+  };
+
+  return { init, hit, setPersonId, goal };
 };

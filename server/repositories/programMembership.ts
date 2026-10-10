@@ -253,6 +253,26 @@ export const findActiveLinkByPerson = async (
 };
 
 /**
+ * Человек последней по `closed_at` закрытой привязки этого Telegram (issue #456). Пусто — закрытых
+ * привязок у Telegram нет.
+ *
+ * Telegram сверяется по отправителю, а у строк без отправителя — по чату: у перенесённых
+ * из старой базы привязок `telegram_user_id` пуст. В личной переписке оба числа — `user.id`.
+ */
+export const findLastClosedLinkPerson = async (telegramUserId: bigint): Promise<string | null> => {
+  const link = await db.telegramLink.findFirst({
+    where: {
+      closedAt: { not: null },
+      OR: [{ telegramUserId }, { telegramUserId: null, telegramChatId: telegramUserId }],
+    },
+    orderBy: { closedAt: 'desc' },
+    select: { personId: true },
+  });
+
+  return link?.personId ?? null;
+};
+
+/**
  * Активная водительская привязка, за которой числится этот Telegram или этот телефон.
  *
  * Спрашивается с той стороны, где заводят сотрудника: водителем и сотрудником одновременно

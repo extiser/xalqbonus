@@ -75,6 +75,8 @@ import {
   registrationLanguageMock,
   registrationOutcomeMock,
   registrationPhoneMock,
+  applicationFormMock,
+  applicationOutcomeMock,
   staffBarMock,
   staffDeskRowsMock,
   staffIssuedMock,
@@ -85,7 +87,13 @@ import {
   staffRewardMock,
   staffSheetOfficesMock,
 } from '~/design/mocks';
-import type { CatalogCart, CatalogScene, GiftSheetScene, RegistrationOutcomeScene } from '~/design/mocks';
+import type {
+  ApplicationOutcomeScene,
+  CatalogCart,
+  CatalogScene,
+  GiftSheetScene,
+  RegistrationOutcomeScene,
+} from '~/design/mocks';
 import { findDesignScreen } from '~/design/screens';
 import { useMemberSurvey, type MemberSurveyDraft, type MemberSurveyScreen } from '~/composables/useMemberSurvey';
 import type {
@@ -580,6 +588,44 @@ const outcome = computed(() => {
   return scene ? registrationOutcomeMock(scene, registrationLanguage.value) : undefined;
 });
 
+// Заявка кандидата: язык переключается на месте; отправка и повтор идут 3 с, как в макете.
+const applicationLanguage = ref<MemberLanguage>('ru');
+const applicationName = ref(['application-filled', 'application-declined'].includes(slug.value) ? 'Азиз' : '');
+const applicationPhone = ref('');
+const applicationBusy = ref(slug.value === 'application-sending' || slug.value === 'application-failed-busy');
+
+function sendApplication(): void {
+  applicationBusy.value = true;
+  setTimeout(() => {
+    applicationBusy.value = false;
+  }, PHONE_CHECK_MS);
+}
+
+const applicationForm = computed(() =>
+  ['application-form', 'application-filled', 'application-declined', 'application-old', 'application-sending'].includes(
+    slug.value,
+  )
+    ? {
+        ...applicationFormMock(applicationLanguage.value),
+        old: slug.value === 'application-old',
+        declined: slug.value === 'application-declined',
+      }
+    : undefined,
+);
+
+const applicationOutcome = computed(() => {
+  const scene = pick<ApplicationOutcomeScene>({
+    'application-accepted': 'accepted',
+    'application-accepted-call': 'acceptedCall',
+    'application-repeat': 'repeat',
+    'application-repeat-call': 'repeatCall',
+    'application-failed': 'failed',
+    'application-failed-busy': 'failed',
+  });
+
+  return scene ? applicationOutcomeMock(scene, applicationLanguage.value) : undefined;
+});
+
 // Профиль: глазик, открытая шторка и язык живут здесь, компонент только рисует их.
 const licenseRevealed = ref(false);
 const profileSheet = ref<'none' | 'reset' | 'language'>(
@@ -910,6 +956,26 @@ const surveyView = computed(() => surveyDesign.view.value);
         v-model:language="registrationLanguage"
         :busy="phoneChecking"
         @send="checkPhone"
+      />
+
+      <OrganismsNextMemberApplicationForm
+        v-else-if="applicationForm"
+        v-bind="applicationForm"
+        v-model:name="applicationName"
+        v-model:phone="applicationPhone"
+        :language="applicationLanguage"
+        :busy="applicationBusy"
+        @update:language="applicationLanguage = $event"
+        @send="sendApplication"
+      />
+
+      <OrganismsNextMemberApplicationOutcome
+        v-else-if="applicationOutcome"
+        v-bind="applicationOutcome"
+        :language="applicationLanguage"
+        :busy="applicationBusy"
+        @update:language="applicationLanguage = $event"
+        @send="sendApplication"
       />
 
       <template v-else-if="giftSheet">
