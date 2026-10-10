@@ -34,6 +34,16 @@ export const CANDIDATE_APPLICATION_STATUS_LABELS: Readonly<Record<CandidateAppli
   rejected: 'Отказ',
 };
 
+/** Итог сверки словами — для карточки заявки в теме группы (issue #463) и админки заявок. */
+export const CANDIDATE_MATCH_LABELS: Readonly<Record<CandidateMatch, string>> = {
+  not_in_park: 'Нет в парке',
+  not_in_registry: 'Нет в реестре, Fleet номер знает',
+  working: 'Работает в парке',
+  former: 'Работал раньше',
+  no_trips: 'В реестре, поездок нет',
+  lookup_failed: 'Не удалось сверить',
+};
+
 const CANDIDATE_MATCHES: readonly CandidateMatch[] = [
   'not_in_park',
   'not_in_registry',

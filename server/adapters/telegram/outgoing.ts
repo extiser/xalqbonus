@@ -131,7 +131,9 @@ const isInvalidChat = (error: GrammyError): boolean => {
  * Отказ Bot API — в вид отказа.
  *
  * `403` — это всегда умерший канал: бота заблокировали, выгнали или удалили учётную запись.
- * Другого смысла у запрета на отправку в приватный чат нет.
+ * Другого смысла у запрета на отправку в приватный чат нет. В группе кандидатов (issue #463)
+ * `403` — бот не администратор или без права на темы: канал до группы так же мёртв, пока
+ * права не вернут руками.
  */
 const classify = (error: GrammyError): TelegramSendError => {
   if (error.error_code === 429) {
@@ -172,6 +174,13 @@ export type SendMessageInput = {
   text: string;
   /** Пусто — сообщение уходит без кнопки. */
   openAppButton?: OpenAppButton;
+  /** Тема группы, в которую ложится сообщение (issue #463). Пусто — общий чат. */
+  messageThreadId?: number;
+  /**
+   * Сообщение темы, на которое это — ответ. Если его успели удалить, сообщение уходит
+   * без ответа, а не отказом: объяснение в теме важнее, чем то, к чему оно прицеплено.
+   */
+  replyToMessageId?: number;
 };
 
 /**
@@ -226,10 +235,74 @@ export const sendTelegramMessage = async (input: SendMessageInput): Promise<numb
       parse_mode: 'HTML',
       link_preview_options: { is_disabled: true },
       reply_markup: openAppKeyboard(input.openAppButton),
+      message_thread_id: input.messageThreadId,
+      reply_parameters:
+        input.replyToMessageId === undefined
+          ? undefined
+          : { message_id: input.replyToMessageId, allow_sending_without_reply: true },
     }),
   );
 
   return message.message_id;
+};
+
+export type CreateForumTopicInput = {
+  token: string;
+  telegramChatId: bigint;
+  /** Название темы, до 128 знаков — предел Telegram. */
+  name: string;
+};
+
+/**
+ * Заводит тему в группе с темами (issue #463). Успех — `message_thread_id` темы, отказ —
+ * `TelegramSendError` тем же разбором, что у отправки: бот не администратор или без права
+ * на темы — `403`, то есть `invalid_chat`.
+ *
+ * `null` — вызов заглушён защитой вне прода: темы нет, и сообщения в неё класть некуда.
+ */
+export const createTelegramForumTopic = async (input: CreateForumTopicInput): Promise<number | null> => {
+  if (isMutedOutside(input.telegramChatId, input.name)) {
+    return null;
+  }
+
+  const topic = await withClassifiedFailure(() =>
+    getApi(input.token).createForumTopic(input.telegramChatId.toString(), input.name),
+  );
+
+  return topic.message_thread_id;
+};
+
+export type CopyMessageInput = {
+  token: string;
+  /** Куда кладётся копия. */
+  telegramChatId: bigint;
+  /** Откуда берётся сообщение. */
+  fromChatId: bigint;
+  messageId: number;
+  /** Тема группы, в которую ложится копия. Пусто — общий чат. */
+  messageThreadId?: number;
+};
+
+/**
+ * Копирует сообщение (issue #463): копия приходит от имени бота, без пометки «Переслано».
+ * Текст, подпись и разметка копируются как есть. Успех — `message_id` копии, отказ —
+ * `TelegramSendError` тем же разбором, что у отправки.
+ *
+ * Заглушённый защитой вне прода вызов отдаёт `SKIPPED_MESSAGE_ID`.
+ */
+export const copyTelegramMessage = async (input: CopyMessageInput): Promise<number> => {
+  // Текста у копии на руках нет — в строку лога идёт, откуда и что копируется.
+  if (isMutedOutside(input.telegramChatId, `копия ${input.fromChatId.toString()}/${input.messageId}`)) {
+    return SKIPPED_MESSAGE_ID;
+  }
+
+  const copy = await withClassifiedFailure(() =>
+    getApi(input.token).copyMessage(input.telegramChatId.toString(), input.fromChatId.toString(), input.messageId, {
+      message_thread_id: input.messageThreadId,
+    }),
+  );
+
+  return copy.message_id;
 };
 
 export type DeleteMessageInput = {

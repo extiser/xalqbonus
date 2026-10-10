@@ -98,3 +98,35 @@ export const readBotConfig = (): BotConfig | null => {
 
   return { token, mode, webhookUrl, webhookSecret };
 };
+
+/**
+ * Группа сотрудников для переписки с кандидатами (issue #463): на каждую заявку бот заводит
+ * в ней тему, сотрудники отвечают кандидату из неё (docs/decisions.md → «Переписка
+ * с кандидатом»).
+ *
+ * ID группы у Telegram — число со знаком минус. Пусто — переписка через группу выключена,
+ * и это рабочее состояние: заявка и приветствие кандидату работают и без группы. Не число —
+ * то же самое, и строка о нём при старте (`readInvalidCandidatesChatId`).
+ */
+const CANDIDATES_CHAT_ID_PATTERN = /^-\d+$/;
+
+export const readCandidatesChatId = (): bigint | null => {
+  const value = readEnv('TG_CANDIDATES_CHAT_ID');
+
+  return CANDIDATES_CHAT_ID_PATTERN.test(value) ? BigInt(value) : null;
+};
+
+/**
+ * Значение `TG_CANDIDATES_CHAT_ID`, если оно заполнено, но не ID группы. `null` — пусто или
+ * годно. Для строки при старте приложения и воркера: опечатка в ID выключает группу молча,
+ * а заметили бы это по заявке без темы.
+ */
+export const readInvalidCandidatesChatId = (): string | null => {
+  const value = readEnv('TG_CANDIDATES_CHAT_ID');
+
+  return value !== '' && !CANDIDATES_CHAT_ID_PATTERN.test(value) ? value : null;
+};
+
+/** Строка лога о негодном `TG_CANDIDATES_CHAT_ID` — одна на приложение и воркер. */
+export const INVALID_CANDIDATES_CHAT_MESSAGE =
+  'TG_CANDIDATES_CHAT_ID не ID группы — переписка с кандидатами через группу выключена';

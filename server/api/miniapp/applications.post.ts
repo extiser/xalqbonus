@@ -1,6 +1,7 @@
 import { readBotToken } from '#server/bot/config';
 import { submitCandidateApplication } from '#server/services/candidates/submitCandidateApplication';
 import { candidateApplicationDenial, rejectCandidateApplicationFailure } from '#server/utils/candidateApplicationFailure';
+import { readAppOrigin } from '#server/utils/appOrigin';
 import { isLanguage } from '#server/utils/language';
 import { requireTelegramLaunch } from '#server/utils/telegramAuth';
 import type { MiniAppApplicationRequestBody, MiniAppApplicationResponse } from '#shared/types/miniapp';
@@ -33,6 +34,7 @@ export default defineEventHandler(async (event): Promise<MiniAppApplicationRespo
       writeAccessGranted: body.writeAccessGranted === true,
       language: body.language,
       botToken: readBotToken(),
+      appOrigin: readAppOrigin(event),
       now: new Date(),
     });
   } catch (error) {
