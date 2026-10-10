@@ -1,5 +1,10 @@
 import { consola } from 'consola';
-import { readBotConfig, type BotConfig } from '#server/bot/config';
+import {
+  INVALID_CANDIDATES_CHAT_MESSAGE,
+  readBotConfig,
+  readInvalidCandidatesChatId,
+  type BotConfig,
+} from '#server/bot/config';
 import { createBotRuntime } from '#server/bot/instance';
 import { startBot } from '#server/bot/start';
 import { BOT_DISABLED_MESSAGE } from '#server/utils/requiredEnv';
@@ -28,6 +33,14 @@ export default defineNitroPlugin((nitroApp) => {
   // Окружение разбирается синхронно, до всякой сети: мусор в TG_BOT_MODE обязан ронять старт
   // процесса, а не всплывать необработанным промисом посреди уже работающего приложения.
   const config = readBotConfigLoudly();
+
+  // Негодный ID группы кандидатов старт не роняет: заявки и приветствие работают и без неё
+  // (issue #463). Но выключенность обязана быть видна.
+  const invalidCandidatesChatId = readInvalidCandidatesChatId();
+
+  if (invalidCandidatesChatId !== null) {
+    log.warn(INVALID_CANDIDATES_CHAT_MESSAGE, { value: invalidCandidatesChatId });
+  }
 
   // Выключенный бот — законное состояние, но не молчаливое: строка называет последствие,
   // а не настройку (issue #153).

@@ -1,6 +1,7 @@
 import { consola } from 'consola';
 import { Bot, webhookCallback } from 'grammy';
 import type { Update } from 'grammy/types';
+import { registerCandidateChatHandlers } from '#server/bot/candidateChat';
 import type { BotConfig } from '#server/bot/config';
 import { registerDemoInviteHandlers } from '#server/bot/demoInvite';
 import { registerEmployeeTelegramHandlers } from '#server/bot/employeeTelegram';
@@ -64,6 +65,13 @@ export const registerBotHandlers = (bot: Bot): void => {
   // своего нет — уступает дальше всё, и метку тоже: водитель с плаката получает то же
   // приветствие, что и без неё (server/bot/promoTouch.ts).
   registerPromoTouchHandlers(bot);
+
+  // Переписка с кандидатом (issue #463): сообщение кандидата в личке — копией в тему его заявки,
+  // ответ сотрудника в теме группы кандидатов — кандидату. После касания метки: `/start p_<код>`
+  // от кандидата пишет касание и проходит дальше, в приветствие. Перед приветствием: сообщения
+  // кандидата ему не отвечаются, а всё, что не про кандидата, уступается дальше
+  // (server/bot/candidateChat.ts).
+  registerCandidateChatHandlers(bot);
 
   // Всё, что осталось от водительской части: приветствие с кнопкой запуска приложения —
   // ответ на любое сообщение в личном чате и на нажатие любой кнопки, в том числе кнопок

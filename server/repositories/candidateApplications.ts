@@ -2,6 +2,7 @@ import { db } from '#server/db';
 import { Prisma } from '#server/generated/prisma/client';
 import type {
   CandidateApplicationChannel,
+  CandidateApplicationStatus,
   CandidateMatch,
   CandidatePhoneSource,
   Language,
@@ -11,7 +12,8 @@ import { parkDaySql } from '#server/utils/parkDaySql';
 import { COMPLETED_TRIP_STATUS } from '#server/utils/tripStatus';
 
 /**
- * Заявки кандидатов (issue #456) и последняя поездка человека для сверки номера.
+ * Заявки кандидатов (issue #456), их темы в группе сотрудников (issue #463) и последняя
+ * поездка человека для сверки номера.
  *
  * Схема в сыром SQL указывается явно: у соединения драйверного адаптера `search_path`
  * дефолтный, и запрос без префикса молча ушёл бы в `public` (docs/decisions.md).
@@ -77,8 +79,9 @@ export const insertCandidateApplication = async (
       select: APPLICATION_SELECT,
     });
   } catch (error) {
-    // Уникальных ограничений у таблицы — первичный ключ со случайным значением и два индекса
-    // открытой заявки, поэтому нарушение уникальности здесь — это индекс открытой заявки.
+    // Уникальных ограничений у таблицы — первичный ключ со случайным значением, два индекса
+    // открытой заявки и пара темы в группе, при вставке пустая. Нарушение уникальности здесь —
+    // это индекс открытой заявки.
     if (describeDatabaseFailure(error)?.code === UNIQUE_VIOLATION) {
       return null;
     }
@@ -141,4 +144,127 @@ export const findPersonLastTripDay = async (personId: string): Promise<string | 
   `;
 
   return rows[0]?.lastDay ?? null;
+};
+
+/**
+ * Заявка в переписке с кандидатом (issue #463): куда писать кандидату и где его тема.
+ */
+export type CandidateChatApplication = {
+  id: string;
+  status: CandidateApplicationStatus;
+  telegramChatId: bigint;
+  name: string;
+  phoneE164: string;
+  writeAllowed: boolean;
+  language: Language;
+  forumChatId: bigint | null;
+  forumTopicId: number | null;
+  topicCardMessageId: number | null;
+  handledByEmployeeId: string | null;
+};
+
+const CHAT_APPLICATION_SELECT = {
+  id: true,
+  status: true,
+  telegramChatId: true,
+  name: true,
+  phoneE164: true,
+  writeAllowed: true,
+  language: true,
+  forumChatId: true,
+  forumTopicId: true,
+  topicCardMessageId: true,
+  handledByEmployeeId: true,
+} as const;
+
+export const findChatApplicationById = async (applicationId: string): Promise<CandidateChatApplication | null> =>
+  db.candidateApplication.findUnique({ where: { id: applicationId }, select: CHAT_APPLICATION_SELECT });
+
+/**
+ * Последняя по времени заявка этого Telegram при любом статусе: сообщения кандидата
+ * после «Оформлен» и «Отказ» идут в тему его последней заявки (docs/decisions.md →
+ * «Переписка с кандидатом»).
+ */
+export const findLatestApplicationByTelegram = async (
+  telegramUserId: bigint,
+): Promise<CandidateChatApplication | null> =>
+  db.candidateApplication.findFirst({
+    where: { telegramUserId },
+    orderBy: { createdAt: 'desc' },
+    select: CHAT_APPLICATION_SELECT,
+  });
+
+/** Заявка темы — по паре группы и `message_thread_id`, её держит уникальный индекс. */
+export const findApplicationByTopic = async (
+  forumChatId: bigint,
+  forumTopicId: number,
+): Promise<CandidateChatApplication | null> =>
+  db.candidateApplication.findUnique({
+    where: { forumChatId_forumTopicId: { forumChatId, forumTopicId } },
+    select: CHAT_APPLICATION_SELECT,
+  });
+
+/** То, что карточка заявки в теме показывает сотрудникам сверх заявки в переписке. */
+export type CandidateTopicCard = CandidateChatApplication & {
+  telegramName: string;
+  telegramUsername: string | null;
+  promoCode: string;
+  /** Название метки. Пусто — метки с таким кодом нет: внешнего ключа у кода нет. */
+  promoLinkName: string | null;
+  match: CandidateMatch;
+  /** `YYYY-MM-DD`. */
+  lastTripDay: string | null;
+};
+
+export const findCandidateTopicCard = async (applicationId: string): Promise<CandidateTopicCard | null> => {
+  const application = await db.candidateApplication.findUnique({
+    where: { id: applicationId },
+    select: {
+      ...CHAT_APPLICATION_SELECT,
+      telegramName: true,
+      telegramUsername: true,
+      promoCode: true,
+      match: true,
+      lastTripDay: true,
+    },
+  });
+
+  if (!application) {
+    return null;
+  }
+
+  const promoLink = await db.promoLink.findUnique({
+    where: { code: application.promoCode },
+    select: { name: true },
+  });
+
+  return {
+    ...application,
+    promoLinkName: promoLink?.name ?? null,
+    // Колонка `date`: Prisma отдаёт её полночью UTC, и день — первые десять знаков.
+    lastTripDay: application.lastTripDay === null ? null : application.lastTripDay.toISOString().slice(0, 10),
+  };
+};
+
+/**
+ * Записывает тему заявки. Только если темы ещё нет: повтор задания, заведший вторую тему,
+ * первую не перетирает.
+ */
+export const recordApplicationTopic = async (
+  applicationId: string,
+  forumChatId: bigint,
+  forumTopicId: number,
+): Promise<void> => {
+  await db.candidateApplication.updateMany({
+    where: { id: applicationId, forumTopicId: null },
+    data: { forumChatId, forumTopicId },
+  });
+};
+
+/** Записывает сообщение с карточкой заявки в теме. */
+export const recordApplicationTopicCard = async (applicationId: string, messageId: number): Promise<void> => {
+  await db.candidateApplication.update({
+    where: { id: applicationId },
+    data: { topicCardMessageId: messageId },
+  });
 };

@@ -618,6 +618,65 @@ enum CandidateMatch {
   @@schema("xb")
 }
 
+/// Кто написал сообщение переписки с кандидатом (issue #463): сам кандидат, сотрудник из темы
+/// группы или бот — автоматическое приветствие.
+enum CandidateMessageAuthor {
+  candidate
+  employee
+  bot
+
+  @@map("candidate_message_author")
+  @@schema("xb")
+}
+
+/// Вид сообщения переписки — по содержательному полю сообщения Telegram
+/// (`server/services/candidates/candidateMessageKind.ts`).
+enum CandidateMessageKind {
+  text
+  photo
+  video
+  animation
+  voice
+  audio
+  document
+  sticker
+  video_note
+  contact
+  location
+  /// Опрос, кубик, игра и прочее содержательное, чего нет в списке выше.
+  other
+
+  @@map("candidate_message_kind")
+  @@schema("xb")
+}
+
+/// Исход доставки сообщения переписки. Строка пишется `pending` до отправки и закрывается
+/// исходом после неё.
+enum CandidateMessageDelivery {
+  pending
+  delivered
+  /// Отправка была и не прошла.
+  failed
+  /// Отправки не было: бот отказался слать сам — кандидат не разрешил ему писать.
+  refused
+
+  @@map("candidate_message_delivery")
+  @@schema("xb")
+}
+
+/// Почему сообщение переписки не доставлено. Заполнена ровно у `failed` и `refused`.
+enum CandidateMessageFailure {
+  /// У заявки нет темы в группе: сообщение кандидата класть некуда.
+  no_topic
+  /// Бот не может писать кандидату: не разрешено или чат умер.
+  cannot_write
+  /// Telegram отказал по другой причине.
+  telegram_error
+
+  @@map("candidate_message_failure")
+  @@schema("xb")
+}
+
 // ---------------------------------------------------------------------------
 // Люди и учётки
 // ---------------------------------------------------------------------------
@@ -1040,6 +1099,8 @@ model Employee {
   accessLinksIssued EmployeeAccessLink[] @relation("access_link_issued_by")
   promoLinks        PromoLink[]
   hireCosts         DashboardHireCost[]
+  candidateApplicationsHandled CandidateApplication[]
+  candidateMessages CandidateMessage[]
 
   @@map("employees")
   @@schema("xb")
@@ -2990,15 +3051,66 @@ model CandidateApplication {
   /// Человек последней закрытой привязки этого Telegram: Telegram был в программе раньше.
   formerLinkPersonId String? @map("former_link_person_id") @db.Uuid
 
+  /// Группа сотрудников, в которой заведена тема заявки (issue #463).
+  forumChatId        BigInt? @map("forum_chat_id")
+  /// `message_thread_id` темы. По паре группы и темы ответ сотрудника находит заявку.
+  forumTopicId       Int?    @map("forum_topic_id")
+  /// Сообщение с карточкой заявки в теме.
+  topicCardMessageId Int?    @map("topic_card_message_id")
+  /// Кто ведёт заявку — сотрудник, ответивший кандидату первым.
+  handledByEmployeeId String? @map("handled_by_employee_id") @db.Uuid
+
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   matchedPerson    Person?      @relation("CandidateMatchedPerson", fields: [matchedPersonId], references: [id])
   matchedProfile   ParkProfile? @relation(fields: [matchedProfileId], references: [profileId])
   formerLinkPerson Person?      @relation("CandidateFormerLinkPerson", fields: [formerLinkPersonId], references: [id])
+  handledByEmployee Employee?   @relation(fields: [handledByEmployeeId], references: [id])
+  messages         CandidateMessage[]
 
   /// Список заявок в админке — по дате.
   @@index([createdAt])
+  @@unique([forumChatId, forumTopicId])
   @@map("candidate_applications")
+  @@schema("xb")
+}
+
+/// Сообщение переписки с кандидатом (issue #463): в обе стороны и приветствие бота. Пишется
+/// до отправки — админка заявок показывает разговор из базы, не спрашивая Telegram
+/// (docs/decisions.md → «Переписка с кандидатом»).
+///
+/// Повтор одного апдейта гасят частичные уникальные индексы в миграции: сообщение кандидата
+/// одно на `candidate_message_id`, сообщение сотрудника — одно на `topic_message_id`.
+model CandidateMessage {
+  id            String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  applicationId String                 @map("application_id") @db.Uuid
+  author        CandidateMessageAuthor
+  /// Заполнен ровно у `author = 'employee'` — проверкой в миграции.
+  employeeId    String?                @map("employee_id") @db.Uuid
+  kind          CandidateMessageKind
+  /// Текст или подпись медиа, как пришли.
+  text          String?
+  /// `file_id` медиа; у фото — самого крупного размера.
+  fileId        String?                @map("file_id")
+  /// Сообщение в личке кандидата: входящее у `candidate`, отправленное у `employee` и `bot`.
+  candidateMessageId Int?              @map("candidate_message_id")
+  /// Сообщение в теме: входящее у `employee`, копия у `candidate`.
+  topicMessageId     Int?              @map("topic_message_id")
+  delivery      CandidateMessageDelivery
+  /// Заполнена ровно у `failed` и `refused` — проверкой в миграции.
+  failure       CandidateMessageFailure?
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  application CandidateApplication @relation(fields: [applicationId], references: [id])
+  // Учётки сотрудников не удаляются, а выключаются; обнулить автора сообщения не дала бы проверка
+  // `candidate_messages_employee_check`, и удаление учётки с перепиской отказывается явно.
+  employee    Employee?            @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  /// Переписка заявки по времени.
+  @@index([applicationId, createdAt])
+  @@map("candidate_messages")
   @@schema("xb")
 }

@@ -1,6 +1,7 @@
 import { consola } from 'consola';
 
 import type { CandidatePhoneSource, Language } from '#server/generated/prisma/enums';
+import { enqueueCandidateTopic } from '#server/queues/candidates';
 import {
   type CandidateApplicationRow,
   findOpenApplicationByPhone,
@@ -51,6 +52,8 @@ export type CandidateApplicationRequest = {
   language: Language;
   /** Токен бота — им проверяется подпись строки контакта. */
   botToken: string;
+  /** Адрес приложения — из него ссылка на заявку в карточке темы (issue #463). */
+  appOrigin: string;
   now: Date;
 };
 
@@ -185,6 +188,18 @@ export const submitCandidateApplication = async (
       match: reconciliation.match,
       phoneSource: phone.source,
     });
+
+    // Тема в группе сотрудников, карточка и приветствие кандидату (issue #463). Постановка
+    // упала — заявка уже записана, и кандидат всё равно видит «Заявка принята»: тему менеджер
+    // не увидит, но заявка будет в админке.
+    try {
+      await enqueueCandidateTopic({ applicationId: inserted.id, appOrigin: request.appOrigin });
+    } catch (error) {
+      log.error('тема заявки кандидата не поставлена в очередь', {
+        applicationId: inserted.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
 
     return respond('accepted', inserted, request.now);
   }

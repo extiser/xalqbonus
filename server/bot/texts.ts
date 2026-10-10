@@ -89,6 +89,7 @@ export type TextKey =
   | 'application_failed_error'
   | 'application_office_title'
   | 'application_write_manager'
+  | 'candidate_greeting'
   | 'contact_not_own'
   | 'linked_new'
   | 'welcome_slide_title'
@@ -699,6 +700,14 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   application_write_manager: {
     ru: 'Написать менеджеру',
     uz: 'Menejerga yozish',
+  },
+  /**
+   * Приветствие кандидату сразу после заявки (issue #463) — первое сообщение бота в его личке.
+   * `{name}` — имя из заявки. Ответом сотрудника не считается: заявку в работу не переводит.
+   */
+  candidate_greeting: {
+    ru: 'Здравствуйте, {name}! Это Xalq Taxi. Заявку получили, менеджер напишет вам в течение дня. Вопросы можно писать сюда.',
+    uz: 'Assalomu alaykum, {name}! Bu Xalq Taxi. Arizangizni oldik, menejer kun davomida sizga yozadi. Savollaringizni shu yerga yozishingiz mumkin.',
   },
   contact_not_own: {
     ru: 'Отправьте, пожалуйста, свой номер телефона кнопкой ниже — чужой контакт мы принять не можем.',

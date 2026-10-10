@@ -5,6 +5,11 @@ import {
   createCampaignsQueue,
   createCampaignsWorker,
 } from '#server/queues/campaigns';
+import {
+  closeCandidatesQueue,
+  createCandidatesWorker,
+  getCandidatesQueue,
+} from '#server/queues/candidates';
 import { closeQueueConnection, getQueueConnection } from '#server/queues/connection';
 import { closeMailingQueue, createMailingWorker, getMailingQueue } from '#server/queues/mailing';
 import { applyMetricsSchedule, createMetricsQueue, createMetricsWorker } from '#server/queues/metrics';
@@ -17,7 +22,11 @@ import { applyOrdersSchedule, createOrdersQueue, createOrdersWorker } from '#ser
 import { applySyncSchedule, createSyncQueue, createSyncWorker } from '#server/queues/sync';
 import { failAbandonedRuns } from '#server/repositories/syncRuns';
 import { readSyncConfig, readTransactionsSyncConfig } from '#server/services/sync/config';
-import { readBotToken } from '#server/bot/config';
+import {
+  INVALID_CANDIDATES_CHAT_MESSAGE,
+  readBotToken,
+  readInvalidCandidatesChatId,
+} from '#server/bot/config';
 import {
   BOT_DISABLED_MESSAGE,
   findMissingEnv,
@@ -44,6 +53,13 @@ if (missingEnv.length > 0) {
 // выключенного бота остановил бы начисление баллов. Но выключенность обязана быть видна.
 if (readBotToken() === '') {
   log.warn(BOT_DISABLED_MESSAGE, { reason: 'TG_BOT_TOKEN пуст' });
+}
+
+// Тему заявки заводит воркер, и негодный ID группы обязан быть виден и в его логе (issue #463).
+const invalidCandidatesChatId = readInvalidCandidatesChatId();
+
+if (invalidCandidatesChatId !== null) {
+  log.warn(INVALID_CANDIDATES_CHAT_MESSAGE, { value: invalidCandidatesChatId });
 }
 
 // Отметка живого цикла: файл трогается раз в интервал, healthcheck контейнера смотрит на его
@@ -138,6 +154,27 @@ mailingWorker.on('failed', (job, error) => {
 
 mailingWorker.on('error', (error: Error) => {
   log.warn('очередь рассылок сообщила об ошибке', { error: error.message });
+});
+
+// Тема, карточка и приветствие кандидата — своя очередь: адресат не человек программы,
+// и выключатель уведомлений с окном отправки к нему не относятся (server/queues/candidates.ts).
+const candidatesQueue = getCandidatesQueue();
+const candidatesWorker = createCandidatesWorker(candidatesQueue);
+
+candidatesWorker.on('completed', (job, outcome) => {
+  log.debug('задание кандидата выполнено', { applicationId: job.data.applicationId, outcome });
+});
+
+candidatesWorker.on('failed', (job, error) => {
+  log.error('тема и приветствие кандидата не выполнены', {
+    applicationId: job?.data.applicationId,
+    attempts: job?.attemptsMade,
+    error: error.message,
+  });
+});
+
+candidatesWorker.on('error', (error: Error) => {
+  log.warn('очередь кандидатов сообщила об ошибке', { error: error.message });
 });
 
 // Просрочка заказов — третья очередь. Своя по той же причине, по которой своя у уведомлений:
@@ -261,6 +298,10 @@ const shutdown = async (signal: string): Promise<void> => {
   // `pending` с заданиями в Redis, и новый процесс продолжит с них.
   await mailingWorker.close();
   await closeMailingQueue();
+  // Кандидаты — по той же причине: оборванная отправка приветствия — сообщение, про которое
+  // неизвестно, ушло оно или нет.
+  await candidatesWorker.close();
+  await closeCandidatesQueue();
   await closeQueueConnection();
   process.exit(0);
 };

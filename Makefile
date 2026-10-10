@@ -12,6 +12,7 @@ COMPOSE_COPY = docker compose -f docker/compose.local.yml -f docker/compose.copy
         employee-owner prod-employee-owner \
         import-legacy-dump \
         copy-restore copy-up copy-psql copy-status metrics-recompute report-print \
+        candidate-topic \
         sync-orders sync-registry sync-enqueue sync-state fleet-history fleet-history-status \
         sync-transactions sync-transactions-recheck fleet-transactions fleet-transactions-status fleet-transactions-check \
         prod-up prod-down prod-restart prod-logs prod-ps prod-shell prod-psql prod-invariants prod-migrate prod-migrate-rolled-back \
@@ -279,6 +280,15 @@ sync-registry: ## Разовый прогон синхронизации про�
 sync-enqueue: ## Поставить задачу синхронизации в очередь воркера. make sync-enqueue kind=transactions_recheck
 	@test -n "$(kind)" || { echo "укажите вид: make sync-enqueue kind=transactions_recheck"; exit 1; }
 	$(COMPOSE) exec -T app npx tsx scripts/sync-enqueue.ts "$(kind)"
+
+# Тема, карточка и приветствие кандидата для уже поданной заявки (issue #463) — в очередь
+# воркера `candidates`. Для заявок, поданных до того, как задана группа сотрудников, и для
+# локальной проверки: Mini App локально не открывается, и заявка заводится строкой через
+# `make psql`. Прежнее выполненное задание заявки убирается, ждущее — не трогается. Сделанные
+# шаги задание пропускает само. ORIGIN — адрес приложения для ссылки на заявку в карточке.
+candidate-topic: ## Тема, карточка и приветствие для поданной заявки. make candidate-topic APPLICATION=<uuid> [ORIGIN=http://localhost:3003]
+	@test -n "$(APPLICATION)" || { echo "укажите заявку: make candidate-topic APPLICATION=<uuid>"; exit 1; }
+	$(COMPOSE) exec -T app npx tsx scripts/candidate-topic.ts "$(APPLICATION)" "$(or $(ORIGIN),http://localhost:3003)"
 
 # Что синхронизация думает о себе: отметки и последние прогоны со счётчиками.
 sync-state: ## Показать отметки синхронизации и последние прогоны
