@@ -100,6 +100,13 @@ const stateParts = (row: PersonRewardRow, language: Language): { word: string; h
         word: plainText('reward_word_expired', language),
         hint: row.expiredAt ? formatCalendarDate(row.expiredAt) : '',
       };
+    // Отменённая выглядит как сгоревшая (issue #270): слово своё, уточнение — дата отмены,
+    // а строки-причины у неё нет.
+    case 'cancelled':
+      return {
+        word: plainText('reward_state_cancelled', language),
+        hint: row.cancelledAt ? formatCalendarDate(row.cancelledAt) : '',
+      };
   }
 };
 
@@ -128,7 +135,7 @@ export const describeMemberReward = (row: PersonRewardRow, language: Language): 
       : `${state.word} · ${state.hint}`,
     reasonText: expired ? plainText('reward_expired_reason', language) : null,
     reasonTextFull: expired ? plainText('reward_expired_reason_full', language) : null,
-    // Код выданной и сгоревшей освобождён и может принадлежать чужой награде.
+    // Код выданной, сгоревшей и отменённой освобождён и может принадлежать чужой награде.
     code: awaiting ? row.code : null,
     office: row.office === null ? null : toMemberOffice(row.office),
     photoPath: product ? row.photoPath : null,

@@ -1,9 +1,10 @@
-import { listDriverRewards, type DriverRewardRow } from '#server/repositories/rewards';
+import { findDriverReward, listDriverRewards, type DriverRewardRow } from '#server/repositories/rewards';
 import type { DriverReward, DriverRewardsResponse } from '#shared/types/rewards';
 
 /**
- * Награды водителя в карточке сотрудника (issue #175) — только просмотр: выдача идёт по коду
+ * Награды водителя в карточке сотрудника (issue #175). Выдачи отсюда нет: она идёт по коду
  * у стойки, и отметка «выдал без кода» из карточки сняла бы след, ради которого код заведён.
+ * Есть только отмена ждущей (`cancelReward`, issue #270).
  */
 
 /**
@@ -28,6 +29,8 @@ const toDriverReward = (row: DriverRewardRow): DriverReward => ({
   expiredAt: row.expiredAt?.toISOString() ?? null,
   claimedAt: row.claimedAt?.toISOString() ?? null,
   claimMode: row.claimMode,
+  cancelledAt: row.cancelledAt?.toISOString() ?? null,
+  cancelledByName: row.cancelledByName,
   source: row.source,
   campaignTitle: row.campaignTitle,
   sourceNote: row.sourceNote,
@@ -39,4 +42,11 @@ export const readDriverRewards = async (personId: string): Promise<DriverRewards
   const rows = await listDriverRewards(personId, DRIVER_REWARDS_LIMIT);
 
   return { rewards: rows.map(toDriverReward) };
+};
+
+/** Одна награда водителя в том же виде, что в списке. `null` — нет её или она чужая. */
+export const readDriverReward = async (personId: string, rewardId: string): Promise<DriverReward | null> => {
+  const row = await findDriverReward(personId, rewardId);
+
+  return row === null ? null : toDriverReward(row);
 };

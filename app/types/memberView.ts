@@ -56,7 +56,7 @@ export interface MemberOrderRowView {
   actionLabel?: string;
 }
 
-export type MemberRewardStatus = 'awaiting' | 'credited' | 'issued' | 'expired';
+export type MemberRewardStatus = 'awaiting' | 'credited' | 'issued' | 'expired' | 'cancelled';
 
 /** Вид награды: баллы на баланс, товар каталога или произвольная. Баллы экрана награды не открывают. */
 export type MemberRewardKind = 'points' | 'product' | 'custom';

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { DASH, formatDateTime, formatSignedNumber } from '~/utils/format';
-import { stockMovementKindLabel } from '~/utils/labels';
+import { stockMovementLabel } from '~/utils/labels';
 import type { StockMovementEntry } from '#shared/types/catalog';
 
 /**
@@ -22,7 +22,7 @@ defineProps<{
   <div class="border-t border-slate-200 py-3 first:border-t-0">
     <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
       <span class="text-sm font-medium text-slate-900">{{ movement.productName }}</span>
-      <span class="text-sm text-slate-600">{{ stockMovementKindLabel(movement.kind) }}</span>
+      <span class="text-sm text-slate-600">{{ stockMovementLabel(movement) }}</span>
       <span class="font-mono text-sm text-slate-900">
         свободно {{ formatSignedNumber(movement.deltaOnHand) }} · резерв
         {{ formatSignedNumber(movement.deltaReserved) }}

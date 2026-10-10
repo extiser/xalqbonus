@@ -11,7 +11,7 @@ import type { OfficeRewardEvent } from '#shared/types/catalog';
  * без товара сломали бы сверку остатка с журналом. Поэтому лента собирается на чтении из двух
  * источников, а не записью в журнал.
  *
- * Второй источник — произвольные награды (`kind = 'custom'`): вручена, выдана, сгорела.
+ * Второй источник — произвольные награды (`kind = 'custom'`): вручена, выдана, сгорела, отменена.
  * Дублирования по построению нет: у награды-товара каждое событие уже описано движением
  * (`reward_reserve`, `reward_issue`, `reward_release`), у баллов нет офиса, а у произвольной
  * движения не бывает — на складе ничего не лежало.
@@ -36,6 +36,11 @@ export type OfficeFeedRow = {
   rewardId: string | null;
   /** Название награды — у видов движения награды и у событий наград. */
   rewardTitle: string | null;
+  /**
+   * Движение вернуло штуку отменённой награды (issue #270): `reward_release` пишут и сгорание,
+   * и отмена, а читать их надо по-разному. Пусто у событий наград.
+   */
+  rewardCancelled: boolean | null;
   /** Акция — у события вручения награды акции: вручила она, а не сотрудник. */
   campaignTitle: string | null;
   /** Кто сделал. Пусто у движения водителя и у всего, что сделал воркер. */
@@ -75,6 +80,7 @@ export const listOfficeFeed = async (
            NULL::text                AS "rewardEvent",
            reward."id"               AS "rewardId",
            reward."title"            AS "rewardTitle",
+           (movement."kind" = 'reward_release' AND reward."status" = 'cancelled') AS "rewardCancelled",
            NULL::text                AS "campaignTitle",
            employee."full_name"      AS "employeeName",
            movement."note",
@@ -98,6 +104,7 @@ export const listOfficeFeed = async (
            event."name",
            reward."id",
            reward."title",
+           NULL::boolean,
            CASE WHEN event."name" = 'granted' THEN campaign."title" END,
            employee."full_name",
            CASE WHEN event."name" = 'granted' THEN reward."source_note" END,
@@ -106,7 +113,8 @@ export const listOfficeFeed = async (
      CROSS JOIN LATERAL (
            VALUES ('granted', reward."created_at", reward."granted_by_employee_id"),
                   ('issued',  reward."issued_at",  reward."issued_by_employee_id"),
-                  ('expired', reward."expired_at", NULL::uuid)
+                  ('expired', reward."expired_at", NULL::uuid),
+                  ('cancelled', reward."cancelled_at", reward."cancelled_by_employee_id")
            ) AS event("name", "at", "employee_id")
       LEFT JOIN xb.campaigns AS campaign ON campaign."id" = reward."campaign_id"
       LEFT JOIN xb.employees AS employee ON employee."id" = event."employee_id"
@@ -127,7 +135,7 @@ export const countOfficeFeed = async (
     SELECT (SELECT count(*)
               FROM xb.stock_movements
              WHERE "office_id" = ${officeId}::uuid)
-         + (SELECT count(*) + count("issued_at") + count("expired_at")
+         + (SELECT count(*) + count("issued_at") + count("expired_at") + count("cancelled_at")
               FROM xb.rewards
              WHERE "office_id" = ${officeId}::uuid AND "kind" = 'custom') AS "total"
   `;

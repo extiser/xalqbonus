@@ -61,6 +61,7 @@ const toEntry = (row: OfficeFeedRow): OfficeFeedEntry => {
       deltaReserved: row.deltaReserved,
       orderNumber: row.orderNumber,
       rewardTitle: row.rewardTitle,
+      rewardCancelled: row.rewardCancelled ?? false,
       employeeName: row.employeeName,
       note: row.note,
       createdAt: row.createdAt.toISOString(),

@@ -347,6 +347,8 @@ enum RewardStatus {
   issued
   /// Не забрали за срок — сгорела.
   expired
+  /// Отменена сотрудником, пока ждала (issue #270): в офисе или в приложении.
+  cancelled
 
   @@map("reward_status")
   @@schema("xb")
@@ -964,6 +966,7 @@ model Employee {
   campaigns       Campaign[]
   rewardsIssued   Reward[]         @relation("reward_issued_by")
   rewardsGranted  Reward[]         @relation("reward_granted_by")
+  rewardsCancelled Reward[]        @relation("reward_cancelled_by")
   giftGrants      GiftGrant[]
   accessLinks       EmployeeAccessLink[] @relation("access_link_employee")
   accessLinksIssued EmployeeAccessLink[] @relation("access_link_issued_by")
@@ -2402,6 +2405,9 @@ model Reward {
   issuedAt           DateTime? @map("issued_at") @db.Timestamptz(6)
   issuedByEmployeeId String?   @map("issued_by_employee_id") @db.Uuid
   expiredAt          DateTime? @map("expired_at") @db.Timestamptz(6)
+  /// Кто и когда отменил ждущую — только у `cancelled` (issue #270).
+  cancelledAt            DateTime? @map("cancelled_at") @db.Timestamptz(6)
+  cancelledByEmployeeId  String?   @map("cancelled_by_employee_id") @db.Uuid
 
   source     RewardSource
   /// Акция, если источник `campaign`.
@@ -2444,6 +2450,7 @@ model Reward {
   office           Office?   @relation(fields: [officeId], references: [id], onDelete: Restrict)
   campaign         Campaign? @relation(fields: [campaignId], references: [id], onDelete: Restrict)
   issuedByEmployee Employee? @relation("reward_issued_by", fields: [issuedByEmployeeId], references: [id])
+  cancelledByEmployee Employee? @relation("reward_cancelled_by", fields: [cancelledByEmployeeId], references: [id])
   grantedByEmployee Employee? @relation("reward_granted_by", fields: [grantedByEmployeeId], references: [id])
   giftGrant         GiftGrant? @relation(fields: [giftGrantId], references: [id], onDelete: Restrict)
 
