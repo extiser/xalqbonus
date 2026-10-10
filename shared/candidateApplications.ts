@@ -20,6 +20,13 @@ export const CANDIDATE_NAME_MAX_LENGTH = 60;
  */
 export const FORMER_DRIVER_DAYS = 90;
 
+/**
+ * Сколько сверка номера ждёт поиска в Fleet API, мс. Заявка ждёт сверку целиком, а клиент Fleet
+ * повторяет запрос до пяти раз с долгим таймаутом: без срока кандидат ждал бы минутами, а экран
+ * старого телефона показал бы сбой при уже записанной заявке (issue #460).
+ */
+export const CANDIDATE_LOOKUP_BUDGET_MS = 8_000;
+
 export const CANDIDATE_APPLICATION_STATUS_LABELS: Readonly<Record<CandidateApplicationStatus, string>> = {
   new: 'Новая',
   in_progress: 'В работе',

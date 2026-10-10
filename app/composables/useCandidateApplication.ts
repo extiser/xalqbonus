@@ -36,6 +36,12 @@ type ApplicationScreenState = MiniAppApplicationScreen | MiniAppApplicationSentS
 /** Версия Bot API, с которой есть окна номера и «Разрешить боту писать». */
 const CONTACT_WINDOWS_VERSION = '6.9';
 
+/**
+ * Сколько ждать ответа ручки заявки, мс. Сверка номера ждёт Fleet API не дольше своего срока
+ * (`CANDIDATE_LOOKUP_BUDGET_MS`), и ответа дольше этого нет — истёк таймаут, сбой как у сети.
+ */
+const SEND_TIMEOUT_MS = 20_000;
+
 /** Строка с номером частями: номер экран ставит белым. */
 const splitLead = (template: string, phone: string): { before: string; phone: string; after: string } => {
   const [before = '', after = ''] = template.split('{phone}');
@@ -125,6 +131,7 @@ export const useCandidateApplication = (dependencies: CandidateApplicationDepend
         method: 'POST',
         headers: { [INIT_DATA_HEADER]: dependencies.initData() },
         body,
+        timeout: SEND_TIMEOUT_MS,
       });
 
       application.value = {
