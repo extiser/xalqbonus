@@ -16,7 +16,7 @@ export type { PromoMedium };
 type Texts<Code extends string> = Readonly<Record<Code, Readonly<Record<WebLanguage, string>>>>;
 
 /** Носители в порядке пилюль формы. */
-export const PROMO_MEDIUMS: readonly PromoMedium[] = ['poster', 'card', 'leaflet', 'video', 'sms', 'other'];
+export const PROMO_MEDIUMS: readonly PromoMedium[] = ['poster', 'card', 'leaflet', 'video', 'sms', 'telegram_ad', 'other'];
 
 export const PROMO_MEDIUM_LABELS: Readonly<Record<PromoMedium, string>> = {
   poster: 'Плакат',
@@ -24,6 +24,7 @@ export const PROMO_MEDIUM_LABELS: Readonly<Record<PromoMedium, string>> = {
   leaflet: 'Листовка',
   video: 'Ролик',
   sms: 'СМС',
+  telegram_ad: 'Реклама в Telegram',
   other: 'Другое',
 };
 

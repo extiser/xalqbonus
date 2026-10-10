@@ -1,3 +1,4 @@
+import type { PromoMedium } from '#server/generated/prisma/enums';
 import { deskDriverName } from '#server/repositories/deskDriver';
 import { findPromoLink, listPromoDays, listPromoFunnels, listPromoJoined } from '#server/repositories/promo';
 import { readPromoLinkUrl } from '#server/services/promo/promoLinkUrl';
@@ -7,12 +8,12 @@ import type { PromoCard } from '#shared/types/promo';
  * Карточка метки (issue #380): метка, ссылка, воронка за всё время, переходы по дням
  * и вступившие по метке. `null` — метки с таким кодом нет.
  *
- * `now` — граница последних суток графика, `readLink` — откуда ссылка в бота. Тест задаёт оба:
+ * `now` — граница последних суток графика, `readLink` — откуда ссылка метки. Тест задаёт оба:
  * ряд дней не должен зависеть от того, когда тест запущен, а имя бота спрашивается у Telegram.
  */
 export type ReadPromoCardOptions = {
   now?: Date;
-  readLink?: (code: string) => Promise<string>;
+  readLink?: (code: string, medium: PromoMedium) => Promise<string>;
 };
 
 export const readPromoCard = async (
@@ -26,7 +27,7 @@ export const readPromoCard = async (
   }
 
   const [link, funnels, days, joined] = await Promise.all([
-    readLink(promo.code),
+    readLink(promo.code, promo.medium),
     listPromoFunnels(promo.code),
     listPromoDays(promo.code, now),
     listPromoJoined(promo.code),

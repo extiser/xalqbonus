@@ -1,4 +1,5 @@
 import { db } from '#server/db';
+import type { PromoTouchChannel } from '#server/generated/prisma/enums';
 
 /**
  * Чтение и уборка касаний промо-меток (issue #377), метки и привязки воронки (issue #380).
@@ -21,6 +22,8 @@ export type TestPromoTouch = {
   telegramChatId: bigint;
   personId: string | null;
   wasParticipant: boolean;
+  channel: PromoTouchChannel;
+  launchedAt: Date | null;
 };
 
 /** Касания этого Telegram в порядке записи. */
@@ -36,6 +39,8 @@ export const readTestPromoTouches = async (telegramUserId: bigint): Promise<Test
       telegramChatId: true,
       personId: true,
       wasParticipant: true,
+      channel: true,
+      launchedAt: true,
     },
   });
 };

@@ -151,6 +151,7 @@ const createLink = async (values: PromoFormValues): Promise<void> => {
         :key="formKey"
         mode="create"
         :link="fresh?.link ?? null"
+        :app-link="fresh?.appLink ?? null"
         :code="fresh?.code ?? null"
         :field-errors="fieldErrors"
         :form-error="formError"

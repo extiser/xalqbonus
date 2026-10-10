@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, ref, useId, watch } from 'vue';
+import { computed, nextTick, ref, useId, watch } from 'vue';
 import { PhWarningCircle } from '@phosphor-icons/vue';
 import { PROMO_MEDIUM_LABELS, PROMO_MEDIUMS, type PromoField, type PromoMedium } from '#shared/promo';
 
@@ -33,14 +33,16 @@ const props = withDefaults(
     mode: PromoFormMode;
     initialName?: string;
     initialPlacement?: string;
-    /** Ссылка с выданным кодом — у заведения. */
+    /** Ссылка с выданным кодом в чат бота — у заведения. */
     link?: string | null;
+    /** Та же ссылка в Mini App — её показывает носитель «Реклама в Telegram». */
+    appLink?: string | null;
     code?: string | null;
     fieldErrors: Partial<Record<PromoField, string>>;
     formError: string | null;
     submitting: boolean;
   }>(),
-  { initialName: '', initialPlacement: '', link: null, code: null },
+  { initialName: '', initialPlacement: '', link: null, appLink: null, code: null },
 );
 
 const emit = defineEmits<{
@@ -52,6 +54,13 @@ const emit = defineEmits<{
 
 const name = ref(props.initialName);
 const medium = ref<PromoMedium | null>(null);
+
+/**
+ * Ссылка в поле «Ссылка» — по выбранному носителю: реклама в Telegram ведёт сразу в Mini App,
+ * остальные — в чат бота (issue #456). Код один, обе ссылки пришли с ним, и смена носителя
+ * кода не перезапрашивает.
+ */
+const shownLink = computed(() => (medium.value === 'telegram_ad' ? props.appLink : props.link));
 const placement = ref(props.initialPlacement);
 
 const mediumErrorId = useId();
@@ -170,7 +179,7 @@ const PILL_CLASSES =
       <p class="m-0 mb-2 font-manrope text-[13px] font-semibold text-web-title">Ссылка</p>
       <MoleculesWebLinkField
         size="form"
-        :link="link"
+        :link="shownLink"
         :code="code"
         refreshable
         :error="fieldErrors.code ?? null"

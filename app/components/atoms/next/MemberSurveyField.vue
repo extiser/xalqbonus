@@ -8,14 +8,22 @@ import { onMounted, ref } from 'vue';
  * появляется на месте строки «Свой вариант», сразу в фокусе и с гранатовым контуром, подпись
  * сверху. `text` — свободный ответ (`question-text.html`): серое в покое, гранатовый контур
  * в фокусе, выше ростом.
+ *
+ * `line` — однострочное поле с подписью внутри плашки, без счётчика: «Имя» в заявке кандидата
+ * (`_reference/design/application/01-form.html`, `.field`). Плашка та же, что у `text`, — макет
+ * заявки взял её с поля опроса; предел длины задаёт экран.
  */
-type FieldVariant = 'own' | 'text';
+type FieldVariant = 'own' | 'text' | 'line';
 
 const props = defineProps<{
   variant: FieldVariant;
   placeholder: string;
-  /** Подпись над полем — только у `own`. */
+  /** Подпись над полем — у `own` и `line`. */
   label?: string;
+  /** Предел знаков у `line`. */
+  maxlength?: number;
+  /** Подсказка браузеру для автозаполнения у `line`. */
+  autocomplete?: string;
 }>();
 
 const text = defineModel<string>({ required: true });
@@ -35,6 +43,21 @@ onMounted(() => {
 
 <template>
   <label
+    v-if="variant === 'line'"
+    class="flex flex-col gap-1.5 rounded-[16px] border border-white/8 bg-xb-button-grey px-4 py-3 transition-[background-color,border-color] duration-150 focus-within:border-xb-garnet focus-within:bg-[rgba(232,54,93,0.10)]"
+  >
+    <span class="text-[12px] font-semibold tracking-[0.3px] text-xb-grey">{{ label }}</span>
+    <input
+      v-model="text"
+      type="text"
+      :maxlength="maxlength"
+      :autocomplete="autocomplete"
+      :placeholder="placeholder"
+      class="h-6 w-full border-0 bg-transparent p-0 font-manrope text-[16px] font-medium text-xb-text outline-none placeholder:font-normal placeholder:text-xb-muted"
+    />
+  </label>
+  <label
+    v-else
     class="flex flex-col gap-2 rounded-[16px] border transition-[background-color,border-color] duration-150"
     :class="
       variant === 'own'

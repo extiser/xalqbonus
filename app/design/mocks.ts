@@ -1658,6 +1658,131 @@ export function registrationOutcomeMock(scene: RegistrationOutcomeScene, languag
   return { ...base, ...offices, kind: 'office' as const };
 }
 
+// ------------------------------------------------------------- заявка кандидата (issue #456)
+
+/** Тексты экранов заявки — словари `T` макетов `application/*.html`, как в `server/bot/texts.ts`. */
+const APPLICATION_TEXTS = {
+  ru: {
+    title: 'Работа водителем в Xalq\u00A0Taxi',
+    lead: 'Оставьте имя и номер. Менеджер парка напишет вам в Telegram в течение дня.',
+    nameLabel: 'Имя',
+    namePlaceholder: 'Как к вам обращаться',
+    phoneLabel: 'Номер телефона',
+    ask: 'Telegram попросит номер и разрешение писать вам. Нажмите «Поделиться» и «Разрешить».',
+    declined: 'Без номера мы не сможем отправить заявку. По\u00A0этому номеру с вами свяжется менеджер.',
+    send: 'Отправить заявку',
+    sending: 'Отправляем заявку…',
+    termsCommission: 'комиссия 3 %*',
+    termsCommissionNote: 'первые 4 недели',
+    termsBonus: '300 баллов',
+    termsBonusNote: 'за первые 5 поездок',
+    termsLegend: '* для водителей, не работавших в Xalq Taxi',
+    accepted: 'Азиз, заявка принята',
+    repeat: 'Азиз, заявка уже отправлена',
+    leadWrite: ['Менеджер парка напишет вам в Telegram в\u00A0течение дня на номер ', '.'] as const,
+    leadCall: ['Менеджер парка позвонит вам в\u00A0течение дня на номер ', '.'] as const,
+    repeatLeadWrite: ['Вы отправили заявку 8\u00A0октября. Менеджер парка напишет вам в Telegram на номер ', '.'] as const,
+    repeatLeadCall: ['Вы отправили заявку 8\u00A0октября. Менеджер парка позвонит вам на номер ', '.'] as const,
+    failedTitle: 'Не получилось отправить заявку',
+    failedLead: 'Проверьте интернет и отправьте заявку ещё\u00A0раз. Имя и номер вводить заново не\u00A0нужно.',
+    failedSend: 'Отправить заявку ещё раз',
+    failedError: 'Заявка не отправлена. Попробуйте ещё раз.',
+    officeTitle: 'Офис Xalq Taxi',
+    office: 'Офис',
+    hours: 'Круглосуточно',
+    map: 'Открыть в Яндекс Картах',
+    write: 'Написать менеджеру',
+  },
+  uz: {
+    title: 'Xalq Taxi’da haydovchi bo‘lib ishlash',
+    lead: 'Ismingiz va raqamingizni qoldiring. Park menejeri bir kun ichida Telegram’da yozadi.',
+    nameLabel: 'Ism',
+    namePlaceholder: 'Sizga qanday murojaat qilaylik',
+    phoneLabel: 'Telefon raqami',
+    ask: 'Telegram raqamingizni va sizga yozishga ruxsat so‘raydi. «Ulashish» va «Ruxsat berish»ni bosing.',
+    declined: 'Raqamsiz arizani yubora olmaymiz. Menejer siz bilan shu raqam orqali bog‘lanadi.',
+    send: 'Ariza yuborish',
+    sending: 'Ariza yuborilmoqda…',
+    termsCommission: 'komissiya 3 %*',
+    termsCommissionNote: 'dastlabki 4 hafta',
+    termsBonus: '300 ball',
+    termsBonusNote: 'dastlabki 5 safar uchun',
+    termsLegend: '* Xalq Taxi’da ishlamagan haydovchilar uchun',
+    accepted: 'Азиз, arizangiz qabul qilindi',
+    repeat: 'Азиз, arizangiz allaqachon yuborilgan',
+    leadWrite: ['Park menejeri bir kun ichida ', ' raqamingizga Telegram’da yozadi.'] as const,
+    leadCall: ['Park menejeri bir kun ichida ', ' raqamingizga qo‘ng‘iroq qiladi.'] as const,
+    repeatLeadWrite: ['Siz arizani 8-oktabrda yuborgansiz. Park menejeri ', ' raqamingizga Telegram’da yozadi.'] as const,
+    repeatLeadCall: ['Siz arizani 8-oktabrda yuborgansiz. Park menejeri ', ' raqamingizga qo‘ng‘iroq qiladi.'] as const,
+    failedTitle: 'Arizani yuborib bo‘lmadi',
+    failedLead: 'Internetni tekshiring va arizani qayta yuboring. Ism va raqamni qayta kiritish shart emas.',
+    failedSend: 'Arizani qayta yuborish',
+    failedError: 'Ariza yuborilmadi. Qayta urinib ko‘ring.',
+    officeTitle: 'Xalq Taxi ofisi',
+    office: 'Ofis',
+    hours: 'Kecha-kunduz',
+    map: 'Yandex Kartada ochish',
+    write: 'Menejerga yozish',
+  },
+} satisfies Record<MemberLanguage, unknown>;
+
+/** Номер из макетов. */
+const APPLICATION_PHONE = '+998 90 123-45-67';
+
+/** Экран заявки: тексты на языке экрана. */
+export function applicationFormMock(language: MemberLanguage) {
+  return { texts: APPLICATION_TEXTS[language] };
+}
+
+export type ApplicationOutcomeScene = 'accepted' | 'acceptedCall' | 'repeat' | 'repeatCall' | 'failed';
+
+/** Исход заявки: офис у парка один — Кадышева, как в макетах. */
+export function applicationOutcomeMock(scene: ApplicationOutcomeScene, language: MemberLanguage) {
+  const texts = APPLICATION_TEXTS[language];
+  const shared = {
+    officeTitle: texts.officeTitle,
+    offices: [
+      {
+        label: texts.office,
+        name: 'Кадышева',
+        address: 'улица Авиасозлар, 9',
+        hours: texts.hours,
+        phone: '+998 99 795-66-42',
+        mapUrl: MAP_URL,
+      },
+    ],
+    mapLabel: texts.map,
+    writeManager: texts.write,
+  };
+
+  if (scene === 'failed') {
+    return {
+      ...shared,
+      kind: 'failed' as const,
+      title: texts.failedTitle,
+      lead: { before: texts.failedLead, phone: '', after: '' },
+      send: texts.failedSend,
+      error: texts.failedError,
+      sending: texts.sending,
+    };
+  }
+
+  const lead: readonly [string, string] = {
+    accepted: texts.leadWrite,
+    acceptedCall: texts.leadCall,
+    repeat: texts.repeatLeadWrite,
+    repeatCall: texts.repeatLeadCall,
+  }[scene];
+  const [before, after] = lead;
+
+  return {
+    ...shared,
+    kind: scene === 'accepted' || scene === 'acceptedCall' ? ('accepted' as const) : ('repeat' as const),
+    title: scene === 'accepted' || scene === 'acceptedCall' ? texts.accepted : texts.repeat,
+    lead: { before, phone: APPLICATION_PHONE, after },
+  };
+}
+
 // --------------------------------------------------------------------------- каталог
 
 /** Баланс в шапке каталога — состояние снимка макетов: 2 450. */

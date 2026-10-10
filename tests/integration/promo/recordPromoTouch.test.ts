@@ -1,6 +1,7 @@
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
-import { recordPromoTouch } from '#server/services/promo/recordPromoTouch';
+import { recordMiniAppPromoTouch, recordPromoTouch } from '#server/services/promo/recordPromoTouch';
+import type { InitDataUser } from '#server/utils/telegramInitData';
 import { cleanupTestData, createTestPerson, disconnectDatabase } from '../support/database';
 import {
   cleanupTestEmployees,
@@ -12,20 +13,21 @@ import {
 import { cleanupTestPromoTouches, readTestPromoTouches } from '../support/promo';
 
 /**
- * Запись перехода по промо-метке (issue #377).
+ * Запись перехода по промо-метке (issue #377) и перехода из Mini App (issue #456).
  *
  * Покрыт сырой запрос вставки — третье исключение docs/infra.md → «Тесты»: человек и признак
  * участника определяются в самом `INSERT`, и расхождение со схемой `telegram_links` typecheck
- * не поймает. Проверяется соответствие схеме и форма строки, через сервис.
+ * не поймает. Проверяется соответствие схеме и форма строки, через сервис. У касания из Mini App —
+ * ещё и `ON CONFLICT` по частичному индексу: строка одна на запуск приложения.
  */
 
 const CODE = 'p_poster1';
 
-describe('запись перехода по промо-метке', () => {
-  afterAll(async () => {
-    await disconnectDatabase();
-  });
+afterAll(async () => {
+  await disconnectDatabase();
+});
 
+describe('запись перехода по промо-метке', () => {
   afterEach(async () => {
     await cleanupTestPromoTouches();
     await cleanupTestEmployees();
@@ -45,6 +47,8 @@ describe('запись перехода по промо-метке', () => {
         telegramChatId: telegramUserId,
         personId: null,
         wasParticipant: false,
+        channel: 'bot',
+        launchedAt: null,
       },
     ]);
   });
@@ -105,5 +109,77 @@ describe('запись перехода по промо-метке', () => {
     await recordPromoTouch({ code: CODE, telegramUserId, telegramChatId: telegramUserId });
 
     expect(await readTestPromoTouches(telegramUserId)).toHaveLength(2);
+  });
+});
+
+/** Тот, кто открыл приложение, — как его отдаёт проверенная `initData`. */
+const launchUser = (telegramUserId: bigint): InitDataUser => ({
+  id: telegramUserId,
+  firstName: 'Азиз',
+  lastName: '',
+  username: '',
+  languageCode: 'ru',
+  allowsWriteToPrivateMessages: false,
+});
+
+describe('запись перехода по промо-метке из Mini App', () => {
+  const LAUNCH = new Date('2026-10-10T09:00:00.000Z');
+
+  afterEach(async () => {
+    await cleanupTestPromoTouches();
+    await cleanupTestEmployees();
+    await cleanupTestData();
+  });
+
+  it('повтор того же запуска строки не добавляет', async () => {
+    const telegramUserId = nextTestTelegramUserId();
+    const launch = { user: launchUser(telegramUserId), startParam: CODE, authDate: LAUNCH };
+
+    await recordMiniAppPromoTouch(launch);
+    await recordMiniAppPromoTouch(launch);
+
+    expect(await readTestPromoTouches(telegramUserId)).toEqual([
+      {
+        code: CODE,
+        telegramUserId,
+        telegramChatId: telegramUserId,
+        personId: null,
+        wasParticipant: false,
+        channel: 'miniapp',
+        launchedAt: LAUNCH,
+      },
+    ]);
+  });
+
+  it('другой запуск — своя строка', async () => {
+    const telegramUserId = nextTestTelegramUserId();
+    const user = launchUser(telegramUserId);
+
+    await recordMiniAppPromoTouch({ user, startParam: CODE, authDate: LAUNCH });
+    await recordMiniAppPromoTouch({ user, startParam: CODE, authDate: new Date(LAUNCH.getTime() + 60_000) });
+
+    expect(await readTestPromoTouches(telegramUserId)).toHaveLength(2);
+  });
+
+  it('участник — с человеком живой привязки', async () => {
+    const telegramUserId = nextTestTelegramUserId();
+    const driver = await createTestPerson({ inProgram: true });
+
+    await linkTestDriver(driver.personId, telegramUserId, telegramUserId);
+
+    await recordMiniAppPromoTouch({ user: launchUser(telegramUserId), startParam: CODE, authDate: LAUNCH });
+
+    expect(await readTestPromoTouches(telegramUserId)).toMatchObject([
+      { personId: driver.personId, wasParticipant: true, channel: 'miniapp' },
+    ]);
+  });
+
+  it('без метки в ссылке — ничего', async () => {
+    const telegramUserId = nextTestTelegramUserId();
+
+    await recordMiniAppPromoTouch({ user: launchUser(telegramUserId), startParam: null, authDate: LAUNCH });
+    await recordMiniAppPromoTouch({ user: launchUser(telegramUserId), startParam: 'survey_1', authDate: LAUNCH });
+
+    expect(await readTestPromoTouches(telegramUserId)).toEqual([]);
   });
 });

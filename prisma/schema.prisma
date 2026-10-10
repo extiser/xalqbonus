@@ -548,9 +548,73 @@ enum PromoMedium {
   leaflet
   video
   sms
+  /// Реклама в Telegram (issue #456): ссылка метки открывает Mini App, `?startapp=<код>`,
+  /// а не чат бота.
+  telegram_ad
   other
 
   @@map("promo_medium")
+  @@schema("xb")
+}
+
+/// Откуда пришло касание метки (issue #456): `/start` в чате бота или запуск Mini App по ссылке
+/// `?startapp=`.
+enum PromoTouchChannel {
+  bot
+  miniapp
+
+  @@map("promo_touch_channel")
+  @@schema("xb")
+}
+
+/// Состояние заявки кандидата (issue #456). Открытая — `new` и `in_progress`; `hired`
+/// и `rejected` ставит админка заявок. Подписи — `shared/candidateApplications.ts`.
+enum CandidateApplicationStatus {
+  new
+  in_progress
+  hired
+  rejected
+
+  @@map("candidate_application_status")
+  @@schema("xb")
+}
+
+/// Где подана заявка: в Mini App или в чате бота.
+enum CandidateApplicationChannel {
+  miniapp
+  bot
+
+  @@map("candidate_application_channel")
+  @@schema("xb")
+}
+
+/// Откуда номер заявки: подписанная строка `requestContact` или ввод руками на Telegram,
+/// где `requestContact` нет. Введённый руками не подтверждён ничем.
+enum CandidatePhoneSource {
+  telegram_contact
+  manual
+
+  @@map("candidate_phone_source")
+  @@schema("xb")
+}
+
+/// Итог сверки номера заявки с реестром парка (issue #456). Заявку не останавливает ни один:
+/// решает менеджер (docs/decisions.md → «Заявка кандидата»).
+enum CandidateMatch {
+  /// Профилей нет, и Fleet API номера не знает.
+  not_in_park
+  /// Профилей нет, а Fleet API номер знает: в реестр его завести не вышло.
+  not_in_registry
+  /// Последние сутки с поездкой — не дальше `FORMER_DRIVER_DAYS` от сегодняшних.
+  working
+  /// Последние сутки с поездкой — дальше `FORMER_DRIVER_DAYS`.
+  former
+  /// Профиль есть, поездок нет.
+  no_trips
+  /// Запрос в Fleet API не прошёл: сверки нет.
+  lookup_failed
+
+  @@map("candidate_match")
   @@schema("xb")
 }
 
@@ -594,6 +658,9 @@ model Person {
   metricPrior   MetricPersonPrior?
   metricMonths  MetricPersonMonth[]
   promoTouches  PromoTouch[]
+  // Две связи с заявкой кандидата — обе именованы: без имени Prisma не различит, какая чья.
+  candidateMatches     CandidateApplication[] @relation("CandidateMatchedPerson")
+  candidateFormerLinks CandidateApplication[] @relation("CandidateFormerLinkPerson")
 
   @@map("persons")
   @@schema("xb")
@@ -669,6 +736,7 @@ model ParkProfile {
   statusEvents  ProfileStatusEvent[]
   trips         Trip[]
   legacyRecords LegacyDriverMap[]
+  candidateApplications CandidateApplication[]
 
   @@index([personId])
   @@index([apiUpdatedAt])
@@ -2811,7 +2879,8 @@ model DashboardHireCost {
 
 /// Переход по промо-метке (issue #377): строка на каждый `/start p_<код>` — плакат, листовка,
 /// QR в офисе. Пишется каждое касание, а не первое, и касание участника программы тоже:
-/// уникальности нет, повторное нажатие того же QR — своя строка.
+/// повторное нажатие того же QR — своя строка. Касание из Mini App по ссылке `?startapp=` —
+/// строка на запуск приложения (issue #456).
 ///
 /// Внешнего ключа на справочник `promo_links` нет намеренно (issue #380): бот пишет касание
 /// с любым годным кодом, даже если метки в справочнике нет, — касание не теряется.
@@ -2832,6 +2901,14 @@ model PromoTouch {
   /// дашборда»).
   wasParticipant Boolean  @map("was_participant")
   touchedAt      DateTime @default(now()) @map("touched_at") @db.Timestamptz(6)
+  /// Откуда касание (issue #456). У строк до Mini App — `bot`.
+  channel        PromoTouchChannel @default(bot)
+  /// Запуск Mini App — `auth_date` подписанной `initData`. У касания из бота пусто.
+  ///
+  /// Касание из Mini App одно на запуск: приложение перечитывает состояние много раз за запуск,
+  /// и строка на каждое чтение раздула бы «Перешли». Держит это частичный уникальный индекс
+  /// `promo_touches_miniapp_launch_key` в миграции.
+  launchedAt     DateTime? @map("launched_at") @db.Timestamptz(6)
 
   person Person? @relation(fields: [personId], references: [id])
 
@@ -2864,5 +2941,64 @@ model PromoLink {
   createdByEmployee Employee? @relation(fields: [createdByEmployeeId], references: [id])
 
   @@map("promo_links")
+  @@schema("xb")
+}
+
+// ---------------------------------------------------------------------------
+// Заявки кандидатов
+// ---------------------------------------------------------------------------
+
+/// Заявка кандидата (issue #456): человек, которого в программе нет, оставил имя и номер,
+/// чтобы работать водителем в парке. Заявка — не регистрация: водителя, привязки Telegram
+/// и участия она не создаёт (docs/decisions.md → «Заявка кандидата»).
+///
+/// Открытая заявка — `new` или `in_progress` — одна на Telegram и одна на номер,
+/// подтверждённый Telegram: частичными уникальными индексами в миграции.
+model CandidateApplication {
+  id      String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  status  CandidateApplicationStatus  @default(new)
+  channel CandidateApplicationChannel
+
+  /// `user.id` из проверенной `initData`.
+  telegramUserId   BigInt  @map("telegram_user_id")
+  /// Чат для переписки — в личной переписке равен `telegram_user_id`.
+  telegramChatId   BigInt  @map("telegram_chat_id")
+  /// Имя и фамилия из Telegram через пробел — админка ставит его рядом с именем из заявки.
+  telegramName     String  @map("telegram_name")
+  telegramUsername String? @map("telegram_username")
+
+  /// Имя из поля заявки, обрезанное по краям, до `CANDIDATE_NAME_MAX_LENGTH`.
+  name        String
+  /// Номер как пришёл.
+  phoneRaw    String               @map("phone_raw")
+  /// `+998XXXXXXXXX`.
+  phoneE164   String               @map("phone_e164")
+  phoneSource CandidatePhoneSource @map("phone_source")
+  /// Бот может писать кандидату: Telegram сказал так в `initData` или в окне `requestWriteAccess`.
+  writeAllowed Boolean @map("write_allowed")
+  /// Язык, на котором заполнена заявка.
+  language    Language
+  /// Код метки из `start_param`. Внешнего ключа нет, как у `promo_touches`.
+  promoCode   String @map("promo_code")
+
+  /// Итог сверки номера с реестром парка на момент заявки.
+  match            CandidateMatch
+  matchedPersonId  String?   @map("matched_person_id") @db.Uuid
+  matchedProfileId String?   @map("matched_profile_id")
+  /// Последние сутки по Ташкенту с поездкой найденного человека.
+  lastTripDay      DateTime? @map("last_trip_day") @db.Date
+  /// Человек последней закрытой привязки этого Telegram: Telegram был в программе раньше.
+  formerLinkPersonId String? @map("former_link_person_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  matchedPerson    Person?      @relation("CandidateMatchedPerson", fields: [matchedPersonId], references: [id])
+  matchedProfile   ParkProfile? @relation(fields: [matchedProfileId], references: [profileId])
+  formerLinkPerson Person?      @relation("CandidateFormerLinkPerson", fields: [formerLinkPersonId], references: [id])
+
+  /// Список заявок в админке — по дате.
+  @@index([createdAt])
+  @@map("candidate_applications")
   @@schema("xb")
 }

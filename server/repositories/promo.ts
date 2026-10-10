@@ -23,27 +23,38 @@ export type PromoTouchRow = {
 };
 
 /**
- * Кладёт строку касания и тем же запросом определяет человека и признак участника.
- *
- * Привязка ищется по отправителю, а у строк, где он пуст, — по чату: у перенесённых
- * из старой базы привязок `telegram_user_id` нет, есть только `telegram_chat_id`.
- * Человек — с живой привязкой; участник — хоть одна привязка, живая или закрытая
- * (docs/decisions.md → «Баллы в метриках дашборда»).
+ * Привязки Telegram касания — `WITH links`: по отправителю, а у строк, где он пуст, — по чату.
+ * У перенесённых из старой базы привязок `telegram_user_id` нет, есть только `telegram_chat_id`.
+ */
+const touchLinksSql = (telegramUserId: string, telegramChatId: string): Prisma.Sql => Prisma.sql`
+  WITH links AS (
+    SELECT link."person_id", link."closed_at", link."linked_at"
+      FROM xb.telegram_links AS link
+     WHERE link."telegram_user_id" = ${telegramUserId}::text::bigint
+        OR (link."telegram_user_id" IS NULL AND link."telegram_chat_id" = ${telegramChatId}::text::bigint)
+  )
+`;
+
+/**
+ * Человек и признак участника касания — из `links`. Человек — с живой привязкой; участник — хоть
+ * одна привязка, живая или закрытая (docs/decisions.md → «Баллы в метриках дашборда»).
  *
  * Живая привязка на Telegram одна — частичный уникальный индекс по чату; порядок по дате
  * только делает выбор однозначным, если отправитель и чат разойдутся.
  */
+const touchPersonSql = Prisma.sql`
+  (SELECT links."person_id" FROM links WHERE links."closed_at" IS NULL
+    ORDER BY links."linked_at" DESC LIMIT 1),
+  EXISTS (SELECT 1 FROM links)
+`;
+
+/** Кладёт строку касания из бота и тем же запросом определяет человека и признак участника. */
 export const insertPromoTouch = async (touch: PromoTouchInput): Promise<PromoTouchRow> => {
   const telegramUserId = touch.telegramUserId.toString();
   const telegramChatId = touch.telegramChatId.toString();
 
   const rows = await db.$queryRaw<PromoTouchRow[]>`
-    WITH links AS (
-      SELECT link."person_id", link."closed_at", link."linked_at"
-        FROM xb.telegram_links AS link
-       WHERE link."telegram_user_id" = ${telegramUserId}::text::bigint
-          OR (link."telegram_user_id" IS NULL AND link."telegram_chat_id" = ${telegramChatId}::text::bigint)
-    )
+    ${touchLinksSql(telegramUserId, telegramChatId)}
     INSERT INTO xb.promo_touches (
       "code", "telegram_user_id", "telegram_chat_id", "person_id", "was_participant"
     )
@@ -51,9 +62,7 @@ export const insertPromoTouch = async (touch: PromoTouchInput): Promise<PromoTou
       ${touch.code},
       ${telegramUserId}::text::bigint,
       ${telegramChatId}::text::bigint,
-      (SELECT links."person_id" FROM links WHERE links."closed_at" IS NULL
-        ORDER BY links."linked_at" DESC LIMIT 1),
-      EXISTS (SELECT 1 FROM links)
+      ${touchPersonSql}
     )
     RETURNING "person_id" AS "personId", "was_participant" AS "wasParticipant"
   `;
@@ -65,6 +74,43 @@ export const insertPromoTouch = async (touch: PromoTouchInput): Promise<PromoTou
   }
 
   return row;
+};
+
+export type MiniAppPromoTouchInput = PromoTouchInput & {
+  /** `auth_date` подписанной `initData` — запуск приложения. */
+  launchedAt: Date;
+};
+
+/**
+ * Кладёт строку касания из Mini App (issue #456) — человек и участник тем же правилом, что
+ * у касания из бота. `null` — касание этого запуска уже записано: повтор того же запуска
+ * отбивает частичный уникальный индекс `promo_touches_miniapp_launch_key`, и это не ошибка.
+ *
+ * Индекс частичный, поэтому указан колонками и условием, а не именем: `ON CONFLICT ON CONSTRAINT`
+ * принимает только ограничение, а частичный индекс ограничением не бывает.
+ */
+export const insertMiniAppPromoTouch = async (touch: MiniAppPromoTouchInput): Promise<PromoTouchRow | null> => {
+  const telegramUserId = touch.telegramUserId.toString();
+  const telegramChatId = touch.telegramChatId.toString();
+
+  const rows = await db.$queryRaw<PromoTouchRow[]>`
+    ${touchLinksSql(telegramUserId, telegramChatId)}
+    INSERT INTO xb.promo_touches (
+      "code", "telegram_user_id", "telegram_chat_id", "person_id", "was_participant", "channel", "launched_at"
+    )
+    VALUES (
+      ${touch.code},
+      ${telegramUserId}::text::bigint,
+      ${telegramChatId}::text::bigint,
+      ${touchPersonSql},
+      'miniapp',
+      ${touch.launchedAt}::timestamptz
+    )
+    ON CONFLICT ("telegram_user_id", "code", "launched_at") WHERE "channel" = 'miniapp' DO NOTHING
+    RETURNING "person_id" AS "personId", "was_participant" AS "wasParticipant"
+  `;
+
+  return rows[0] ?? null;
 };
 
 // ---------------------------------------------------------------------------

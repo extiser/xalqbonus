@@ -4,7 +4,7 @@ import { findPromoLink } from '#server/repositories/promo';
 import { readPromoLinkUrl } from '#server/services/promo/promoLinkUrl';
 
 /**
- * QR метки для печати и сообщений (issue #380): голый код ссылки в бота, без рамки и подписи.
+ * QR метки для печати и сообщений (issue #380): голый код ссылки метки, без рамки и подписи.
  * Коррекция H — плакат переживёт царапину и блик; поле вокруг — 4 модуля,
  * как требует стандарт; тёмный — `--color-web-page`, на белом.
  *
@@ -29,7 +29,7 @@ export const renderPromoQr = async (code: string, format: PromoQrFormat): Promis
     return null;
   }
 
-  const link = await readPromoLinkUrl(promo.code);
+  const link = await readPromoLinkUrl(promo.code, promo.medium);
 
   if (format === 'svg') {
     const options: QRCodeToStringOptions = { ...QR_BASE, type: 'svg' };

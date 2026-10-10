@@ -1,8 +1,10 @@
 import { consola } from 'consola';
-import type { H3Event } from 'h3';
+// `createError` и `getHeader` — из `h3` явно, а не автоимпортом: функция проверяется тестом
+// доставки личности вне сборки Nitro, а в общем пространстве имён `createError` — обёртка Nuxt.
+import { createError, getHeader, type H3Event } from 'h3';
 
 import { readBotToken } from '#server/bot/config';
-import { checkInitData, type InitDataUser } from '#server/utils/telegramInitData';
+import { checkInitData, type InitDataUser, type TelegramLaunch } from '#server/utils/telegramInitData';
 import { INIT_DATA_HEADER } from '#shared/types/miniapp';
 
 /**
@@ -26,14 +28,15 @@ export const readInitDataHeader = (event: H3Event): string => getHeader(event, I
 const log = consola.withTag('miniapp:auth');
 
 /**
- * Кто открыл приложение. Отказ поднимается исключением: до сюда доходят только запросы,
+ * Кто и как открыл приложение. Отказ поднимается исключением: до сюда доходят только запросы,
  * которым дальше делать нечего.
  *
  * Ролью это не является и ничего о водителе не говорит: функция отвечает ровно на вопрос
  * «строку подписал Telegram, и в ней вот этот человек». Участник он программы или нет,
- * решает база, а не подпись.
+ * решает база, а не подпись. Параметр ссылки и момент открытия берутся из той же проверенной
+ * строки: параметр, присланный клиентом рядом с ней, выбрал бы клиент (issue #456).
  */
-export const requireTelegramUser = (event: H3Event): InitDataUser => {
+export const requireTelegramLaunch = (event: H3Event): TelegramLaunch => {
   const token = readBotToken();
 
   if (token === '') {
@@ -77,5 +80,8 @@ export const requireTelegramUser = (event: H3Event): InitDataUser => {
     });
   }
 
-  return check.user;
+  return { user: check.user, startParam: check.startParam, authDate: check.authDate };
 };
+
+/** Кто открыл приложение — `requireTelegramLaunch` без параметра ссылки и момента открытия. */
+export const requireTelegramUser = (event: H3Event): InitDataUser => requireTelegramLaunch(event).user;

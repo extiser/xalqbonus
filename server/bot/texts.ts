@@ -60,6 +60,35 @@ export type TextKey =
   | 'office_map'
   | 'employee_denied_title'
   | 'employee_denied_text'
+  | 'application_title'
+  | 'application_lead'
+  | 'application_name_label'
+  | 'application_name_placeholder'
+  | 'application_phone_label'
+  | 'application_ask'
+  | 'application_declined'
+  | 'application_send'
+  | 'application_sending'
+  | 'application_terms_commission'
+  | 'application_terms_commission_note'
+  | 'application_terms_bonus'
+  | 'application_terms_bonus_note'
+  | 'application_terms_legend'
+  | 'application_accepted_title'
+  | 'application_lead_write'
+  | 'application_lead_call'
+  | 'application_repeat_title'
+  | 'application_repeat_lead_write'
+  | 'application_repeat_lead_call'
+  | 'application_date_today'
+  | 'application_date_yesterday'
+  | 'application_date_day'
+  | 'application_failed_title'
+  | 'application_failed_lead'
+  | 'application_failed_send'
+  | 'application_failed_error'
+  | 'application_office_title'
+  | 'application_write_manager'
   | 'contact_not_own'
   | 'linked_new'
   | 'welcome_slide_title'
@@ -538,6 +567,138 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   employee_denied_text: {
     ru: 'Чтобы его вернуть, обратитесь к руководителю парка.',
     uz: 'Uni qaytarish uchun park rahbariga murojaat qiling.',
+  },
+  /**
+   * Заявка кандидата (issue #456) — экраны `_reference/design/application/`: заявка, «Заявка
+   * принята», «Заявка уже отправлена», сбой отправки. Тексты — словарь `T` макетов.
+   */
+  application_title: {
+    ru: 'Работа водителем в Xalq\u00A0Taxi',
+    uz: 'Xalq Taxi’da haydovchi bo‘lib ishlash',
+  },
+  application_lead: {
+    ru: 'Оставьте имя и номер. Менеджер парка напишет вам в Telegram в течение дня.',
+    uz: 'Ismingiz va raqamingizni qoldiring. Park menejeri bir kun ichida Telegram’da yozadi.',
+  },
+  application_name_label: {
+    ru: 'Имя',
+    uz: 'Ism',
+  },
+  application_name_placeholder: {
+    ru: 'Как к вам обращаться',
+    uz: 'Sizga qanday murojaat qilaylik',
+  },
+  /** Поле номера на Telegram, где `requestContact` нет: номер вводится руками. */
+  application_phone_label: {
+    ru: 'Номер телефона',
+    uz: 'Telefon raqami',
+  },
+  /** Подсказка над кнопкой: окна Telegram не наши, и что в них нажать, говорим заранее. */
+  application_ask: {
+    ru: 'Telegram попросит номер и разрешение писать вам. Нажмите «Поделиться» и «Разрешить».',
+    uz: 'Telegram raqamingizni va sizga yozishga ruxsat so‘raydi. «Ulashish» va «Ruxsat berish»ni bosing.',
+  },
+  /** На месте подсказки, когда в окне номера нажали «Отмена». */
+  application_declined: {
+    ru: 'Без номера мы не сможем отправить заявку. По\u00A0этому номеру с вами свяжется менеджер.',
+    uz: 'Raqamsiz arizani yubora olmaymiz. Menejer siz bilan shu raqam orqali bog‘lanadi.',
+  },
+  application_send: {
+    ru: 'Отправить заявку',
+    uz: 'Ariza yuborish',
+  },
+  application_sending: {
+    ru: 'Отправляем заявку…',
+    uz: 'Ariza yuborilmoqda…',
+  },
+  /** Ставка новичка: 3 % первые четыре недели, срок на экране обязателен. Сноска — `application_terms_legend`. */
+  application_terms_commission: {
+    ru: 'комиссия 3 %*',
+    uz: 'komissiya 3 %*',
+  },
+  application_terms_commission_note: {
+    ru: 'первые 4 недели',
+    uz: 'dastlabki 4 hafta',
+  },
+  /** Приветственный бонус: `{points}` и `{trips}` — `WELCOME_BONUS_POINTS`, `WELCOME_TRIPS_REQUIRED`. */
+  application_terms_bonus: {
+    ru: '{points} баллов',
+    uz: '{points} ball',
+  },
+  application_terms_bonus_note: {
+    ru: 'за первые {trips} поездок',
+    uz: 'dastlabki {trips} safar uchun',
+  },
+  application_terms_legend: {
+    ru: '* для водителей, не работавших в Xalq Taxi',
+    uz: '* Xalq Taxi’da ishlamagan haydovchilar uchun',
+  },
+  /** `{name}` — имя из заявки. */
+  application_accepted_title: {
+    ru: '{name}, заявка принята',
+    uz: '{name}, arizangiz qabul qilindi',
+  },
+  /** `{phone}` — номер заявки: экран ставит его белым. Боту разрешили писать. */
+  application_lead_write: {
+    ru: 'Менеджер парка напишет вам в Telegram в\u00A0течение дня на номер {phone}.',
+    uz: 'Park menejeri bir kun ichida {phone} raqamingizga Telegram’da yozadi.',
+  },
+  /** Писать не разрешили — менеджер звонит. */
+  application_lead_call: {
+    ru: 'Менеджер парка позвонит вам в\u00A0течение дня на номер {phone}.',
+    uz: 'Park menejeri bir kun ichida {phone} raqamingizga qo‘ng‘iroq qiladi.',
+  },
+  application_repeat_title: {
+    ru: '{name}, заявка уже отправлена',
+    uz: '{name}, arizangiz allaqachon yuborilgan',
+  },
+  /** `{date}` — день заявки: `application_date_today`, `application_date_yesterday` или `application_date_day`. */
+  application_repeat_lead_write: {
+    ru: 'Вы отправили заявку {date}. Менеджер парка напишет вам в Telegram на номер {phone}.',
+    uz: 'Siz arizani {date} yuborgansiz. Park menejeri {phone} raqamingizga Telegram’da yozadi.',
+  },
+  application_repeat_lead_call: {
+    ru: 'Вы отправили заявку {date}. Менеджер парка позвонит вам на номер {phone}.',
+    uz: 'Siz arizani {date} yuborgansiz. Park menejeri {phone} raqamingizga qo‘ng‘iroq qiladi.',
+  },
+  application_date_today: {
+    ru: 'сегодня',
+    uz: 'bugun',
+  },
+  application_date_yesterday: {
+    ru: 'вчера',
+    uz: 'kecha',
+  },
+  /** День словом не сегодня и не вчера: `{date}` — «8 октября», «8-oktabr». */
+  application_date_day: {
+    ru: '{date}',
+    uz: '{date}da',
+  },
+  application_failed_title: {
+    ru: 'Не получилось отправить заявку',
+    uz: 'Arizani yuborib bo‘lmadi',
+  },
+  application_failed_lead: {
+    ru: 'Проверьте интернет и отправьте заявку ещё\u00A0раз. Имя и номер вводить заново не\u00A0нужно.',
+    uz: 'Internetni tekshiring va arizani qayta yuboring. Ism va raqamni qayta kiritish shart emas.',
+  },
+  application_failed_send: {
+    ru: 'Отправить заявку ещё раз',
+    uz: 'Arizani qayta yuborish',
+  },
+  /** Строка под кнопкой, когда и повтор не прошёл. */
+  application_failed_error: {
+    ru: 'Заявка не отправлена. Попробуйте ещё раз.',
+    uz: 'Ariza yuborilmadi. Qayta urinib ko‘ring.',
+  },
+  application_office_title: {
+    ru: 'Офис Xalq Taxi',
+    uz: 'Xalq Taxi ofisi',
+  },
+  /** Открывает чат с ботом: переписка с кандидатом идёт через бота. */
+  application_write_manager: {
+    ru: 'Написать менеджеру',
+    uz: 'Menejerga yozish',
   },
   contact_not_own: {
     ru: 'Отправьте, пожалуйста, свой номер телефона кнопкой ниже — чужой контакт мы принять не можем.',

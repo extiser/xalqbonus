@@ -38,6 +38,22 @@ export const DESIGN_GROUPS: DesignGroup[] = [
     ],
   },
   {
+    title: 'Заявка кандидата',
+    screens: [
+      { slug: 'application-form', title: 'Экран заявки — поле пустое', source: 'application/01-form.html' },
+      { slug: 'application-filled', title: 'Экран заявки — имя вписано', source: 'application/01-form.html#filled' },
+      { slug: 'application-declined', title: 'Экран заявки — «Отмена» в окне номера', source: 'application/01-form.html#declined' },
+      { slug: 'application-old', title: 'Экран заявки — старый Telegram, номер руками', source: 'application/01-form.html#old' },
+      { slug: 'application-sending', title: 'Экран заявки — отправляем', source: 'application/01-form.html' },
+      { slug: 'application-accepted', title: 'Заявка принята — напишет в Telegram', source: 'application/02-accepted.html' },
+      { slug: 'application-accepted-call', title: 'Заявка принята — позвонит', source: 'application/02-accepted.html#call' },
+      { slug: 'application-repeat', title: 'Заявка уже отправлена', source: 'application/04-repeat.html' },
+      { slug: 'application-repeat-call', title: 'Заявка уже отправлена — позвонит', source: 'application/04-repeat.html#call' },
+      { slug: 'application-failed', title: 'Сбой отправки', source: 'application/03-failed.html' },
+      { slug: 'application-failed-busy', title: 'Сбой отправки — повтор идёт', source: 'application/03-failed.html#busy' },
+    ],
+  },
+  {
     title: 'Главный экран',
     screens: [
       { slug: 'home', title: 'Участник акции — эталон', source: 'home/main-screen.html, catalog/catalog-block.html' },

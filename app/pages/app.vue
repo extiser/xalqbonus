@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { MINIAPP_PATH } from '#shared/pagePaths';
+import { readPromoCode } from '#shared/promoLinks';
 import { formatPhone, type FormattedPhone } from '#shared/phone';
 import {
   INIT_DATA_HEADER,
@@ -19,6 +20,7 @@ import {
   type MiniAppStateResponse,
   type RegistrationScreenTexts,
 } from '#shared/types/miniapp';
+import { useCandidateApplication } from '~/composables/useCandidateApplication';
 import { useCountUp } from '~/composables/useCountUp';
 import { useDeskOffices } from '~/composables/useDeskOffices';
 import { useLiveScreenPoll } from '~/composables/useLiveScreenPoll';
@@ -210,8 +212,10 @@ const toParagraphs = (text: string): string[] => text.split('\n\n');
  *
  * `employee_denied` — выключенный сотрудник: экран исхода регистрации, а не заглушка,
  * потому что на нём номер и Telegram ID, по которым руководитель найдёт учётку.
+ *
+ * `application` — заявка кандидата (issue #456): экран заявки и её исходы.
  */
-type Stage = 'loading' | 'error' | 'member' | 'registration' | 'employee' | 'employee_denied';
+type Stage = 'loading' | 'error' | 'member' | 'registration' | 'employee' | 'employee_denied' | 'application';
 
 const stage = ref<Stage>('loading');
 
@@ -223,6 +227,7 @@ const NEXT_LAYOUT_STAGES: ReadonlySet<Stage> = new Set<Stage>([
   'employee_denied',
   'member',
   'employee',
+  'application',
 ]);
 
 /** Заглушка на стадии `error`. */
@@ -378,6 +383,17 @@ const memberGifts = useMemberGifts(() => initData, {
  * на главной. Свой язык, свои экраны внутри и черновики ответов держит композабл.
  */
 const memberSurvey = useMemberSurvey(() => initData);
+
+/**
+ * Заявка кандидата (issue #456): экран заявки, окна Telegram, отправка и исходы. Участнику
+ * и сотруднику, подавшим заявку, экран перечитывается — откроется их настоящий экран.
+ */
+const candidate = useCandidateApplication({
+  initData: () => initData,
+  webApp: () => webApp,
+  reload: () => loadState(),
+  onAccepted: () => metrika.goal('application_sent', { promoCode: launchPromoCode() }),
+});
 
 /**
  * Опрос из адреса запуска — кнопка «✍️ Пройти опрос» в рассылке открывает Mini App с `?survey=<id>`
@@ -2109,6 +2125,14 @@ const applyState = (state: MiniAppStateResponse): void => {
     return;
   }
 
+  if (state.screen === 'application' || state.screen === 'application_sent') {
+    resetScreenWork();
+    candidate.open(state);
+    stage.value = 'application';
+
+    return;
+  }
+
   if (state.screen === 'employee_denied') {
     resetScreenWork();
     employeeDenied.value = state;
@@ -2456,6 +2480,8 @@ const metrikaPath = computed((): string | null => {
       return `${MINIAPP_PATH}/employee/${employeeScreen.value}`;
     case 'employee_denied':
       return `${MINIAPP_PATH}/employee-denied`;
+    case 'application':
+      return `${MINIAPP_PATH}/application/${candidate.view.value}`;
   }
 });
 
@@ -2480,6 +2506,25 @@ watch(member, (current) => {
     metrikaPersonSent = true;
   }
 });
+
+/**
+ * Код метки, которой открыто приложение, — параметр целей Метрики заявки (issue #456). Из той же
+ * подписанной строки, что уходит на сервер; пусто — метки нет.
+ */
+const launchPromoCode = (): string => readPromoCode(new URLSearchParams(initData).get('start_param') ?? '') ?? '';
+
+/** Экран заявки показан — цель раз за загрузку страницы. */
+let applicationOpenSent = false;
+
+watch(
+  () => stage.value === 'application' && candidate.view.value === 'form',
+  (shown) => {
+    if (shown && !applicationOpenSent) {
+      metrika.goal('application_open', { promoCode: launchPromoCode() });
+      applicationOpenSent = true;
+    }
+  },
+);
 
 /** Щипок в iOS: `user-scalable=no` Safari не слушает, жест гасится здесь. */
 const preventGesture = (event: Event): void => {
@@ -3014,6 +3059,25 @@ const openMap = (office: MemberOfficeView): void => {
           @exit="exitCatalog"
         />
       </template>
+    </template>
+
+    <template v-else-if="stage === 'application'">
+      <OrganismsNextMemberApplicationForm
+        v-if="candidate.form.value"
+        v-bind="candidate.form.value"
+        v-model:name="candidate.name.value"
+        v-model:phone="candidate.manualPhone.value"
+        @update:language="candidate.language.value = $event"
+        @send="candidate.submit"
+      />
+      <OrganismsNextMemberApplicationOutcome
+        v-else-if="candidate.outcome.value"
+        v-bind="candidate.outcome.value"
+        @update:language="candidate.language.value = $event"
+        @map="openMap"
+        @write="candidate.writeManager"
+        @send="candidate.retry"
+      />
     </template>
 
     <template v-else-if="(stage === 'registration' || stage === 'employee_denied') && currentTexts">
