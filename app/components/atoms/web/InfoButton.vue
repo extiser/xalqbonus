@@ -8,6 +8,9 @@ import { PhInfo } from '@phosphor-icons/vue';
  *
  * Нажатие не всплывает: плитка-вход под значком не открывается, а щелчок мимо подсказки
  * не закрывает её в ту же секунду. Что открыто — решает тот, кто ставит значок.
+ *
+ * Поднят на пиксель (`relative -top-px`): по середине строки значок садится ниже букв подписи.
+ * Сдвиг здесь, а не там, где значок стоит, — значок один на весь веб.
  */
 defineProps<{
   /** Название метрики: «Что это: {название}» для чтения с экрана. */
@@ -21,7 +24,7 @@ defineEmits<{ click: [] }>();
 <template>
   <button
     type="button"
-    class="-my-1.5 ml-0.5 inline-grid size-7 cursor-pointer place-items-center rounded-full border-0 p-0 align-middle hover:bg-web-raised hover:text-web-cyan focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-web-cyan"
+    class="relative -top-px -my-1.5 ml-0.5 inline-grid size-7 cursor-pointer place-items-center rounded-full border-0 p-0 align-middle hover:bg-web-raised hover:text-web-cyan focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-web-cyan"
     :class="expanded ? 'bg-web-raised text-web-cyan' : 'bg-transparent text-web-axis'"
     :aria-label="`Что это: ${title}`"
     :aria-expanded="expanded"
