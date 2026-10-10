@@ -1,4 +1,4 @@
-import type { PromoMedium } from '../../server/generated/prisma/enums';
+import type { PromoEntry, PromoMedium } from '../../server/generated/prisma/enums';
 
 /**
  * Ответы ручек раздела «Промо» (issue #380). Определения цифр — `shared/metrics.ts`,
@@ -24,6 +24,8 @@ export type PromoLinkRow = PromoFunnelCounts & {
   code: string;
   name: string;
   medium: PromoMedium;
+  /** Куда ведёт ссылка; не `bot` — только у рекламы в Telegram. */
+  entry: PromoEntry;
   placement: string | null;
   createdAt: string;
 };
@@ -39,7 +41,7 @@ export type PromoNewCode = {
   code: string;
   /** Ссылка в чат бота с этим кодом — форма показывает её до создания метки. */
   link: string;
-  /** Ссылка в Mini App с этим кодом — у носителя «Реклама в Telegram» форма показывает её. */
+  /** Ссылка в Mini App с этим кодом — её форма показывает у рекламы в Telegram со входом в приложение. */
   appLink: string;
 };
 
@@ -70,12 +72,14 @@ export type PromoCard = {
     code: string;
     name: string;
     medium: PromoMedium;
+    /** Куда ведёт ссылка; не `bot` — только у рекламы в Telegram. */
+    entry: PromoEntry;
     placement: string | null;
     createdAt: string;
     /** Имя сотрудника, заведшего метку; `null` — заведена миграцией при выкате. */
     createdBy: string | null;
   };
-  /** Ссылка метки: в чат бота, а у рекламы в Telegram — в Mini App. */
+  /** Ссылка метки — по входу: в чат бота или в Mini App. */
   link: string;
   funnel: PromoFunnelCounts & {
     /** Все открытия бота по метке, с повторами. */

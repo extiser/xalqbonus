@@ -31,9 +31,9 @@ const formatDay = (day: string): string => {
 /**
  * Карточка заявки — первое сообщение темы. Последняя строка — адрес заявки в админке:
  * страница `/applications/{id}` появится задачей админки заявок, и та обязана держать
- * этот адрес.
+ * этот адрес. Адреса приложения нет — нет и строки.
  */
-export const topicCardText = (card: CandidateTopicCard, appOrigin: string): string => {
+export const topicCardText = (card: CandidateTopicCard, appOrigin: string | null): string => {
   const telegram =
     card.telegramUsername === null
       ? escapeHtml(card.telegramName)
@@ -54,7 +54,7 @@ export const topicCardText = (card: CandidateTopicCard, appOrigin: string): stri
     `Метка: ${promo}`,
     `Сверка: ${match}`,
     `Писать в бот: ${card.writeAllowed ? 'можно' : 'нельзя, звоните'}`,
-    escapeHtml(`${appOrigin}/applications/${card.id}`),
+    ...(appOrigin === null ? [] : [escapeHtml(`${appOrigin}/applications/${card.id}`)]),
   ].join('\n');
 };
 

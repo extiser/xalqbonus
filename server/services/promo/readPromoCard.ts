@@ -1,4 +1,4 @@
-import type { PromoMedium } from '#server/generated/prisma/enums';
+import type { PromoEntry } from '#server/generated/prisma/enums';
 import { deskDriverName } from '#server/repositories/deskDriver';
 import { findPromoLink, listPromoDays, listPromoFunnels, listPromoJoined } from '#server/repositories/promo';
 import { readPromoLinkUrl } from '#server/services/promo/promoLinkUrl';
@@ -13,7 +13,7 @@ import type { PromoCard } from '#shared/types/promo';
  */
 export type ReadPromoCardOptions = {
   now?: Date;
-  readLink?: (code: string, medium: PromoMedium) => Promise<string>;
+  readLink?: (code: string, entry: PromoEntry) => Promise<string>;
 };
 
 export const readPromoCard = async (
@@ -27,7 +27,7 @@ export const readPromoCard = async (
   }
 
   const [link, funnels, days, joined] = await Promise.all([
-    readLink(promo.code, promo.medium),
+    readLink(promo.code, promo.entry),
     listPromoFunnels(promo.code),
     listPromoDays(promo.code, now),
     listPromoJoined(promo.code),
@@ -44,6 +44,7 @@ export const readPromoCard = async (
       code: promo.code,
       name: promo.name,
       medium: promo.medium,
+      entry: promo.entry,
       placement: promo.placement,
       createdAt: promo.createdAt.toISOString(),
       createdBy: promo.createdBy,

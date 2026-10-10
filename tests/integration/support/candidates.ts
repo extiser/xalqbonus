@@ -3,10 +3,18 @@ import type { Language } from '#server/generated/prisma/enums';
 
 /**
  * Заявки кандидатов для тестов (issue #460) и их уборка — по Telegram, которым заявка заведена.
- * Вместе с заявкой убирается её переписка (issue #463).
+ * Вместе с заявкой убирается её переписка (issue #463) и черновики заявки в чате (issue #467).
  */
 
 const createdTelegramUserIds = new Set<bigint>();
+
+/**
+ * Запоминает Telegram, которым заявку или черновик завёл сервис, а не фикстура: их строки
+ * тесту неизвестны, и уборка находит их по Telegram.
+ */
+export const trackTestCandidateTelegram = (telegramUserId: bigint): void => {
+  createdTelegramUserIds.add(telegramUserId);
+};
 
 export type TestCandidateApplicationInput = {
   telegramUserId: bigint;
@@ -56,12 +64,27 @@ export const readTestCandidateMessages = async (applicationId: string) =>
 export const readTestCandidateApplication = async (applicationId: string) =>
   db.candidateApplication.findUnique({ where: { id: applicationId } });
 
+/** Черновики заявки в чате этого Telegram — все, законченные и нет. */
+export const readTestChatDrafts = async (telegramUserId: bigint) =>
+  db.candidateChatDraft.findMany({ where: { telegramUserId }, orderBy: { createdAt: 'asc' } });
+
+/** Сообщения черновика по времени. */
+export const readTestChatDraftMessages = async (draftId: string) =>
+  db.candidateDraftMessage.findMany({ where: { draftId }, orderBy: { createdAt: 'asc' } });
+
+/** Открытые заявки этого Telegram. */
+export const readTestOpenApplications = async (telegramUserId: bigint) =>
+  db.candidateApplication.findMany({ where: { telegramUserId, status: { in: ['new', 'in_progress'] } } });
+
 export const cleanupTestCandidateApplications = async (): Promise<void> => {
   const telegramUserIds = [...createdTelegramUserIds];
   createdTelegramUserIds.clear();
 
   if (telegramUserIds.length > 0) {
-    // Переписка — первой: внешний ключ сообщения на заявку стоит на `RESTRICT`.
+    // Черновики — до заявок: внешний ключ черновика на заявку стоит на `RESTRICT`.
+    await db.candidateDraftMessage.deleteMany({ where: { draft: { telegramUserId: { in: telegramUserIds } } } });
+    await db.candidateChatDraft.deleteMany({ where: { telegramUserId: { in: telegramUserIds } } });
+    // Переписка — тоже до заявок: внешний ключ сообщения на заявку стоит на `RESTRICT`.
     await db.candidateMessage.deleteMany({
       where: { application: { telegramUserId: { in: telegramUserIds } } },
     });

@@ -1,6 +1,6 @@
 import { db } from '#server/db';
 import { Prisma } from '#server/generated/prisma/client';
-import type { PromoMedium } from '#server/generated/prisma/enums';
+import type { PromoEntry, PromoMedium } from '#server/generated/prisma/enums';
 import { parkDaySql } from '#server/utils/parkDaySql';
 
 /**
@@ -121,6 +121,7 @@ export type PromoLinkInput = {
   code: string;
   name: string;
   medium: PromoMedium;
+  entry: PromoEntry;
   placement: string | null;
   createdByEmployeeId: string;
 };
@@ -162,6 +163,7 @@ export type PromoLinkRecord = {
   code: string;
   name: string;
   medium: PromoMedium;
+  entry: PromoEntry;
   placement: string | null;
   createdAt: Date;
   createdBy: string | null;
@@ -174,6 +176,7 @@ export const findPromoLink = async (code: string): Promise<PromoLinkRecord | nul
       code: true,
       name: true,
       medium: true,
+      entry: true,
       placement: true,
       createdAt: true,
       createdByEmployee: { select: { fullName: true } },
@@ -186,6 +189,7 @@ export const findPromoLink = async (code: string): Promise<PromoLinkRecord | nul
         code: link.code,
         name: link.name,
         medium: link.medium,
+        entry: link.entry,
         placement: link.placement,
         createdAt: link.createdAt,
         createdBy: link.createdByEmployee?.fullName ?? null,
@@ -269,6 +273,7 @@ export type PromoFunnelRow = {
   code: string;
   name: string;
   medium: PromoMedium;
+  entry: PromoEntry;
   placement: string | null;
   createdAt: Date;
   went: number;
@@ -305,6 +310,7 @@ export const listPromoFunnels = async (code?: string): Promise<PromoFunnelRow[]>
     SELECT link."code",
            link."name",
            link."medium"::text      AS "medium",
+           link."entry"::text       AS "entry",
            link."placement",
            link."created_at"        AS "createdAt",
            coalesce(went."went", 0)           AS "went",

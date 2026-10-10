@@ -1,4 +1,4 @@
-import type { PromoMedium } from '#server/generated/prisma/enums';
+import type { PromoEntry } from '#server/generated/prisma/enums';
 
 /**
  * Ссылки сотрудника (issue #267): страница приглашения, страница «задать пароль» и ссылка
@@ -35,13 +35,13 @@ export const buildTelegramBindLink = (botUsername: string, token: string): strin
  * с префиксом `p_` (`shared/promoLinks.ts`). Здесь, рядом с привязкой, а не у раздела «Промо»:
  * ссылки на бота собираются в одном месте и из одного имени бота.
  *
- * Куда ведёт, решает носитель (issue #456). Реклама в Telegram — сразу в Mini App: `?startapp=`
- * открывает главное приложение бота и кладёт код в `start_param` подписанной `initData`. Работает
- * это, только если главное приложение задано боту в BotFather. Остальные носители — в чат бота,
- * `/start <код>`.
+ * Куда ведёт, решает вход метки, а не носитель (issue #467). Вход в приложение — сразу в Mini App:
+ * `?startapp=` открывает главное приложение бота и кладёт код в `start_param` подписанной
+ * `initData`. Работает это, только если главное приложение задано боту в BotFather. Вход в чат
+ * бота — `/start <код>`.
  */
-export const buildPromoLink = (botUsername: string, code: string, medium: PromoMedium): string =>
-  medium === 'telegram_ad' ? buildPromoAppLink(botUsername, code) : buildPromoBotLink(botUsername, code);
+export const buildPromoLink = (botUsername: string, code: string, entry: PromoEntry): string =>
+  entry === 'miniapp' ? buildPromoAppLink(botUsername, code) : buildPromoBotLink(botUsername, code);
 
 /** Ссылка метки в чат бота — `?start=<код>`. */
 export const buildPromoBotLink = (botUsername: string, code: string): string =>

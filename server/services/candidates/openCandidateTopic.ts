@@ -39,8 +39,11 @@ const log = consola.withTag('candidates:topic');
 
 export type OpenCandidateTopicInput = {
   applicationId: string;
-  /** Адрес приложения — из него ссылка на заявку в админке. */
-  appOrigin: string;
+  /**
+   * Адрес приложения — из него ссылка на заявку в админке. `null` — адреса нет (заявка из чата
+   * бота на машине без `TG_MINIAPP_URL`), и строки со ссылкой в карточке нет.
+   */
+  appOrigin: string | null;
 };
 
 /** Чем кончилось приветствие. */
@@ -106,7 +109,7 @@ const ensureTopic = async (card: CandidateTopicCard, token: string): Promise<Can
 };
 
 /** Карточка заявки — первое сообщение темы. */
-const ensureCard = async (card: CandidateTopicCard, appOrigin: string, token: string): Promise<void> => {
+const ensureCard = async (card: CandidateTopicCard, appOrigin: string | null, token: string): Promise<void> => {
   if (card.forumChatId === null || card.forumTopicId === null || card.topicCardMessageId !== null) {
     return;
   }

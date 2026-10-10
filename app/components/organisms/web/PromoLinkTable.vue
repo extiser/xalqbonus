@@ -3,7 +3,7 @@ import { useRouter } from 'vue-router';
 import { DASH, formatMomentDate, formatNumber, formatWholeShare } from '~/utils/format';
 import type { LoadState } from '~/types/loadState';
 import type { MetricKey } from '#shared/metrics';
-import { PROMO_MEDIUM_LABELS } from '#shared/promo';
+import { PROMO_ENTRY_LABELS, PROMO_MEDIUM_LABELS } from '#shared/promo';
 import type { PromoLinkRow } from '#shared/types/promo';
 
 /**
@@ -83,7 +83,13 @@ const CELL_CLASSES = 'border-t border-web-line py-[11px] pr-3 whitespace-nowrap 
                   {{ link.code }} · с {{ formatMomentDate(link.createdAt) }}
                 </div>
               </td>
-              <td :class="CELL_CLASSES">{{ PROMO_MEDIUM_LABELS[link.medium] }}</td>
+              <td :class="CELL_CLASSES">
+                {{ PROMO_MEDIUM_LABELS[link.medium] }}
+                <!-- Вход у рекламы в Telegram — второй строкой, тем же видом, что код под названием (issue #467). -->
+                <div v-if="link.medium === 'telegram_ad'" class="mt-0.5 text-[12px] font-medium text-web-grey">
+                  {{ PROMO_ENTRY_LABELS[link.entry] }}
+                </div>
+              </td>
               <td :class="CELL_CLASSES" class="text-web-grey">{{ link.placement ?? DASH }}</td>
               <td :class="CELL_CLASSES" class="text-right">{{ formatNumber(link.went) }}</td>
               <td :class="CELL_CLASSES" class="text-right">{{ formatNumber(link.joined) }}</td>

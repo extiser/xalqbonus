@@ -29,7 +29,7 @@ export const renderPromoQr = async (code: string, format: PromoQrFormat): Promis
     return null;
   }
 
-  const link = await readPromoLinkUrl(promo.code, promo.medium);
+  const link = await readPromoLinkUrl(promo.code, promo.entry);
 
   if (format === 'svg') {
     const options: QRCodeToStringOptions = { ...QR_BASE, type: 'svg' };
