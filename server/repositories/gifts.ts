@@ -272,6 +272,8 @@ export type GiftGrantRow = {
   creditedAuto: number;
   /** Ещё ждут. */
   waiting: number;
+  /** Отменены сотрудником, пока ждали (issue #270). */
+  cancelled: number;
 };
 
 /**
@@ -301,7 +303,8 @@ const giftGrantSelect = (where: Prisma.Sql, limit: number): Prisma.Sql => Prisma
          grant_row."created_at"    AS "createdAt",
          outcome."claimedByDriver",
          outcome."creditedAuto",
-         outcome."waiting"
+         outcome."waiting",
+         outcome."cancelled"
     FROM xb.gift_grants AS grant_row
     JOIN xb.employees AS author ON author."id" = grant_row."granted_by_employee_id"
     LEFT JOIN xb.segments AS segment ON segment."id" = grant_row."segment_id"
@@ -316,7 +319,8 @@ const giftGrantSelect = (where: Prisma.Sql, limit: number): Prisma.Sql => Prisma
     CROSS JOIN LATERAL (
       SELECT (count(*) FILTER (WHERE reward."claim_mode" = 'driver'))::int AS "claimedByDriver",
              (count(*) FILTER (WHERE reward."claim_mode" = 'auto'))::int   AS "creditedAuto",
-             (count(*) FILTER (WHERE reward."status" = 'claimable'))::int  AS "waiting"
+             (count(*) FILTER (WHERE reward."status" = 'claimable'))::int  AS "waiting",
+             (count(*) FILTER (WHERE reward."status" = 'cancelled'))::int  AS "cancelled"
         FROM xb.rewards AS reward
        WHERE reward."gift_grant_id" = grant_row."id"
     ) AS outcome

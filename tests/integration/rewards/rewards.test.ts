@@ -26,6 +26,7 @@ import { creditDueGifts } from '#server/services/gifts/creditDueGifts';
 import { claimGift } from '#server/services/gifts/creditGift';
 import { cancelReward } from '#server/services/rewards/cancelReward';
 import { grantGift } from '#server/services/gifts/grantGift';
+import { readGiftGrant } from '#server/services/gifts/readGiftGrants';
 import { expireRewards } from '#server/services/rewards/expireRewards';
 import { grantManualReward } from '#server/services/rewards/grantManualReward';
 import { issueOfficeReward } from '#server/services/rewards/issueOfficeReward';
@@ -48,7 +49,13 @@ import {
   trackTestProduct,
 } from '../support/database';
 import { cleanupTestEmployees, createTestEmployee, setTestProfilePhone } from '../support/employees';
-import { backdateTestGift, expireTestGift, findGiftRewardId, readGift } from '../support/gifts';
+import {
+  backdateTestGift,
+  expireTestGift,
+  findGiftRewardId,
+  readGift,
+  readGiftGrantCounters,
+} from '../support/gifts';
 import { grantPoints } from '../support/points';
 import { disconnectQueues } from '../support/queues';
 import {
@@ -836,6 +843,7 @@ describe('награды', () => {
     const gift = await findGiftRewardId(giftGrantId, scenario.personId);
     const balanceBefore = await readAccountBalance(scenario.personId);
     const campaignTransfersBefore = await countTransfersByReason(scenario.personId, 'campaign');
+    const grantBefore = await readGiftGrant(giftGrantId);
 
     const cancelled = await cancelReward({
       actor: { employeeId: scenario.employeeId, role: 'senior_manager' },
@@ -845,6 +853,18 @@ describe('награды', () => {
 
     expect(cancelled.status).toBe('cancelled');
     expect(await readAccountBalance(scenario.personId)).toBe(balanceBefore);
+
+    // Таблица раздач: из «ждут» в «отменено», и исходы снова складываются в число наград раздачи.
+    const grantAfter = await readGiftGrant(giftGrantId);
+
+    expect(grantAfter?.waiting).toBe((grantBefore?.waiting ?? 0) - 1);
+    expect(grantAfter?.cancelled).toBe((grantBefore?.cancelled ?? 0) + 1);
+    expect(
+      (grantAfter?.claimedByDriver ?? 0) +
+        (grantAfter?.creditedAuto ?? 0) +
+        (grantAfter?.waiting ?? 0) +
+        (grantAfter?.cancelled ?? 0),
+    ).toBe((await readGiftGrantCounters(giftGrantId))?.rewards);
     expect(await countTransfersByReason(scenario.personId, 'campaign')).toBe(campaignTransfersBefore);
 
     const { gifts, rewards } = await readMemberRewards({ personId: scenario.personId, language: 'ru' });

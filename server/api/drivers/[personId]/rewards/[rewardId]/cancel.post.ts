@@ -28,7 +28,7 @@ export default defineEventHandler(async (event): Promise<DriverReward> => {
       throw createError({
         statusCode: 409,
         statusMessage: 'Conflict',
-        message: 'отменить можно только ждущую награду — эта уже выдана, зачислена или сгорела',
+        message: 'Отменить можно только ждущую награду. Эта уже выдана, зачислена, сгорела или отменена.',
       });
     }
 

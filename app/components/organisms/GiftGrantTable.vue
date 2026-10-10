@@ -93,11 +93,11 @@ const recipientText = (grant: GiftGrant): string =>
           </p>
         </div>
         <div class="text-right">
-          <p class="text-xs text-slate-500">получателей / пропущено / забрали сами / по сроку / ждут</p>
+          <p class="text-xs text-slate-500">получателей / пропущено / забрали сами / по сроку / ждут / отменено</p>
           <p class="font-mono text-sm text-slate-900 tabular-nums">
             {{ formatNumber(grant.recipients) }} / {{ formatNumber(grant.skipped) }} /
             {{ formatNumber(grant.claimedByDriver) }} / {{ formatNumber(grant.creditedAuto) }} /
-            {{ formatNumber(grant.waiting) }}
+            {{ formatNumber(grant.waiting) }} / {{ formatNumber(grant.cancelled) }}
           </p>
         </div>
       </li>

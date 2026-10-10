@@ -442,6 +442,11 @@ export type GiftGrant = {
   creditedAuto: number;
   /** Ещё ждут. */
   waiting: number;
+  /**
+   * Отменены сотрудником, пока ждали (issue #270). Вместе с тремя исходами выше — все подарки
+   * раздачи: без этого счётчика сумма после отмены не сходилась бы с числом получателей.
+   */
+  cancelled: number;
 };
 
 export type GiftGrantsResponse = {
