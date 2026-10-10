@@ -138,9 +138,11 @@ export const replaceMetricPersonDays = async (
       `;
       const unattributedOrders = unattributed[0]?.total ?? 0;
 
+      // `clock_timestamp()`, а не `now()`: `now()` — время начала транзакции, и конец прогона
+      // встал бы рядом с его началом.
       await transaction.$executeRaw`
         UPDATE xb.metric_recompute_runs
-           SET "finished_at" = now(),
+           SET "finished_at" = clock_timestamp(),
                "rows" = ${rows}::int,
                "unattributed_orders" = ${unattributedOrders}::int
          WHERE "id" = ${runId}::uuid
@@ -1055,9 +1057,10 @@ export const finishMetricMoneyRun = async (
   runId: string,
   rows: { rows: number; personMonthRows: number },
 ): Promise<void> => {
+  // `clock_timestamp()`, а не `now()`: запись идёт в транзакции пересчёта, а `now()` — время её начала.
   await transaction.$executeRaw`
     UPDATE xb.metric_money_runs
-       SET "finished_at" = now(),
+       SET "finished_at" = clock_timestamp(),
            "rows" = ${rows.rows}::int,
            "person_month_rows" = ${rows.personMonthRows}::int
      WHERE "id" = ${runId}::uuid
