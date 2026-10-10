@@ -1,7 +1,8 @@
 /**
- * Проверка, что скрипт проверки движка написан на ES5 (issue #223). Запуск — `make old-engine-guard`.
+ * Проверка, что скрипт проверки движка (issue #223) и скрипт экранов заявки кандидата на старом
+ * движке (issue #460) написаны на ES5. Запуск — `make old-engine-guard`.
  *
- * Скрипт — строка, сборщик его не транспилирует, и выполниться он обязан на движке, который
+ * Скрипты — строки, сборщик их не транспилирует, и выполниться они обязаны на движке, который
  * не понимает остальное приложение. Поэтому проверяется сам текст, каким он уйдёт в страницу.
  *
  * Проверок три:
@@ -16,6 +17,7 @@
  */
 import { transformSync } from 'esbuild';
 
+import { OLD_ENGINE_APPLICATION_SCRIPT } from '../app/utils/oldEngineApplication';
 import { OLD_ENGINE_FORCE_ALLOWED_SCRIPT, OLD_ENGINE_GUARD_SCRIPT } from '../app/utils/oldEngineGuard';
 
 /** Вызовы новее ES5 — те, что перечислены в issue, и их ближайшие соседи. */
@@ -74,6 +76,7 @@ const checkScript = (name: string, code: string): string[] => {
 const scripts: [string, string][] = [
   ['OLD_ENGINE_GUARD_SCRIPT', OLD_ENGINE_GUARD_SCRIPT],
   ['OLD_ENGINE_FORCE_ALLOWED_SCRIPT', OLD_ENGINE_FORCE_ALLOWED_SCRIPT],
+  ['OLD_ENGINE_APPLICATION_SCRIPT', OLD_ENGINE_APPLICATION_SCRIPT],
 ];
 
 const problems = scripts.flatMap(([name, code]) => checkScript(name, code));

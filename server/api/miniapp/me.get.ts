@@ -62,7 +62,7 @@ export default defineEventHandler(async (event): Promise<MiniAppStateResponse> =
     return readMemberScreen(driver, user.id, new Date(), viewer ? demoScreen('driver', driver.language) : null);
   }
 
-  const applicationScreen = await readApplicationScreen(launch);
+  const applicationScreen = await readApplicationScreen(launch, new Date());
 
   if (applicationScreen) {
     return applicationScreen;
