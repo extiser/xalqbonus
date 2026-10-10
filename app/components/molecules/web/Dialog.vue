@@ -12,6 +12,10 @@ import { PhX } from '@phosphor-icons/vue';
  * `close` — что делать с несохранённым, решает не оно.
  *
  * Содержимое — слотом: форма метки, правка метки.
+ *
+ * При открытии курсор встаёт в поле с `autofocus`, а без такого — в первое поле ввода окна.
+ * Ставит его само окно: браузер при `showModal()` ищет `autofocus` в том, что уже нарисовано,
+ * а форму с новым ключом Vue рисует после — поле, получившее фокус, тут же заменялось новым.
  */
 const props = defineProps<{
   open: boolean;
@@ -22,6 +26,15 @@ const emit = defineEmits<{ close: [] }>();
 
 const dialog = ref<HTMLDialogElement | null>(null);
 
+/** Поля ввода, в которые встаёт курсор; кнопки и скрытые поля — не они. */
+const FIELD_SELECTOR = 'input:not([type="hidden"]):not(:disabled), textarea:not(:disabled), select:not(:disabled)';
+
+const focusFirstField = (element: HTMLDialogElement): void => {
+  const field = element.querySelector<HTMLElement>('[autofocus]') ?? element.querySelector<HTMLElement>(FIELD_SELECTOR);
+
+  field?.focus();
+};
+
 const sync = (open: boolean): void => {
   const element = dialog.value;
 
@@ -31,13 +44,15 @@ const sync = (open: boolean): void => {
 
   if (open && !element.open) {
     element.showModal();
+    focusFirstField(element);
   } else if (!open && element.open) {
     element.close();
   }
 };
 
 onMounted(() => sync(props.open));
-watch(() => props.open, sync);
+// После отрисовки: окно открывается вместе с новой формой, и искать поле надо уже в ней.
+watch(() => props.open, sync, { flush: 'post' });
 
 /** Escape: браузер закрыл бы окно сам, но закрывает его вызывающий — через `open`. */
 const onCancel = (event: Event): void => {
