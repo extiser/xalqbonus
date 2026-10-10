@@ -16,6 +16,8 @@ import { workStatusLabel } from '~/utils/labels';
  */
 const props = defineProps<{
   driver: DriverSearchRow;
+  /** Номер строки в результатах, с 1; на страницах — продолжение счёта прошлых. */
+  position: number;
 }>();
 
 const fullName = computed(() => {
@@ -36,55 +38,58 @@ const callsigns = computed(() => props.driver.callsigns.join(', '));
 </script>
 
 <template>
-  <article class="border-t border-slate-200 py-3 first:border-t-0 first:pt-0">
-    <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-      <NuxtLink
-        :to="`/drivers/${driver.personId}`"
-        class="text-sm font-semibold text-slate-900 underline decoration-slate-300 underline-offset-4 transition-colors hover:decoration-slate-900"
-      >
-        {{ fullName }}
-      </NuxtLink>
-      <!-- Рядом с именем, а не в сетке ниже: позывной — то, чем водитель называет себя сам
-           и что произносится вслух в офисе, наравне с фамилией. -->
-      <span v-if="callsigns" class="font-mono text-sm text-slate-500">{{ callsigns }}</span>
-      <AtomsStatusBadge
-        :tone="driver.isMember ? 'ok' : 'muted'"
-        :label="driver.isMember ? 'в программе' : 'не в программе'"
-      />
-      <AtomsStatusBadge v-if="driver.isDemo" tone="demo" label="ДЕМО" />
-      <AtomsStatusBadge
-        v-for="status in driver.workStatuses"
-        :key="status"
-        :tone="status === 'working' ? 'ok' : 'muted'"
-        :label="workStatusLabel(status)"
-      />
-      <!-- Несколько учёток у одного человека — не редкость и не ошибка: увольнение
-           и заведение заново дают второй профиль на том же номере ВУ. -->
-      <AtomsStatusBadge
-        v-if="driver.profilesCount > 1"
-        tone="warn"
-        :label="`учёток в парке: ${driver.profilesCount}`"
-      />
-    </div>
+  <article class="flex items-start gap-x-4 border-t border-slate-200 py-3 first:border-t-0 first:pt-0">
+    <span class="w-10 shrink-0 text-right"><AtomsRowNumber :value="position" /></span>
+    <div class="min-w-0 flex-1">
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <NuxtLink
+          :to="`/drivers/${driver.personId}`"
+          class="text-sm font-semibold text-slate-900 underline decoration-slate-300 underline-offset-4 transition-colors hover:decoration-slate-900"
+        >
+          {{ fullName }}
+        </NuxtLink>
+        <!-- Рядом с именем, а не в сетке ниже: позывной — то, чем водитель называет себя сам
+             и что произносится вслух в офисе, наравне с фамилией. -->
+        <span v-if="callsigns" class="font-mono text-sm text-slate-500">{{ callsigns }}</span>
+        <AtomsStatusBadge
+          :tone="driver.isMember ? 'ok' : 'muted'"
+          :label="driver.isMember ? 'в программе' : 'не в программе'"
+        />
+        <AtomsStatusBadge v-if="driver.isDemo" tone="demo" label="ДЕМО" />
+        <AtomsStatusBadge
+          v-for="status in driver.workStatuses"
+          :key="status"
+          :tone="status === 'working' ? 'ok' : 'muted'"
+          :label="workStatusLabel(status)"
+        />
+        <!-- Несколько учёток у одного человека — не редкость и не ошибка: увольнение
+             и заведение заново дают второй профиль на том же номере ВУ. -->
+        <AtomsStatusBadge
+          v-if="driver.profilesCount > 1"
+          tone="warn"
+          :label="`учёток в парке: ${driver.profilesCount}`"
+        />
+      </div>
 
-    <dl class="mt-1 grid grid-cols-1 gap-x-6 text-sm sm:grid-cols-3">
-      <div class="flex gap-2">
-        <dt class="text-slate-500">ВУ</dt>
-        <dd class="ym-hide-content font-mono break-all text-slate-700">{{ driver.licenseNumberRaw ?? DASH }}</dd>
-      </div>
-      <div class="flex gap-2">
-        <dt class="text-slate-500">Телефон</dt>
-        <dd class="ym-hide-content font-mono break-all text-slate-700">
-          {{ driver.phones.length > 0 ? driver.phones.join(', ') : DASH }}
-        </dd>
-      </div>
-      <div class="flex gap-2">
-        <dt class="text-slate-500">Баланс</dt>
-        <!-- Прочерк, а не ноль: счёта нет, потому что человек не в программе. -->
-        <dd class="font-mono text-slate-700 tabular-nums">
-          {{ driver.balance === null ? DASH : formatNumber(driver.balance) }}
-        </dd>
-      </div>
-    </dl>
+      <dl class="mt-1 grid grid-cols-1 gap-x-6 text-sm sm:grid-cols-3">
+        <div class="flex gap-2">
+          <dt class="text-slate-500">ВУ</dt>
+          <dd class="ym-hide-content font-mono break-all text-slate-700">{{ driver.licenseNumberRaw ?? DASH }}</dd>
+        </div>
+        <div class="flex gap-2">
+          <dt class="text-slate-500">Телефон</dt>
+          <dd class="ym-hide-content font-mono break-all text-slate-700">
+            {{ driver.phones.length > 0 ? driver.phones.join(', ') : DASH }}
+          </dd>
+        </div>
+        <div class="flex gap-2">
+          <dt class="text-slate-500">Баланс</dt>
+          <!-- Прочерк, а не ноль: счёта нет, потому что человек не в программе. -->
+          <dd class="font-mono text-slate-700 tabular-nums">
+            {{ driver.balance === null ? DASH : formatNumber(driver.balance) }}
+          </dd>
+        </div>
+      </dl>
+    </div>
   </article>
 </template>

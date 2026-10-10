@@ -42,10 +42,11 @@ const driversLabel = (total: number): string =>
       </p>
       <ul>
         <li
-          v-for="segment in data.segments"
+          v-for="(segment, index) in data.segments"
           :key="segment.segmentId"
           class="flex flex-wrap items-start gap-x-4 gap-y-1 border-t border-slate-200 py-3"
         >
+          <span class="w-8 shrink-0 text-right"><AtomsRowNumber :value="index + 1" /></span>
           <div class="min-w-48 flex-1">
             <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <NuxtLink

@@ -51,10 +51,11 @@ const recipientText = (grant: GiftGrant): string =>
     />
     <ul v-else>
       <li
-        v-for="grant in grants"
+        v-for="(grant, index) in grants"
         :key="grant.giftGrantId"
         class="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-200 py-3 first:border-t-0"
       >
+        <span class="w-8 shrink-0 text-right"><AtomsRowNumber :value="index + 1" /></span>
         <!-- Обложки — той же рамкой 16:9, что у водителя; обе или ни одной. -->
         <div v-if="coverThumbnails(grant).length > 0" class="flex shrink-0 gap-2">
           <figure v-for="cover in coverThumbnails(grant)" :key="cover.label">

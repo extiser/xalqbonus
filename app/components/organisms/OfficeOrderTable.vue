@@ -39,7 +39,7 @@ const emit = defineEmits<{ toggle: [order: OfficeOrder]; page: [offset: number] 
 defineSlots<{ expanded(props: { order: OfficeOrder }): unknown }>();
 
 /** Колонок в строке — раскрытая карточка занимает их все. */
-const COLUMN_COUNT = 8;
+const COLUMN_COUNT = 9;
 
 </script>
 
@@ -61,6 +61,7 @@ const COLUMN_COUNT = 8;
         <table class="w-full text-left text-sm">
           <thead class="text-xs text-slate-500">
             <tr>
+              <th class="w-px py-2 pr-4 text-right font-medium">№</th>
               <th class="py-2 pr-4 font-medium">Номер</th>
               <th class="py-2 pr-4 font-medium">Статус</th>
               <th class="py-2 pr-4 font-medium">Водитель</th>
@@ -72,8 +73,9 @@ const COLUMN_COUNT = 8;
             </tr>
           </thead>
           <tbody>
-            <template v-for="order in data.orders" :key="order.orderId">
+            <template v-for="(order, index) in data.orders" :key="order.orderId">
               <tr class="border-t border-slate-200">
+                <td class="py-2 pr-4 text-right whitespace-nowrap"><AtomsRowNumber :value="data.offset + index + 1" /></td>
                 <td class="py-2 pr-4">
                   <button
                     type="button"

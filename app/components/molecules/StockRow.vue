@@ -15,6 +15,8 @@ import type { OfficeStockRow } from '#shared/types/catalog';
  */
 const props = defineProps<{
   row: OfficeStockRow;
+  /** Номер строки в таблице остатков, с 1. */
+  position: number;
   /** Операция по этой строке в пути: обе формы на время гаснут. */
   busy: boolean;
   /** Действий нет: ДЕМО ОФИС у того, кто его не правит (issue #212). */
@@ -76,6 +78,7 @@ const archived = computed(() => props.row.archivedAt !== null);
 <template>
   <div class="border-t border-slate-200 py-3 first:border-t-0">
     <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <span class="w-8 shrink-0 text-right"><AtomsRowNumber :value="position" /></span>
       <div class="min-w-40 flex-1">
         <p class="text-sm font-medium text-slate-900">{{ row.name }}</p>
         <p class="mt-0.5 text-xs text-slate-500">

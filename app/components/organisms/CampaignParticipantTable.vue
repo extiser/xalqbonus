@@ -102,6 +102,7 @@ const fullName = (row: CampaignParticipantsResponse['rows'][number]): string =>
           <table class="w-full text-left text-sm">
             <thead class="text-xs text-slate-500">
               <tr>
+                <th class="w-px py-2 pr-4 text-right font-medium">№</th>
                 <th class="py-2 pr-4 font-medium">Водитель</th>
                 <th class="py-2 pr-4 font-medium">Позывной</th>
                 <th v-if="splitEnabled" class="py-2 pr-4 font-medium">Половина</th>
@@ -112,7 +113,8 @@ const fullName = (row: CampaignParticipantsResponse['rows'][number]): string =>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in data.rows" :key="row.personId" class="border-t border-slate-200">
+              <tr v-for="(row, index) in data.rows" :key="row.personId" class="border-t border-slate-200">
+                <td class="py-2 pr-4 text-right whitespace-nowrap"><AtomsRowNumber :value="data.offset + index + 1" /></td>
                 <td class="py-2 pr-4">
                   <NuxtLink
                     :to="`/drivers/${row.personId}`"

@@ -98,9 +98,10 @@ const criteria = computed((): SearchCriterion[] => {
         </template>
       </p>
       <MoleculesDriverSearchItem
-        v-for="driver in data.rows"
+        v-for="(driver, index) in data.rows"
         :key="driver.personId"
         :driver="driver"
+        :position="data.offset + index + 1"
       />
       <div class="border-t border-slate-200 pt-3">
         <MoleculesPagerBar

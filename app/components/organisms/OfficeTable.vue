@@ -36,22 +36,25 @@ defineProps<{
     />
     <ul v-else>
       <li
-        v-for="office in data.offices"
+        v-for="(office, index) in data.offices"
         :key="office.officeId"
-        class="border-t border-slate-200 py-3 first:border-t-0"
+        class="flex items-start gap-x-4 border-t border-slate-200 py-3 first:border-t-0"
       >
-        <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <NuxtLink
-            :to="`/offices/${office.officeId}`"
-            class="text-sm font-semibold text-slate-900 underline underline-offset-2 hover:text-slate-600"
-          >
-            {{ office.name }}
-          </NuxtLink>
-          <AtomsStatusBadge v-if="office.archivedAt" tone="muted" label="В архиве" />
-          <AtomsStatusBadge v-if="office.isDemo" tone="demo" label="ДЕМО" />
+        <span class="w-8 shrink-0 text-right"><AtomsRowNumber :value="index + 1" /></span>
+        <div class="min-w-0 flex-1">
+          <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <NuxtLink
+              :to="`/offices/${office.officeId}`"
+              class="text-sm font-semibold text-slate-900 underline underline-offset-2 hover:text-slate-600"
+            >
+              {{ office.name }}
+            </NuxtLink>
+            <AtomsStatusBadge v-if="office.archivedAt" tone="muted" label="В архиве" />
+            <AtomsStatusBadge v-if="office.isDemo" tone="demo" label="ДЕМО" />
+          </div>
+          <p class="mt-1 text-sm text-slate-600">{{ office.address }}</p>
+          <p v-if="office.workHours" class="mt-0.5 text-xs text-slate-500">{{ office.workHours }}</p>
         </div>
-        <p class="mt-1 text-sm text-slate-600">{{ office.address }}</p>
-        <p v-if="office.workHours" class="mt-0.5 text-xs text-slate-500">{{ office.workHours }}</p>
       </li>
     </ul>
   </MoleculesSectionPanel>

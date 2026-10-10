@@ -36,10 +36,11 @@ defineProps<{
     />
     <ul v-else>
       <li
-        v-for="survey in surveys"
+        v-for="(survey, index) in surveys"
         :key="survey.surveyId"
         class="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-200 py-3 first:border-t-0"
       >
+        <span class="w-8 shrink-0 text-right"><AtomsRowNumber :value="index + 1" /></span>
         <div class="min-w-48 flex-1">
           <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <NuxtLink
