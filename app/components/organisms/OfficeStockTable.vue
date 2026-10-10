@@ -47,9 +47,10 @@ const emit = defineEmits<{
     <div v-else>
       <p v-if="error" class="mb-3 text-sm text-red-700">{{ error }}</p>
       <MoleculesStockRow
-        v-for="row in data.rows"
+        v-for="(row, index) in data.rows"
         :key="row.productId"
         :row="row"
+        :position="index + 1"
         :busy="busyProductId === row.productId"
         :readonly="readonly"
         @receive="emit('receive', { productId: row.productId, ...$event })"

@@ -64,6 +64,9 @@ const visibleAccounts = computed(() =>
   (props.accounts ?? []).filter((account) => showDisabled.value || !account.disabled),
 );
 
+/** Номер строки сплошной: учётки продолжают счёт приглашений, которые стоят над ними. */
+const inviteCount = computed(() => (props.invites ?? []).length);
+
 /** Учётка, у которой открыт выбор новой роли. Одна за раз: выбор — короткое действие. */
 const roleEditorFor = ref<string | null>(null);
 const chosenRole = ref('');
@@ -129,10 +132,11 @@ const empty = computed(
       </label>
       <ul>
         <li
-          v-for="invite in invites ?? []"
+          v-for="(invite, index) in invites ?? []"
           :key="invite.inviteId"
           class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-slate-200 py-3 first:border-t-0"
         >
+          <span class="w-8 shrink-0 text-right"><AtomsRowNumber :value="index + 1" /></span>
           <div class="min-w-48 flex-1">
             <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <span class="text-sm font-semibold text-slate-900">{{ invite.fullName ?? 'Приглашение' }}</span>
@@ -170,10 +174,11 @@ const empty = computed(
         </li>
 
         <li
-          v-for="account in visibleAccounts"
+          v-for="(account, index) in visibleAccounts"
           :key="account.employeeId"
           class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-slate-200 py-3 first:border-t-0"
         >
+          <span class="w-8 shrink-0 text-right"><AtomsRowNumber :value="inviteCount + index + 1" /></span>
           <div class="min-w-48 flex-1">
             <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <span class="text-sm font-semibold text-slate-900">{{ account.fullName }}</span>

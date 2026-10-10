@@ -54,6 +54,7 @@ const CELL_CLASSES = 'border-t border-web-line py-[11px] pr-3 whitespace-nowrap 
         <table class="w-full border-collapse font-manrope text-[14px]">
           <thead>
             <tr>
+              <th :class="HEAD_CLASSES" class="w-px text-right">№</th>
               <th :class="HEAD_CLASSES" class="text-left">Метка</th>
               <th :class="HEAD_CLASSES" class="text-left">Носитель</th>
               <th :class="HEAD_CLASSES" class="text-left">Место</th>
@@ -64,11 +65,12 @@ const CELL_CLASSES = 'border-t border-web-line py-[11px] pr-3 whitespace-nowrap 
           </thead>
           <tbody>
             <tr
-              v-for="link in links"
+              v-for="(link, index) in links"
               :key="link.code"
               class="group cursor-pointer"
               @click="router.push(cardPath(link.code))"
             >
+              <td :class="CELL_CLASSES" class="text-right"><AtomsWebRowNumber :value="index + 1" /></td>
               <td :class="CELL_CLASSES">
                 <NuxtLink
                   :to="cardPath(link.code)"

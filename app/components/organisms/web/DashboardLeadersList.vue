@@ -23,6 +23,9 @@ import type { DashboardLeaderGroup, DashboardLeaderRow, DashboardLevers } from '
  *
  * Строка вместо таблицы — плитка в два ряда, как в макетах состояний; с таблицей — три и растёт.
  *
+ * Первая колонка — номер строки, сплошной через группы: подзаголовок называет число в группе,
+ * номер — сколько всего.
+ *
  * Таблица — `table-layout: fixed` с заданными ширинами колонок, не уже 860: дальше прокрутка вбок
  * внутри плитки. Текст — влево, числа и «Программа» — вправо; значок подсказки в их шапке — за
  * правым краем подписи (`MoleculesWebColumnLabel`). Отступ от шапки плитки до таблицы — 28, как
@@ -111,14 +114,22 @@ const GROUP_TITLES: Record<DashboardLeaderGroup, (count: number) => string> = {
 
 const GROUP_ORDER: readonly DashboardLeaderGroup[] = ['below', 'stopped', 'left'];
 
-/** Непустые группы в порядке экрана; строки внутри уже упорядочены сервером. */
-const groups = computed(() =>
-  GROUP_ORDER.map((group) => {
-    const members = (rows.value ?? []).filter((row) => row.group === group);
+/**
+ * Непустые группы в порядке экрана; строки внутри уже упорядочены сервером. `start` — сколько
+ * строк стоит выше группы: от него продолжается сплошной номер.
+ */
+const groups = computed(() => {
+  let start = 0;
 
-    return { group, title: GROUP_TITLES[group](members.length), rows: members };
-  }).filter((group) => group.rows.length > 0),
-);
+  return GROUP_ORDER.map((group) => {
+    const members = (rows.value ?? []).filter((row) => row.group === group);
+    const entry = { group, title: GROUP_TITLES[group](members.length), rows: members, start };
+
+    start += members.length;
+
+    return entry;
+  }).filter((group) => group.rows.length > 0);
+});
 
 const footnote = computed(() => {
   const value = leaders.value;
@@ -134,14 +145,17 @@ const idleText = (days: number): string => `не ездит ${days} ${pluralize(
 
 type Column = { label: string; width: string; align: 'left' | 'right'; metric?: MetricKey };
 
+/** Колонка номера строки — перед `COLUMNS`; её ширина взята у «Последней поездки», «Водителя» и «К своей норме». */
+const NUMBER_WIDTH = '5%';
+
 const COLUMNS: readonly Column[] = [
   { label: 'Позывной', width: '8%', align: 'left' },
-  { label: 'Водитель', width: '26%', align: 'left' },
+  { label: 'Водитель', width: '25%', align: 'left' },
   { label: 'Программа', width: '9%', align: 'right', metric: 'leadersProgram' },
   { label: 'В неделю / его норма', width: '15%', align: 'right', metric: 'leadersWeekNorm' },
-  { label: 'К своей норме', width: '15%', align: 'right', metric: 'leadersToNorm' },
+  { label: 'К своей норме', width: '14%', align: 'right', metric: 'leadersToNorm' },
   { label: 'Недель ниже', width: '12%', align: 'right', metric: 'leadersWeeksBelow' },
-  { label: 'Последняя поездка', width: '15%', align: 'right' },
+  { label: 'Последняя поездка', width: '12%', align: 'right' },
 ];
 
 const HEAD_CLASSES = 'pb-2.5 font-manrope text-[12px] font-medium whitespace-nowrap text-web-axis';
@@ -155,6 +169,8 @@ const cell = (index: number): string =>
     index === 1 ? 'whitespace-normal pr-4' : `whitespace-nowrap ${gap(index)}`,
     COLUMNS[index]?.align === 'right' ? 'text-right' : '',
   ].join(' ');
+
+const NUMBER_CELL_CLASSES = 'border-t border-web-line py-[11px] pr-3 text-right whitespace-nowrap group-hover:bg-web-cyan/3';
 
 const PILL_CLASSES = 'inline-block rounded-full px-2.5 py-[3px] font-manrope text-[12px] font-semibold';
 </script>
@@ -200,10 +216,12 @@ const PILL_CLASSES = 'inline-block rounded-full px-2.5 py-[3px] font-manrope tex
       <div class="-mx-1 mt-3.5 overflow-x-auto px-1">
         <table class="mt-3.5 w-full min-w-[860px] table-fixed border-collapse font-manrope text-[14px] text-web-text">
           <colgroup>
+            <col :style="{ width: NUMBER_WIDTH }" />
             <col v-for="column in COLUMNS" :key="column.label" :style="{ width: column.width }" />
           </colgroup>
           <thead>
             <tr>
+              <th :class="HEAD_CLASSES" class="pr-3 text-right">№</th>
               <th
                 v-for="(column, index) in COLUMNS"
                 :key="column.label"
@@ -217,7 +235,7 @@ const PILL_CLASSES = 'inline-block rounded-full px-2.5 py-[3px] font-manrope tex
             <template v-for="(group, groupIndex) in groups" :key="group.group">
               <tr>
                 <td
-                  :colspan="COLUMNS.length"
+                  :colspan="COLUMNS.length + 1"
                   class="pr-3 pb-2 font-manrope text-[12px] font-semibold text-web-title"
                   :class="groupIndex === 0 ? 'pt-1' : 'pt-[18px]'"
                 >
@@ -225,11 +243,12 @@ const PILL_CLASSES = 'inline-block rounded-full px-2.5 py-[3px] font-manrope tex
                 </td>
               </tr>
               <tr
-                v-for="row in group.rows"
+                v-for="(row, index) in group.rows"
                 :key="row.personId"
                 class="group cursor-pointer"
                 @click="router.push(driverPath(row))"
               >
+                <td :class="NUMBER_CELL_CLASSES"><AtomsWebRowNumber :value="group.start + index + 1" /></td>
                 <td :class="cell(0)">{{ row.callsign ?? DASH }}</td>
                 <td :class="cell(1)">
                   <NuxtLink

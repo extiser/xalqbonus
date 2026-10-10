@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { DASH, formatDateTime, formatNumber } from '~/utils/format';
 import type { ReportCell, ReportColumn, ReportRow, ReportResult } from '#shared/types/reports';
 
@@ -15,7 +16,7 @@ import type { ReportCell, ReportColumn, ReportRow, ReportResult } from '#shared/
  * толщины, что над `Итого`, и перед строками следующего офиса — пустая полоса в половину строки.
  * Перед `Итого` полосы нет: там уже есть линия.
  */
-defineProps<{
+const props = defineProps<{
   result: ReportResult;
 }>();
 
@@ -53,6 +54,25 @@ const rowClass = (rows: ReportRow[], index: number): string => {
 
   return row.kind === 'row' && opensGap(rows, index - 1) ? '' : ROW_CLASSES[row.kind];
 };
+
+/**
+ * Номера строк раздела, сплошные через офисы; у строк «Итого» номера нет — `null`: номер
+ * считает записи, а итог — не запись.
+ */
+const rowNumbers = (rows: ReportRow[]): (number | null)[] => {
+  let count = 0;
+
+  return rows.map((row) => {
+    if (row.kind !== 'row') return null;
+
+    count += 1;
+
+    return count;
+  });
+};
+
+/** Номера по разделам — в порядке `result.sections`. */
+const sectionRowNumbers = computed(() => props.result.sections.map((section) => rowNumbers(section.rows)));
 </script>
 
 <template>
@@ -63,11 +83,12 @@ const rowClass = (rows: ReportRow[], index: number): string => {
       <p class="mt-1 text-xs text-slate-400">Сформирован {{ formatDateTime(result.generatedAt) }}</p>
     </div>
 
-    <MoleculesSectionPanel v-for="section in result.sections" :key="section.title" :title="section.title">
+    <MoleculesSectionPanel v-for="(section, sectionIndex) in result.sections" :key="section.title" :title="section.title">
       <div class="overflow-x-auto">
         <table class="w-full text-left text-sm">
           <thead class="text-xs text-slate-500">
             <tr>
+              <th class="w-px py-2 pr-4 text-right font-medium">№</th>
               <th
                 v-for="column in section.columns"
                 :key="column.key"
@@ -81,6 +102,12 @@ const rowClass = (rows: ReportRow[], index: number): string => {
           <tbody class="text-slate-900">
             <template v-for="(row, rowIndex) in section.rows" :key="rowIndex">
               <tr :class="rowClass(section.rows, rowIndex)">
+                <td class="py-2 pr-4 text-right whitespace-nowrap">
+                  <AtomsRowNumber
+                    v-if="sectionRowNumbers[sectionIndex]?.[rowIndex]"
+                    :value="sectionRowNumbers[sectionIndex]?.[rowIndex] ?? 0"
+                  />
+                </td>
                 <td
                   v-for="column in section.columns"
                   :key="column.key"
@@ -92,7 +119,7 @@ const rowClass = (rows: ReportRow[], index: number): string => {
               </tr>
               <!-- Полоса в половину строки (36 px): отступ между офисами, без линий. -->
               <tr v-if="opensGap(section.rows, rowIndex)" aria-hidden="true">
-                <td :colspan="section.columns.length" class="h-4.5 p-0" />
+                <td :colspan="section.columns.length + 1" class="h-4.5 p-0" />
               </tr>
             </template>
           </tbody>

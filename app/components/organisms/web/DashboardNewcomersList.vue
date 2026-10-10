@@ -115,13 +115,16 @@ const driverPath = (row: DashboardNewcomerRow): string => `/drivers/${row.person
 
 type Column = { label: string; width: string; align: 'left' | 'right' };
 
+/** Колонка номера строки — перед `columns`; её ширина взята у дат первой и последней поездки и у «Водителя». */
+const NUMBER_WIDTH = '5%';
+
 const columns = computed((): readonly Column[] => [
   { label: 'Позывной', width: '10%', align: 'left' },
-  { label: 'Водитель', width: '30%', align: 'left' },
+  { label: 'Водитель', width: '29%', align: 'left' },
   { label: 'Программа', width: '12%', align: 'right' },
-  { label: 'Первая поездка', width: '16%', align: 'right' },
+  { label: 'Первая поездка', width: '14%', align: 'right' },
   { label: `Поездок за ${ready.value?.thresholds.firstDays ?? ''} дней`, width: '16%', align: 'right' },
-  { label: 'Последняя поездка', width: '16%', align: 'right' },
+  { label: 'Последняя поездка', width: '14%', align: 'right' },
 ]);
 
 const HEAD_CLASSES = 'pb-2.5 font-manrope text-[12px] font-medium whitespace-nowrap text-web-axis';
@@ -135,6 +138,8 @@ const cell = (index: number): string =>
     index === 1 ? 'whitespace-normal pr-4' : `whitespace-nowrap ${gap(index)}`,
     columns.value[index]?.align === 'right' ? 'text-right' : '',
   ].join(' ');
+
+const NUMBER_CELL_CLASSES = 'border-t border-web-line py-3 pr-3 text-right whitespace-nowrap group-hover:bg-web-cyan/3';
 
 const PILL_CLASSES = 'inline-block rounded-full px-2.5 py-[3px] font-manrope text-[12px] font-semibold';
 </script>
@@ -179,10 +184,12 @@ const PILL_CLASSES = 'inline-block rounded-full px-2.5 py-[3px] font-manrope tex
     <div v-else-if="rows" class="-mx-1 mt-3.5 overflow-x-auto px-1">
       <table class="mt-3.5 w-full min-w-[860px] table-fixed border-collapse font-manrope text-[14px] text-web-text">
         <colgroup>
+          <col :style="{ width: NUMBER_WIDTH }" />
           <col v-for="column in columns" :key="column.label" :style="{ width: column.width }" />
         </colgroup>
         <thead>
           <tr>
+            <th :class="HEAD_CLASSES" class="pr-3 text-right">№</th>
             <th
               v-for="(column, index) in columns"
               :key="column.label"
@@ -193,7 +200,8 @@ const PILL_CLASSES = 'inline-block rounded-full px-2.5 py-[3px] font-manrope tex
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in rows" :key="row.personId" class="group cursor-pointer" @click="router.push(driverPath(row))">
+          <tr v-for="(row, index) in rows" :key="row.personId" class="group cursor-pointer" @click="router.push(driverPath(row))">
+            <td :class="NUMBER_CELL_CLASSES"><AtomsWebRowNumber :value="index + 1" /></td>
             <td :class="cell(0)">
               <template v-if="row.callsign">{{ row.callsign }}</template>
               <span v-else class="text-web-grey">{{ DASH }}</span>
