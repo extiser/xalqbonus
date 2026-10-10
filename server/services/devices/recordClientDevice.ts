@@ -2,7 +2,7 @@ import type { ClientPlatform } from '#server/generated/prisma/enums';
 import { recordClientDeviceVisit } from '#server/repositories/clientDevices';
 import { listActiveOffices, type OfficeRow } from '#server/repositories/offices';
 import { formatPhone } from '#shared/phone';
-import type { MiniAppDeviceResponse, OldEngineOffice } from '#shared/types/miniapp';
+import type { OldEngineOffice } from '#shared/types/miniapp';
 
 /**
  * Вход в Mini App с телефона (issue #223): строка лога устройств и, если движок старый,
@@ -88,7 +88,7 @@ const toOldEngineOffice = (row: OfficeRow): OldEngineOffice => ({
   mapUrl: row.mapUrl,
 });
 
-export const recordClientDevice = async (input: ClientDeviceInput): Promise<MiniAppDeviceResponse> => {
+export const recordClientDevice = async (input: ClientDeviceInput): Promise<{ offices: OldEngineOffice[] }> => {
   const { osVersion, engineVersion } = parseUserAgent(input.userAgent);
 
   await recordClientDeviceVisit({

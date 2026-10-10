@@ -31,6 +31,10 @@ import { INIT_DATA_HEADER } from '#shared/types/miniapp';
  *      Google Play перебрасывает на `market://`, и Telegram показывает
  *      `net::ERR_UNKNOWN_URL_SCHEME` (прогон на стенде 26-09-2026, Android 11, WebView 87).
  *      Без `openLink` — `window.open`, а не открылось и оно — остаётся `href` самой ссылки.
+ *   6. Приложение открыто ссылкой метки (`start_param` начинается с `p_`) — «обновите» не рисуется
+ *      сразу (issue #460): ответ входа может нести экран заявки кандидата. До 8 секунд на экране
+ *      только фон; экран заявки пришёл — его рисует `__xbOldEngineApplication`
+ *      (`oldEngineApplication.ts`), иначе, при ошибке или по истечении срока — «обновите».
  *
  * Разметка и CSS — из макетов `_reference/design/registration/state-old-browser-*.html` как
  * есть: CSS нарочно старый (без flex gap, `inset`, `dvh`, `@layer`, `oklch`), и переписывать
@@ -111,10 +115,22 @@ export const OLD_ENGINE_GUARD_SCRIPT = `(function () {
   var initData = webApp && typeof webApp.initData === 'string' ? webApp.initData : '';
   var hasInitData = /(^|&)hash=/.test(initData) && /(^|&)auth_date=/.test(initData);
   var showScreen = !engineOk && screenPlatform !== '';
+  var willSendVisit = hasInitData && phonePlatform !== '';
+  var startParam = webApp && webApp.initDataUnsafe && typeof webApp.initDataUnsafe.start_param === 'string'
+    ? webApp.initDataUnsafe.start_param
+    : '';
+  // Приложение открыто ссылкой метки — экран может оказаться заявкой кандидата (issue #460):
+  // «обновите» ждёт ответа входа, а до него на экране только фон.
+  var awaitApplication = showScreen && willSendVisit && /^p_/.test(startParam);
+
+  // Сразу при старом движке — спрятать основной код и поставить фон экрана. Остальное — CSS экрана
+  // «обновите»: ставится, только когда рисуется он, — экраны заявки несут свой.
+  var BASE_CSS_TEXT = [
+    '#__nuxt { display: none !important; }',
+    'html, body { background: #0B0D11; margin: 0; }'
+  ].join('\\n');
 
   var CSS_TEXT = [
-    '#__nuxt { display: none !important; }',
-    'html, body { background: #0B0D11; margin: 0; }',
     '.screen {',
     '  position: relative; width: 100%; max-width: 520px; min-height: 100vh; margin: 0 auto;',
     '  box-sizing: border-box; background: #0B0D11; color: #F4F6F8; overflow: hidden;',
@@ -213,9 +229,14 @@ export const OLD_ENGINE_GUARD_SCRIPT = `(function () {
   var ICON_PHONE = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M6.2 4.5h3l1.4 3.4-2 1.4a11 11 0 0 0 5.1 5.1l1.4-2 3.4 1.4v3c0 .8-.7 1.5-1.5 1.4C10.5 17.7 6.3 13.5 4.8 6c-.1-.8.6-1.5 1.4-1.5Z" stroke="#8A93A2" stroke-width="1.7" stroke-linejoin="round"/></svg>';
   var ICON_CHEVRON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M9.5 5.5l6.5 6.5-6.5 6.5" stroke="#7FB3F5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
+  /** Сколько ждать ответа входа, прежде чем рисовать «обновите» без него. */
+  var APPLICATION_WAIT_MS = 8000;
+
   var language = 'ru';
   var screenRoot = null;
   var pendingOffices = null;
+  var screenDecided = !awaitApplication;
+  var waitTimer = null;
 
   function escapeHtml(value) {
     return String(value)
@@ -388,6 +409,74 @@ export const OLD_ENGINE_GUARD_SCRIPT = `(function () {
     }
   }
 
+  function appendStyle(cssText) {
+    var style = document.createElement('style');
+
+    style.appendChild(document.createTextNode(cssText));
+    document.head.appendChild(style);
+  }
+
+  function whenDocumentReady(callback) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', callback);
+    } else {
+      callback();
+    }
+  }
+
+  function showUpdateScreen() {
+    appendStyle(CSS_TEXT);
+    whenDocumentReady(renderScreen);
+  }
+
+  /** Ответ входа не пришёл за отведённое время — «обновите», офисы дорисуются, если ответ всё же придёт. */
+  function onApplicationWaitOver() {
+    if (screenDecided) {
+      return;
+    }
+
+    screenDecided = true;
+    showUpdateScreen();
+  }
+
+  /** Экран заявки вместо «обновите»: ответ его несёт и скрипт экранов заявки на месте. */
+  function showApplication(application) {
+    var context = {
+      webApp: webApp,
+      initData: initData,
+      onExternalLinkClick: onExternalLinkClick
+    };
+
+    whenDocumentReady(function () {
+      try {
+        window.__xbOldEngineApplication(application, context);
+      } catch (error) {
+        showUpdateScreen();
+      }
+    });
+  }
+
+  function onVisitAnswered(response) {
+    var hasOffices = response !== null && Object.prototype.toString.call(response.offices) === '[object Array]';
+
+    if (!screenDecided) {
+      screenDecided = true;
+      clearTimeout(waitTimer);
+
+      if (response !== null && response.application && typeof window.__xbOldEngineApplication === 'function') {
+        showApplication(response.application);
+
+        return;
+      }
+
+      showUpdateScreen();
+    }
+
+    if (hasOffices) {
+      renderOffices(response.offices);
+    }
+  }
+
   function sendVisit() {
     var request = new XMLHttpRequest();
 
@@ -395,21 +484,21 @@ export const OLD_ENGINE_GUARD_SCRIPT = `(function () {
     request.setRequestHeader('Content-Type', 'application/json');
     request.setRequestHeader('${INIT_DATA_HEADER}', initData);
     request.onreadystatechange = function () {
-      var response;
+      var response = null;
 
-      if (request.readyState !== 4 || request.status !== 200 || !showScreen) {
+      if (request.readyState !== 4 || !showScreen) {
         return;
       }
 
-      try {
-        response = JSON.parse(request.responseText);
-      } catch (error) {
-        return;
+      if (request.status === 200) {
+        try {
+          response = JSON.parse(request.responseText);
+        } catch (error) {
+          response = null;
+        }
       }
 
-      if (response && Object.prototype.toString.call(response.offices) === '[object Array]') {
-        renderOffices(response.offices);
-      }
+      onVisitAnswered(response && typeof response === 'object' ? response : null);
     };
     request.send(JSON.stringify({
       platform: phonePlatform,
@@ -421,23 +510,21 @@ export const OLD_ENGINE_GUARD_SCRIPT = `(function () {
   if (showScreen) {
     window.__xbOldEngine = true;
     language = readLanguage();
+    appendStyle(BASE_CSS_TEXT);
 
-    var style = document.createElement('style');
-    style.appendChild(document.createTextNode(CSS_TEXT));
-    document.head.appendChild(style);
-
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', renderScreen);
+    if (awaitApplication) {
+      waitTimer = setTimeout(onApplicationWaitOver, APPLICATION_WAIT_MS);
     } else {
-      renderScreen();
+      showUpdateScreen();
     }
   }
 
-  if (hasInitData && phonePlatform !== '') {
+  if (willSendVisit) {
     try {
       sendVisit();
     } catch (error) {
-      // Лог устройств — не повод ломать открытие приложения.
+      // Лог устройств — не повод ломать открытие приложения. Экран не ждёт ответа, которого не будет.
+      onApplicationWaitOver();
     }
   }
 })();

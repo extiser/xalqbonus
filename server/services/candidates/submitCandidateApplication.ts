@@ -109,7 +109,8 @@ const readApplicationPhone = (request: CandidateApplicationRequest): Application
 const respond = (
   outcome: MiniAppApplicationResponse['outcome'],
   row: CandidateApplicationRow,
-): MiniAppApplicationResponse => ({ outcome, ...toApplicationView(row), language: row.language });
+  now: Date,
+): MiniAppApplicationResponse => ({ outcome, ...toApplicationView(row, now), language: row.language });
 
 export const submitCandidateApplication = async (
   request: CandidateApplicationRequest,
@@ -149,7 +150,7 @@ export const submitCandidateApplication = async (
     (phone.source === 'telegram_contact' ? await findOpenApplicationByPhone(phone.e164) : null);
 
   if (open) {
-    return respond('repeat', open);
+    return respond('repeat', open, request.now);
   }
 
   const [reconciliation, formerLinkPersonId] = await Promise.all([
@@ -185,7 +186,7 @@ export const submitCandidateApplication = async (
       phoneSource: phone.source,
     });
 
-    return respond('accepted', inserted);
+    return respond('accepted', inserted, request.now);
   }
 
   // Вставку отбил индекс открытой заявки: второе нажатие успело раньше. Ответ — та заявка.
@@ -197,5 +198,5 @@ export const submitCandidateApplication = async (
     throw new Error('вставку заявки отбил индекс открытой заявки, а открытой заявки нет');
   }
 
-  return respond('repeat', raced);
+  return respond('repeat', raced, request.now);
 };

@@ -1,3 +1,4 @@
+import { readOldEngineApplication } from '#server/services/candidates/readOldEngineApplication';
 import { recordClientDevice } from '#server/services/devices/recordClientDevice';
 import { recordMiniAppPromoTouch } from '#server/services/promo/recordPromoTouch';
 import { requireTelegramLaunch } from '#server/utils/telegramAuth';
@@ -12,6 +13,9 @@ import type { MiniAppDeviceRequestBody, MiniAppDeviceResponse } from '#shared/ty
  *
  * Здесь же — переход по промо-метке из ссылки `?startapp=` (issue #456): ручку зовут до основного
  * кода и на старом телефоне, где до `/api/miniapp/me` дело не доходит.
+ *
+ * И по той же причине — экран заявки кандидата для старого движка (issue #460): скрипт проверки
+ * рисует его вместо «обновите», когда заявка этому человеку положена.
  */
 
 /** Потолок строк от клиента: в лог не должно уехать сколько угодно чего угодно. */
@@ -39,11 +43,16 @@ export default defineEventHandler(async (event): Promise<MiniAppDeviceResponse> 
 
   await recordMiniAppPromoTouch(launch);
 
-  return recordClientDevice({
+  const { offices } = await recordClientDevice({
     telegramUserId: user.id,
     userAgent: getHeader(event, 'user-agent') ?? '',
     platform: readClientString(body.platform),
     botApiVersion: readClientString(body.botApiVersion),
     engineOk: body.engineOk,
   });
+
+  return {
+    offices,
+    application: await readOldEngineApplication({ launch, engineOk: body.engineOk, offices, now: new Date() }),
+  };
 });

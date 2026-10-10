@@ -6,7 +6,7 @@ import { findPersonLastTripDay } from '#server/repositories/candidateApplication
 import { findActiveProfilesByPhone } from '#server/repositories/registry';
 import { ParkLookupFailedError, runProfileSyncByPhone } from '#server/services/sync/syncProfileByPhone';
 import { calendarDayMoment, DAY_MS, formatDayKey } from '#server/utils/parkTime';
-import { FORMER_DRIVER_DAYS } from '#shared/candidateApplications';
+import { CANDIDATE_LOOKUP_BUDGET_MS, FORMER_DRIVER_DAYS } from '#shared/candidateApplications';
 
 /**
  * Сверка номера заявки с реестром парка (issue #456): работает ли человек в парке, работал ли
@@ -29,6 +29,25 @@ export type CandidatePhoneReconciliation = {
 
 const NOTHING_FOUND = { personId: null, profileId: null, lastTripDay: null } as const;
 
+const LOOKUP_TIMED_OUT = Symbol('lookup timed out');
+
+/**
+ * Итог работы или `LOOKUP_TIMED_OUT`, если она не уложилась в срок. Работа не обрывается: гонка
+ * только перестаёт её ждать.
+ */
+const withinBudget = async <T>(work: Promise<T>, budgetMs: number): Promise<T | typeof LOOKUP_TIMED_OUT> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<typeof LOOKUP_TIMED_OUT>((resolve) => {
+    timer = setTimeout(() => resolve(LOOKUP_TIMED_OUT), budgetMs);
+  });
+
+  try {
+    return await Promise.race([work, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
 /** Сколько суток от `fromDay` до `toDay` — оба `YYYY-MM-DD`. */
 const daysBetween = (fromDay: string, toDay: string): number =>
   Math.round((calendarDayMoment(toDay).getTime() - calendarDayMoment(fromDay).getTime()) / DAY_MS);
@@ -45,7 +64,23 @@ export const reconcileCandidatePhone = async (
     try {
       // Сверка в реестр не пишет: в Fleet API ходит сервис синхронизации и записывает найденное
       // сам, своим обычным путём.
-      profilesSeen = (await runProfileSyncByPhone(phoneE164)).profilesSeen;
+      const lookup = runProfileSyncByPhone(phoneE164);
+      const summary = await withinBudget(lookup, CANDIDATE_LOOKUP_BUDGET_MS);
+
+      if (summary === LOOKUP_TIMED_OUT) {
+        // Заявка не ждёт дольше срока: поиск доделывается в фоне и запишет реестр сам, а его
+        // отказ остаётся в логе — наружу ему идти некуда. Телефон в лог не идёт.
+        lookup.catch((error: unknown) => {
+          log.error('поиск по телефону, не уложившийся в срок сверки, упал', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+        log.warn('сверка номера не уложилась в срок — заявка без сверки', { budgetMs: CANDIDATE_LOOKUP_BUDGET_MS });
+
+        return { match: 'lookup_failed', ...NOTHING_FOUND };
+      }
+
+      profilesSeen = summary.profilesSeen;
     } catch (error) {
       // Отказ внешнего сервиса — не повод терять заявку: она заводится без сверки, а менеджер
       // проверит номер сам. Телефон в лог не идёт — он персональные данные.

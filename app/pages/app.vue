@@ -61,6 +61,7 @@ import {
   showcaseCheckoutView,
   showcaseProductsView,
 } from '~/utils/memberViews';
+import { OLD_ENGINE_APPLICATION_SCRIPT } from '~/utils/oldEngineApplication';
 import { OLD_ENGINE_FORCE_ALLOWED_SCRIPT, OLD_ENGINE_GUARD_SCRIPT } from '~/utils/oldEngineGuard';
 import { failureDenial } from '~/utils/requestError';
 import {
@@ -137,10 +138,14 @@ useHead({
    * «обновите» и пишет вход в лог устройств до основного кода, который там не выполняется.
    * Встроенным классическим скриптом, а не модулем: сборка его не трогает. Разрешение показать
    * экран принудительно (`?old-engine=android|ios`) ставится перед ней только под `nuxt dev`.
+   *
+   * Перед проверкой — скрипт экранов заявки кандидата (issue #460): он только объявляет функцию,
+   * и проверка зовёт её вместо «обновите», когда ответ входа несёт экран заявки.
    */
   script: [
     { src: TELEGRAM_SDK_URL },
     ...(import.meta.dev ? [{ innerHTML: OLD_ENGINE_FORCE_ALLOWED_SCRIPT }] : []),
+    { innerHTML: OLD_ENGINE_APPLICATION_SCRIPT },
     { innerHTML: OLD_ENGINE_GUARD_SCRIPT },
   ],
 });

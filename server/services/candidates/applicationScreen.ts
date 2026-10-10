@@ -7,6 +7,7 @@ import { readAdPromoCode } from '#server/services/candidates/adLaunch';
 import { buildBotChatLink } from '#server/services/employees/employeeLinks';
 import { readMemberOffices } from '#server/services/offices/readMemberOffices';
 import { WELCOME_BONUS_POINTS, WELCOME_TRIPS_REQUIRED } from '#server/services/points/awardWelcomeBonus';
+import { formatDayKey, formatDayMonthWord, previousDayKey } from '#server/utils/parkTime';
 import type { TelegramLaunch } from '#server/utils/telegramInitData';
 import { formatPhone } from '#shared/phone';
 import type {
@@ -65,11 +66,41 @@ export const applicationScreenTexts = (): Record<Language, ApplicationScreenText
   uz: screenTexts('uz'),
 });
 
-/** Заявка для экрана: номер — в показном виде, дата — ISO, день словом ставит экран. */
-export const toApplicationView = (row: CandidateApplicationRow): CandidateApplicationView => ({
+/**
+ * День заявки на «Заявка уже отправлена» одним языком: сегодня и вчера — словами, иначе день
+ * и месяц словом. Сутки — по Ташкенту, как у всего, что видит водитель.
+ */
+const submittedDay = (submittedAt: Date, language: Language, now: Date): string => {
+  const day = formatDayKey(submittedAt);
+
+  if (day === formatDayKey(now)) {
+    return plainText('application_date_today', language);
+  }
+
+  if (day === previousDayKey(now)) {
+    return plainText('application_date_yesterday', language);
+  }
+
+  // Неразрывно: «8 октября» не разрывается переносом строки.
+  return plainText('application_date_day', language, {
+    date: formatDayMonthWord(submittedAt, language).replaceAll(' ', '\u00A0'),
+  });
+};
+
+/**
+ * День заявки словом на обоих языках. Здесь, а не на экране: экран старого движка на ES5
+ * даты не форматирует, и правило у обоих экранов одно (issue #460).
+ */
+export const submittedDayText = (submittedAt: Date, now: Date): Record<Language, string> => ({
+  ru: submittedDay(submittedAt, 'ru', now),
+  uz: submittedDay(submittedAt, 'uz', now),
+});
+
+/** Заявка для экрана: номер — в показном виде, день заявки — готовым словом. */
+export const toApplicationView = (row: CandidateApplicationRow, now: Date): CandidateApplicationView => ({
   name: row.name,
   phone: formatPhone(row.phoneE164).display,
-  submittedAt: row.createdAt.toISOString(),
+  submittedAtText: submittedDayText(row.createdAt, now),
   writeAllowed: row.writeAllowed,
 });
 
@@ -98,6 +129,7 @@ const readScreenBase = async () => {
  */
 export const readApplicationScreen = async (
   launch: TelegramLaunch,
+  now: Date,
 ): Promise<MiniAppApplicationScreen | MiniAppApplicationSentScreen | null> => {
   const open = await findOpenApplicationByTelegram(launch.user.id);
 
@@ -105,7 +137,7 @@ export const readApplicationScreen = async (
     return {
       screen: 'application_sent',
       ...(await readScreenBase()),
-      ...toApplicationView(open),
+      ...toApplicationView(open, now),
       language: open.language,
     };
   }

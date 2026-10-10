@@ -1,6 +1,8 @@
-import { afterAll, afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 
 import { reconcileCandidatePhone } from '#server/services/candidates/reconcileCandidatePhone';
+import { type ProfileLookupSummary, runProfileSyncByPhone } from '#server/services/sync/syncProfileByPhone';
+import { CANDIDATE_LOOKUP_BUDGET_MS } from '#shared/candidateApplications';
 import { cleanupTestData, createTestPerson, createTestTrip, disconnectDatabase } from '../support/database';
 import { cleanupTestEmployees, nextTestPhone, setTestProfilePhone } from '../support/employees';
 import { cleanupTestMetrics, insertTestPersonDays, insertTestPersonPrior, markTestPersonDemo } from '../support/metrics';
@@ -13,6 +15,21 @@ import { cleanupTestMetrics, insertTestPersonDays, insertTestPersonPrior, markTe
  *
  * Номер у каждого человека свой и в реестре есть: до Fleet API сверка не доходит.
  */
+
+// Поиск в Fleet API подменяется: тест проверяет срок сверки, а не Fleet. Сверки с номером
+// из реестра до поиска не доходят, и подмена их не касается.
+vi.mock('#server/services/sync/syncProfileByPhone', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('#server/services/sync/syncProfileByPhone')>()),
+  runProfileSyncByPhone: vi.fn(),
+}));
+
+/** Насколько ответ сверки может опоздать против срока: таймер и запрос к реестру. */
+const BUDGET_SLACK_MS = 1_000;
+
+/** Насколько поддельный поиск дольше срока. */
+const LOOKUP_OVERRUN_MS = 500;
+
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** 10-10-2026, полдень по Ташкенту. */
 const NOW = new Date('2026-10-10T07:00:00.000Z');
@@ -131,6 +148,52 @@ describe('сверка номера заявки кандидата', () => {
     expect(await reconcileCandidatePhone(person.phone, NOW)).toMatchObject({
       match: 'no_trips',
       lastTripDay: null,
+    });
+  });
+
+  describe('поиск в Fleet API дольше срока сверки', () => {
+    afterEach(() => {
+      vi.mocked(runProfileSyncByPhone).mockReset();
+    });
+
+    it('ответил после срока — заявка без сверки, ответ не позже срока', async () => {
+      const summary: ProfileLookupSummary = {
+        runId: 'test',
+        requests: 1,
+        rateLimited: 0,
+        profilesSeen: 0,
+        profilesInserted: 0,
+        profilesUpdated: 0,
+        skippedWithoutLicense: 0,
+        malformed: 0,
+      };
+      const lookup = delay(CANDIDATE_LOOKUP_BUDGET_MS + LOOKUP_OVERRUN_MS).then(() => summary);
+
+      vi.mocked(runProfileSyncByPhone).mockReturnValue(lookup);
+
+      const startedAt = Date.now();
+      const reconciliation = await reconcileCandidatePhone(nextTestPhone(), NOW);
+      const elapsedMs = Date.now() - startedAt;
+
+      expect(reconciliation).toEqual({ match: 'lookup_failed', personId: null, profileId: null, lastTripDay: null });
+      expect(elapsedMs).toBeGreaterThanOrEqual(CANDIDATE_LOOKUP_BUDGET_MS - 50);
+      expect(elapsedMs).toBeLessThan(CANDIDATE_LOOKUP_BUDGET_MS + BUDGET_SLACK_MS);
+
+      // Поиск не оборван: доделывается в фоне.
+      await expect(lookup).resolves.toBe(summary);
+    });
+
+    it('упал после срока — заявка без сверки, отказ поиска не уходит наружу', async () => {
+      const lookup = delay(CANDIDATE_LOOKUP_BUDGET_MS + LOOKUP_OVERRUN_MS).then((): ProfileLookupSummary => {
+        throw new Error('fetch failed');
+      });
+
+      vi.mocked(runProfileSyncByPhone).mockReturnValue(lookup);
+
+      expect(await reconcileCandidatePhone(nextTestPhone(), NOW)).toMatchObject({ match: 'lookup_failed' });
+
+      // Отказ случается уже после ответа: необработанное отклонение Vitest засчитал бы провалом.
+      await delay(LOOKUP_OVERRUN_MS + 200);
     });
   });
 });

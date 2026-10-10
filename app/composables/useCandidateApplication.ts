@@ -36,43 +36,11 @@ type ApplicationScreenState = MiniAppApplicationScreen | MiniAppApplicationSentS
 /** Версия Bot API, с которой есть окна номера и «Разрешить боту писать». */
 const CONTACT_WINDOWS_VERSION = '6.9';
 
-const PARK_TIME_ZONE = 'Asia/Tashkent';
-
-/** День `YYYY-MM-DD` по Ташкенту. */
-const DAY_KEY = new Intl.DateTimeFormat('en-CA', {
-  timeZone: PARK_TIME_ZONE,
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-});
-
-const DAY_MS = 24 * 60 * 60 * 1_000;
-
-/** День словом — «8 октября», «8-oktabr»: форму слова даёт `Intl` на языке экрана, как на сервере. */
-const DAY_MONTH_WORD: Readonly<Record<Language, Intl.DateTimeFormat>> = {
-  ru: new Intl.DateTimeFormat('ru-RU', { timeZone: PARK_TIME_ZONE, day: 'numeric', month: 'long' }),
-  uz: new Intl.DateTimeFormat('uz-Latn-UZ', { timeZone: PARK_TIME_ZONE, day: 'numeric', month: 'long' }),
-};
-
 /**
- * День заявки на «Заявка уже отправлена»: сегодня и вчера — словами, иначе день и месяц.
- * Сутки — по Ташкенту, как у всего, что видит водитель.
+ * Сколько ждать ответа ручки заявки, мс. Сверка номера ждёт Fleet API не дольше своего срока
+ * (`CANDIDATE_LOOKUP_BUDGET_MS`), и ответа дольше этого нет — истёк таймаут, сбой как у сети.
  */
-const submittedDay = (submittedAt: string, texts: ApplicationScreenTexts, language: Language, now: Date): string => {
-  const moment = new Date(submittedAt);
-  const day = DAY_KEY.format(moment);
-
-  if (day === DAY_KEY.format(now)) {
-    return texts.dateToday;
-  }
-
-  if (day === DAY_KEY.format(new Date(now.getTime() - DAY_MS))) {
-    return texts.dateYesterday;
-  }
-
-  // Неразрывно: «8 октября» не разрывается переносом строки.
-  return texts.dateDay.replaceAll('{date}', DAY_MONTH_WORD[language].format(moment).replaceAll(' ', ' '));
-};
+const SEND_TIMEOUT_MS = 20_000;
 
 /** Строка с номером частями: номер экран ставит белым. */
 const splitLead = (template: string, phone: string): { before: string; phone: string; after: string } => {
@@ -130,7 +98,7 @@ export const useCandidateApplication = (dependencies: CandidateApplicationDepend
       application.value = {
         name: state.name,
         phone: state.phone,
-        submittedAt: state.submittedAt,
+        submittedAtText: state.submittedAtText,
         writeAllowed: state.writeAllowed,
       };
       view.value = 'repeat';
@@ -163,12 +131,13 @@ export const useCandidateApplication = (dependencies: CandidateApplicationDepend
         method: 'POST',
         headers: { [INIT_DATA_HEADER]: dependencies.initData() },
         body,
+        timeout: SEND_TIMEOUT_MS,
       });
 
       application.value = {
         name: response.name,
         phone: response.phone,
-        submittedAt: response.submittedAt,
+        submittedAtText: response.submittedAtText,
         writeAllowed: response.writeAllowed,
       };
       language.value = response.language;
@@ -328,7 +297,7 @@ export const useCandidateApplication = (dependencies: CandidateApplicationDepend
       kind: 'repeat' as const,
       title: current.repeatTitle.replaceAll('{name}', sent.name),
       lead: splitLead(
-        template.replaceAll('{date}', submittedDay(sent.submittedAt, current, language.value, new Date())),
+        template.replaceAll('{date}', sent.submittedAtText[language.value]),
         sent.phone,
       ),
     };

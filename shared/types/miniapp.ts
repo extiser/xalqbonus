@@ -715,9 +715,44 @@ export type OldEngineOffice = {
   mapUrl: string | null;
 };
 
+/**
+ * Экран заявки кандидата на старом движке (issue #460) — его рисует скрипт экранов заявки
+ * (`app/utils/oldEngineApplication.ts`) вместо «обновите». Решает тот же выбор экрана, что
+ * у `GET /api/miniapp/me`, поэтому и тексты те же, что у экранов #456.
+ *
+ * Скрипт на ES5 ничего не форматирует сам: офисы — в показном виде, как у «обновите», день
+ * заявки — готовым словом.
+ */
+type OldEngineApplicationBase = {
+  /** Оба языка сразу: переключатель работает без запроса. */
+  texts: Record<Language, ApplicationScreenTexts>;
+  /** У `form` — по языку Telegram, у `sent` — язык заявки. */
+  language: Language;
+  offices: OldEngineOffice[];
+  /** `https://t.me/<бот>` — «Написать менеджеру» открывает чат с ботом. */
+  managerChatUrl: string;
+};
+
+export type OldEngineApplication =
+  | (OldEngineApplicationBase & { kind: 'form' })
+  | (OldEngineApplicationBase & {
+      kind: 'sent';
+      name: string;
+      /** Номер заявки для показа: «+998 90 123-45-67». */
+      phone: string;
+      writeAllowed: boolean;
+      /** День заявки готовым словом на обоих языках — `CandidateApplicationView.submittedAtText`. */
+      submittedAtText: Record<Language, string>;
+    });
+
 export type MiniAppDeviceResponse = {
   /** Работающие офисы при `engineOk === false`, иначе пусто: новому движку они не нужны. */
   offices: OldEngineOffice[];
+  /**
+   * Экран заявки вместо «обновите» (issue #460). `null` — движок новый или заявка этому
+   * человеку не положена: тогда «обновите», как раньше.
+   */
+  application: OldEngineApplication | null;
 };
 
 /**
@@ -927,7 +962,7 @@ export type MiniAppEmployeeDeniedScreen = {
 /**
  * Тексты экранов заявки кандидата на одном языке (issue #456) — поле на ключ словаря. Подстановки
  * `{name}`, `{phone}` и `{date}` ставит экран: имя и номер он рисует по-своему, а день заявки
- * знает только он — ответ ручки заявки текстов не несёт.
+ * приходит готовым словом в `submittedAtText`.
  */
 export type ApplicationScreenTexts = {
   /** Экран заявки. */
@@ -984,8 +1019,12 @@ export type CandidateApplicationView = {
   name: string;
   /** Номер заявки для показа: «+998 90 123-45-67». */
   phone: string;
-  /** Когда подана, ISO. */
-  submittedAt: string;
+  /**
+   * День заявки словом на обоих языках — «сегодня», «вчера» или «8 октября» по Ташкенту, — то,
+   * что встаёт в `{date}` строки «Заявка уже отправлена». Правило одно, на сервере: экран
+   * старого движка на ES5 даты не форматирует (issue #460).
+   */
+  submittedAtText: Record<Language, string>;
   /** Бот может писать: «напишет в Telegram», иначе «позвонит». */
   writeAllowed: boolean;
 };
