@@ -1,5 +1,6 @@
-import type { PromoMedium } from '#server/generated/prisma/enums';
+import type { PromoEntry, PromoMedium } from '#server/generated/prisma/enums';
 import {
+  isPromoEntry,
   isPromoMedium,
   PROMO_NAME_MAX_LENGTH,
   PROMO_PLACEMENT_MAX_LENGTH,
@@ -55,6 +56,26 @@ export const readPromoMedium = (value: unknown, problems: PromoDenialCode[]): Pr
   if (isPromoMedium(value)) return value;
 
   problems.push('medium_missing');
+
+  return null;
+};
+
+/**
+ * Вход (issue #467). Выбирается только у рекламы в Telegram: там значение обязано быть из списка,
+ * иначе беда и `null`. У остальных носителей — чат бота, и присланное не читается: форма шлёт
+ * вход всегда, а у плаката выбирать нечего. Носитель не выбран — вход тоже чат бота: беда
+ * носителя уже в списке, и метка не заведётся.
+ */
+export const readPromoEntry = (
+  value: unknown,
+  medium: PromoMedium | null,
+  problems: PromoDenialCode[],
+): PromoEntry | null => {
+  if (medium !== 'telegram_ad') return 'bot';
+
+  if (isPromoEntry(value)) return value;
+
+  problems.push('entry_missing');
 
   return null;
 };

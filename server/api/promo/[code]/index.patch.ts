@@ -3,7 +3,7 @@ import { requireEmployeeRole } from '#server/utils/employeeAuth';
 import { promoNotFound, readPromoCodeParam, rejectPromoFailure } from '#server/utils/promoFailure';
 import { PROMO_ROLES } from '#shared/access';
 
-// Правка метки — «Изменить» в карточке (issue #380): название и место. Код и носитель
+// Правка метки — «Изменить» в карточке (issue #380): название и место. Код, носитель и вход
 // не меняются; поля в теле, кроме этих двух, не читаются.
 type UpdateBody = {
   name?: unknown;

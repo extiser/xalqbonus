@@ -8,11 +8,11 @@ import {
   findOpenApplicationByTelegram,
   insertCandidateApplication,
 } from '#server/repositories/candidateApplications';
-import { findEmployeeByTelegramOrPhone } from '#server/repositories/employees';
 import { findActiveLinkByChat, findLastClosedLinkPerson } from '#server/repositories/programMembership';
 import { readAdPromoCode } from '#server/services/candidates/adLaunch';
 import { toApplicationView } from '#server/services/candidates/applicationScreen';
 import { reconcileCandidatePhone } from '#server/services/candidates/reconcileCandidatePhone';
+import { isEmployeeTelegram } from '#server/services/employees/isEmployeeTelegram';
 import { normalizePhoneE164 } from '#server/utils/phoneNumber';
 import { checkContactData, type TelegramLaunch } from '#server/utils/telegramInitData';
 import {
@@ -141,8 +141,11 @@ export const submitCandidateApplication = async (
 
   const phone = readApplicationPhone(request);
 
-  // Сотрудник парка заявку водителя не подаёт — та же проверка, что у регистрации.
-  if (await findEmployeeByTelegramOrPhone(user.id, phone.e164)) {
+  // Сотрудник парка заявку водителя не подаёт — по своему Telegram он получает своё приветствие.
+  // Номер сотрудника заявку не останавливает: на старом Telegram номер вводится руками, и отказ
+  // по номеру сказал бы любому, сотрудник ли его владелец. Заявка принимается как любая,
+  // разбирается парк (docs/decisions.md → «Заявка в чате бота»).
+  if (await isEmployeeTelegram(user.id)) {
     throw new CandidateApplicationError('employee');
   }
 

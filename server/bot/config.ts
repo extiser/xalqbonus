@@ -58,6 +58,28 @@ export const readBotToken = (): string => readEnv('TG_BOT_TOKEN');
 export const readMiniAppUrl = (): string => readEnv('TG_MINIAPP_URL');
 
 /**
+ * Адрес приложения для ссылок, которые бот собирает сам, вне запроса (issue #467): в обработчике
+ * апдейта `readAppOrigin(event)` взять негде. Берётся `origin` адреса Mini App: приложение живёт
+ * на том же домене, что веб (`.env.example`: «домен машины плюс `/app`»).
+ *
+ * `null` — адрес не задан или не разбирается: ссылку тогда не ставят вовсе, а не собирают
+ * с пустым хостом.
+ */
+export const readMiniAppOrigin = (): string | null => {
+  const miniAppUrl = readMiniAppUrl();
+
+  if (miniAppUrl === '') {
+    return null;
+  }
+
+  try {
+    return new URL(miniAppUrl).origin;
+  } catch {
+    return null;
+  }
+};
+
+/**
  * Читает параметры бота из окружения.
  *
  * `null` означает выключенного бота, а не ошибку: пустой `TG_BOT_TOKEN` — рабочее состояние

@@ -548,12 +548,24 @@ enum PromoMedium {
   leaflet
   video
   sms
-  /// Реклама в Telegram (issue #456): ссылка метки открывает Mini App, `?startapp=<код>`,
-  /// а не чат бота.
+  /// Реклама в Telegram (issue #456). Куда ведёт ссылка — в Mini App или в чат бота, — решает
+  /// вход метки (`PromoEntry`, issue #467).
   telegram_ad
   other
 
   @@map("promo_medium")
+  @@schema("xb")
+}
+
+/// Куда ведёт ссылка метки (issue #467): в Mini App — `?startapp=<код>` — или в чат бота —
+/// `?start=<код>`. Выбор — только у рекламы в Telegram, остальные носители ведут в чат бота.
+/// Вход решает только ссылку: заявку принимают обе двери у любой метки рекламы
+/// (docs/decisions.md → «Заявка в чате бота»). Подписи — `shared/promo.ts`.
+enum PromoEntry {
+  miniapp
+  bot
+
+  @@map("promo_entry")
   @@schema("xb")
 }
 
@@ -674,6 +686,15 @@ enum CandidateMessageFailure {
   telegram_error
 
   @@map("candidate_message_failure")
+  @@schema("xb")
+}
+
+/// Шаг заявки в чате бота (issue #467): ждём номер кнопкой или имя текстом.
+enum CandidateDraftStep {
+  awaiting_contact
+  awaiting_name
+
+  @@map("candidate_draft_step")
   @@schema("xb")
 }
 
@@ -2982,7 +3003,8 @@ model PromoTouch {
 }
 
 /// Промо-метка (issue #380): носитель — плакат, визитка, ролик — со ссылкой в бота
-/// `t.me/<бот>?start=<код>` и QR для печати. Касания по ней пишет бот в `promo_touches`.
+/// `t.me/<бот>?start=<код>` или, у рекламы в Telegram со входом в приложение, `?startapp=<код>`,
+/// и QR для печати. Касания по ней пишет бот в `promo_touches`.
 ///
 /// Код — первичный ключ: он напечатан и после заведения не меняется, как и носитель.
 /// Удаления нет.
@@ -2992,6 +3014,9 @@ model PromoLink {
   /// Видно только сотрудникам, до 80 символов.
   name                String
   medium              PromoMedium
+  /// Вход (issue #467). Не `bot` — только у рекламы в Telegram: проверкой в миграции. После
+  /// заведения не меняется, как код и носитель: ссылка уже стоит в объявлении.
+  entry               PromoEntry  @default(bot)
   /// Где висит или кому раздают, до 120 символов. Пусто — ещё не записали.
   placement           String?
   /// Кто завёл. Пусто — заведена миграцией при выкате.
@@ -3068,6 +3093,7 @@ model CandidateApplication {
   formerLinkPerson Person?      @relation("CandidateFormerLinkPerson", fields: [formerLinkPersonId], references: [id])
   handledByEmployee Employee?   @relation(fields: [handledByEmployeeId], references: [id])
   messages         CandidateMessage[]
+  chatDrafts       CandidateChatDraft[]
 
   /// Список заявок в админке — по дате.
   @@index([createdAt])
@@ -3112,5 +3138,68 @@ model CandidateMessage {
   /// Переписка заявки по времени.
   @@index([applicationId, createdAt])
   @@map("candidate_messages")
+  @@schema("xb")
+}
+
+/// Черновик заявки в чате бота (issue #467): ход диалога «номер кнопкой, имя текстом» до заявки.
+/// Между сообщениями кандидата бывают часы и перезапуск приложения, поэтому шаг, номер и метка —
+/// в базе, а не в памяти процесса (docs/decisions.md → «Заявка в чате бота»).
+///
+/// Незаконченный черновик — без заявки — один на Telegram: частичным уникальным индексом
+/// в миграции. `/start` по метке начинает его заново той же строкой.
+model CandidateChatDraft {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// `from.id` апдейта.
+  telegramUserId   BigInt             @map("telegram_user_id")
+  /// `chat.id` апдейта — в личной переписке равен `telegram_user_id`.
+  telegramChatId   BigInt             @map("telegram_chat_id")
+  /// Имя и фамилия из Telegram через пробел. Обновляются на каждом `/start`.
+  telegramName     String             @map("telegram_name")
+  telegramUsername String?            @map("telegram_username")
+  /// Метка рекламы, по которой черновик начат или начат заново. Внешнего ключа нет,
+  /// как у `promo_touches`.
+  promoCode        String             @map("promo_code")
+  /// По языку Telegram на `/start`.
+  language         Language
+  step             CandidateDraftStep
+  /// Номер из контакта как пришёл. Заполнен ровно при `awaiting_name` — проверкой в миграции.
+  phoneRaw         String?            @map("phone_raw")
+  /// `+998XXXXXXXXX`. Заполнен ровно при `awaiting_name`.
+  phoneE164        String?            @map("phone_e164")
+  /// Заявка, которой кончился черновик. Пусто — черновик не закончен.
+  applicationId    String?            @map("application_id") @db.Uuid
+  /// Последний `/start`, начавший черновик или начавший его заново.
+  startedAt        DateTime           @map("started_at") @db.Timestamptz(6)
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Заявки не удаляются; обнулить ссылку значило бы молча вернуть закрытый черновик
+  // в незаконченные.
+  application CandidateApplication?   @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  messages    CandidateDraftMessage[]
+
+  @@map("candidate_chat_drafts")
+  @@schema("xb")
+}
+
+/// Сообщение кандидата в незаконченном черновике, кроме `/start` (issue #467): менеджер увидит,
+/// что человек писал и где остановился. Показ — задача админки заявок.
+model CandidateDraftMessage {
+  id                 String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  draftId            String               @map("draft_id") @db.Uuid
+  kind               CandidateMessageKind
+  /// Текст или подпись медиа, как пришли.
+  text               String?
+  /// `file_id` медиа; у фото — самого крупного размера.
+  fileId             String?              @map("file_id")
+  /// `message_id` в личке кандидата.
+  candidateMessageId Int                  @map("candidate_message_id")
+  createdAt          DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  draft CandidateChatDraft @relation(fields: [draftId], references: [id])
+
+  /// Повтор одного апдейта: вставка — `ON CONFLICT DO NOTHING`, и шаг второй раз не двигается.
+  @@unique([draftId, candidateMessageId])
+  @@map("candidate_draft_messages")
   @@schema("xb")
 }

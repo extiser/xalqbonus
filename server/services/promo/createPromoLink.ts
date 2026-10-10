@@ -1,6 +1,7 @@
 import { insertPromoLink, isPromoCodeTaken } from '#server/repositories/promo';
 import {
   PromoInputError,
+  readPromoEntry,
   readPromoMedium,
   readPromoName,
   readPromoPlacement,
@@ -13,7 +14,7 @@ import { readPromoCode } from '../../../shared/promoLinks';
  * Заведение промо-метки (issue #380). Код приходит из формы — его выдал `generatePromoCode`,
  * — и проверяется заново: свободный при выдаче, к нажатию «Создать» он мог стать чужим.
  *
- * Отказы — все сразу, в порядке полей формы: название, носитель, место, ссылка. Занятость кода
+ * Отказы — все сразу, в порядке полей формы: название, носитель, вход, место, ссылка. Занятость кода
  * спрашивается у базы только у годной формы: при негодных полях метка всё равно не заведётся.
  */
 
@@ -21,6 +22,7 @@ export type CreatePromoLinkRequest = {
   code: unknown;
   name: unknown;
   medium: unknown;
+  entry: unknown;
   placement: unknown;
   employeeId: string;
 };
@@ -29,6 +31,7 @@ export const createPromoLink = async (request: CreatePromoLinkRequest): Promise<
   const problems: PromoDenialCode[] = [];
   const name = readPromoName(request.name, problems);
   const medium = readPromoMedium(request.medium, problems);
+  const entry = readPromoEntry(request.entry, medium, problems);
   const placement = readPromoPlacement(request.placement, problems);
   const code = typeof request.code === 'string' ? readPromoCode(request.code) : null;
 
@@ -36,8 +39,8 @@ export const createPromoLink = async (request: CreatePromoLinkRequest): Promise<
 
   throwPromoProblems(problems);
 
-  if (code === null || medium === null) {
-    throw new Error('годная форма метки без кода или носителя');
+  if (code === null || medium === null || entry === null) {
+    throw new Error('годная форма метки без кода, носителя или входа');
   }
 
   if (await isPromoCodeTaken(code)) {
@@ -48,6 +51,7 @@ export const createPromoLink = async (request: CreatePromoLinkRequest): Promise<
     code,
     name,
     medium,
+    entry,
     placement,
     createdByEmployeeId: request.employeeId,
   });

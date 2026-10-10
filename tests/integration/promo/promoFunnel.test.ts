@@ -1,5 +1,6 @@
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
+import type { PromoEntry } from '#server/generated/prisma/enums';
 import { isPromoCodeTaken } from '#server/repositories/promo';
 import { generatePromoCode } from '#server/services/promo/generatePromoCode';
 import { listPromoLinks } from '#server/services/promo/listPromoLinks';
@@ -31,8 +32,12 @@ import {
  * Проверяются определения из issue и форма строки, через сервисы, которыми читают ручки.
  */
 
-/** Ссылка карточки — без Telegram: имя бота спрашивается у него, а тесту это не нужно. */
-const readLink = async (code: string): Promise<string> => `https://t.me/test_bot?start=${code}`;
+/**
+ * Ссылка карточки — без Telegram: имя бота спрашивается у него, а тесту это не нужно. Вход
+ * метки — в параметре ссылки, как у настоящей (issue #467).
+ */
+const readLink = async (code: string, entry: PromoEntry): Promise<string> =>
+  `https://t.me/test_bot?${entry === 'miniapp' ? 'startapp' : 'start'}=${code}`;
 
 /** Сутки — по Ташкенту, UTC+5: 10:00Z — это 15:00 того же дня. */
 const at = (day: string, hour = 10): Date => new Date(`${day}T${String(hour).padStart(2, '0')}:00:00Z`);
@@ -101,6 +106,28 @@ describe('воронка промо-меток', () => {
 
     expect(card.funnel).toEqual({ went: 1, joined: 0, firstTrip: 0, already: 0, touches: 3 });
     expect(await readRow(code)).toMatchObject({ code, medium: 'poster', placement: null, went: 1 });
+  });
+
+  it('вход метки: список и карточка отдают его, ссылка карточки — по входу', async () => {
+    const poster = nextTestPromoCode();
+    const adApp = nextTestPromoCode();
+    const adChat = nextTestPromoCode();
+
+    await createTestPromoLink(poster, LINK_CREATED);
+    await createTestPromoLink(adApp, LINK_CREATED, 'telegram_ad', 'miniapp');
+    await createTestPromoLink(adChat, LINK_CREATED, 'telegram_ad', 'bot');
+
+    expect(await readRow(poster)).toMatchObject({ medium: 'poster', entry: 'bot' });
+    expect(await readRow(adApp)).toMatchObject({ medium: 'telegram_ad', entry: 'miniapp' });
+    expect(await readRow(adChat)).toMatchObject({ medium: 'telegram_ad', entry: 'bot' });
+
+    const appCard = await readCard(adApp);
+    const chatCard = await readCard(adChat);
+
+    expect(appCard.promo.entry).toBe('miniapp');
+    expect(appCard.link).toBe(`https://t.me/test_bot?startapp=${adApp}`);
+    expect(chatCard.promo.entry).toBe('bot');
+    expect(chatCard.link).toBe(`https://t.me/test_bot?start=${adChat}`);
   });
 
   it('уже был: первое касание участником — в «уже были», во «вступили» не попадает', async () => {

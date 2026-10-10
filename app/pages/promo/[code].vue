@@ -7,7 +7,7 @@ import { formatMomentDate } from '~/utils/format';
 import { toLoadState } from '~/utils/loadState';
 import { readPromoFieldErrors } from '~/utils/promoFormErrors';
 import { failureText } from '~/utils/requestError';
-import { PROMO_MEDIUM_LABELS, type PromoField } from '#shared/promo';
+import { PROMO_ENTRY_LABELS, PROMO_MEDIUM_LABELS, type PromoField } from '#shared/promo';
 import type { PromoCard } from '#shared/types/promo';
 
 /**
@@ -39,13 +39,17 @@ const state = computed(() => toLoadState(status.value));
 
 const missing = computed(() => error.value?.statusCode === 404);
 
-/** «Плакат · Офис 1, стена у стойки · с 06.10.2026 · завёл {имя}»; носитель — отдельно, жирным. */
+/**
+ * «Плакат · Офис 1, стена у стойки · с 06.10.2026 · завёл {имя}»; носитель — отдельно, жирным.
+ * У рекламы в Telegram первым после носителя — вход словами (issue #467).
+ */
 const metaTail = computed(() => {
   const promo = card.value?.promo;
 
   if (!promo) return '';
 
   return [
+    promo.medium === 'telegram_ad' ? PROMO_ENTRY_LABELS[promo.entry] : null,
     promo.placement,
     `с ${formatMomentDate(promo.createdAt)}`,
     promo.createdBy === null ? 'заведена при выкате' : `завёл ${promo.createdBy}`,

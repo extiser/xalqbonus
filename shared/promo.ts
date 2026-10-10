@@ -1,5 +1,5 @@
 import type { WebLanguage } from './denials';
-import type { PromoMedium } from '../server/generated/prisma/enums';
+import type { PromoEntry, PromoMedium } from '../server/generated/prisma/enums';
 
 /**
  * Промо-метки (issue #380): носители, пределы полей и отказы формы метки — код и текст к нему.
@@ -11,7 +11,7 @@ import type { PromoMedium } from '../server/generated/prisma/enums';
  * Относительными путями, а не через `#shared`: так подключаются соседние файлы `shared/`.
  */
 
-export type { PromoMedium };
+export type { PromoEntry, PromoMedium };
 
 type Texts<Code extends string> = Readonly<Record<Code, Readonly<Record<WebLanguage, string>>>>;
 
@@ -31,6 +31,28 @@ export const PROMO_MEDIUM_LABELS: Readonly<Record<PromoMedium, string>> = {
 export const isPromoMedium = (value: unknown): value is PromoMedium =>
   typeof value === 'string' && (PROMO_MEDIUMS as readonly string[]).includes(value);
 
+/**
+ * Входы метки рекламы в Telegram в порядке пилюль формы (issue #467): в приложение — форма
+ * заявки, в чат бота — диалог «номер кнопкой, имя текстом». У остальных носителей вход один —
+ * чат бота.
+ */
+export const PROMO_ENTRIES: readonly PromoEntry[] = ['miniapp', 'bot'];
+
+export const isPromoEntry = (value: unknown): value is PromoEntry =>
+  typeof value === 'string' && (PROMO_ENTRIES as readonly string[]).includes(value);
+
+/** Подписи пилюль поля «Вход» формы. */
+export const PROMO_ENTRY_CHOICE_LABELS: Readonly<Record<PromoEntry, string>> = {
+  miniapp: 'Приложение',
+  bot: 'Чат бота',
+};
+
+/** Вход словами — в карточке и списке меток, у рекламы в Telegram. */
+export const PROMO_ENTRY_LABELS: Readonly<Record<PromoEntry, string>> = {
+  miniapp: 'вход в приложение',
+  bot: 'вход в чат бота',
+};
+
 /** Название метки — видно только сотрудникам, в списке и в карточке. */
 export const PROMO_NAME_MAX_LENGTH = 80;
 
@@ -42,20 +64,22 @@ export type PromoDenialCode =
   | 'name_missing'
   | 'name_too_long'
   | 'medium_missing'
+  | 'entry_missing'
   | 'placement_too_long'
   | 'code_invalid'
   | 'code_taken';
 
 /** Поле формы метки, к которому относится отказ. Код стоит в поле «Ссылка». */
-export type PromoField = 'name' | 'medium' | 'placement' | 'code';
+export type PromoField = 'name' | 'medium' | 'entry' | 'placement' | 'code';
 
 export const isPromoField = (value: unknown): value is PromoField =>
-  value === 'name' || value === 'medium' || value === 'placement' || value === 'code';
+  value === 'name' || value === 'medium' || value === 'entry' || value === 'placement' || value === 'code';
 
 export const PROMO_DENIAL_FIELDS: Readonly<Record<PromoDenialCode, PromoField>> = {
   name_missing: 'name',
   name_too_long: 'name',
   medium_missing: 'medium',
+  entry_missing: 'entry',
   placement_too_long: 'placement',
   code_invalid: 'code',
   code_taken: 'code',
@@ -69,6 +93,7 @@ const PROMO_DENIAL_TEXTS: Texts<PromoDenialCode> = {
   name_missing: { ru: 'Введите название — по нему метку найдут в списке' },
   name_too_long: { ru: `Название — до ${PROMO_NAME_MAX_LENGTH} символов` },
   medium_missing: { ru: 'Выберите носитель' },
+  entry_missing: { ru: 'Выберите вход' },
   placement_too_long: { ru: `Место размещения — до ${PROMO_PLACEMENT_MAX_LENGTH} символов` },
   code_invalid: { ru: CODE_TAKEN_TEXT },
   code_taken: { ru: CODE_TAKEN_TEXT },

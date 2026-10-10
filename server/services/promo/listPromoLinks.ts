@@ -13,6 +13,7 @@ export const listPromoLinks = async (): Promise<PromoList> => {
       code: row.code,
       name: row.name,
       medium: row.medium,
+      entry: row.entry,
       placement: row.placement,
       createdAt: row.createdAt.toISOString(),
       went: row.went,

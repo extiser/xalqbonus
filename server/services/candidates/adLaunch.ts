@@ -2,11 +2,13 @@ import { findPromoLink } from '#server/repositories/promo';
 import { readPromoCode } from '#shared/promoLinks';
 
 /**
- * Код метки рекламы в Telegram, которой открыто приложение (issue #456). `null` — приложение открыто
- * не ссылкой метки, метки нет в справочнике или носитель у неё другой.
+ * Код метки рекламы в Telegram из `start_param` приложения или параметра `/start` (issue #456,
+ * issue #467). `null` — параметр не метка, метки нет в справочнике или носитель у неё другой.
  *
- * Носитель решает вход: экран заявки открывает только реклама в Telegram, остальные метки ведут
- * в регистрацию, как раньше (docs/decisions.md → «Заявка кандидата»).
+ * Заявку открывает только реклама в Telegram, остальные метки ведут в регистрацию и приветствие,
+ * как раньше (docs/decisions.md → «Заявка кандидата»). Вход метки здесь не читается: он решает
+ * только ссылку, и заявку принимают обе двери у любой метки рекламы (docs/decisions.md →
+ * «Заявка в чате бота»).
  */
 export const readAdPromoCode = async (startParam: string | null): Promise<string | null> => {
   const code = readPromoCode(startParam ?? '');

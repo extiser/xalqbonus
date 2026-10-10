@@ -90,6 +90,17 @@ export type TextKey =
   | 'application_office_title'
   | 'application_write_manager'
   | 'candidate_greeting'
+  | 'application_chat_intro'
+  | 'button_send_phone'
+  | 'application_chat_ask_name'
+  | 'application_chat_contact_not_own'
+  | 'application_chat_use_button'
+  | 'application_chat_name_invalid'
+  | 'application_chat_accepted'
+  | 'application_chat_repeat'
+  | 'application_chat_failed'
+  | 'application_chat_phone_not_uz'
+  | 'application_chat_phone_not_uz_no_office'
   | 'contact_not_own'
   | 'linked_new'
   | 'welcome_slide_title'
@@ -708,6 +719,61 @@ const TEXTS: Readonly<Record<TextKey, Readonly<Record<Language, string>>>> = {
   candidate_greeting: {
     ru: 'Здравствуйте, {name}! Это Xalq Taxi. Заявку получили, менеджер напишет вам в течение дня. Вопросы можно писать сюда.',
     uz: 'Assalomu alaykum, {name}! Bu Xalq Taxi. Arizangizni oldik, menejer kun davomida sizga yozadi. Savollaringizni shu yerga yozishingiz mumkin.',
+  },
+  /**
+   * Заявка в чате бота (issue #467): номер кнопкой «Отправить номер», имя текстом
+   * (server/services/candidates/advanceChatDraft.ts). Первое — ответ на `/start` с меткой
+   * рекламы; `{trips}` и `{points}` — `WELCOME_TRIPS_REQUIRED`, `WELCOME_BONUS_POINTS`.
+   */
+  application_chat_intro: {
+    ru: 'Работа водителем в Xalq Taxi. Оставьте номер и имя. Менеджер парка напишет вам здесь в течение дня. Если вы не работали в Xalq Taxi, первые 4 недели комиссия 3 %. За первые {trips} поездок вы получите {points} баллов. Нажмите «Отправить номер» внизу.',
+    uz: 'Xalq Taxi’da haydovchi bo‘lib ishlash. Raqamingiz va ismingizni qoldiring. Park menejeri bir kun ichida shu yerga yozadi. Agar Xalq Taxi’da ishlamagan bo‘lsangiz, dastlabki 4 hafta komissiya 3 %. Dastlabki {trips} safar uchun {points} ball olasiz. Pastdagi «Raqamni yuborish» tugmasini bosing.',
+  },
+  /** Кнопка клавиатуры чата с `request_contact`: Telegram отправляет номер аккаунта. */
+  button_send_phone: {
+    ru: 'Отправить номер',
+    uz: 'Raqamni yuborish',
+  },
+  application_chat_ask_name: {
+    ru: 'Спасибо. Как к вам обращаться? Напишите имя.',
+    uz: 'Rahmat. Sizga qanday murojaat qilaylik? Ismingizni yozing.',
+  },
+  application_chat_contact_not_own: {
+    ru: 'Это не ваш номер. Нажмите «Отправить номер» внизу, и Telegram отправит ваш.',
+    uz: 'Bu sizning raqamingiz emas. Pastdagi «Raqamni yuborish» tugmasini bosing, Telegram sizning raqamingizni yuboradi.',
+  },
+  /** Вместо контакта — что угодно другое: текст, фото, команда. Номер в чате — только кнопкой. */
+  application_chat_use_button: {
+    ru: 'Номер набирать не нужно. Нажмите «Отправить номер» внизу.',
+    uz: 'Raqamni yozish shart emas. Pastdagi «Raqamni yuborish» tugmasini bosing.',
+  },
+  application_chat_name_invalid: {
+    ru: 'Напишите имя текстом. Не длиннее 60 букв.',
+    uz: 'Ismingizni matn bilan yozing. 60 ta harfdan oshmasin.',
+  },
+  /** Заявка принята — оно же приветствие кандидату в переписке. `{name}` — имя из заявки. */
+  application_chat_accepted: {
+    ru: '{name}, заявка принята. Менеджер парка напишет вам здесь в течение дня. Вопросы можно писать сюда.',
+    uz: '{name}, arizangiz qabul qilindi. Park menejeri bir kun ichida shu yerga yozadi. Savollaringizni shu yerga yozishingiz mumkin.',
+  },
+  /** Открытая заявка уже есть. `{date}` — день заявки словом (`submittedDayText`). */
+  application_chat_repeat: {
+    ru: '{name}, заявка уже отправлена {date}. Менеджер парка напишет вам здесь. Вопросы можно писать сюда.',
+    uz: '{name}, arizangiz {date} yuborilgan. Park menejeri shu yerga yozadi. Savollaringizni shu yerga yozishingiz mumkin.',
+  },
+  application_chat_failed: {
+    ru: 'Не получилось отправить заявку. Нажмите /start и попробуйте ещё раз.',
+    uz: 'Arizani yuborib bo‘lmadi. /start ni bosing va qayta urinib ko‘ring.',
+  },
+  /** Номер аккаунта не узбекский. `{phone}` — телефон первого живого офиса. */
+  application_chat_phone_not_uz: {
+    ru: 'Мы принимаем заявки только с узбекским номером. Позвоните в офис парка: {phone}.',
+    uz: 'Biz faqat O‘zbekiston raqami bilan ariza qabul qilamiz. Park ofisiga qo‘ng‘iroq qiling: {phone}.',
+  },
+  /** То же, когда телефона офиса нет. */
+  application_chat_phone_not_uz_no_office: {
+    ru: 'Мы принимаем заявки только с узбекским номером.',
+    uz: 'Biz faqat O‘zbekiston raqami bilan ariza qabul qilamiz.',
   },
   contact_not_own: {
     ru: 'Отправьте, пожалуйста, свой номер телефона кнопкой ниже — чужой контакт мы принять не можем.',

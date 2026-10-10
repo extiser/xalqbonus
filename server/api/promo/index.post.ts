@@ -10,6 +10,7 @@ type CreateBody = {
   code?: unknown;
   name?: unknown;
   medium?: unknown;
+  entry?: unknown;
   placement?: unknown;
 };
 
@@ -22,6 +23,7 @@ export default defineEventHandler(async (event): Promise<PromoCreated> => {
       code: body?.code,
       name: body?.name,
       medium: body?.medium,
+      entry: body?.entry,
       placement: body?.placement,
       employeeId: employee.employeeId,
     });

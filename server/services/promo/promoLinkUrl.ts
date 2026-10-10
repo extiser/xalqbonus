@@ -1,6 +1,6 @@
 import { getBotUsername } from '#server/adapters/telegram/botIdentity';
 import { readBotToken } from '#server/bot/config';
-import type { PromoMedium } from '#server/generated/prisma/enums';
+import type { PromoEntry } from '#server/generated/prisma/enums';
 import { BotUnavailableError } from '#server/services/employees/botUnavailableError';
 import { buildPromoAppLink, buildPromoBotLink, buildPromoLink } from '#server/services/employees/employeeLinks';
 
@@ -22,14 +22,14 @@ const readBotUsername = async (): Promise<string> => {
 };
 
 /**
- * Ссылка метки (issue #380): в чат бота `?start=<код>` или, у рекламы в Telegram, в Mini App
- * `?startapp=<код>` (issue #456) — по носителю метки.
+ * Ссылка метки (issue #380): в чат бота `?start=<код>` или в Mini App `?startapp=<код>` — по входу
+ * метки (issue #467).
  */
-export const readPromoLinkUrl = async (code: string, medium: PromoMedium): Promise<string> =>
-  buildPromoLink(await readBotUsername(), code, medium);
+export const readPromoLinkUrl = async (code: string, entry: PromoEntry): Promise<string> =>
+  buildPromoLink(await readBotUsername(), code, entry);
 
 /**
- * Обе ссылки кода сразу — окну «Новая метка»: носитель там ещё не выбран, и поле «Ссылка»
+ * Обе ссылки кода сразу — окну «Новая метка»: носитель и вход там ещё не выбраны, и поле «Ссылка»
  * меняется с выбором без нового запроса.
  */
 export const readPromoLinkUrls = async (code: string): Promise<{ link: string; appLink: string }> => {

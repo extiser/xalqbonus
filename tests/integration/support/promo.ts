@@ -1,5 +1,5 @@
 import { db } from '#server/db';
-import type { PromoMedium, PromoTouchChannel } from '#server/generated/prisma/enums';
+import type { PromoEntry, PromoMedium, PromoTouchChannel } from '#server/generated/prisma/enums';
 
 /**
  * Чтение и уборка касаний промо-меток (issue #377), метки и привязки воронки (issue #380).
@@ -75,15 +75,17 @@ export const insertTestPromoTouch = async (touch: TestPromoTouchInput): Promise<
 /**
  * Метка справочника с заданным временем заведения: от него начинается ряд дней. Носитель —
  * плакат, если не сказано иное: экран заявки открывает только реклама в Telegram (issue #456).
+ * Вход — чат бота, если не сказано иное: так его ставит база (issue #467).
  */
 export const createTestPromoLink = async (
   code: string,
   createdAt: Date,
   medium: PromoMedium = 'poster',
+  entry: PromoEntry = 'bot',
 ): Promise<void> => {
   createdPromoCodes.add(code);
 
-  await db.promoLink.create({ data: { code, name: `Тест ${code}`, medium, createdAt } });
+  await db.promoLink.create({ data: { code, name: `Тест ${code}`, medium, entry, createdAt } });
 };
 
 let nextCode = 0;

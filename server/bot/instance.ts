@@ -1,6 +1,7 @@
 import { consola } from 'consola';
 import { Bot, webhookCallback } from 'grammy';
 import type { Update } from 'grammy/types';
+import { registerCandidateApplicationChatHandlers } from '#server/bot/candidateApplicationChat';
 import { registerCandidateChatHandlers } from '#server/bot/candidateChat';
 import type { BotConfig } from '#server/bot/config';
 import { registerDemoInviteHandlers } from '#server/bot/demoInvite';
@@ -65,6 +66,13 @@ export const registerBotHandlers = (bot: Bot): void => {
   // своего нет — уступает дальше всё, и метку тоже: водитель с плаката получает то же
   // приветствие, что и без неё (server/bot/promoTouch.ts).
   registerPromoTouchHandlers(bot);
+
+  // Заявка кандидата в чате бота (issue #467): `/start` по метке рекламы — номер кнопкой, имя
+  // текстом. После касания метки: к этому моменту оно уже записано. Перед перепиской с кандидатом:
+  // сообщения незаконченного черновика не должны уйти в тему прошлой закрытой заявки. Всё, что
+  // не про черновик, — участник, сотрудник, `/start` без метки рекламы — уступается дальше
+  // (server/bot/candidateApplicationChat.ts).
+  registerCandidateApplicationChatHandlers(bot);
 
   // Переписка с кандидатом (issue #463): сообщение кандидата в личке — копией в тему его заявки,
   // ответ сотрудника в теме группы кандидатов — кандидату. После касания метки: `/start p_<код>`
