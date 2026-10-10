@@ -20,6 +20,8 @@
   --cyan: #9CEEFF; --teal: #1C4A58; --teal-mid: #137B9C; --compare: #4F6C73;
   /* смысл */
   --green: #47CB4A; --scarlet: #FF5C78; --gold: #F7BC3E; --garnet: #E8365D;
+  --scarlet-muted: #E2768A; /* статус «Отказ»: 70 % алого и 30 % цвета названия */
+  --well: #0A1518;          /* утопленное окно внутри плитки — переписка */
   --gap: 16px; --radius: 32px; --pad: 28px;
 }
 * { box-sizing: border-box; margin: 0; }
@@ -165,6 +167,25 @@ table.type { width: 100%; border-collapse: collapse; }
   .t-hero { font-size: 44px; }
   .type tr { display: block; border-top: 1px solid var(--line); padding: 10px 0; } .type td { display: block; border: 0; padding: 2px 0; width: auto !important; } .type td.meta { display: none; }
 }
+
+/* 10. Подпись при наведении (сессия 105): короткая подпись к значку, погашенной кнопке, пометке.
+   Своя, а не `title` браузера: та появляется через секунду, выглядит системной и на телефоне не видна вовсе */
+.tt { position: fixed; z-index: 60; max-width: 240px; width: max-content; background: var(--raised); color: var(--text); font: 500 12px/1.4 Manrope; padding: 7px 10px; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.45), inset 0 0 0 1px var(--line); pointer-events: none; opacity: 0; transform: translateY(2px); transition: opacity .12s, transform .12s; }
+.tt.on { opacity: 1; transform: none; }
+.tt-static { position: relative; display: inline-block; opacity: 1; transform: none; }
+.tt-demo { display: flex; flex-wrap: wrap; gap: 28px 40px; align-items: flex-start; }
+.tt-case { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.tt-case .cap { font: 500 12px Manrope; color: var(--axis); }
+.tt-stack { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.tt-field { display: flex; align-items: center; gap: 4px; height: 48px; width: 340px; max-width: 100%; border-radius: 14px; background: rgba(156,238,255,.04); box-shadow: inset 0 0 0 1px var(--line); padding: 0 6px 0 16px; font: 500 14px ui-monospace, Menlo, monospace; color: var(--title); }
+.tt-field span.t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .tt-field b { color: var(--cyan); font-weight: 600; }
+.tt-ico { flex: none; width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; color: var(--grey); cursor: pointer; border: 0; background: none; padding: 0; }
+.tt-ico:hover, .tt-ico:focus-visible { color: var(--cyan); background: var(--tile); outline: none; }
+.tt-ico svg { width: 20px; height: 20px; }
+.tt-btn { display: inline-flex; align-items: center; height: 36px; font: 600 13px Manrope; color: var(--cyan); background: rgba(156,238,255,.12); box-shadow: inset 0 0 0 1px rgba(156,238,255,.45); border-radius: 999px; padding: 0 16px; border: 0; }
+.tt-btn[aria-disabled="true"] { opacity: .4; cursor: default; }
+.tt-mark { font: 500 12px Manrope; color: var(--grey); cursor: default; }
+.tt-mark svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 4px; }
 </style>
 </head>
 <body>
@@ -264,7 +285,8 @@ table.type { width: 100%; border-collapse: collapse; }
     <tr><td><span style="font:700 26px/1.1 Unbounded">Дашборд</span></td><td>Заголовок страницы · Unbounded 26 / 700</td><td class="meta">один на страницу</td></tr>
     <tr><td><span style="font:500 18px Manrope;color:#9DB1B5">Поездки за месяц</span></td><td>Название плитки · Manrope 18 / 500</td><td class="meta">что это за число, с заглавной, без двоеточия</td></tr>
     <tr><td><span style="font:600 15px Manrope;color:#9DB1B5"><b style="color:#47CB4A">+12 %</b> к сентябрю</span></td><td>Изменение · Manrope 15 / 600</td><td class="meta">знак обязателен, база словом</td></tr>
-    <tr><td><span style="font:500 15px Manrope">Строка списка или разбора</span></td><td>Строка · Manrope 15 / 400–500</td><td class="meta">списки, разбор, таблицы</td></tr>
+    <tr><td><span style="font:500 15px Manrope">Строка списка или разбора</span></td><td>Строка · Manrope 15 / 400–500</td><td class="meta">списки, разбор</td></tr>
+    <tr><td><span style="font:500 14px Manrope">Строка таблицы</span></td><td>Строка таблицы · Manrope 14 / 400–500</td><td class="meta">таблицы; заголовок колонки — 12 / 500 цветом оси</td></tr>
     <tr><td><span style="font:300 13px Manrope;color:#7E9399">Посчитано ночью, 05:00</span></td><td>Уточнение · Manrope 13 / 300</td><td class="meta">откуда цифра, когда посчитана</td></tr>
     <tr><td><span style="font:500 12px Manrope;color:#566E74">1 окт · 8 окт · 15 окт</span></td><td>Ось графика · Manrope 12 / 500</td><td class="meta">тише уточнения</td></tr>
   </table>
@@ -322,6 +344,7 @@ table.type { width: 100%; border-collapse: collapse; }
     </div>
   </div>
   <p class="note">Кнопка-вход — круг 40 на поднятом цвете, вся плитка нажимается. Под линией — заливка того же цвета, от 35 % к нулю. Прошлые столбцы — фоном шкалы, текущий — циановым.</p>
+  <p class="note">Скругление внутри плитки — не больше 12–14: плитка 32, вложенное окно 14, поле, кнопка-значок, сообщение 12. Пилюля — только у статуса, пилюли фильтра и кнопки действия. События, счётчики и пояснения рядом с числом пишутся текстом, без подложки (сессия 105).</p>
 </div>
 
 <!-- 6. График -->
@@ -459,6 +482,23 @@ table.type { width: 100%; border-collapse: collapse; }
   <p class="note">Ошибка показывается после попытки сохранить или после ухода из поля, а не на каждую букву. Первое поле с ошибкой получает фокус. Кнопка сохранения не гасится заранее: человек нажимает и видит, что не так. Текст ошибки — без кодов и названий полей из базы. Форма в окне — <code>promo/02-new.html</code>: ширина 560, выбор из нескольких — кнопками-пилюлями, значки действий внутри поля справа с подписью при наведении.</p>
 </div>
 
+<!-- 10. Подпись при наведении -->
+<div class="section">
+  <h2>10 · Подпись при наведении</h2>
+  <p class="rule">Короткая подпись к тому, что без неё непонятно: значок без текста, погашенная кнопка, пометка в строке. Одна строка, редко две. Вместо <code>title</code> браузера: тот появляется через секунду, выглядит системно, его нельзя оформить, и на телефоне его нет вовсе. Подпись не объясняет метрику: для этого есть подсказка (i) из раздела 8.</p>
+  <div class="tile" style="padding:28px">
+    <div class="tt-demo">
+      <div class="tt-case"><span class="cap">Так она выглядит</span><div class="tt-stack"><span class="tt tt-static">Скопировать ссылку</span><button class="tt-ico" type="button" aria-label="Скопировать ссылку" style="color:var(--cyan);background:var(--raised)"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M216,40V168H168V88H88V40Z" opacity="0.2"/><path d="M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z"/></svg></button></div></div>
+      <div class="tt-case"><span class="cap">Значки в поле: наведите</span><div class="tt-field"><span class="t">t.me/xalqbonusbot?start=<b>p_k7Qm2x</b></span><button class="tt-ico" type="button" aria-label="Другой код" data-tt="Другой код"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M216,128a88,88,0,1,1-88-88A88,88,0,0,1,216,128Z" opacity="0.2"/><path d="M224,48V96a8,8,0,0,1-8,8H168a8,8,0,0,1,0-16h28.69L182.06,73.37a79.56,79.56,0,0,0-56.13-23.43h-.45A79.52,79.52,0,0,0,69.59,72.71,8,8,0,0,1,58.41,61.27a96,96,0,0,1,135,.79L208,76.69V48a8,8,0,0,1,16,0ZM186.41,183.29a80,80,0,0,1-112.47-.66L59.31,168H88a8,8,0,0,0,0-16H40a8,8,0,0,0-8,8v48a8,8,0,0,0,16,0V179.31l14.63,14.63A95.43,95.43,0,0,0,130,222.06h.53a95.36,95.36,0,0,0,67.07-27.33,8,8,0,0,0-11.18-11.44Z"/></svg></button><button class="tt-ico" type="button" aria-label="Скопировать ссылку" data-tt="Скопировать ссылку" data-tt-done="Скопировано"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M216,40V168H168V88H88V40Z" opacity="0.2"/><path d="M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z"/></svg></button></div></div>
+      <div class="tt-case"><span class="cap">Погашенная кнопка: почему нельзя</span><span class="tt-btn" role="button" aria-disabled="true" tabindex="0" data-tt="Выберите месяц, где есть хотя бы один лидер">Создать сегмент</span></div>
+      <div class="tt-case"><span class="cap">Пометка в строке</span><span class="tt-mark" tabindex="0" data-tt="Номер введён вручную. Кандидат не поделился номером из Telegram."><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M232,64V192a8,8,0,0,1-8,8H32a8,8,0,0,1-8-8V64a8,8,0,0,1,8-8H224A8,8,0,0,1,232,64Z" opacity="0.2"/><path d="M224,48H32A16,16,0,0,0,16,64V192a16,16,0,0,0,16,16H224a16,16,0,0,0,16-16V64A16,16,0,0,0,224,48Zm0,144H32V64H224V192Zm-16-64a8,8,0,0,1-8,8H56a8,8,0,0,1,0-16H200A8,8,0,0,1,208,128Zm0-32a8,8,0,0,1-8,8H56a8,8,0,0,1,0-16H200A8,8,0,0,1,208,96ZM72,160a8,8,0,0,1-8,8H56a8,8,0,0,1,0-16h8A8,8,0,0,1,72,160Zm96,0a8,8,0,0,1-8,8H96a8,8,0,0,1,0-16h64A8,8,0,0,1,168,160Zm40,0a8,8,0,0,1-8,8h-8a8,8,0,0,1,0-16h8A8,8,0,0,1,208,160Z"/></svg>вручную</span></div>
+    </div>
+  </div>
+  <p class="note">Поднятая поверхность, скругление 10, поля 7 и 10, текст 12 / 500 белым, ширина до 240. Встаёт над элементом по центру, с зазором 8. Не влезает сверху — встаёт снизу; у края окна сдвигается внутрь с полем 12. Висит поверх страницы, плитка её не обрезает. Открыта одна за раз.</p>
+  <p class="note">Мышь: появляется через 300 мс наведения и сразу гаснет, когда мышь ушла. Соседний элемент с подписью в течение 300 мс показывает свою сразу, без задержки. Клавиатура: появляется при фокусе сразу, гаснет при уходе фокуса и по Esc. Подпись меняется на месте: «Скопировать ссылку» после нажатия становится «Скопировано» на 1,5 с.</p>
+  <p class="note">Телефон: наведения нет. Нажатие на значок делает своё действие, подпись не показывается, поэтому без неё должно быть понятно, что делает значок, или рядом стоит текст. Исключение — погашенная кнопка: нажатие на неё показывает подпись на 3 с, иначе на телефоне не узнать, почему кнопка не работает.</p>
+</div>
+
 </div>
 <script>
 /* Меню аккаунта открывается кнопкой и закрывается щелчком мимо — только чтобы макет можно было потрогать */
@@ -500,6 +540,35 @@ document.addEventListener('click', closeTip);
 document.addEventListener('keydown', function (event) { if (event.key === 'Escape') closeTip(); });
 /* Прокрутка и смена размера окна подсказку не закрывают, а двигают за значком: на телефоне окно меняет высоту, когда прячется строка адреса */
 window.addEventListener('scroll', placeTip, true); window.addEventListener('resize', placeTip);
+
+/* Подпись при наведении: одна на страницу; мышь — через 300 мс, клавиатура — сразу; на телефоне — только у погашенных */
+var tt = document.createElement('div'); tt.className = 'tt'; tt.setAttribute('role', 'tooltip'); tt.id = 'tt'; document.body.appendChild(tt);
+var ttOwner = null, ttTimer = null, ttWarmUntil = 0, ttHideTimer = null;
+function ttPlace() {
+  if (!ttOwner) return;
+  var box = ttOwner.getBoundingClientRect(), width = tt.offsetWidth, height = tt.offsetHeight;
+  var left = Math.min(Math.max(12, box.left + box.width / 2 - width / 2), window.innerWidth - width - 12);
+  var top = box.top - height - 8; if (top < 12) top = box.bottom + 8;
+  tt.style.left = left + 'px'; tt.style.top = top + 'px';
+}
+function ttShow(el, text) { clearTimeout(ttHideTimer); ttOwner = el; tt.textContent = text || el.dataset.tt; el.setAttribute('aria-describedby', 'tt'); tt.classList.add('on'); ttPlace(); }
+function ttHide() { clearTimeout(ttTimer); if (ttOwner) { ttOwner.removeAttribute('aria-describedby'); ttWarmUntil = Date.now() + 300; } ttOwner = null; tt.classList.remove('on'); }
+document.querySelectorAll('[data-tt]').forEach(function (el) {
+  el.addEventListener('pointerenter', function (event) {
+    if (event.pointerType !== 'mouse') return;
+    clearTimeout(ttTimer);
+    if (Date.now() < ttWarmUntil) ttShow(el); else ttTimer = setTimeout(function () { ttShow(el); }, 300);
+  });
+  el.addEventListener('pointerleave', function (event) { if (event.pointerType === 'mouse') ttHide(); });
+  el.addEventListener('focus', function () { if (el.matches(':focus-visible')) ttShow(el); });
+  el.addEventListener('blur', ttHide);
+  el.addEventListener('click', function (event) {
+    if (el.getAttribute('aria-disabled') === 'true' && event.pointerType !== 'mouse') { ttShow(el); ttHideTimer = setTimeout(ttHide, 3000); }
+    if (el.dataset.ttDone) { ttShow(el, el.dataset.ttDone); setTimeout(function () { if (ttOwner === el) tt.textContent = el.dataset.tt; ttPlace(); }, 1500); }
+  });
+});
+document.addEventListener('keydown', function (event) { if (event.key === 'Escape') ttHide(); });
+window.addEventListener('scroll', ttPlace, true); window.addEventListener('resize', ttPlace);
 </script>
 </body>
 </html>
