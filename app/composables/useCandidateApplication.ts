@@ -187,6 +187,17 @@ export const useCandidateApplication = (dependencies: CandidateApplicationDepend
         return;
       }
 
+      // Строку контакта сервер не принял — подпись не сошлась или строка просрочена. Повтор той же
+      // строкой не поможет никогда: экран заявки с вписанным именем, и «Отправить заявку» откроет
+      // окно номера заново.
+      if (code === 'contact_rejected') {
+        lastBody = null;
+        declined.value = false;
+        view.value = 'form';
+
+        return;
+      }
+
       // Сеть, сервер, таймаут и остальные отказы — сбой отправки с повтором тем же телом.
       console.error('[miniapp] заявка кандидата не отправлена', error);
       view.value = 'failed';
