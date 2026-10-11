@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Шаблон лендинга</title>
+<!--
+  Шаблон лендинга заявки XalqBonus.
+
+  Как сделать свой лендинг:
+  1. Скопируйте папку целиком, поменяйте тексты, цвета и картинки.
+  2. Оставьте ровно одно поле с атрибутом data-xb-name и ровно одну кнопку с data-xb-submit.
+     По ним приложение находит, куда человек пишет имя и что он нажимает. Номер приложение
+     попросит у Telegram само, поле для номера не нужно.
+  3. Картинки кладите в папку рядом (JPEG, PNG или WebP) и ссылайтесь относительным путём:
+     img/hero.jpg. Ссылки на картинки с других сайтов не пройдут проверку.
+  4. Стили пишите здесь, в <style>. Шрифты — Manrope и Unbounded: их подключает приложение.
+     Свои шрифты и скрипты не работают, скрипты вырезаются при загрузке.
+  5. Заархивируйте содержимое папки в .zip так, чтобы index.html лежал в корне архива.
+-->
+<style>
+  .lp { font-family: Manrope, system-ui, sans-serif; color: #10202A; background: #fff; padding: 22px 20px 28px; max-width: 520px; margin: 0 auto; }
+  .lp-badge { display: inline-block; font-weight: 700; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: #0B6E4F; background: #DFF5EC; border-radius: 6px; padding: 4px 8px; }
+  .lp h1 { font-weight: 800; font-size: 26px; line-height: 1.15; margin: 12px 0 0; letter-spacing: -.5px; }
+  .lp p { font-size: 15px; line-height: 1.5; color: #3A4A52; margin: 10px 0 0; }
+  .lp-hero { display: block; width: 100%; height: auto; border-radius: 12px; margin-top: 16px; }
+  .lp ul { list-style: none; padding: 0; margin: 16px 0 0; }
+  .lp li { font-weight: 500; font-size: 14px; line-height: 1.4; padding-left: 26px; position: relative; margin-top: 10px; }
+  .lp li::before { content: ""; position: absolute; left: 0; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: #DFF5EC; box-shadow: inset 0 0 0 5px #0B6E4F; }
+  .lp label { display: block; font-weight: 600; font-size: 13px; color: #3A4A52; margin-top: 22px; }
+  .lp input { box-sizing: border-box; width: 100%; height: 48px; margin-top: 6px; border: 1px solid #CBD5DA; border-radius: 10px; padding: 0 14px; font: 500 16px Manrope, system-ui, sans-serif; color: #10202A; background: #fff; }
+  .lp button { width: 100%; height: 52px; margin-top: 14px; border: 0; border-radius: 12px; background: #0B6E4F; color: #fff; font: 700 16px Manrope, system-ui, sans-serif; }
+  .lp small { display: block; font-size: 12px; line-height: 1.45; color: #6B7B82; margin-top: 10px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="lp">
+  <span class="lp-badge">Xalq Taxi</span>
+  <h1>Работа в такси в Ташкенте</h1>
+  <p>Оставьте заявку, и менеджер парка позвонит вам сегодня.</p>
+  <img class="lp-hero" src="img/hero.jpg" alt="">
+  <ul>
+    <li>Выплаты каждый день</li>
+    <li>Баллы за каждую поездку и подарки в офисе</li>
+    <li>Оформление за один день</li>
+  </ul>
+  <label for="name">Как вас зовут</label>
+  <input id="name" data-xb-name placeholder="Имя" autocomplete="given-name">
+  <button data-xb-submit type="button">Оставить заявку</button>
+  <small>Нажимая кнопку, вы отправляете номер из Telegram.</small>
+</div>
+</body>
+</html>
