@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useRoute } from 'vue-router';
-import { isCurrentPath, type NavigationItem } from '~/utils/navigation';
+import { formatNumber } from '~/utils/format';
+import { isCurrentPath, navigationCountOf, type NavigationCount, type NavigationItem } from '~/utils/navigation';
 import type { EmployeeIdentity } from '#shared/types/employee';
 
 /**
@@ -10,11 +11,14 @@ import type { EmployeeIdentity } from '#shared/types/employee';
  * и вопрос «под кем я сейчас» должен иметь ответ до того, как человек что-то сделает.
  *
  * За данными компонент не ходит и выход сам не делает: принимает готовое свойством
- * и отдаёт событие наверх (docs/frontend.md → «Данные в компоненты не ходят»).
+ * и отдаёт событие наверх (docs/frontend.md → «Данные в компоненты не ходят»). Числа счётчиков
+ * у пунктов (`counts`) приносит раскладка: у «Заявок» — сколько заявок ждёт ответа (issue #471),
+ * пилюлей после подписи, как у пункта меню веба; ноль не показывается.
  */
 defineProps<{
   items: NavigationItem[];
   employee: EmployeeIdentity | null;
+  counts: Partial<Record<NavigationCount, number>>;
 }>();
 
 const emit = defineEmits<{ signOut: [] }>();
@@ -33,7 +37,7 @@ const isCurrent = (path: string): boolean => isCurrentPath(route.path, path);
           v-for="item in items"
           :key="item.path"
           :to="item.path"
-          class="rounded-md px-2 py-1 text-sm font-medium transition-colors"
+          class="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium transition-colors"
           :class="
             isCurrent(item.path)
               ? 'bg-slate-100 text-slate-900'
@@ -41,6 +45,10 @@ const isCurrent = (path: string): boolean => isCurrentPath(route.path, path);
           "
         >
           {{ item.title }}
+          <span
+            v-if="navigationCountOf(item, counts) !== undefined"
+            class="rounded-full bg-slate-900 px-1.5 py-px text-xs leading-[1.45] font-semibold text-white"
+          >{{ formatNumber(navigationCountOf(item, counts) ?? 0) }}</span>
         </NuxtLink>
       </nav>
 

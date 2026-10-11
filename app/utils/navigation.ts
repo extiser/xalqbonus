@@ -114,3 +114,16 @@ export const navigationFor = (role: EmployeeIdentity['role'] | null): Navigation
  */
 export const isCurrentPath = (currentPath: string, itemPath: string): boolean =>
   currentPath === itemPath || currentPath.startsWith(`${itemPath}/`);
+
+/**
+ * Число счётчика у пункта для показа: у пункта без счётчика, без числа и при нуле — `undefined`,
+ * пилюли нет. Одно правило на меню веба и шапку светлой раскладки.
+ */
+export const navigationCountOf = (
+  item: NavigationItem,
+  counts: Partial<Record<NavigationCount, number>>,
+): number | undefined => {
+  const count = item.count === undefined ? undefined : counts[item.count];
+
+  return count === undefined || count === 0 ? undefined : count;
+};
