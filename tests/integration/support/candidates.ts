@@ -4,6 +4,7 @@ import type {
   CandidateApplicationStatus,
   CandidateMessageAuthor,
   CandidateMessageDelivery,
+  CandidatePhoneSource,
   Language,
 } from '#server/generated/prisma/enums';
 
@@ -36,6 +37,8 @@ export type TestCandidateApplicationInput = {
   name?: string;
   /** По умолчанию — «Новая». */
   status?: CandidateApplicationStatus;
+  /** По умолчанию — номер введён руками: чужие заявки по номеру он не закрывает. */
+  phoneSource?: CandidatePhoneSource;
 };
 
 /** Открытая заявка — «Новая», номер введён руками: чужие заявки по номеру она не закрывает. */
@@ -54,7 +57,7 @@ export const insertTestCandidateApplication = async (
       status: input.status ?? 'new',
       phoneRaw: input.phoneE164.slice(4),
       phoneE164: input.phoneE164,
-      phoneSource: 'manual',
+      phoneSource: input.phoneSource ?? 'manual',
       writeAllowed: input.writeAllowed,
       language: input.language,
       promoCode: input.promoCode,
@@ -115,6 +118,28 @@ export const insertTestApplicationEvent = async (input: {
 /** Telegram заявки был привязан к этому человеку раньше — так его находит подача заявки. */
 export const setTestFormerLinkPerson = async (applicationId: string, personId: string): Promise<void> => {
   await db.candidateApplication.update({ where: { id: applicationId }, data: { formerLinkPersonId: personId } });
+};
+
+/** Незаконченный черновик заявки в чате — ждёт номер кнопкой. */
+export const insertTestOpenChatDraft = async (input: {
+  telegramUserId: bigint;
+  promoCode: string;
+}): Promise<{ draftId: string }> => {
+  createdTelegramUserIds.add(input.telegramUserId);
+
+  const draft = await db.candidateChatDraft.create({
+    data: {
+      telegramUserId: input.telegramUserId,
+      telegramChatId: input.telegramUserId,
+      telegramName: 'Тест Кандидат',
+      promoCode: input.promoCode,
+      language: 'ru',
+      step: 'awaiting_contact',
+      startedAt: new Date(),
+    },
+  });
+
+  return { draftId: draft.id };
 };
 
 /** Журнал отметок заявки по времени. */

@@ -13,7 +13,9 @@ import {
   insertTestApplicationEvent,
   insertTestCandidateApplication,
   insertTestCandidateMessage,
+  insertTestOpenChatDraft,
   readTestApplicationEvents,
+  readTestChatDrafts,
   readTestCandidateApplication,
   readTestCandidateMessages,
   setTestFormerLinkPerson,
@@ -280,6 +282,106 @@ describe('раздел «Заявки»', () => {
       expect(await readTestApplicationEvents(hiredId)).toEqual([]);
       expect(await readTestApplicationEvents(newId)).toEqual([]);
       expect((await readTestCandidateApplication(newId))?.status).toBe('new');
+    });
+
+    it('вернуть в работу при другой открытой заявке того же Telegram — отказ, статус и журнал прежние', async () => {
+      const employee = await createTestEmployee({ role: 'manager' });
+      const telegramUserId = nextTestTelegramUserId();
+      const insert = async (status: 'rejected' | 'new') =>
+        (
+          await insertTestCandidateApplication({
+            telegramUserId,
+            promoCode: nextTestPromoCode(),
+            phoneE164: nextTestPhone(),
+            language: 'ru',
+            writeAllowed: true,
+            createdAt: new Date(),
+            name: nextNameTag(),
+            status,
+          })
+        ).applicationId;
+      const rejectedId = await insert('rejected');
+      await insert('new');
+
+      await expect(
+        markApplicationStatus({ applicationId: rejectedId, status: 'in_progress', employeeId: employee.employeeId }),
+      ).rejects.toMatchObject({ code: 'open_application_exists' });
+
+      expect((await readTestCandidateApplication(rejectedId))?.status).toBe('rejected');
+      expect((await readTestCandidateApplication(rejectedId))?.handledByEmployeeId).toBeNull();
+      expect(await readTestApplicationEvents(rejectedId)).toEqual([]);
+    });
+
+    it('вернуть в работу при открытой заявке на тот же номер из Telegram с другого Telegram — отказ', async () => {
+      const employee = await createTestEmployee({ role: 'manager' });
+      const phoneE164 = nextTestPhone();
+      const insert = async (status: 'hired' | 'in_progress') =>
+        (
+          await insertTestCandidateApplication({
+            telegramUserId: nextTestTelegramUserId(),
+            promoCode: nextTestPromoCode(),
+            phoneE164,
+            phoneSource: 'telegram_contact',
+            language: 'ru',
+            writeAllowed: true,
+            createdAt: new Date(),
+            name: nextNameTag(),
+            status,
+          })
+        ).applicationId;
+      const hiredId = await insert('hired');
+      await insert('in_progress');
+
+      await expect(
+        markApplicationStatus({ applicationId: hiredId, status: 'in_progress', employeeId: employee.employeeId }),
+      ).rejects.toMatchObject({ code: 'open_application_exists' });
+
+      expect((await readTestCandidateApplication(hiredId))?.status).toBe('hired');
+      expect(await readTestApplicationEvents(hiredId)).toEqual([]);
+    });
+
+    it('вернуть в работу закрывает незаконченный черновик в чате этой заявкой', async () => {
+      const employee = await createTestEmployee({ role: 'manager' });
+      const telegramUserId = nextTestTelegramUserId();
+      const { applicationId } = await insertTestCandidateApplication({
+        telegramUserId,
+        promoCode: nextTestPromoCode(),
+        phoneE164: nextTestPhone(),
+        language: 'ru',
+        writeAllowed: true,
+        createdAt: new Date(),
+        name: nextNameTag(),
+        status: 'rejected',
+      });
+      const { draftId } = await insertTestOpenChatDraft({ telegramUserId, promoCode: nextTestPromoCode() });
+
+      await markApplicationStatus({ applicationId, status: 'in_progress', employeeId: employee.employeeId });
+
+      const drafts = await readTestChatDrafts(telegramUserId);
+
+      expect((await readTestCandidateApplication(applicationId))?.status).toBe('in_progress');
+      expect(drafts.map((draft) => ({ id: draft.id, applicationId: draft.applicationId }))).toEqual([
+        { id: draftId, applicationId },
+      ]);
+    });
+
+    it('«Отказ» черновик в чате не трогает', async () => {
+      const employee = await createTestEmployee({ role: 'manager' });
+      const telegramUserId = nextTestTelegramUserId();
+      const { applicationId } = await insertTestCandidateApplication({
+        telegramUserId,
+        promoCode: nextTestPromoCode(),
+        phoneE164: nextTestPhone(),
+        language: 'ru',
+        writeAllowed: true,
+        createdAt: new Date(),
+        name: nextNameTag(),
+      });
+      await insertTestOpenChatDraft({ telegramUserId, promoCode: nextTestPromoCode() });
+
+      await markApplicationStatus({ applicationId, status: 'rejected', employeeId: employee.employeeId });
+
+      expect((await readTestChatDrafts(telegramUserId))[0]?.applicationId).toBeNull();
     });
 
     it('отметка снимает ожидание ответа', async () => {

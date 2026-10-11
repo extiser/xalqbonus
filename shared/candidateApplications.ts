@@ -149,6 +149,8 @@ export const isApplicationMarkStatus = (value: unknown): value is ApplicationMar
  * - `status_invalid` — в теле не «Оформлен», «Отказ» или «В работе»;
  * - `status_transition_invalid` — из нынешнего статуса в этот отметкой не перейти: заявку уже
  *   отметили или вернули;
+ * - `open_application_exists` — вернуть в работу нельзя: у кандидата уже есть другая открытая
+ *   заявка на тот же Telegram или тот же номер из Telegram;
  * - `message_invalid` — ответ кандидату пустой или длиннее предела Telegram;
  * - `cannot_write` — бот не может писать кандидату;
  * - `telegram_error` — Telegram не принял сообщение.
@@ -160,6 +162,7 @@ export type ApplicationDenialCode =
   | 'application_not_found'
   | 'status_invalid'
   | 'status_transition_invalid'
+  | 'open_application_exists'
   | 'message_invalid'
   | 'cannot_write'
   | 'telegram_error';
@@ -168,6 +171,7 @@ const APPLICATION_DENIAL_TEXTS: Readonly<Record<ApplicationDenialCode, Readonly<
   application_not_found: { ru: 'Такой заявки нет.' },
   status_invalid: { ru: 'Такого статуса у заявки нет.' },
   status_transition_invalid: { ru: 'Статус заявки уже сменили. Обновите страницу.' },
+  open_application_exists: { ru: 'У кандидата уже есть открытая заявка. Эту заявку вернуть в работу нельзя.' },
   message_invalid: { ru: `Сообщение должно быть от 1 до ${CANDIDATE_REPLY_MAX_LENGTH} знаков.` },
   cannot_write: { ru: 'Бот не может писать кандидату. Позвоните ему.' },
   telegram_error: { ru: 'Telegram не принял сообщение. Отправьте ещё раз.' },

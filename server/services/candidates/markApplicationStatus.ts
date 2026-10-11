@@ -12,7 +12,12 @@ import type { ApplicationMarkStatus } from '#shared/candidateApplications';
  * Остальное — отказ `status_transition_invalid`: заявку уже отметили или вернули с другого экрана.
  * «Новая» → «В работе» отметкой не ставится — это делает первый ответ сотрудника.
  *
- * Статус, строка журнала и «ведёт», если заявку ещё никто не вёл, — одной транзакцией.
+ * Вернуть в работу нельзя, если у кандидата уже есть другая открытая заявка — на тот же Telegram
+ * или на тот же номер из Telegram: отказ `open_application_exists` (docs/decisions.md → «Заявка
+ * кандидата»). Возврат в работу закрывает этой заявкой незаконченный черновик заявки в чате,
+ * чтобы сообщения кандидата шли в тему, а не в черновик.
+ *
+ * Статус, строка журнала, «ведёт», если заявку ещё никто не вёл, и черновик — одной транзакцией.
  */
 
 const TRANSITIONS: Readonly<
@@ -35,6 +40,7 @@ export const markApplicationStatus = async (input: {
     status: input.status,
     eventKind: transition.event,
     employeeId: input.employeeId,
+    closeChatDraft: input.status === 'in_progress',
   });
 
   if (outcome === 'not_found') {
@@ -43,6 +49,10 @@ export const markApplicationStatus = async (input: {
 
   if (outcome === 'transition_invalid') {
     throw new ApplicationDenialError('status_transition_invalid');
+  }
+
+  if (outcome === 'open_application_exists') {
+    throw new ApplicationDenialError('open_application_exists');
   }
 
   return { status: input.status };

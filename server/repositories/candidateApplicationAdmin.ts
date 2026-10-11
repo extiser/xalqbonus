@@ -12,6 +12,7 @@ import type {
   CandidatePhoneSource,
 } from '#server/generated/prisma/enums';
 import { parkDaySql } from '#server/utils/parkDaySql';
+import { isConstraintViolation, UNIQUE_VIOLATION } from '#server/utils/postgresErrors';
 import { COMPLETED_TRIP_STATUS } from '#server/utils/tripStatus';
 
 /**
@@ -498,12 +499,30 @@ export const findFirstTripAfterApplication = async (
   return rows[0]?.at ?? null;
 };
 
-export type ApplicationMarkOutcome = 'marked' | 'not_found' | 'transition_invalid';
+export type ApplicationMarkOutcome = 'marked' | 'not_found' | 'transition_invalid' | 'open_application_exists';
+
+/**
+ * Частичные уникальные индексы открытой заявки — одна «Новая» или «В работе» на Telegram и на номер,
+ * подтверждённый Telegram (миграция `20261011090000_candidate_applications`).
+ */
+const OPEN_APPLICATION_INDEXES = ['candidate_applications_open_telegram_key', 'candidate_applications_open_phone_key'];
+
+const isOpenApplicationConflict = (error: unknown): boolean =>
+  OPEN_APPLICATION_INDEXES.some((index) => isConstraintViolation(error, UNIQUE_VIOLATION, index));
 
 /**
  * Отметка сотрудника: статус, строка журнала и пустой «ведёт» — одной транзакцией. Статус
  * меняется, только если нынешний — из `fromStatuses`: вторая отметка той же заявки, поставленная
  * одновременно, ждёт первую на блокировке строки и находит статус уже сменённым.
+ *
+ * Возврат в работу открывает заявку, а открытая заявка одна на Telegram и на номер из Telegram
+ * (docs/decisions.md → «Заявка кандидата»). Если у кандидата уже есть другая открытая — кандидат
+ * подал новую, пока эта была закрыта, — смену статуса отбивает индекс, транзакция откатывается
+ * целиком, и это исход `open_application_exists`, а не ошибка.
+ *
+ * `closeChatDraft` — заодно закрыть этой заявкой незаконченный черновик заявки в чате этого
+ * Telegram: заявка снова открыта, и сообщения кандидата должны идти в её тему, а не в черновик
+ * (как у `startChatDraft`, нашедшего открытую заявку).
  */
 export const markApplicationStatus = async (input: {
   applicationId: string;
@@ -511,29 +530,51 @@ export const markApplicationStatus = async (input: {
   status: CandidateApplicationStatus;
   eventKind: CandidateApplicationEventKind;
   employeeId: string;
-}): Promise<ApplicationMarkOutcome> =>
-  db.$transaction(async (transaction) => {
-    const updated = await transaction.candidateApplication.updateMany({
-      where: { id: input.applicationId, status: { in: [...input.fromStatuses] } },
-      data: { status: input.status },
+  closeChatDraft: boolean;
+}): Promise<ApplicationMarkOutcome> => {
+  try {
+    return await db.$transaction(async (transaction): Promise<ApplicationMarkOutcome> => {
+      const updated = await transaction.candidateApplication.updateMany({
+        where: { id: input.applicationId, status: { in: [...input.fromStatuses] } },
+        data: { status: input.status },
+      });
+
+      if (updated.count === 0) {
+        const exists = await transaction.candidateApplication.count({ where: { id: input.applicationId } });
+
+        return exists > 0 ? 'transition_invalid' : 'not_found';
+      }
+
+      await transaction.candidateApplicationEvent.create({
+        data: { applicationId: input.applicationId, kind: input.eventKind, employeeId: input.employeeId },
+      });
+      await transaction.candidateApplication.updateMany({
+        where: { id: input.applicationId, handledByEmployeeId: null },
+        data: { handledByEmployeeId: input.employeeId },
+      });
+
+      if (input.closeChatDraft) {
+        const application = await transaction.candidateApplication.findUniqueOrThrow({
+          where: { id: input.applicationId },
+          select: { telegramUserId: true },
+        });
+
+        await transaction.candidateChatDraft.updateMany({
+          where: { telegramUserId: application.telegramUserId, applicationId: null },
+          data: { applicationId: input.applicationId },
+        });
+      }
+
+      return 'marked';
     });
-
-    if (updated.count === 0) {
-      const exists = await transaction.candidateApplication.count({ where: { id: input.applicationId } });
-
-      return exists > 0 ? 'transition_invalid' : 'not_found';
+  } catch (error) {
+    if (isOpenApplicationConflict(error)) {
+      return 'open_application_exists';
     }
 
-    await transaction.candidateApplicationEvent.create({
-      data: { applicationId: input.applicationId, kind: input.eventKind, employeeId: input.employeeId },
-    });
-    await transaction.candidateApplication.updateMany({
-      where: { id: input.applicationId, handledByEmployeeId: null },
-      data: { handledByEmployeeId: input.employeeId },
-    });
-
-    return 'marked';
-  });
+    throw error;
+  }
+};
 
 /** Заявка для пересверки номера. */
 export const findApplicationMatch = async (

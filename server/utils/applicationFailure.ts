@@ -10,8 +10,8 @@ import { applicationDenialText, type ApplicationDenialCode } from '#shared/candi
  * Отказы раздела «Заявки» в ответе HTTP (issue #471): код — экрану для решения, текст —
  * из словаря `shared/candidateApplications.ts`.
  *
- * Номер ответа — по смыслу: заявки нет — `404`; негодное тело — `400`; статус уже сменили или
- * бот не может писать — `409`, запрос верный, но предмет в другом состоянии; Telegram отказал —
+ * Номер ответа — по смыслу: заявки нет — `404`; негодное тело — `400`; статус уже сменили,
+ * у кандидата другая открытая заявка или бот не может писать — `409`, запрос верный, но предмет в другом состоянии; Telegram отказал —
  * `502`, отказала внешняя система.
  */
 
@@ -20,6 +20,7 @@ const STATUS_BY_CODE: Readonly<Record<ApplicationDenialCode, { statusCode: numbe
   status_invalid: { statusCode: 400, statusMessage: 'Bad Request' },
   message_invalid: { statusCode: 400, statusMessage: 'Bad Request' },
   status_transition_invalid: { statusCode: 409, statusMessage: 'Conflict' },
+  open_application_exists: { statusCode: 409, statusMessage: 'Conflict' },
   cannot_write: { statusCode: 409, statusMessage: 'Conflict' },
   telegram_error: { statusCode: 502, statusMessage: 'Bad Gateway' },
 };
