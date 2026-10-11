@@ -11,6 +11,7 @@ import type {
   CandidateMessageKind,
   CandidatePhoneSource,
 } from '#server/generated/prisma/enums';
+import { unfinishedTotalsSql } from '#server/repositories/candidateChatDrafts';
 import { parkDaySql } from '#server/utils/parkDaySql';
 import { isConstraintViolation, UNIQUE_VIOLATION } from '#server/utils/postgresErrors';
 import { COMPLETED_TRIP_STATUS } from '#server/utils/tripStatus';
@@ -214,10 +215,14 @@ export type ApplicationTotalsRow = {
   countInProgress: number;
   countHired: number;
   countRejected: number;
+  waitingUnfinished: number;
+  countUnfinished: number;
 };
 
 /**
  * Плитки — по всем заявкам, без фильтра и поиска, — и число у каждой пилюли с учётом поиска.
+ * Людей из «Не закончили» (issue #475) — ждущих ответа и под поиском — считают подзапросы того же
+ * запроса: «Ждут ответа» складывается из них и заявок.
  *
  * «За 7 дней» у оформленных — по последней отметке «Оформлен» заявки, которая сейчас
  * «Оформлен»: оформленная, возвращённая в работу и оформленная снова считается по второй.
@@ -228,6 +233,8 @@ export const readApplicationTotals = async (input: {
   overdueBefore: Date;
   /** Первые сутки окна «за 7 дней» по Ташкенту, `YYYY-MM-DD`. */
   weekFromDay: string;
+  /** Молчащий человек попадает в «Не закончили», если нажал `/start` раньше этого. */
+  unfinishedVisibleBefore: Date;
 }): Promise<ApplicationTotalsRow> => {
   const matches = searchSql(input.search);
   const rows = await db.$queryRaw<ApplicationTotalsRow[]>`
@@ -248,7 +255,8 @@ export const readApplicationTotals = async (input: {
            count(*) FILTER (WHERE ${matches} AND facts."status" = 'new')::int AS "countNew",
            count(*) FILTER (WHERE ${matches} AND facts."status" = 'in_progress')::int AS "countInProgress",
            count(*) FILTER (WHERE ${matches} AND facts."status" = 'hired')::int AS "countHired",
-           count(*) FILTER (WHERE ${matches} AND facts."status" = 'rejected')::int AS "countRejected"
+           count(*) FILTER (WHERE ${matches} AND facts."status" = 'rejected')::int AS "countRejected",
+           ${unfinishedTotalsSql({ visibleBefore: input.unfinishedVisibleBefore, search: input.search })}
       FROM facts
       LEFT JOIN LATERAL (
              SELECT max(event."created_at") AS "at"

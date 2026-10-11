@@ -182,6 +182,11 @@ describe('заявка в чате бота: черновик', () => {
     );
     expect((await onlyDraft(telegramUserId)).step).toBe('awaiting_name');
 
+    const [contact] = await readTestChatDraftMessages(draft.id);
+
+    // Сообщение номера — тот самый контакт (issue #475).
+    expect((await onlyDraft(telegramUserId)).phoneMessageId).toBe(contact?.id);
+
     await startDraft(telegramUserId, secondCode, reply, 'uz');
 
     expect(await onlyDraft(telegramUserId)).toMatchObject({
@@ -191,6 +196,7 @@ describe('заявка в чате бота: черновик', () => {
       step: 'awaiting_contact',
       phoneRaw: null,
       phoneE164: null,
+      phoneMessageId: null,
       applicationId: null,
     });
     // Второе начало — на языке нового `/start`, с кнопкой.

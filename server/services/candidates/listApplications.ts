@@ -11,6 +11,7 @@ import {
   APPLICATION_OVERDUE_HOURS,
   APPLICATIONS_PAGE_SIZE,
   type ApplicationFilter,
+  UNFINISHED_VISIBLE_AFTER_MINUTES,
 } from '#shared/candidateApplications';
 import { formatPhone } from '#shared/phone';
 import type { ApplicationList, ApplicationRow, ApplicationWaitingFrom } from '#shared/types/applications';
@@ -21,12 +22,21 @@ import type { ApplicationList, ApplicationRow, ApplicationWaitingFrom } from '#s
  * Плитки — за всё время, без фильтра и поиска; пилюли — с поиском, без фильтра; строки —
  * под фильтром и поиском. Всего строк — число пилюли выбранного фильтра: оно посчитано тем же
  * правилом, что и сами строки.
+ *
+ * Люди из «Не закончили» (issue #475) входят в плитку «Ждут ответа», если написали сами, и считаются
+ * своей пилюлей; строки вкладки отдаёт `listUnfinished`. В «Дольше суток» их нет.
  */
 
 /** Сколько суток в окне «за 7 дней» — сегодня включительно. */
 const WEEK_DAYS = 7;
 
-const HOUR_MS = 60 * 60 * 1_000;
+const MINUTE_MS = 60 * 1_000;
+
+const HOUR_MS = 60 * MINUTE_MS;
+
+/** Молчащий человек попадает в «Не закончили», если нажал `/start` раньше этого момента. */
+export const unfinishedVisibleBefore = (now: Date): Date =>
+  new Date(now.getTime() - UNFINISHED_VISIBLE_AFTER_MINUTES * MINUTE_MS);
 
 /** Знаки, которые в номере отбрасываются: так номер пишут в переписке и на бумаге. */
 const PHONE_SEPARATORS = /[\s\-+]/g;
@@ -100,6 +110,7 @@ export const listApplications = async ({
       search,
       overdueBefore: new Date(now.getTime() - APPLICATION_OVERDUE_HOURS * HOUR_MS),
       weekFromDay: shiftDayKey(formatDayKey(now), -(WEEK_DAYS - 1)),
+      unfinishedVisibleBefore: unfinishedVisibleBefore(now),
     }),
   ]);
 
@@ -110,11 +121,13 @@ export const listApplications = async ({
     in_progress: totals.countInProgress,
     hired: totals.countHired,
     rejected: totals.countRejected,
+    unfinished: totals.countUnfinished,
   };
 
   return {
     tiles: {
-      waiting: totals.waiting,
+      waiting: totals.waiting + totals.waitingUnfinished,
+      waitingUnfinished: totals.waitingUnfinished,
       overdue: totals.overdue,
       total: totals.total,
       totalWeek: totals.totalWeek,

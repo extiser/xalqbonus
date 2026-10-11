@@ -114,6 +114,12 @@ export const APPLICATIONS_PAGE_SIZE = 25;
  */
 export const APPLICATION_OVERDUE_HOURS = 24;
 
+/**
+ * Через сколько минут после `/start` молчащий человек попадает в «Не закончили» (issue #475).
+ * Написавший сам — сразу (docs/decisions.md → «„Не закончили“ в заявках»).
+ */
+export const UNFINISHED_VISIBLE_AFTER_MINUTES = 60;
+
 /** Предел ответа из админки — предел текста одного сообщения Telegram. */
 export const CANDIDATE_REPLY_MAX_LENGTH = 4096;
 
@@ -153,7 +159,9 @@ export const isApplicationMarkStatus = (value: unknown): value is ApplicationMar
  *   заявка на тот же Telegram или тот же номер из Telegram;
  * - `message_invalid` — ответ кандидату пустой или длиннее предела Telegram;
  * - `cannot_write` — бот не может писать кандидату;
- * - `telegram_error` — Telegram не принял сообщение.
+ * - `telegram_error` — Telegram не принял сообщение;
+ * - `draft_not_found` — человека из «Не закончили» с таким идентификатором нет (issue #475);
+ * - `draft_closed` — человек уже подал заявку: черновик закончен.
  *
  * Словарь отдельный от `shared/denials.ts`, как у промо-меток: там — отказы двери, здесь —
  * предмет разговора (docs/decisions.md → «Отказ двери веба говорит кодом»).
@@ -165,7 +173,9 @@ export type ApplicationDenialCode =
   | 'open_application_exists'
   | 'message_invalid'
   | 'cannot_write'
-  | 'telegram_error';
+  | 'telegram_error'
+  | 'draft_not_found'
+  | 'draft_closed';
 
 const APPLICATION_DENIAL_TEXTS: Readonly<Record<ApplicationDenialCode, Readonly<Record<WebLanguage, string>>>> = {
   application_not_found: { ru: 'Такой заявки нет.' },
@@ -175,6 +185,8 @@ const APPLICATION_DENIAL_TEXTS: Readonly<Record<ApplicationDenialCode, Readonly<
   message_invalid: { ru: `Сообщение должно быть от 1 до ${CANDIDATE_REPLY_MAX_LENGTH} знаков.` },
   cannot_write: { ru: 'Бот не может писать кандидату. Позвоните ему.' },
   telegram_error: { ru: 'Telegram не принял сообщение. Отправьте ещё раз.' },
+  draft_not_found: { ru: 'Такого человека в списке нет.' },
+  draft_closed: { ru: 'Человек уже подал заявку. Обновите страницу.' },
 };
 
 export const applicationDenialText = (code: ApplicationDenialCode, language: WebLanguage): string =>

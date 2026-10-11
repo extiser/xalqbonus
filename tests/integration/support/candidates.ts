@@ -2,7 +2,9 @@ import { db } from '#server/db';
 import type {
   CandidateApplicationEventKind,
   CandidateApplicationStatus,
+  CandidateDraftMessageAuthor,
   CandidateMessageAuthor,
+  CandidateMessageKind,
   CandidateMessageDelivery,
   CandidatePhoneSource,
   Language,
@@ -141,6 +143,86 @@ export const insertTestOpenChatDraft = async (input: {
 
   return { draftId: draft.id };
 };
+
+export type TestChatDraftInput = {
+  telegramUserId: bigint;
+  promoCode: string;
+  startedAt: Date;
+  /** Имя из Telegram. По умолчанию — «Тест Кандидат». */
+  telegramName?: string;
+  telegramUsername?: string | null;
+  /** Номер черновика — шаг имени. Пусто — черновик ждёт номер. */
+  phoneE164?: string;
+  /** Заявка, которой черновик кончился. */
+  applicationId?: string;
+};
+
+/** Черновик заявки в чате задним числом — «Не закончили» сравнивает начало с порогом. */
+export const insertTestChatDraft = async (input: TestChatDraftInput): Promise<{ draftId: string }> => {
+  createdTelegramUserIds.add(input.telegramUserId);
+
+  const draft = await db.candidateChatDraft.create({
+    data: {
+      telegramUserId: input.telegramUserId,
+      telegramChatId: input.telegramUserId,
+      telegramName: input.telegramName ?? 'Тест Кандидат',
+      telegramUsername: input.telegramUsername ?? null,
+      promoCode: input.promoCode,
+      language: 'ru',
+      step: input.phoneE164 === undefined ? 'awaiting_contact' : 'awaiting_name',
+      phoneRaw: input.phoneE164 ?? null,
+      phoneE164: input.phoneE164 ?? null,
+      applicationId: input.applicationId ?? null,
+      startedAt: input.startedAt,
+    },
+  });
+
+  return { draftId: draft.id };
+};
+
+export type TestDraftMessageInput = {
+  draftId: string;
+  author: CandidateDraftMessageAuthor;
+  /** Обязателен у `employee`. */
+  employeeId?: string;
+  /** По умолчанию — текст. */
+  kind?: CandidateMessageKind;
+  /** По умолчанию — доставлено. */
+  delivery?: 'delivered' | 'failed';
+  createdAt: Date;
+};
+
+/**
+ * Сообщение черновика задним числом — минуя бота: «ждёт ответа» сравнивает моменты сообщений.
+ * У недоставленного причина — отказ Telegram.
+ */
+export const insertTestDraftMessage = async (input: TestDraftMessageInput): Promise<{ messageId: string }> => {
+  lastTestMessageId += 1;
+
+  const delivery = input.delivery ?? 'delivered';
+  const message = await db.candidateDraftMessage.create({
+    data: {
+      draftId: input.draftId,
+      author: input.author,
+      employeeId: input.employeeId ?? null,
+      kind: input.kind ?? 'text',
+      text: input.kind === 'contact' ? null : 'тест',
+      candidateMessageId: delivery === 'delivered' ? lastTestMessageId : null,
+      delivery,
+      failure: delivery === 'failed' ? 'telegram_error' : null,
+      createdAt: input.createdAt,
+    },
+  });
+
+  return { messageId: message.id };
+};
+
+/** Контакт, по которому черновик взял номер. */
+export const setTestDraftPhoneMessage = async (draftId: string, messageId: string): Promise<void> => {
+  await db.candidateChatDraft.update({ where: { id: draftId }, data: { phoneMessageId: messageId } });
+};
+
+export const readTestChatDraft = async (draftId: string) => db.candidateChatDraft.findUnique({ where: { id: draftId } });
 
 /** Журнал отметок заявки по времени. */
 export const readTestApplicationEvents = async (applicationId: string) =>
