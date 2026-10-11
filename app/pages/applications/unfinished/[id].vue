@@ -73,15 +73,31 @@ const missing = computed(() => error.value?.statusCode === 404);
 const now = ref(Date.now());
 let clock: ReturnType<typeof setInterval> | null = null;
 
+/** Как часто карточка перечитывает себя, пока открыта на экране, мс. */
+const REFRESH_MS = 30_000;
+
+let refresher: ReturnType<typeof setInterval> | null = null;
+
+// Человек меняет карточку из Telegram, пока она открыта: пишет, присылает номер, нажимает `/start`
+// и возвращается в список. Без перечитывания на экране оставалось бы прежнее — без новых сообщений
+// и без «Убрать из списка» у вернувшегося.
+const refreshVisible = (): void => {
+  if (document.visibilityState === 'visible' && !sending.value && !dismissing.value) void refresh();
+};
+
 onMounted(() => {
   now.value = Date.now();
   clock = setInterval(() => {
     now.value = Date.now();
   }, 60_000);
+  refresher = setInterval(refreshVisible, REFRESH_MS);
+  document.addEventListener('visibilitychange', refreshVisible);
 });
 
 onBeforeUnmount(() => {
   if (clock) clearInterval(clock);
+  if (refresher) clearInterval(refresher);
+  document.removeEventListener('visibilitychange', refreshVisible);
 });
 
 const waitingText = computed((): string | null => {
