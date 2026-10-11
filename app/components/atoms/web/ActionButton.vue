@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, type Component } from 'vue';
+import { computed, resolveComponent, type Component } from 'vue';
 
 /**
  * Кнопка действия в плитке веба — «Сделать сегмент», «Задать», «Список» на экранах дашборда
@@ -11,14 +11,16 @@ import { computed, type Component } from 'vue';
  * Размер `page` — та же кнопка крупнее, 40 и 14 / 600 (`.btn-main` экранов «Промо», issue #380):
  * главное действие страницы в шапке, в окне и кнопки скачивания QR. Вид `quiet` — без подложки
  * и контура, текст цветом названия: «Отмена» рядом с главным действием окна (`.btn-ghost`).
- * Значок (`icon`) — Phosphor duotone слева от подписи; `title` — подсказка при наведении.
+ * Значок (`icon`) — Phosphor duotone слева от подписи; `tooltip` — подпись при наведении
+ * (`MoleculesWebTooltip`, issue #457): без неё обёртки нет.
  *
  * Ведёт адресом (`to`) — тогда это ссылка, иначе кнопка с событием `click`. Файл — `download`:
  * простая ссылка на ручку выгрузки, без перехода внутри приложения («Выгрузить в Excel», issues #373, #402).
  * `submit` — кнопка отправляет свою форму. `disabled` — погашенная (issue #402): прозрачность 40 %,
- * не нажимается и никуда не ведёт. Это не `<button disabled>`, а `span`: у погашенного элемента
- * браузер не всегда показывает подсказку при наведении, а она объясняет, почему кнопка погашена. В плитке со входом (`to` у плитки) её не ставят:
- * плитка нажимается целиком, и кнопка в ссылке — ошибка разметки.
+ * не нажимается и никуда не ведёт. Это не `<button disabled>`, а `span`: погашенный `button` в части
+ * браузеров не получает событий мыши, а подпись при наведении должна показываться и у него — она
+ * объясняет, почему кнопка погашена. В плитке со входом (`to` у плитки) её не ставят: плитка нажимается целиком, и кнопка
+ * в ссылке — ошибка разметки.
  */
 type ActionButtonSize = 'tile' | 'page';
 type ActionButtonVariant = 'action' | 'quiet';
@@ -32,17 +34,17 @@ const props = withDefaults(
     size?: ActionButtonSize;
     variant?: ActionButtonVariant;
     icon?: Component;
-    /** Подсказка при наведении. */
-    title?: string;
+    /** Подпись при наведении. */
+    tooltip?: string;
     /** Отправляет форму, в которой стоит. */
     submit?: boolean;
     /** Погашена: видна, не нажимается. */
     disabled?: boolean;
   }>(),
-  { to: undefined, download: undefined, size: 'tile', variant: 'action', icon: undefined, title: undefined },
+  { to: undefined, download: undefined, size: 'tile', variant: 'action', icon: undefined, tooltip: undefined },
 );
 
-defineEmits<{ click: [] }>();
+const emit = defineEmits<{ click: [] }>();
 
 const BASE_CLASSES =
   'inline-flex shrink-0 items-center rounded-full font-manrope font-semibold whitespace-nowrap no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-web-cyan';
@@ -70,19 +72,31 @@ const classes = computed(() => [
   VARIANT_CLASSES[props.variant],
   props.disabled ? DISABLED_CLASSES : 'cursor-pointer',
 ]);
+
+const NuxtLink = resolveComponent('NuxtLink');
+
+/** Чем кнопка стала: одна разметка на все случаи, и обёртка подписи ставится вокруг любого. */
+const element = computed((): { is: string | Component; attributes: Record<string, string> } => {
+  if (props.disabled) return { is: 'span', attributes: { role: 'button', 'aria-disabled': 'true' } };
+  if (props.to) return { is: NuxtLink, attributes: { to: props.to } };
+  if (props.download) return { is: 'a', attributes: { href: props.download, download: '' } };
+
+  return { is: 'button', attributes: { type: props.submit ? 'submit' : 'button' } };
+});
+
+/** Событие — только у кнопки: погашенная и ссылки его не шлют. */
+const click = (): void => {
+  if (element.value.is === 'button') emit('click');
+};
 </script>
 
 <template>
-  <span v-if="disabled" role="button" aria-disabled="true" :title="title" :class="classes">
+  <MoleculesWebTooltip v-if="tooltip" :text="tooltip">
+    <component :is="element.is" v-bind="element.attributes" :class="classes" @click="click">
+      <component :is="icon" v-if="icon" weight="duotone" aria-hidden="true" :class="ICON_CLASSES[size]" />{{ label }}
+    </component>
+  </MoleculesWebTooltip>
+  <component :is="element.is" v-else v-bind="element.attributes" :class="classes" @click="click">
     <component :is="icon" v-if="icon" weight="duotone" aria-hidden="true" :class="ICON_CLASSES[size]" />{{ label }}
-  </span>
-  <NuxtLink v-else-if="to" :to="to" :title="title" :class="classes">
-    <component :is="icon" v-if="icon" weight="duotone" aria-hidden="true" :class="ICON_CLASSES[size]" />{{ label }}
-  </NuxtLink>
-  <a v-else-if="download" :href="download" download :title="title" :class="classes">
-    <component :is="icon" v-if="icon" weight="duotone" aria-hidden="true" :class="ICON_CLASSES[size]" />{{ label }}
-  </a>
-  <button v-else :type="submit ? 'submit' : 'button'" :title="title" :class="classes" @click="$emit('click')">
-    <component :is="icon" v-if="icon" weight="duotone" aria-hidden="true" :class="ICON_CLASSES[size]" />{{ label }}
-  </button>
+  </component>
 </template>

@@ -11,7 +11,7 @@ import { PhArrowsClockwise, PhCheck, PhCopy } from '@phosphor-icons/vue';
  *
  * «Скопировать ссылку» кладёт её в буфер, и значок на 1,5 с сменяется галочкой. «Другой код»
  * (`refreshable`) — событием наверх: код выдаёт сервер, а не поле. У значков подписи
- * при наведении (`codex.md`, «Формы — решено»).
+ * при наведении (`codex.md`, «Формы — решено»; `MoleculesWebTooltip`, issue #457).
  */
 const props = defineProps<{
   /** Ссылка целиком. Пусто — ещё не пришла. */
@@ -33,6 +33,8 @@ const COPIED_MS = 1_500;
 
 const copied = ref(false);
 let copiedTimer: ReturnType<typeof setTimeout> | null = null;
+
+const copyLabel = computed(() => (copied.value ? 'Скопировано' : 'Скопировать ссылку'));
 
 const parts = computed(() => {
   const link = props.link ?? '';
@@ -77,26 +79,16 @@ const BUTTON_CLASSES =
     <span class="min-w-0 flex-1 overflow-hidden text-left text-ellipsis whitespace-nowrap [direction:rtl]">
       <bdi>{{ parts.head }}<b class="font-semibold text-web-cyan">{{ parts.code }}</b></bdi>
     </span>
-    <button
-      v-if="refreshable"
-      type="button"
-      title="Другой код"
-      aria-label="Другой код"
-      :class="BUTTON_CLASSES"
-      @click="$emit('refresh')"
-    >
-      <PhArrowsClockwise weight="duotone" aria-hidden="true" class="size-5" />
-    </button>
-    <button
-      type="button"
-      :title="copied ? 'Скопировано' : 'Скопировать ссылку'"
-      :aria-label="copied ? 'Скопировано' : 'Скопировать ссылку'"
-      :disabled="!link"
-      :class="BUTTON_CLASSES"
-      @click="copy"
-    >
-      <PhCheck v-if="copied" weight="bold" aria-hidden="true" class="size-5 text-web-cyan" />
-      <PhCopy v-else weight="duotone" aria-hidden="true" class="size-5" />
-    </button>
+    <MoleculesWebTooltip v-if="refreshable" text="Другой код">
+      <button type="button" aria-label="Другой код" :class="BUTTON_CLASSES" @click="$emit('refresh')">
+        <PhArrowsClockwise weight="duotone" aria-hidden="true" class="size-5" />
+      </button>
+    </MoleculesWebTooltip>
+    <MoleculesWebTooltip :text="copyLabel">
+      <button type="button" :aria-label="copyLabel" :disabled="!link" :class="BUTTON_CLASSES" @click="copy">
+        <PhCheck v-if="copied" weight="bold" aria-hidden="true" class="size-5 text-web-cyan" />
+        <PhCopy v-else weight="duotone" aria-hidden="true" class="size-5" />
+      </button>
+    </MoleculesWebTooltip>
   </div>
 </template>
