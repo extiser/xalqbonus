@@ -11,15 +11,18 @@ import {
   listApplicationEvents,
   listApplicationMessages,
 } from '#server/repositories/candidateApplicationAdmin';
+import { findPromoLinkNames, listApplicationDrafts } from '#server/repositories/candidateChatDrafts';
 import { ApplicationDenialError } from '#server/services/candidates/applicationDenial';
 import { readWaiting } from '#server/services/candidates/listApplications';
+import { toDraftMessage } from '#server/services/candidates/readUnfinishedCard';
 import { CANDIDATE_REPLY_ROLES } from '#shared/access';
 import { formatPhone } from '#shared/phone';
-import type { ApplicationCard } from '#shared/types/applications';
+import type { ApplicationCard, ApplicationDraftMessage } from '#shared/types/applications';
 
 /**
  * Карточка заявки раздела «Заявки» (issue #471): кандидат, переписка из базы, журнал отметок,
- * сверка, откуда пришёл и ход заявки.
+ * сверка, откуда пришёл и ход заявки. Переписку до подачи — сообщения черновиков заявки в чате —
+ * карточка отдаёт отдельно (issue #475): разговор до заявки не теряется.
  *
  * Заявку, которую не удалось сверить при подаче, карточка ставит на пересверку в фоне и отвечает
  * тем, что есть: итог появится при следующем открытии. Постановка не удалась — строка в лог,
@@ -64,9 +67,10 @@ export const readApplicationCard = async (input: {
     }
   }
 
-  const [waiting, messages, events, promoName, touchedAt, firstTripAt] = await Promise.all([
+  const [waiting, messages, drafts, events, promoName, touchedAt, firstTripAt] = await Promise.all([
     findApplicationWaiting(application.id),
     listApplicationMessages(application.id),
+    listApplicationDrafts(application.id),
     listApplicationEvents(application.id),
     findPromoLinkName(application.promoCode),
     findLastPromoTouchBefore(application.promoCode, application.telegramUserId, application.createdAt),
@@ -82,6 +86,21 @@ export const readApplicationCard = async (input: {
     ...events.map((event) => ({ at: event.createdAt, employeeName: event.employee.fullName })),
   ].sort((left, right) => left.at.getTime() - right.at.getTime());
   const firstReply = replies[0];
+  const draftPromoNames = await findPromoLinkNames([...new Set(drafts.map((draft) => draft.promoCode))]);
+  const draftMessages = drafts
+    .flatMap((draft) =>
+      draft.messages.map((message) => ({
+        at: message.createdAt.getTime(),
+        message: {
+          ...toDraftMessage(message, draft.phoneMessageId),
+          startedAt: draft.startedAt.toISOString(),
+          promoName: draftPromoNames.get(draft.promoCode) ?? null,
+          phone: draft.phoneE164 === null ? null : formatPhone(draft.phoneE164).display,
+        },
+      })),
+    )
+    .sort((left, right) => left.at - right.at)
+    .map(({ message }): ApplicationDraftMessage => message);
 
   return {
     application: {
@@ -122,6 +141,7 @@ export const readApplicationCard = async (input: {
       failure: message.failure,
       createdAt: message.createdAt.toISOString(),
     })),
+    draftMessages,
     events: events.map((event) => ({
       kind: event.kind,
       employeeName: event.employee.fullName,

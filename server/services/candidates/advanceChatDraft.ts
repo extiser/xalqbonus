@@ -7,6 +7,7 @@ import {
   findOpenChatDraftById,
   insertChatDraftMessage,
   recordChatDraftPhone,
+  restoreDismissedChatDraft,
 } from '#server/repositories/candidateChatDrafts';
 import type { CandidateMessageContent } from '#server/services/candidates/candidateMessageKind';
 import {
@@ -28,9 +29,10 @@ import { formatPhone, normalizePhoneE164 } from '#shared/phone';
  * потом имя текстом (docs/decisions.md → «Заявка в чате бота»).
  *
  * Сначала сообщение пишется в черновик — менеджер увидит, что человек писал и где остановился;
- * повтор апдейта отбивает уникальный индекс, и дальше не идёт ничего. Затем шаг — по черновику,
- * перечитанному здесь же: сервис зовут внутри очереди чата, и два быстрых сообщения не прочтут
- * один и тот же шаг.
+ * повтор апдейта отбивает уникальный индекс, и дальше не идёт ничего. Убранный из «Не закончили»
+ * этим сообщением возвращается в список (issue #475): написал снова — значит, снова ждёт. Затем
+ * шаг — по черновику, перечитанному здесь же: сервис зовут внутри очереди чата, и два быстрых
+ * сообщения не прочтут один и тот же шаг.
  *
  * Бот отвечает на каждое ошибочное сообщение, сколько бы их ни было: шлёт их только сам
  * кандидат и только себе.
@@ -86,6 +88,7 @@ const phoneNotUzText = async (language: Language): Promise<string> => {
 const advanceAwaitingContact = async (
   draft: CandidateChatDraftRow,
   input: AdvanceChatDraftInput,
+  messageId: string,
 ): Promise<AdvanceChatDraftOutcome> => {
   const { contact, telegramUserId } = input.message;
   const { language } = draft;
@@ -122,7 +125,7 @@ const advanceAwaitingContact = async (
     return 'repeat';
   }
 
-  await recordChatDraftPhone(draft.id, { phoneRaw: contact.phoneNumber, phoneE164 });
+  await recordChatDraftPhone(draft.id, { phoneRaw: contact.phoneNumber, phoneE164, phoneMessageId: messageId });
   await input.reply(text('application_chat_ask_name', language), REMOVE_KEYBOARD);
 
   return 'awaiting_name';
@@ -164,7 +167,7 @@ const advanceAwaitingName = async (
 
 export const advanceChatDraft = async (input: AdvanceChatDraftInput): Promise<AdvanceChatDraftOutcome> => {
   const { content, messageId } = input.message;
-  const recorded = await insertChatDraftMessage({
+  const recordedId = await insertChatDraftMessage({
     draftId: input.draftId,
     kind: content.kind,
     text: content.text,
@@ -172,9 +175,11 @@ export const advanceChatDraft = async (input: AdvanceChatDraftInput): Promise<Ad
     candidateMessageId: messageId,
   });
 
-  if (!recorded) {
+  if (recordedId === null) {
     return 'duplicate';
   }
+
+  await restoreDismissedChatDraft(input.draftId);
 
   const draft = await findOpenChatDraftById(input.draftId);
 
@@ -182,5 +187,7 @@ export const advanceChatDraft = async (input: AdvanceChatDraftInput): Promise<Ad
     return 'draft_closed';
   }
 
-  return draft.step === 'awaiting_contact' ? advanceAwaitingContact(draft, input) : advanceAwaitingName(draft, input);
+  return draft.step === 'awaiting_contact'
+    ? advanceAwaitingContact(draft, input, recordedId)
+    : advanceAwaitingName(draft, input);
 };

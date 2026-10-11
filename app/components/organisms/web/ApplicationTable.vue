@@ -11,7 +11,10 @@ import {
   FORMER_DRIVER_DAYS,
   type ApplicationFilter,
 } from '#shared/candidateApplications';
-import type { ApplicationList, ApplicationRow } from '#shared/types/applications';
+import type { ApplicationList, ApplicationRow, UnfinishedList } from '#shared/types/applications';
+
+/** Пилюля списка: фильтр заявок или вкладка «Не закончили» (issue #475) — у неё своя таблица. */
+export type ApplicationListTab = ApplicationFilter | 'unfinished';
 
 /**
  * Плитка «Заявки» списка заявок (issue #471) — таблица `01-list.html`, 12 × 6, растёт по числу
@@ -23,20 +26,27 @@ import type { ApplicationList, ApplicationRow } from '#shared/types/applications
  * страницы. Ждёт ответа — циан, дольше суток — жирным; не ждёт — прочерк. Строка открывает
  * карточку заявки, имя — ссылка туда же, для клавиатуры.
  *
+ * Пилюля «Не закончили» (issue #475) — после «В работе», нейтральная: при ней под пилюлями таблица
+ * людей, не подавших заявку (`OrganismsWebUnfinishedTable`), а число у пилюли и плитки — из списка
+ * заявок.
+ *
  * Данные, фильтр, поиск и страница — свойствами; сама плитка в сеть не ходит и адрес не правит:
  * выбор уходит наверх событиями.
  */
 const props = defineProps<{
   state: LoadState;
   list: ApplicationList | null;
-  filter: ApplicationFilter;
+  filter: ApplicationListTab;
   query: string;
   /** Момент, от которого считается «ждёт ответа», мс. */
   now: number;
+  /** Строки вкладки «Не закончили»; читаются, только когда она выбрана. */
+  unfinishedState: LoadState;
+  unfinished: UnfinishedList | null;
 }>();
 
 const emit = defineEmits<{
-  filter: [filter: ApplicationFilter];
+  filter: [filter: ApplicationListTab];
   search: [query: string];
   page: [offset: number];
 }>();
@@ -47,15 +57,16 @@ const OVERDUE_MS = APPLICATION_OVERDUE_HOURS * 60 * 60 * 1_000;
 
 const MATCH_VALUES = { formerDriverDays: String(FORMER_DRIVER_DAYS) };
 
-const pills = computed((): FilterPill<ApplicationFilter>[] => {
+const pills = computed((): FilterPill<ApplicationListTab>[] => {
   const counts = props.list?.counts;
-  const count = (key: ApplicationFilter): number => counts?.[key] ?? 0;
+  const count = (key: ApplicationListTab): number => counts?.[key] ?? 0;
 
   return [
     { key: 'all', label: 'Все', count: count('all') },
     { key: 'waiting', label: 'Ждут ответа', count: count('waiting'), tone: 'cyan' },
     { key: 'new', label: 'Новая', count: count('new'), tone: 'gold' },
     { key: 'in_progress', label: 'В работе', count: count('in_progress') },
+    { key: 'unfinished', label: 'Не закончили', count: count('unfinished') },
     { key: 'hired', label: 'Оформлен', count: count('hired'), tone: 'green' },
     { key: 'rejected', label: 'Отказ', count: count('rejected'), tone: 'scarlet' },
   ];
@@ -114,7 +125,14 @@ const SUB_CLASSES = 'mt-0.5 text-[12px] font-medium text-web-grey';
       <MoleculesWebFilterPills :pills="pills" :current="filter" label="Фильтр заявок" @select="selectFilter" />
     </div>
 
-    <div v-if="state === 'loading' && list === null" class="mt-3.5">
+    <OrganismsWebUnfinishedTable
+      v-if="filter === 'unfinished'"
+      :state="unfinishedState"
+      :list="unfinished"
+      :now="now"
+      @page="emit('page', $event)"
+    />
+    <div v-else-if="state === 'loading' && list === null" class="mt-3.5">
       <AtomsWebHint text="Загружаем заявки…" />
     </div>
     <div v-else-if="state === 'error' || list === null" class="mt-3.5">

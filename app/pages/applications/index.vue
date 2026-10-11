@@ -1,17 +1,20 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router';
-import { formatNumber } from '~/utils/format';
+import { formatNumber, pluralize } from '~/utils/format';
 import { toLoadState } from '~/utils/loadState';
-import { APPLICATION_OVERDUE_HOURS, isApplicationFilter, type ApplicationFilter } from '#shared/candidateApplications';
+import type { ApplicationListTab } from '~/components/organisms/web/ApplicationTable.vue';
+import { APPLICATION_OVERDUE_HOURS, isApplicationFilter } from '#shared/candidateApplications';
 import type { MetricKey, MetricValues } from '#shared/metrics';
-import type { AdParticipantList, ApplicationList } from '#shared/types/applications';
+import type { AdParticipantList, ApplicationList, UnfinishedList } from '#shared/types/applications';
 
 /**
  * Раздел «Заявки», список (issue #471) — экран `_reference/design/web/applications/01-list.html`.
  *
  * Четыре плитки «кого пинать» и итога, таблица заявок с фильтром, поиском и листанием и таблица
- * участников программы, пришедших по рекламе. Фильтр, поиск и страница живут в адресе
+ * участников программы, пришедших по рекламе. Пилюля «Не закончили» (issue #475, `03-unfinished.html`)
+ * показывает вместо заявок людей, не подавших заявку в чате бота: плитки и числа у пилюль при ней
+ * берутся из списка заявок без фильтра, строки — из своей ручки. Фильтр, поиск и страница живут в адресе
  * (`?filter=`, `?q=`, `?offset=`, `?adOffset=`): ссылку на отфильтрованный список можно переслать,
  * а «Назад» из карточки возвращает туда же.
  */
@@ -34,20 +37,44 @@ const readOffset = (value: unknown): number => {
   return Number.isSafeInteger(offset) && offset > 0 ? offset : 0;
 };
 
-const filter = computed((): ApplicationFilter => (isApplicationFilter(route.query.filter) ? route.query.filter : 'all'));
+const filter = computed((): ApplicationListTab => {
+  const value = route.query.filter;
+
+  if (value === 'unfinished') return 'unfinished';
+
+  return isApplicationFilter(value) ? value : 'all';
+});
 const query = computed(() => readText(route.query.q));
 const offset = computed(() => readOffset(route.query.offset));
 const adOffset = computed(() => readOffset(route.query.adOffset));
 
+// При «Не закончили» строки заявок не нужны: список зовётся без фильтра — ради плиток и чисел у пилюль.
 const { data: list, status } = await useFetch<ApplicationList>('/api/applications', {
-  query: computed(() => ({ filter: filter.value, q: query.value, offset: offset.value })),
+  query: computed(() =>
+    filter.value === 'unfinished'
+      ? { filter: 'all', q: query.value, offset: 0 }
+      : { filter: filter.value, q: query.value, offset: offset.value },
+  ),
 });
+
+// `useRequestFetch`, а не `$fetch`: при отрисовке на сервере запрос несёт cookie сессии.
+const requestFetch = useRequestFetch();
+
+const { data: unfinished, status: unfinishedStatus } = await useAsyncData(
+  'applications-unfinished',
+  (): Promise<UnfinishedList | null> =>
+    filter.value === 'unfinished'
+      ? requestFetch<UnfinishedList>('/api/applications/unfinished', { query: { q: query.value, offset: offset.value } })
+      : Promise.resolve(null),
+  { watch: [filter, query, offset] },
+);
 
 const { data: adList, status: adStatus } = await useFetch<AdParticipantList>('/api/applications/ad-participants', {
   query: computed(() => ({ offset: adOffset.value })),
 });
 
 const state = computed(() => toLoadState(status.value));
+const unfinishedState = computed(() => toLoadState(unfinishedStatus.value));
 const adState = computed(() => toLoadState(adStatus.value));
 
 /** Пустое значение из адреса убирается: ссылка остаётся короткой. */
@@ -63,7 +90,7 @@ const replaceQuery = (changes: Record<string, string | number>): void => {
 };
 
 // Новый фильтр и новый поиск — с первой страницы: старое смещение могло быть дальше конца.
-const selectFilter = (next: ApplicationFilter): void => replaceQuery({ filter: next, offset: 0 });
+const selectFilter = (next: ApplicationListTab): void => replaceQuery({ filter: next, offset: 0 });
 const search = (next: string): void => replaceQuery({ q: next.trim(), offset: 0 });
 const page = (next: number): void => replaceQuery({ offset: next });
 const adPage = (next: number): void => replaceQuery({ adOffset: next });
@@ -84,22 +111,36 @@ onBeforeUnmount(() => {
   if (clock) clearInterval(clock);
 });
 
-type TotalTile = { title: string; metric: MetricKey; value: number | null; week: number | null; values?: MetricValues };
+/** Число плитки и серая подпись рядом: «+18 за 7 дней», «1 не закончил». */
+type TotalTile = { title: string; metric: MetricKey; value: number | null; unit: string | undefined; values?: MetricValues };
+
+const weekUnit = (week: number | undefined): string | undefined =>
+  week === undefined ? undefined : `+${formatNumber(week)} за 7 дней`;
+
+const unfinishedUnit = (count: number | undefined): string | undefined =>
+  count === undefined || count === 0
+    ? undefined
+    : `${formatNumber(count)} ${pluralize(count, 'не закончил', 'не закончили', 'не закончили')}`;
 
 const tiles = computed<TotalTile[]>(() => {
   const counts = list.value?.tiles ?? null;
 
   return [
-    { title: 'Ждут ответа', metric: 'applicationsWaiting', value: counts?.waiting ?? null, week: null },
+    {
+      title: 'Ждут ответа',
+      metric: 'applicationsWaiting',
+      value: counts?.waiting ?? null,
+      unit: unfinishedUnit(counts?.waitingUnfinished),
+    },
     {
       title: 'Дольше суток',
       metric: 'applicationsOverdue',
       value: counts?.overdue ?? null,
-      week: null,
+      unit: undefined,
       values: { overdueHours: String(APPLICATION_OVERDUE_HOURS) },
     },
-    { title: 'Всего заявок', metric: 'applicationsTotal', value: counts?.total ?? null, week: counts?.totalWeek ?? null },
-    { title: 'Оформлены', metric: 'applicationsHired', value: counts?.hired ?? null, week: counts?.hiredWeek ?? null },
+    { title: 'Всего заявок', metric: 'applicationsTotal', value: counts?.total ?? null, unit: weekUnit(counts?.totalWeek) },
+    { title: 'Оформлены', metric: 'applicationsHired', value: counts?.hired ?? null, unit: weekUnit(counts?.hiredWeek) },
   ];
 });
 </script>
@@ -132,7 +173,7 @@ const tiles = computed<TotalTile[]>(() => {
             v-if="tile.value !== null"
             size="tile"
             :value="formatNumber(tile.value)"
-            :unit="tile.week === null ? undefined : `+${formatNumber(tile.week)} за 7 дней`"
+            :unit="tile.unit"
           />
           <AtomsWebHint v-else :text="state === 'loading' ? 'Считаем…' : 'Не загрузилось'" />
         </div>
@@ -143,6 +184,8 @@ const tiles = computed<TotalTile[]>(() => {
         :filter="filter"
         :query="query"
         :now="now"
+        :unfinished-state="unfinishedState"
+        :unfinished="unfinished ?? null"
         @filter="selectFilter"
         @search="search"
         @page="page"

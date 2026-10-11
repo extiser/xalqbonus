@@ -187,9 +187,10 @@ describe('раздел «Заявки»', () => {
 
       const after = await listApplications({ filter: 'all', query: tag, offset: 0, now });
 
-      expect(after.counts).toEqual({ all: 8, waiting: 4, new: 3, in_progress: 3, hired: 1, rejected: 1 });
+      expect(after.counts).toEqual({ all: 8, waiting: 4, new: 3, in_progress: 3, hired: 1, rejected: 1, unfinished: 0 });
       expect(after.tiles).toEqual({
         waiting: before.tiles.waiting + 4,
+        waitingUnfinished: before.tiles.waitingUnfinished,
         overdue: before.tiles.overdue + 1,
         total: before.tiles.total + 8,
         totalWeek: before.tiles.totalWeek + 8,

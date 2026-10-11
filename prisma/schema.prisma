@@ -709,6 +709,16 @@ enum CandidateDraftStep {
   @@schema("xb")
 }
 
+/// Кто написал сообщение черновика заявки в чате (issue #475): сам человек или сотрудник
+/// из админки — ответ тому, кто не закончил заявку.
+enum CandidateDraftMessageAuthor {
+  person
+  employee
+
+  @@map("candidate_draft_message_author")
+  @@schema("xb")
+}
+
 // ---------------------------------------------------------------------------
 // Люди и учётки
 // ---------------------------------------------------------------------------
@@ -1134,6 +1144,9 @@ model Employee {
   candidateApplicationsHandled CandidateApplication[]
   candidateMessages CandidateMessage[]
   candidateApplicationEvents CandidateApplicationEvent[]
+  candidateDraftMessages CandidateDraftMessage[]
+  candidateDraftsHandled CandidateChatDraft[] @relation("CandidateDraftHandledBy")
+  candidateDraftsDismissed CandidateChatDraft[] @relation("CandidateDraftDismissedBy")
 
   @@map("employees")
   @@schema("xb")
@@ -3204,36 +3217,64 @@ model CandidateChatDraft {
   applicationId    String?            @map("application_id") @db.Uuid
   /// Последний `/start`, начавший черновик или начавший его заново.
   startedAt        DateTime           @map("started_at") @db.Timestamptz(6)
+  /// Сообщение-контакт, по которому черновик взял номер (issue #475). Стирается вместе с номером
+  /// при новом `/start`.
+  phoneMessageId   String?            @map("phone_message_id") @db.Uuid
+  /// Кто ведёт — первый, кто ответил человеку из админки. Новый `/start` его не стирает.
+  handledByEmployeeId   String?       @map("handled_by_employee_id") @db.Uuid
+  /// «Убрать из списка»: человек пропадает из «Не закончили». Новый `/start` и любое его сообщение
+  /// в черновик возвращают его. Оба поля пусты или оба заполнены — проверкой в миграции.
+  dismissedAt           DateTime?     @map("dismissed_at") @db.Timestamptz(6)
+  dismissedByEmployeeId String?       @map("dismissed_by_employee_id") @db.Uuid
   createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   // Заявки не удаляются; обнулить ссылку значило бы молча вернуть закрытый черновик
   // в незаконченные.
   application CandidateApplication?   @relation(fields: [applicationId], references: [id], onDelete: Restrict)
-  messages    CandidateDraftMessage[]
+  messages    CandidateDraftMessage[] @relation("CandidateDraftMessages")
+  phoneMessage CandidateDraftMessage? @relation("CandidateDraftPhoneMessage", fields: [phoneMessageId], references: [id])
+  handledByEmployee   Employee?       @relation("CandidateDraftHandledBy", fields: [handledByEmployeeId], references: [id])
+  // Учётки сотрудников не удаляются, а выключаются; обнулить автора отметки не дала бы проверка
+  // `candidate_chat_drafts_dismissed_check`, и удаление учётки отказывается явно.
+  dismissedByEmployee Employee?       @relation("CandidateDraftDismissedBy", fields: [dismissedByEmployeeId], references: [id], onDelete: Restrict)
 
   @@map("candidate_chat_drafts")
   @@schema("xb")
 }
 
-/// Сообщение кандидата в незаконченном черновике, кроме `/start` (issue #467): менеджер увидит,
-/// что человек писал и где остановился. Показ — задача админки заявок.
+/// Сообщение черновика заявки в чате, кроме `/start` (issue #467): менеджер увидит, что человек
+/// писал и где остановился. С issue #475 — в обе стороны: ответ сотрудника из админки тому,
+/// кто не закончил заявку, пишется `pending` до отправки и закрывается исходом после неё.
 model CandidateDraftMessage {
   id                 String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   draftId            String               @map("draft_id") @db.Uuid
+  author             CandidateDraftMessageAuthor
+  /// Заполнен ровно у `author = 'employee'` — проверкой в миграции.
+  employeeId         String?              @map("employee_id") @db.Uuid
   kind               CandidateMessageKind
   /// Текст или подпись медиа, как пришли.
   text               String?
   /// `file_id` медиа; у фото — самого крупного размера.
   fileId             String?              @map("file_id")
-  /// `message_id` в личке кандидата.
-  candidateMessageId Int                  @map("candidate_message_id")
+  /// `message_id` в личке человека: входящее у `person`, отправленное у `employee`. У недоставленного
+  /// ответа его нет.
+  candidateMessageId Int?                 @map("candidate_message_id")
+  delivery           CandidateMessageDelivery
+  /// Заполнена ровно у `failed` — проверкой в миграции.
+  failure            CandidateMessageFailure?
   createdAt          DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  draft CandidateChatDraft @relation(fields: [draftId], references: [id])
+  draft CandidateChatDraft @relation("CandidateDraftMessages", fields: [draftId], references: [id])
+  // Учётки сотрудников не удаляются, а выключаются; обнулить автора сообщения не дала бы проверка
+  // `candidate_draft_messages_employee_check`, и удаление учётки с перепиской отказывается явно.
+  employee Employee? @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  phoneOfDrafts CandidateChatDraft[] @relation("CandidateDraftPhoneMessage")
 
   /// Повтор одного апдейта: вставка — `ON CONFLICT DO NOTHING`, и шаг второй раз не двигается.
   @@unique([draftId, candidateMessageId])
+  /// Переписка черновика по времени.
+  @@index([draftId, createdAt])
   @@map("candidate_draft_messages")
   @@schema("xb")
 }

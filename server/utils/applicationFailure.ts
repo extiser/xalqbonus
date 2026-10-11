@@ -10,8 +10,9 @@ import { applicationDenialText, type ApplicationDenialCode } from '#shared/candi
  * Отказы раздела «Заявки» в ответе HTTP (issue #471): код — экрану для решения, текст —
  * из словаря `shared/candidateApplications.ts`.
  *
- * Номер ответа — по смыслу: заявки нет — `404`; негодное тело — `400`; статус уже сменили,
- * у кандидата другая открытая заявка или бот не может писать — `409`, запрос верный, но предмет в другом состоянии; Telegram отказал —
+ * Номер ответа — по смыслу: заявки или человека из «Не закончили» нет — `404`; негодное тело —
+ * `400`; статус уже сменили, у кандидата другая открытая заявка, бот не может писать или человек
+ * уже подал заявку — `409`, запрос верный, но предмет в другом состоянии; Telegram отказал —
  * `502`, отказала внешняя система.
  */
 
@@ -23,6 +24,8 @@ const STATUS_BY_CODE: Readonly<Record<ApplicationDenialCode, { statusCode: numbe
   open_application_exists: { statusCode: 409, statusMessage: 'Conflict' },
   cannot_write: { statusCode: 409, statusMessage: 'Conflict' },
   telegram_error: { statusCode: 502, statusMessage: 'Bad Gateway' },
+  draft_not_found: { statusCode: 404, statusMessage: 'Not Found' },
+  draft_closed: { statusCode: 409, statusMessage: 'Conflict' },
 };
 
 export const denyApplication = (code: ApplicationDenialCode): Error =>
@@ -36,12 +39,21 @@ export const denyApplication = (code: ApplicationDenialCode): Error =>
 export const rejectApplicationFailure = (error: unknown): unknown =>
   error instanceof ApplicationDenialError ? denyApplication(error.code) : error;
 
-/** Идентификатор заявки из пути. Не UUID — заявки нет: базе такое значение не передаётся. */
+/** Идентификатор из пути. Не UUID — предмета нет: базе такое значение не передаётся. */
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const readApplicationIdParam = (value: unknown): string => {
   if (typeof value !== 'string' || !UUID_PATTERN.test(value)) {
     throw denyApplication('application_not_found');
+  }
+
+  return value;
+};
+
+/** Идентификатор человека из «Не закончили» — черновика заявки в чате — из пути (issue #475). */
+export const readDraftIdParam = (value: unknown): string => {
+  if (typeof value !== 'string' || !UUID_PATTERN.test(value)) {
+    throw denyApplication('draft_not_found');
   }
 
   return value;

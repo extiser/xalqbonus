@@ -11,9 +11,19 @@ import cardHandler from '#server/api/applications/[id]/index.get';
 import messagesHandler from '#server/api/applications/[id]/messages.post';
 import statusHandler from '#server/api/applications/[id]/status.post';
 import listHandler from '#server/api/applications/index.get';
+import unfinishedCardHandler from '#server/api/applications/unfinished/[id]/index.get';
+import unfinishedDismissHandler from '#server/api/applications/unfinished/[id]/dismiss.post';
+import unfinishedMessagesHandler from '#server/api/applications/unfinished/[id]/messages.post';
+import unfinishedListHandler from '#server/api/applications/unfinished/index.get';
 import waitingCountHandler from '#server/api/applications/waiting-count.get';
 import { SESSION_COOKIE_NAME, signEmployeeSession } from '#server/utils/employeeSession';
-import { cleanupTestCandidateApplications, insertTestCandidateApplication, readTestCandidateMessages } from '../support/candidates';
+import {
+  cleanupTestCandidateApplications,
+  insertTestCandidateApplication,
+  insertTestChatDraft,
+  readTestCandidateMessages,
+  readTestChatDraftMessages,
+} from '../support/candidates';
 import { disconnectDatabase } from '../support/database';
 import {
   cleanupTestEmployees,
@@ -26,8 +36,8 @@ import { nextTestPromoCode } from '../support/promo';
 import { disconnectQueues } from '../support/queues';
 
 /**
- * Доступ к разделу «Заявки» (issue #471) — ручками, как их зовёт веб: cookie сессии, проверка
- * учётки и роли. Ветки, которых в обычной работе не встречается, — демо-сотрудник и менеджер
+ * Доступ к разделу «Заявки» (issue #471) и его вкладке «Не закончили» (issue #475) — ручками, как
+ * их зовёт веб: cookie сессии, проверка учётки и роли. Ветки, которых в обычной работе не встречается, — демо-сотрудник и менеджер
  * у ответа из админки — ломаются молча, и кандидату ушло бы сообщение от имени парка
  * не от того, кому это разрешено (docs/infra.md → «Тесты», доступ).
  *
@@ -85,6 +95,16 @@ const createApplication = async (): Promise<string> => {
   return applicationId;
 };
 
+const createDraft = async (): Promise<string> => {
+  const { draftId } = await insertTestChatDraft({
+    telegramUserId: nextTestTelegramUserId(),
+    promoCode: nextTestPromoCode(),
+    startedAt: new Date(),
+  });
+
+  return draftId;
+};
+
 const callHandler = (handler: EventHandler, event: H3Event): Promise<unknown> => Promise.resolve(handler(event));
 
 describe('доступ к разделу «Заявки»', () => {
@@ -114,6 +134,22 @@ describe('доступ к разделу «Заявки»', () => {
     expect(await readTestCandidateMessages(applicationId)).toEqual([]);
   });
 
+  it('ответ человеку из «Не закончили» менеджеру и старшему менеджеру — 403, строки нет', async () => {
+    expect(SESSION_SECRET).not.toBe('');
+
+    const draftId = await createDraft();
+
+    for (const role of ['manager', 'senior_manager'] as const) {
+      const employee = await createTestEmployee({ role });
+
+      await expect(
+        callHandler(unfinishedMessagesHandler, eventFor(employee.employeeId, role, { id: draftId })),
+      ).rejects.toMatchObject({ statusCode: 403, data: { code: 'role_not_allowed' } });
+    }
+
+    expect(await readTestChatDraftMessages(draftId)).toEqual([]);
+  });
+
   it('менеджеру открыты список, счётчик и карточка', async () => {
     const applicationId = await createApplication();
     const employee = await createTestEmployee({ role: 'manager' });
@@ -130,19 +166,24 @@ describe('доступ к разделу «Заявки»', () => {
     expect(SESSION_SECRET).not.toBe('');
 
     const applicationId = await createApplication();
+    const draftId = await createDraft();
     const demo = await demoEmployee();
-    const handlers: [string, EventHandler][] = [
-      ['список', listHandler],
-      ['счётчик', waitingCountHandler],
-      ['участники по рекламе', adParticipantsHandler],
-      ['карточка', cardHandler],
-      ['отметка', statusHandler],
-      ['ответ', messagesHandler],
+    const handlers: [string, EventHandler, string][] = [
+      ['список', listHandler, applicationId],
+      ['счётчик', waitingCountHandler, applicationId],
+      ['участники по рекламе', adParticipantsHandler, applicationId],
+      ['карточка', cardHandler, applicationId],
+      ['отметка', statusHandler, applicationId],
+      ['ответ', messagesHandler, applicationId],
+      ['«Не закончили»', unfinishedListHandler, draftId],
+      ['карточка «Не закончили»', unfinishedCardHandler, draftId],
+      ['ответ «Не закончили»', unfinishedMessagesHandler, draftId],
+      ['«Убрать из списка»', unfinishedDismissHandler, draftId],
     ];
 
-    for (const [name, handler] of handlers) {
+    for (const [name, handler, id] of handlers) {
       await expect(
-        callHandler(handler, eventFor(demo.employeeId, demo.role, { id: applicationId })),
+        callHandler(handler, eventFor(demo.employeeId, demo.role, { id })),
         name,
       ).rejects.toMatchObject({ statusCode: 403, data: { code: 'demo_not_allowed' } });
     }
