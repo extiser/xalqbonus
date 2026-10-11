@@ -66,6 +66,8 @@
   --color-web-page: #081114;
   --color-web-tile: #0E1B1F;
   --color-web-raised: #142429;
+  /* Утопленное окно внутри плитки — переписка заявки. */
+  --color-web-well: #0A1518;
   --color-web-line: rgba(156, 238, 255, 0.07);
   /* текст */
   --color-web-text: #F4F9FA;
@@ -80,6 +82,8 @@
   /* смысл */
   --color-web-green: #47CB4A;
   --color-web-scarlet: var(--color-xb-scarlet);
+  /* Статус «Отказ»: алый, приглушённый к цвету названия, — красный, но не яркий (кодекс, «Статусы»). */
+  --color-web-scarlet-muted: #E2768A;
   --color-web-gold: var(--color-xb-gold);
   --color-web-garnet: var(--color-xb-garnet);
 

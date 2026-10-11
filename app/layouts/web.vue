@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { useCurrentEmployee } from '~/composables/useCurrentEmployee';
 import { useSignOut } from '~/composables/useSignOut';
 import { useDesignFonts } from '~/design/fonts';
-import { navigationFor } from '~/utils/navigation';
+import { navigationFor, type NavigationCount } from '~/utils/navigation';
+import type { ApplicationWaitingCount } from '#shared/types/applications';
 
 /**
  * Раскладка веба в стиле бенто: тёмная, меню колонкой слева, содержимое справа
@@ -21,11 +23,37 @@ import { navigationFor } from '~/utils/navigation';
  * На широком мониторе меню остаётся у левого края, а содержимое тянется на свободное место
  * до 1600 и дальше встаёт по центру места справа от меню: прижатое влево
  * содержимое оставляло справа пустоту.
+ *
+ * Числа счётчиков у пунктов меню спрашивает раскладка, а не меню (docs/frontend.md → «Данные
+ * в компоненты не ходят»): заявки, ждущие ответа (issue #471), — при открытии и на каждой смене
+ * страницы, чтобы отвеченная заявка уходила из счётчика без перезагрузки. Не ответила ручка —
+ * счётчика нет: меню без числа лучше меню с ошибкой.
  */
 
 const employee = useCurrentEmployee();
+const route = useRoute();
 
 const items = computed(() => navigationFor(employee.value?.role ?? null));
+
+const countsApplications = computed(() => items.value.some((item) => item.count === 'applicationsWaiting'));
+
+const { data: applicationsWaiting, refresh: refreshApplicationsWaiting } = useFetch<ApplicationWaitingCount>(
+  '/api/applications/waiting-count',
+  { lazy: true, server: false, immediate: countsApplications.value },
+);
+
+watch(
+  () => route.fullPath,
+  () => {
+    if (countsApplications.value) void refreshApplicationsWaiting();
+  },
+);
+
+const counts = computed((): Partial<Record<NavigationCount, number>> => {
+  const waiting = applicationsWaiting.value?.count;
+
+  return waiting === undefined ? {} : { applicationsWaiting: waiting };
+});
 
 const signOut = useSignOut();
 
@@ -46,7 +74,7 @@ useHead({
       <div
         class="sticky top-4 z-30 h-[calc(100dvh-32px)] max-web:pointer-events-none max-web:fixed max-web:inset-x-0 max-web:top-auto max-web:bottom-0 max-web:h-auto max-web:px-3 max-web:pb-[calc(12px+env(safe-area-inset-bottom))]"
       >
-        <OrganismsWebSideMenu :items="items" :employee="employee" @sign-out="signOut" />
+        <OrganismsWebSideMenu :items="items" :employee="employee" :counts="counts" @sign-out="signOut" />
       </div>
       <main class="mx-auto w-full max-w-[1600px] min-w-0 px-2 pt-2 pb-12 max-web:p-0 max-web:pb-[calc(110px+env(safe-area-inset-bottom))]">
         <slot />

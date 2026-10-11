@@ -1,3 +1,4 @@
+import type { WebLanguage } from './denials';
 import type { CandidateApplicationStatus, CandidateMatch } from '../server/generated/prisma/enums';
 
 /**
@@ -103,3 +104,74 @@ export const readManualPhone = (value: string): string | null => {
 
   return new RegExp(`^\\d{${MANUAL_PHONE_DIGITS}}$`).test(digits) ? `+998${digits}` : null;
 };
+
+/** Строк на странице обеих таблиц раздела «Заявки» (issue #471). */
+export const APPLICATIONS_PAGE_SIZE = 25;
+
+/**
+ * Сколько часов ожидания ответа — порог «Дольше суток»: таких кандидатов парк может потерять
+ * (docs/decisions.md → «Заявки в админке»).
+ */
+export const APPLICATION_OVERDUE_HOURS = 24;
+
+/** Предел ответа из админки — предел текста одного сообщения Telegram. */
+export const CANDIDATE_REPLY_MAX_LENGTH = 4096;
+
+/**
+ * Фильтр списка заявок — пилюли над таблицей. `waiting` — заявки, ждущие ответа сотрудника;
+ * остальные, кроме `all`, — по статусу.
+ */
+export type ApplicationFilter = 'all' | 'waiting' | CandidateApplicationStatus;
+
+export const APPLICATION_FILTERS: readonly ApplicationFilter[] = [
+  'all',
+  'waiting',
+  'new',
+  'in_progress',
+  'hired',
+  'rejected',
+];
+
+export const isApplicationFilter = (value: unknown): value is ApplicationFilter =>
+  typeof value === 'string' && (APPLICATION_FILTERS as readonly string[]).includes(value);
+
+/** Статус, который ставит отметка сотрудника: «Оформлен», «Отказ» и «Вернуть в работу». */
+export type ApplicationMarkStatus = Extract<CandidateApplicationStatus, 'hired' | 'rejected' | 'in_progress'>;
+
+export const isApplicationMarkStatus = (value: unknown): value is ApplicationMarkStatus =>
+  value === 'hired' || value === 'rejected' || value === 'in_progress';
+
+/**
+ * Отказ ручек раздела «Заявки» (issue #471) — кодом, по которому решает экран
+ * (docs/principles.md → «Ошибки»):
+ *
+ * - `application_not_found` — заявки с таким идентификатором нет;
+ * - `status_invalid` — в теле не «Оформлен», «Отказ» или «В работе»;
+ * - `status_transition_invalid` — из нынешнего статуса в этот отметкой не перейти: заявку уже
+ *   отметили или вернули;
+ * - `message_invalid` — ответ кандидату пустой или длиннее предела Telegram;
+ * - `cannot_write` — бот не может писать кандидату;
+ * - `telegram_error` — Telegram не принял сообщение.
+ *
+ * Словарь отдельный от `shared/denials.ts`, как у промо-меток: там — отказы двери, здесь —
+ * предмет разговора (docs/decisions.md → «Отказ двери веба говорит кодом»).
+ */
+export type ApplicationDenialCode =
+  | 'application_not_found'
+  | 'status_invalid'
+  | 'status_transition_invalid'
+  | 'message_invalid'
+  | 'cannot_write'
+  | 'telegram_error';
+
+const APPLICATION_DENIAL_TEXTS: Readonly<Record<ApplicationDenialCode, Readonly<Record<WebLanguage, string>>>> = {
+  application_not_found: { ru: 'Такой заявки нет.' },
+  status_invalid: { ru: 'Такого статуса у заявки нет.' },
+  status_transition_invalid: { ru: 'Статус заявки уже сменили. Обновите страницу.' },
+  message_invalid: { ru: `Сообщение должно быть от 1 до ${CANDIDATE_REPLY_MAX_LENGTH} знаков.` },
+  cannot_write: { ru: 'Бот не может писать кандидату. Позвоните ему.' },
+  telegram_error: { ru: 'Telegram не принял сообщение. Отправьте ещё раз.' },
+};
+
+export const applicationDenialText = (code: ApplicationDenialCode, language: WebLanguage): string =>
+  APPLICATION_DENIAL_TEXTS[code][language];

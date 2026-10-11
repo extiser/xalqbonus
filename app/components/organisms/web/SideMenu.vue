@@ -2,7 +2,7 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { PhCaretUpDown, PhUserCircle } from '@phosphor-icons/vue';
-import { isCurrentPath, type NavigationItem } from '~/utils/navigation';
+import { isCurrentPath, type NavigationCount, type NavigationItem } from '~/utils/navigation';
 import { EMPLOYEE_ROLE_LABELS } from '#shared/employeeRoles';
 import type { EmployeeIdentity } from '#shared/types/employee';
 
@@ -19,12 +19,20 @@ import type { EmployeeIdentity } from '#shared/types/employee';
  *
  * Где меню стоит — колонкой у края окна или панелью внизу — решает раскладка: компонент
  * только заполняет отведённое ему место. За данными не ходит и выход сам не делает
- * (docs/frontend.md → «Данные в компоненты не ходят»).
+ * (docs/frontend.md → «Данные в компоненты не ходят»): числа счётчиков у пунктов приносит
+ * раскладка (`counts`), ноль счётчика не показывает.
  */
-defineProps<{
+const props = defineProps<{
   items: NavigationItem[];
   employee: EmployeeIdentity | null;
+  counts: Partial<Record<NavigationCount, number>>;
 }>();
+
+const countOf = (item: NavigationItem): number | undefined => {
+  const count = item.count === undefined ? undefined : props.counts[item.count];
+
+  return count === undefined || count === 0 ? undefined : count;
+};
 
 const emit = defineEmits<{ signOut: [] }>();
 
@@ -95,6 +103,7 @@ const PLATE_CLASSES =
         :title="item.title"
         :to="item.path"
         :current="isCurrentPath(route.path, item.path)"
+        :count="countOf(item)"
       />
     </nav>
 

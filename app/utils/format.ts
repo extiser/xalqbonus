@@ -168,6 +168,34 @@ export const formatDuration = (milliseconds: number | null): string => {
   return `${Math.floor(hours / 24)} д ${hours % 24} ч`;
 };
 
+const MINUTE_MS = 60_000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+
+/**
+ * Сколько ждали — словами, грубо (issue #471): меньше часа — «25 мин», меньше суток — «5 ч»,
+ * дальше — «1 д 4 ч», а без часов — «2 д». Минуты при часах и часы при неделях — шум:
+ * менеджеру важно, сколько примерно человек ждёт, а не до минуты.
+ *
+ * Меньше минуты — «1 мин»: «0 мин» читалось бы как «не ждёт вовсе».
+ */
+export const formatWaitDuration = (milliseconds: number): string => {
+  const duration = Math.max(milliseconds, 0);
+
+  if (duration < HOUR_MS) {
+    return `${Math.max(Math.floor(duration / MINUTE_MS), 1)} мин`;
+  }
+
+  if (duration < DAY_MS) {
+    return `${Math.floor(duration / HOUR_MS)} ч`;
+  }
+
+  const days = Math.floor(duration / DAY_MS);
+  const hours = Math.floor((duration % DAY_MS) / HOUR_MS);
+
+  return hours === 0 ? `${days} д` : `${days} д ${hours} ч`;
+};
+
 /** Окно опроса одной строкой. У полного обхода реестра окна нет вовсе — там прочерк. */
 export const formatWindow = (from: string | null, to: string | null): string => {
   if (!from && !to) {

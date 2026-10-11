@@ -173,3 +173,16 @@ export const DEMO_EDITOR_ROLES: readonly EmployeeRole[] = ['owner'];
 /** Вправе ли роль править сущность с этим признаком. Живую — всякий, кого пустил раздел. */
 export const canEditDemo = (role: EmployeeRole, isDemo: boolean): boolean =>
   !isDemo || DEMO_EDITOR_ROLES.includes(role);
+
+/**
+ * Раздел «Заявки» — список, карточка и отметки — всем ролям (issue #471): офис у парка один,
+ * делить заявки нечего, и все видят все (docs/decisions.md → «Заявки в админке»). Демо-сотруднику
+ * раздел закрыт ручками: заявки — живые люди.
+ */
+export const APPLICATION_ROLES: readonly EmployeeRole[] = ALL_EMPLOYEE_ROLES;
+
+/**
+ * Ответ кандидату из админки — владельцу и админу (issue #471). Менеджеры отвечают из темы
+ * группы кандидатов в Telegram (docs/decisions.md → «Заявки в админке»).
+ */
+export const CANDIDATE_REPLY_ROLES: readonly EmployeeRole[] = ['owner', 'admin'];

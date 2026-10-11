@@ -13,10 +13,12 @@ import {
   PhShoppingBag,
   PhSquaresFour,
   PhStorefront,
+  PhUserPlus,
   PhUsers,
 } from '@phosphor-icons/vue';
 import {
   ALL_EMPLOYEE_ROLES,
+  APPLICATION_ROLES,
   CAMPAIGN_ROLES,
   CATALOG_ROLES,
   DEMO_EDITOR_ROLES,
@@ -46,11 +48,18 @@ import type { EmployeeIdentity } from '#shared/types/employee';
  * меню веба рисует его, шапка светлой раскладки — нет. Набор — Phosphor, импорт поимённый,
  * чтобы сборка брала только используемые (`docs/decisions.md` → «Веб в стиле бенто»).
  */
+/**
+ * Что считает счётчик у пункта (issue #471). Число приносит раскладка — меню за данными
+ * не ходит (docs/frontend.md → «Данные в компоненты не ходят»).
+ */
+export type NavigationCount = 'applicationsWaiting';
+
 export type NavigationItem = {
   title: string;
   path: string;
   icon: Component;
   roles: readonly EmployeeIdentity['role'][];
+  count?: NavigationCount;
 };
 
 const SERVICE_NAVIGATION: NavigationItem[] = [
@@ -59,6 +68,15 @@ const SERVICE_NAVIGATION: NavigationItem[] = [
   // вложены в его адрес.
   { title: 'Дашборд', path: '/dashboard', icon: PhSquaresFour, roles: METRICS_ROLES },
   { title: 'Водители', path: '/drivers', icon: PhUsers, roles: ALL_EMPLOYEE_ROLES },
+  // Заявки кандидатов (issue #471) — рядом с ежедневной работой менеджера. Счётчик — заявки,
+  // ждущие ответа: по ним видно, кого пинать.
+  {
+    title: 'Заявки',
+    path: '/applications',
+    icon: PhUserPlus,
+    roles: APPLICATION_ROLES,
+    count: 'applicationsWaiting',
+  },
   { title: 'Заказы', path: '/orders', icon: PhShoppingBag, roles: ORDER_ROLES },
   { title: 'Офисы', path: '/offices', icon: PhStorefront, roles: CATALOG_ROLES },
   // Раздел называется «Каталог», а адрес — по сущности, которой он управляет: страница

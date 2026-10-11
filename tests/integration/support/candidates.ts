@@ -1,5 +1,11 @@
 import { db } from '#server/db';
-import type { Language } from '#server/generated/prisma/enums';
+import type {
+  CandidateApplicationEventKind,
+  CandidateApplicationStatus,
+  CandidateMessageAuthor,
+  CandidateMessageDelivery,
+  Language,
+} from '#server/generated/prisma/enums';
 
 /**
  * Заявки кандидатов для тестов (issue #460) и их уборка — по Telegram, которым заявка заведена.
@@ -26,6 +32,10 @@ export type TestCandidateApplicationInput = {
   /** Тема заявки в группе сотрудников. Пусто — темы нет. */
   forumChatId?: bigint;
   forumTopicId?: number;
+  /** Имя из заявки. По умолчанию — «Азиз». */
+  name?: string;
+  /** По умолчанию — «Новая». */
+  status?: CandidateApplicationStatus;
 };
 
 /** Открытая заявка — «Новая», номер введён руками: чужие заявки по номеру она не закрывает. */
@@ -40,7 +50,8 @@ export const insertTestCandidateApplication = async (
       telegramUserId: input.telegramUserId,
       telegramChatId: input.telegramUserId,
       telegramName: 'Тест Кандидат',
-      name: 'Азиз',
+      name: input.name ?? 'Азиз',
+      status: input.status ?? 'new',
       phoneRaw: input.phoneE164.slice(4),
       phoneE164: input.phoneE164,
       phoneSource: 'manual',
@@ -56,6 +67,59 @@ export const insertTestCandidateApplication = async (
 
   return { applicationId: application.id };
 };
+
+export type TestCandidateMessageInput = {
+  applicationId: string;
+  author: CandidateMessageAuthor;
+  /** Обязателен у `employee`. */
+  employeeId?: string;
+  delivery: CandidateMessageDelivery;
+  createdAt: Date;
+};
+
+let lastTestMessageId = 50_000 + Math.floor(Math.random() * 1_000_000);
+
+/**
+ * Сообщение переписки задним числом — минуя бота: «ждёт ответа» сравнивает моменты сообщений,
+ * и тесту нужно задать их самому. У недоставленного причина — отказ Telegram.
+ */
+export const insertTestCandidateMessage = async (input: TestCandidateMessageInput): Promise<void> => {
+  lastTestMessageId += 1;
+
+  await db.candidateMessage.create({
+    data: {
+      applicationId: input.applicationId,
+      author: input.author,
+      employeeId: input.employeeId ?? null,
+      kind: 'text',
+      text: 'тест',
+      candidateMessageId: input.author === 'candidate' ? lastTestMessageId : null,
+      topicMessageId: input.author === 'employee' ? lastTestMessageId : null,
+      delivery: input.delivery,
+      failure: input.delivery === 'failed' || input.delivery === 'refused' ? 'telegram_error' : null,
+      createdAt: input.createdAt,
+    },
+  });
+};
+
+/** Отметка сотрудника задним числом. Статус заявки она не меняет — это делает сервис. */
+export const insertTestApplicationEvent = async (input: {
+  applicationId: string;
+  kind: CandidateApplicationEventKind;
+  employeeId: string;
+  createdAt: Date;
+}): Promise<void> => {
+  await db.candidateApplicationEvent.create({ data: input });
+};
+
+/** Telegram заявки был привязан к этому человеку раньше — так его находит подача заявки. */
+export const setTestFormerLinkPerson = async (applicationId: string, personId: string): Promise<void> => {
+  await db.candidateApplication.update({ where: { id: applicationId }, data: { formerLinkPersonId: personId } });
+};
+
+/** Журнал отметок заявки по времени. */
+export const readTestApplicationEvents = async (applicationId: string) =>
+  db.candidateApplicationEvent.findMany({ where: { applicationId }, orderBy: { createdAt: 'asc' } });
 
 /** Переписка заявки по времени. */
 export const readTestCandidateMessages = async (applicationId: string) =>
@@ -84,7 +148,10 @@ export const cleanupTestCandidateApplications = async (): Promise<void> => {
     // Черновики — до заявок: внешний ключ черновика на заявку стоит на `RESTRICT`.
     await db.candidateDraftMessage.deleteMany({ where: { draft: { telegramUserId: { in: telegramUserIds } } } });
     await db.candidateChatDraft.deleteMany({ where: { telegramUserId: { in: telegramUserIds } } });
-    // Переписка — тоже до заявок: внешний ключ сообщения на заявку стоит на `RESTRICT`.
+    // Переписка и журнал отметок — тоже до заявок: внешние ключи на заявку стоят на `RESTRICT`.
+    await db.candidateApplicationEvent.deleteMany({
+      where: { application: { telegramUserId: { in: telegramUserIds } } },
+    });
     await db.candidateMessage.deleteMany({
       where: { application: { telegramUserId: { in: telegramUserIds } } },
     });
