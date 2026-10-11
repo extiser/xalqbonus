@@ -1,4 +1,6 @@
-import type { H3Event } from 'h3';
+// `getCookie` — из `h3` явно, а не автоимпортом: проверка доступа прогоняется тестом ручек
+// раздела «Заявки» (issue #471), а в тесте автоимпортов Nitro нет.
+import { getCookie, type H3Event } from 'h3';
 
 import type { EmployeeRole } from '#server/generated/prisma/enums';
 import { readDemoFlag, type DemoEntityRef } from '#server/services/demo/readDemoFlag';

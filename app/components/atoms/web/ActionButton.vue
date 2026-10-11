@@ -11,7 +11,11 @@ import { computed, resolveComponent, type Component } from 'vue';
  * Размер `page` — та же кнопка крупнее, 40 и 14 / 600 (`.btn-main` экранов «Промо», issue #380):
  * главное действие страницы в шапке, в окне и кнопки скачивания QR. Вид `quiet` — без подложки
  * и контура, текст цветом названия: «Отмена» рядом с главным действием окна (`.btn-ghost`).
- * Значок (`icon`) — Phosphor duotone слева от подписи; `tooltip` — подпись при наведении
+ * Варианты `hired` и `rejected` — кнопка, которая ставит статус заявки, цветом этого статуса
+ * (кодекс, «Статусы»; issue #471): «Оформлен» зелёная, «Отказ» приглушённым алым, подложка 10 %
+ * (у отказа 8 %), контур 45 % (у отказа 40 %).
+ * Значок (`icon`) — Phosphor duotone слева от подписи, `trailingIcon` — справа: «Дальше»
+ * листания (issue #471); `tooltip` — подпись при наведении
  * (`MoleculesWebTooltip`, issue #457): без неё обёртки нет.
  *
  * Ведёт адресом (`to`) — тогда это ссылка, иначе кнопка с событием `click`. Файл — `download`:
@@ -23,7 +27,7 @@ import { computed, resolveComponent, type Component } from 'vue';
  * в ссылке — ошибка разметки.
  */
 type ActionButtonSize = 'tile' | 'page';
-type ActionButtonVariant = 'action' | 'quiet';
+type ActionButtonVariant = 'action' | 'quiet' | 'hired' | 'rejected';
 
 const props = withDefaults(
   defineProps<{
@@ -34,6 +38,8 @@ const props = withDefaults(
     size?: ActionButtonSize;
     variant?: ActionButtonVariant;
     icon?: Component;
+    /** Значок справа от подписи. */
+    trailingIcon?: Component;
     /** Подпись при наведении. */
     tooltip?: string;
     /** Отправляет форму, в которой стоит. */
@@ -41,7 +47,15 @@ const props = withDefaults(
     /** Погашена: видна, не нажимается. */
     disabled?: boolean;
   }>(),
-  { to: undefined, download: undefined, size: 'tile', variant: 'action', icon: undefined, tooltip: undefined },
+  {
+    to: undefined,
+    download: undefined,
+    size: 'tile',
+    variant: 'action',
+    icon: undefined,
+    trailingIcon: undefined,
+    tooltip: undefined,
+  },
 );
 
 const emit = defineEmits<{ click: [] }>();
@@ -57,6 +71,8 @@ const SIZE_CLASSES: Record<ActionButtonSize, string> = {
 const VARIANT_CLASSES: Record<ActionButtonVariant, string> = {
   action: 'border-0 bg-web-cyan/12 text-web-cyan inset-ring inset-ring-web-cyan/45',
   quiet: 'border-0 bg-transparent text-web-title hover:text-web-text',
+  hired: 'border-0 bg-web-green/10 text-web-green inset-ring inset-ring-web-green/45',
+  rejected: 'border-0 bg-web-scarlet/8 text-web-scarlet-muted inset-ring inset-ring-web-scarlet/40',
 };
 
 const ICON_CLASSES: Record<ActionButtonSize, string> = {
@@ -93,10 +109,12 @@ const click = (): void => {
 <template>
   <MoleculesWebTooltip v-if="tooltip" :text="tooltip">
     <component :is="element.is" v-bind="element.attributes" :class="classes" @click="click">
-      <component :is="icon" v-if="icon" weight="duotone" aria-hidden="true" :class="ICON_CLASSES[size]" />{{ label }}
+      <component :is="icon" v-if="icon" weight="duotone" aria-hidden="true" :class="ICON_CLASSES[size]" />{{ label
+      }}<component :is="trailingIcon" v-if="trailingIcon" weight="duotone" aria-hidden="true" :class="ICON_CLASSES[size]" />
     </component>
   </MoleculesWebTooltip>
   <component :is="element.is" v-else v-bind="element.attributes" :class="classes" @click="click">
-    <component :is="icon" v-if="icon" weight="duotone" aria-hidden="true" :class="ICON_CLASSES[size]" />{{ label }}
+    <component :is="icon" v-if="icon" weight="duotone" aria-hidden="true" :class="ICON_CLASSES[size]" />{{ label
+    }}<component :is="trailingIcon" v-if="trailingIcon" weight="duotone" aria-hidden="true" :class="ICON_CLASSES[size]" />
   </component>
 </template>

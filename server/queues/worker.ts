@@ -156,17 +156,19 @@ mailingWorker.on('error', (error: Error) => {
   log.warn('очередь рассылок сообщила об ошибке', { error: error.message });
 });
 
-// Тема, карточка и приветствие кандидата — своя очередь: адресат не человек программы,
-// и выключатель уведомлений с окном отправки к нему не относятся (server/queues/candidates.ts).
+// Тема, карточка и приветствие кандидата и пересверка его номера — своя очередь: адресат
+// не человек программы, и выключатель уведомлений с окном отправки к нему не относятся
+// (server/queues/candidates.ts).
 const candidatesQueue = getCandidatesQueue();
 const candidatesWorker = createCandidatesWorker(candidatesQueue);
 
 candidatesWorker.on('completed', (job, outcome) => {
-  log.debug('задание кандидата выполнено', { applicationId: job.data.applicationId, outcome });
+  log.debug('задание кандидата выполнено', { kind: job.name, applicationId: job.data.applicationId, outcome });
 });
 
 candidatesWorker.on('failed', (job, error) => {
-  log.error('тема и приветствие кандидата не выполнены', {
+  log.error('задание кандидата не выполнено', {
+    kind: job?.name,
     applicationId: job?.data.applicationId,
     attempts: job?.attemptsMade,
     error: error.message,

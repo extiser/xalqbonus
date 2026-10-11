@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useCurrentEmployee } from '~/composables/useCurrentEmployee';
+import { useNavigationCounts } from '~/composables/useNavigationCounts';
 import { useSignOut } from '~/composables/useSignOut';
 import { useDesignFonts } from '~/design/fonts';
 import { navigationFor } from '~/utils/navigation';
@@ -21,11 +22,15 @@ import { navigationFor } from '~/utils/navigation';
  * На широком мониторе меню остаётся у левого края, а содержимое тянется на свободное место
  * до 1600 и дальше встаёт по центру места справа от меню: прижатое влево
  * содержимое оставляло справа пустоту.
+ *
+ * Числа счётчиков у пунктов меню спрашивает раскладка, а не меню (`useNavigationCounts`).
  */
 
 const employee = useCurrentEmployee();
 
 const items = computed(() => navigationFor(employee.value?.role ?? null));
+
+const counts = useNavigationCounts(items);
 
 const signOut = useSignOut();
 
@@ -46,7 +51,7 @@ useHead({
       <div
         class="sticky top-4 z-30 h-[calc(100dvh-32px)] max-web:pointer-events-none max-web:fixed max-web:inset-x-0 max-web:top-auto max-web:bottom-0 max-web:h-auto max-web:px-3 max-web:pb-[calc(12px+env(safe-area-inset-bottom))]"
       >
-        <OrganismsWebSideMenu :items="items" :employee="employee" @sign-out="signOut" />
+        <OrganismsWebSideMenu :items="items" :employee="employee" :counts="counts" @sign-out="signOut" />
       </div>
       <main class="mx-auto w-full max-w-[1600px] min-w-0 px-2 pt-2 pb-12 max-web:p-0 max-web:pb-[calc(110px+env(safe-area-inset-bottom))]">
         <slot />

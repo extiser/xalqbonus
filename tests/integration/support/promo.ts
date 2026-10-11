@@ -52,11 +52,13 @@ export type TestPromoTouchInput = {
   /** Чат — по умолчанию тот же Telegram: в личке бота `chat.id` равен `from.id`. */
   telegramChatId?: bigint;
   wasParticipant?: boolean;
+  /** Человек с живой привязкой на момент касания. По умолчанию — нет. */
+  personId?: string;
 };
 
 /**
  * Касание задним числом — минуя бота: время касания воронка сравнивает с вступлением и режет
- * по суткам, и тесту нужно задать его самому. Человек не проставляется — воронка его не читает.
+ * по суткам, и тесту нужно задать его самому. Человек — только если задан: воронка его не читает.
  */
 export const insertTestPromoTouch = async (touch: TestPromoTouchInput): Promise<void> => {
   readTelegramUserIds.add(touch.telegramUserId);
@@ -67,6 +69,7 @@ export const insertTestPromoTouch = async (touch: TestPromoTouchInput): Promise<
       telegramUserId: touch.telegramUserId,
       telegramChatId: touch.telegramChatId ?? touch.telegramUserId,
       wasParticipant: touch.wasParticipant ?? false,
+      personId: touch.personId ?? null,
       touchedAt: touch.touchedAt,
     },
   });

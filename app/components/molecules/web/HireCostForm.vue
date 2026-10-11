@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
-import { PhWarningCircle } from '@phosphor-icons/vue';
 import { endSentence, formatCompactSum, formatNumber, formatTenths } from '~/utils/format';
 import { hiredCount, hiredWhen, noHiredText } from '~/utils/hirePayback';
 import { monthForms, monthYear } from '#shared/monthNames';
@@ -135,13 +134,9 @@ const submit = (): void => {
 
 <template>
   <form novalidate class="mt-1" @submit.prevent="submit">
-    <p
-      v-if="formError"
-      role="alert"
-      class="m-0 mt-5 flex items-start gap-2 rounded-[14px] bg-web-scarlet/10 px-4 py-3 font-manrope text-[14px] leading-[1.45] font-medium text-web-scarlet inset-ring inset-ring-web-scarlet/40"
-    >
-      <PhWarningCircle weight="duotone" aria-hidden="true" class="mt-0.5 size-[18px] shrink-0" />{{ formError }}
-    </p>
+    <div v-if="formError" class="mt-5">
+      <AtomsWebFormAlert :text="formError" />
+    </div>
 
     <div class="mt-5">
       <MoleculesWebTextField

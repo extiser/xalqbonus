@@ -29,9 +29,17 @@ import type { MetricKey, MetricValues } from '#shared/metrics';
  *
  * Содержимое раскладывает тот, кто собирает плитку: сама она колонка с `min-width: 0`
  * и не знает, что в ней — число, разбор или график.
+ *
+ * Шесть рядов — у таблицы заявок и у переписки заявки (issue #471). На ширине 901–1100 плитке
+ * можно задать свою ширину (`medium`): четыре плитки 3 × 1 там не вмещают подпись и встают
+ * 2 × 2, а переписка встаёт на всю ширину. `pinned` ставит плитку в левый верхний угол сетки
+ * на ноутбуке — переписку заявки, вокруг которой встают плитки справа, — а на телефоне она идёт
+ * по порядку разметки. `inline` — название слева колонкой 150, содержимое справа строкой
+ * («Ход заявки»); на телефоне — колонкой, как у всех.
  */
 type TileCols = 3 | 4 | 6 | 8 | 12;
-type TileRows = 1 | 2 | 3 | 4;
+type TileRows = 1 | 2 | 3 | 4 | 6;
+type TileMediumCols = 6 | 12;
 
 defineProps<{
   cols: TileCols;
@@ -47,6 +55,12 @@ defineProps<{
   to?: string;
   /** Плитка растит ряд по содержимому, а не обрезает его: таблица с неизвестным числом строк. */
   grow?: boolean;
+  /** Ширина на 901–1100, где своя ширина плитке тесна. */
+  medium?: TileMediumCols;
+  /** Левый верхний угол сетки на ноутбуке. */
+  pinned?: boolean;
+  /** Название слева, содержимое справа строкой. */
+  inline?: boolean;
 }>();
 
 const NuxtLink = resolveComponent('NuxtLink');
@@ -64,6 +78,12 @@ const ROWS_CLASSES: Record<TileRows, string> = {
   2: 'row-span-2',
   3: 'row-span-3',
   4: 'row-span-4',
+  6: 'row-span-6',
+};
+
+const MEDIUM_CLASSES: Record<TileMediumCols, string> = {
+  6: 'web:max-[1100px]:col-span-6',
+  12: 'web:max-[1100px]:col-span-12',
 };
 </script>
 
@@ -77,9 +97,15 @@ const ROWS_CLASSES: Record<TileRows, string> = {
       ROWS_CLASSES[rows],
       to ? 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-web-cyan' : '',
       grow ? '' : 'web:[contain:size]',
+      medium ? MEDIUM_CLASSES[medium] : '',
+      pinned ? 'web:col-start-1 web:row-start-1' : '',
+      inline ? 'web:flex-row web:items-center web:gap-7' : '',
     ]"
   >
-    <div class="flex items-center justify-between gap-3" :class="!to && $slots.aside ? 'max-web:flex-wrap' : ''">
+    <div
+      class="flex items-center justify-between gap-3"
+      :class="[!to && $slots.aside ? 'max-web:flex-wrap' : '', inline ? 'web:w-[150px] web:shrink-0' : '']"
+    >
       <AtomsWebTileTitle :label="title" :marker="marker" :metric="metric" :metric-values="metricValues" />
       <span v-if="to" class="grid size-10 shrink-0 place-items-center rounded-full bg-web-raised" aria-hidden="true">
         <svg

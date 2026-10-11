@@ -689,6 +689,17 @@ enum CandidateMessageFailure {
   @@schema("xb")
 }
 
+/// Отметка сотрудника в заявке кандидата (issue #471): «Оформлен», «Отказ» и «Вернуть в работу».
+/// Статус заявки меняется вместе со строкой журнала, в одной транзакции.
+enum CandidateApplicationEventKind {
+  hired
+  rejected
+  reopened
+
+  @@map("candidate_application_event_kind")
+  @@schema("xb")
+}
+
 /// Шаг заявки в чате бота (issue #467): ждём номер кнопкой или имя текстом.
 enum CandidateDraftStep {
   awaiting_contact
@@ -1122,6 +1133,7 @@ model Employee {
   hireCosts         DashboardHireCost[]
   candidateApplicationsHandled CandidateApplication[]
   candidateMessages CandidateMessage[]
+  candidateApplicationEvents CandidateApplicationEvent[]
 
   @@map("employees")
   @@schema("xb")
@@ -3094,6 +3106,7 @@ model CandidateApplication {
   handledByEmployee Employee?   @relation(fields: [handledByEmployeeId], references: [id])
   messages         CandidateMessage[]
   chatDrafts       CandidateChatDraft[]
+  events           CandidateApplicationEvent[]
 
   /// Список заявок в админке — по дате.
   @@index([createdAt])
@@ -3138,6 +3151,27 @@ model CandidateMessage {
   /// Переписка заявки по времени.
   @@index([applicationId, createdAt])
   @@map("candidate_messages")
+  @@schema("xb")
+}
+
+/// Журнал отметок сотрудников в заявке (issue #471): кто и когда поставил «Оформлен», «Отказ»
+/// или вернул заявку в работу. Сам статус — `candidate_applications.status`, дата и автор
+/// отметки — здесь. Отметка считается ответом сотрудника: после неё заявка ответа не ждёт
+/// (docs/decisions.md → «Заявки в админке»).
+model CandidateApplicationEvent {
+  id            String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  applicationId String                        @map("application_id") @db.Uuid
+  kind          CandidateApplicationEventKind
+  employeeId    String                        @map("employee_id") @db.Uuid
+  createdAt     DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  application CandidateApplication @relation(fields: [applicationId], references: [id])
+  // Учётки сотрудников не удаляются, а выключаются; удаление учётки с отметками отказывается явно.
+  employee    Employee             @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  /// Журнал заявки по времени.
+  @@index([applicationId, createdAt])
+  @@map("candidate_application_events")
   @@schema("xb")
 }
 

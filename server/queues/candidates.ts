@@ -7,6 +7,10 @@ import {
   type OpenCandidateTopicInput,
   type OpenCandidateTopicOutcome,
 } from '#server/services/candidates/openCandidateTopic';
+import {
+  recheckCandidateMatch,
+  type RecheckCandidateMatchOutcome,
+} from '#server/services/candidates/recheckCandidateMatch';
 
 /**
  * Очередь переписки с кандидатом (issue #463): тема в группе сотрудников, карточка заявки
@@ -20,6 +24,10 @@ import {
  * Задание одно на заявку: `jobId` из её идентификатора, и вторая постановка той же заявки
  * второго задания не заводит. Повтор после сбоя безопасен — шаг, который уже сделан,
  * сервис пропускает.
+ *
+ * Второе задание очереди — пересверка номера заявки, которую не удалось сверить при подаче
+ * (issue #471). Ставит его карточка заявки в админке; с перепиской его роднит адресат —
+ * заявка, а не человек программы.
  */
 
 const log = consola.withTag('queue:candidates');
@@ -28,7 +36,17 @@ export const CANDIDATES_QUEUE_NAME = 'candidates';
 
 const OPEN_TOPIC_JOB = 'openCandidateTopic';
 
+const RECHECK_MATCH_JOB = 'recheckCandidateMatch';
+
 export type CandidateTopicJobData = OpenCandidateTopicInput;
+
+export type CandidateRecheckJobData = { applicationId: string };
+
+export type CandidatesJobData = CandidateTopicJobData | CandidateRecheckJobData;
+
+type CandidatesJobOutcome = OpenCandidateTopicOutcome | RecheckCandidateMatchOutcome;
+
+const isTopicJobData = (data: CandidatesJobData): data is CandidateTopicJobData => 'appOrigin' in data;
 
 /**
  * Идентификатор задания заявки. Через подчёркивание: двоеточие BullMQ в своём идентификаторе
@@ -36,15 +54,17 @@ export type CandidateTopicJobData = OpenCandidateTopicInput;
  */
 const jobIdFor = (applicationId: string): string => `topic_${applicationId}`;
 
+const recheckJobIdFor = (applicationId: string): string => `recheck_${applicationId}`;
+
 // Очередь одна на процесс и держится на globalThis — по той же причине, что очередь
 // уведомлений: горячая перезагрузка в dev перевычисляет модуль.
 const globalForQueue = globalThis as typeof globalThis & {
-  candidatesQueue?: Queue<CandidateTopicJobData>;
+  candidatesQueue?: Queue<CandidatesJobData>;
 };
 
-export const getCandidatesQueue = (): Queue<CandidateTopicJobData> => {
+export const getCandidatesQueue = (): Queue<CandidatesJobData> => {
   if (!globalForQueue.candidatesQueue) {
-    globalForQueue.candidatesQueue = new Queue<CandidateTopicJobData>(CANDIDATES_QUEUE_NAME, {
+    globalForQueue.candidatesQueue = new Queue<CandidatesJobData>(CANDIDATES_QUEUE_NAME, {
       connection: getQueueConnection(),
       // Повторы — как у уведомлений: сеть и сбой Telegram повторяются с паузой, отказ
       // по содержанию снимается сразу, лимит попыткой не считается.
@@ -63,6 +83,21 @@ export const getCandidatesQueue = (): Queue<CandidateTopicJobData> => {
 /** Ставит тему, карточку и приветствие по только что поданной заявке. */
 export const enqueueCandidateTopic = async (data: CandidateTopicJobData): Promise<void> => {
   await getCandidatesQueue().add(OPEN_TOPIC_JOB, data, { jobId: jobIdFor(data.applicationId) });
+};
+
+/**
+ * Ставит пересверку номера заявки. Одна на заявку, пока ждёт или идёт: `jobId` из её
+ * идентификатора. Выполненная и упавшая не хранятся — иначе BullMQ не поставил бы следующую
+ * с тем же `jobId`, и открытие карточки назавтра пересверку бы не запустило.
+ */
+export const enqueueCandidateRecheck = async (applicationId: string): Promise<void> => {
+  const data: CandidateRecheckJobData = { applicationId };
+
+  await getCandidatesQueue().add(RECHECK_MATCH_JOB, data, {
+    jobId: recheckJobIdFor(applicationId),
+    removeOnComplete: true,
+    removeOnFail: true,
+  });
 };
 
 /** Чем кончилась постановка задания для уже поданной заявки. */
@@ -101,13 +136,19 @@ export const requeueCandidateTopic = async (data: CandidateTopicJobData): Promis
  * не чинит, снимает задание со строкой ошибки.
  */
 export const createCandidatesWorker = (
-  queue: Queue<CandidateTopicJobData> = getCandidatesQueue(),
-): Worker<CandidateTopicJobData, OpenCandidateTopicOutcome> =>
-  new Worker<CandidateTopicJobData, OpenCandidateTopicOutcome>(
+  queue: Queue<CandidatesJobData> = getCandidatesQueue(),
+): Worker<CandidatesJobData, CandidatesJobOutcome> =>
+  new Worker<CandidatesJobData, CandidatesJobOutcome>(
     CANDIDATES_QUEUE_NAME,
     async (job) => {
+      const { data } = job;
+
+      if (job.name === RECHECK_MATCH_JOB || !isTopicJobData(data)) {
+        return recheckCandidateMatch(data.applicationId);
+      }
+
       try {
-        return await openCandidateTopic(job.data);
+        return await openCandidateTopic(data);
       } catch (error) {
         if (error instanceof TelegramSendError && error.kind === 'rate_limit') {
           await queue.rateLimit(error.retryAfterMs ?? 1_000);
