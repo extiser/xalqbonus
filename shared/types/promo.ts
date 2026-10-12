@@ -78,6 +78,10 @@ export type PromoCard = {
     createdAt: string;
     /** Имя сотрудника, заведшего метку; `null` — заведена миграцией при выкате. */
     createdBy: string | null;
+    /** Лендинг метки; `null` — экран заявки по умолчанию (issue #478). */
+    landing: { id: string; name: string } | null;
+    /** По метке уже переходили — лендинг больше не меняется. */
+    landingLocked: boolean;
   };
   /** Ссылка метки — по входу: в чат бота или в Mini App. */
   link: string;

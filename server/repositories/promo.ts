@@ -123,6 +123,8 @@ export type PromoLinkInput = {
   medium: PromoMedium;
   entry: PromoEntry;
   placement: string | null;
+  /** Лендинг; пусто — экран заявки по умолчанию (issue #478). */
+  landingId: string | null;
   createdByEmployeeId: string;
 };
 
@@ -136,10 +138,13 @@ export const insertPromoLink = async (link: PromoLinkInput): Promise<boolean> =>
   return count === 1;
 };
 
-/** Правит название и место. `false` — метки с таким кодом нет. */
+/**
+ * Правит название, место и лендинг. Лендинг `undefined` — не трогается. `false` — метки с таким
+ * кодом нет.
+ */
 export const updatePromoLinkFields = async (
   code: string,
-  fields: { name: string; placement: string | null },
+  fields: { name: string; placement: string | null; landingId?: string | null },
 ): Promise<boolean> => {
   const { count } = await db.promoLink.updateMany({ where: { code }, data: fields });
 
@@ -167,6 +172,8 @@ export type PromoLinkRecord = {
   placement: string | null;
   createdAt: Date;
   createdBy: string | null;
+  /** Лендинг метки; `null` — экран заявки по умолчанию (issue #478). */
+  landing: { id: string; name: string } | null;
 };
 
 export const findPromoLink = async (code: string): Promise<PromoLinkRecord | null> => {
@@ -180,6 +187,7 @@ export const findPromoLink = async (code: string): Promise<PromoLinkRecord | nul
       placement: true,
       createdAt: true,
       createdByEmployee: { select: { fullName: true } },
+      landing: { select: { id: true, name: true } },
     },
   });
 
@@ -193,8 +201,16 @@ export const findPromoLink = async (code: string): Promise<PromoLinkRecord | nul
         placement: link.placement,
         createdAt: link.createdAt,
         createdBy: link.createdByEmployee?.fullName ?? null,
+        landing: link.landing,
       };
 };
+
+/**
+ * Были ли переходы по метке — хоть одно касание с её кодом. После первого лендинг метки
+ * не меняется: воронка не смешивает лендинги (issue #478).
+ */
+export const hasPromoTouches = async (code: string): Promise<boolean> =>
+  (await db.promoTouch.findFirst({ where: { code }, select: { id: true } })) !== null;
 
 // ---------------------------------------------------------------------------
 // Воронка

@@ -1,12 +1,19 @@
 import type { PromoEntry } from '#server/generated/prisma/enums';
 import { deskDriverName } from '#server/repositories/deskDriver';
-import { findPromoLink, listPromoDays, listPromoFunnels, listPromoJoined } from '#server/repositories/promo';
+import {
+  findPromoLink,
+  hasPromoTouches,
+  listPromoDays,
+  listPromoFunnels,
+  listPromoJoined,
+} from '#server/repositories/promo';
 import { readPromoLinkUrl } from '#server/services/promo/promoLinkUrl';
 import type { PromoCard } from '#shared/types/promo';
 
 /**
  * Карточка метки (issue #380): метка, ссылка, воронка за всё время, переходы по дням
- * и вступившие по метке. `null` — метки с таким кодом нет.
+ * и вступившие по метке. `null` — метки с таким кодом нет. Лендинг метки и были ли по ней
+ * переходы — для строки под названием и окна «Изменить» (issue #478).
  *
  * `now` — граница последних суток графика, `readLink` — откуда ссылка метки. Тест задаёт оба:
  * ряд дней не должен зависеть от того, когда тест запущен, а имя бота спрашивается у Telegram.
@@ -26,11 +33,12 @@ export const readPromoCard = async (
     return null;
   }
 
-  const [link, funnels, days, joined] = await Promise.all([
+  const [link, funnels, days, joined, touched] = await Promise.all([
     readLink(promo.code, promo.entry),
     listPromoFunnels(promo.code),
     listPromoDays(promo.code, now),
     listPromoJoined(promo.code),
+    hasPromoTouches(promo.code),
   ]);
 
   const funnel = funnels[0];
@@ -48,6 +56,8 @@ export const readPromoCard = async (
       placement: promo.placement,
       createdAt: promo.createdAt.toISOString(),
       createdBy: promo.createdBy,
+      landing: promo.landing,
+      landingLocked: touched,
     },
     link,
     funnel: {

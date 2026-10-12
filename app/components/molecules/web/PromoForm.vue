@@ -9,6 +9,7 @@ import {
   type PromoField,
   type PromoMedium,
 } from '#shared/promo';
+import type { LandingOption } from '#shared/types/landings';
 
 /**
  * Форма промо-метки (issue #380) — окно «Новая метка» по `_reference/design/web/promo/02-new.html`
@@ -17,6 +18,10 @@ import {
  * Заведение (`create`): название, носитель пилюлями — ничего не выбрано заранее, — у рекламы
  * в Telegram вход (issue #467), место размещения и ссылка с кодом, который выдал сервер.
  * Правка (`edit`): название и место — код, носитель и вход не меняются.
+ *
+ * У рекламы со входом «Приложение» — поле «Лендинг» (issue #478, `02-new-landing.html`): экран
+ * заявки по умолчанию или загруженный лендинг. В правке после первого перехода по метке
+ * (`landingLocked`) поле показано выбранным значением без выбора.
  *
  * Формы по кодексу (`codex.md`, «Формы — решено»): `novalidate`
  * и своей проверки нет — ошибки присылает сервер, по полю (`fieldErrors`), и они встают под
@@ -32,6 +37,8 @@ export type PromoFormValues = {
   medium: PromoMedium | null;
   /** Уходит всегда; сервер читает его только у рекламы в Telegram. */
   entry: PromoEntry;
+  /** Лендинг; `null` — экран заявки по умолчанию, и он же у меток, где поля нет. */
+  landingId: string | null;
   placement: string;
 };
 
@@ -42,6 +49,15 @@ const props = withDefaults(
     mode: PromoFormMode;
     initialName?: string;
     initialPlacement?: string;
+    /** Носитель и вход метки в правке: по ним решается, есть ли поле «Лендинг». */
+    initialMedium?: PromoMedium | null;
+    initialEntry?: PromoEntry;
+    /** Лендинг метки в правке; `null` — экран по умолчанию. */
+    initialLanding?: LandingOption | null;
+    /** По метке уже переходили — лендинг не меняется. */
+    landingLocked?: boolean;
+    /** Лендинги, которые можно выбрать. */
+    landingOptions?: readonly LandingOption[];
     /** Ссылка с выданным кодом в чат бота — у заведения. */
     link?: string | null;
     /** Та же ссылка в Mini App — её показывает реклама в Telegram со входом в приложение. */
@@ -51,7 +67,17 @@ const props = withDefaults(
     formError: string | null;
     submitting: boolean;
   }>(),
-  { initialName: '', initialPlacement: '', link: null, appLink: null, code: null },
+  {
+    initialName: '',
+    initialPlacement: '',
+    initialMedium: null,
+    initialEntry: 'miniapp',
+    initialLanding: null,
+    landingOptions: () => [],
+    link: null,
+    appLink: null,
+    code: null,
+  },
 );
 
 const emit = defineEmits<{
@@ -79,18 +105,44 @@ const showEntry = computed(() => medium.value === 'telegram_ad');
 const shownLink = computed(() => (showEntry.value && entry.value === 'miniapp' ? props.appLink : props.link));
 const placement = ref(props.initialPlacement);
 
+/**
+ * Лендинг — только у рекламы в Telegram со входом «Приложение»: он и есть экран, который откроет
+ * ссылка. Смена носителя или входа поле прячет, выбор не сбрасывает; уходит он только с полем.
+ */
+const landingId = ref<string | null>(props.initialLanding?.id ?? null);
+const showLanding = computed(() =>
+  props.mode === 'create'
+    ? medium.value === 'telegram_ad' && entry.value === 'miniapp'
+    : props.initialMedium === 'telegram_ad' && props.initialEntry === 'miniapp',
+);
+
+/**
+ * В правке стоящий лендинг виден в выборе, даже если его уже нельзя выбрать заново — в архиве
+ * или без прошедшей версии: иначе поле показало бы чужое значение.
+ */
+const landingChoices = computed((): readonly LandingOption[] => {
+  const current = props.initialLanding;
+
+  return current && !props.landingOptions.some((option) => option.id === current.id)
+    ? [...props.landingOptions, current]
+    : props.landingOptions;
+});
+
 const mediumErrorId = useId();
 const entryErrorId = useId();
+const landingErrorId = useId();
 const codeErrorId = useId();
 
 const nameField = ref<{ focus: () => void } | null>(null);
 const placementField = ref<{ focus: () => void } | null>(null);
+const landingField = ref<{ focus: () => void } | null>(null);
 const mediumGroup = ref<HTMLElement | null>(null);
 const entryGroup = ref<HTMLElement | null>(null);
 const codeGroup = ref<HTMLElement | null>(null);
 
 watch(name, () => emit('edit', 'name'));
 watch(placement, () => emit('edit', 'placement'));
+watch(landingId, () => emit('edit', 'landing'));
 
 const chooseMedium = (value: PromoMedium): void => {
   medium.value = value;
@@ -103,13 +155,14 @@ const chooseEntry = (value: PromoEntry): void => {
 };
 
 /** Порядок полей на форме — в нём ищется первое поле с ошибкой. */
-const FIELD_ORDER: readonly PromoField[] = ['name', 'medium', 'entry', 'placement', 'code'];
+const FIELD_ORDER: readonly PromoField[] = ['name', 'medium', 'entry', 'landing', 'placement', 'code'];
 
 const PILL_GROUPS = { medium: mediumGroup, entry: entryGroup, code: codeGroup } as const;
 
 const focusField = (field: PromoField): void => {
   if (field === 'name') nameField.value?.focus();
   else if (field === 'placement') placementField.value?.focus();
+  else if (field === 'landing') landingField.value?.focus();
   else PILL_GROUPS[field].value?.querySelector('button')?.focus();
 };
 
@@ -126,7 +179,13 @@ watch(
 );
 
 const submit = (): void => {
-  emit('submit', { name: name.value, medium: medium.value, entry: entry.value, placement: placement.value });
+  emit('submit', {
+    name: name.value,
+    medium: medium.value,
+    entry: entry.value,
+    landingId: showLanding.value ? landingId.value : null,
+    placement: placement.value,
+  });
 };
 
 const PILL_CLASSES =
@@ -223,6 +282,36 @@ const PILL_CLASSES =
         Куда ведёт ссылка из объявления. В приложении человек заполняет форму заявки. В чате бот спрашивает
         номер и имя. После создания вход изменить нельзя.
       </p>
+    </div>
+
+    <div v-if="showLanding" class="mt-5">
+      <p :id="`${landingErrorId}-label`" class="m-0 mb-2 font-manrope text-[13px] font-semibold text-web-title">
+        Лендинг<span v-if="!landingLocked" class="ml-0.5 text-web-scarlet" aria-hidden="true">*</span>
+      </p>
+      <template v-if="landingLocked">
+        <p
+          class="m-0 flex h-12 items-center overflow-hidden rounded-[14px] bg-web-cyan/4 px-4 font-manrope text-[15px] font-medium text-ellipsis whitespace-nowrap text-web-title"
+        >
+          {{ initialLanding?.name ?? 'Экран заявки' }}
+        </p>
+        <p class="m-0 mt-1.5 font-manrope text-[12px] leading-[1.45] text-web-grey">
+          Лендинг меняется до первого перехода по метке
+        </p>
+      </template>
+      <template v-else>
+        <MoleculesWebLandingSelect
+          ref="landingField"
+          v-model="landingId"
+          :options="landingChoices"
+          :labelled-by="`${landingErrorId}-label`"
+          :error="fieldErrors.landing ?? null"
+          :described-by="fieldErrors.landing ? landingErrorId : undefined"
+        />
+        <AtomsWebFieldError v-if="fieldErrors.landing" :id="landingErrorId" :text="fieldErrors.landing" />
+        <p v-else class="m-0 mt-1.5 font-manrope text-[12px] leading-[1.45] text-web-grey">
+          Что увидит человек, открывший приложение по метке. Сменить лендинг можно до первого перехода по метке.
+        </p>
+      </template>
     </div>
 
     <div class="mt-5">

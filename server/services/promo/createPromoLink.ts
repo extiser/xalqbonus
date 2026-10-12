@@ -1,7 +1,10 @@
+import { isLandingSelectable } from '#server/repositories/landings';
 import { insertPromoLink, isPromoCodeTaken } from '#server/repositories/promo';
 import {
+  acceptsLanding,
   PromoInputError,
   readPromoEntry,
+  readPromoLandingId,
   readPromoMedium,
   readPromoName,
   readPromoPlacement,
@@ -14,8 +17,12 @@ import { readPromoCode } from '../../../shared/promoLinks';
  * Заведение промо-метки (issue #380). Код приходит из формы — его выдал `generatePromoCode`,
  * — и проверяется заново: свободный при выдаче, к нажатию «Создать» он мог стать чужим.
  *
- * Отказы — все сразу, в порядке полей формы: название, носитель, вход, место, ссылка. Занятость кода
- * спрашивается у базы только у годной формы: при негодных полях метка всё равно не заведётся.
+ * Отказы — все сразу, в порядке полей формы: название, носитель, вход, лендинг, место, ссылка.
+ * Занятость кода спрашивается у базы только у годной формы: при негодных полях метка всё равно
+ * не заведётся.
+ *
+ * Лендинг (issue #478) — только у рекламы со входом «Приложение» и только тот, что можно выбрать:
+ * не в архиве и прошедший проверку. Иначе `landing_unavailable`.
  */
 
 export type CreatePromoLinkRequest = {
@@ -24,6 +31,7 @@ export type CreatePromoLinkRequest = {
   medium: unknown;
   entry: unknown;
   placement: unknown;
+  landingId: unknown;
   employeeId: string;
 };
 
@@ -32,6 +40,15 @@ export const createPromoLink = async (request: CreatePromoLinkRequest): Promise<
   const name = readPromoName(request.name, problems);
   const medium = readPromoMedium(request.medium, problems);
   const entry = readPromoEntry(request.entry, medium, problems);
+  const landingId = readPromoLandingId(request.landingId, problems) ?? null;
+
+  if (
+    landingId !== null &&
+    (!acceptsLanding(medium, entry) || !(await isLandingSelectable(landingId)))
+  ) {
+    problems.push('landing_unavailable');
+  }
+
   const placement = readPromoPlacement(request.placement, problems);
   const code = typeof request.code === 'string' ? readPromoCode(request.code) : null;
 
@@ -53,6 +70,7 @@ export const createPromoLink = async (request: CreatePromoLinkRequest): Promise<
     medium,
     entry,
     placement,
+    landingId,
     createdByEmployeeId: request.employeeId,
   });
 

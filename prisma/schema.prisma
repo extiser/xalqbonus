@@ -1140,6 +1140,8 @@ model Employee {
   accessLinks       EmployeeAccessLink[] @relation("access_link_employee")
   accessLinksIssued EmployeeAccessLink[] @relation("access_link_issued_by")
   promoLinks        PromoLink[]
+  landingsCreated   Landing[]        @relation("landing_created_by")
+  landingVersionsUploaded LandingVersion[] @relation("landing_version_uploaded_by")
   hireCosts         DashboardHireCost[]
   candidateApplicationsHandled CandidateApplication[]
   candidateMessages CandidateMessage[]
@@ -3046,12 +3048,65 @@ model PromoLink {
   placement           String?
   /// Кто завёл. Пусто — заведена миграцией при выкате.
   createdByEmployeeId String?     @map("created_by_employee_id") @db.Uuid
+  /// Лендинг — экран заявки, который видит открывший Mini App по метке (issue #478). Пусто — экран
+  /// заявки по умолчанию. Заполнен только у рекламы в Telegram со входом «Приложение»: проверкой
+  /// в миграции. Меняется до первого касания метки — правилом сервиса.
+  landingId           String?     @map("landing_id") @db.Uuid
   createdAt           DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   createdByEmployee Employee? @relation(fields: [createdByEmployeeId], references: [id])
+  landing           Landing?  @relation(fields: [landingId], references: [id], onDelete: Restrict)
 
+  @@index([landingId])
   @@map("promo_links")
+  @@schema("xb")
+}
+
+/// Лендинг «Промо» (issue #478): экран заявки для рекламы, загруженный архивом `.zip` через админку
+/// (docs/decisions.md → «Лендинги в „Промо“»). Сам экран — в версиях: каждая загрузка и замена —
+/// новая строка `landing_versions`, метки показывают последнюю прошедшую проверку.
+///
+/// Удаляется только лендинг, который не стоит ни у одной метки, — `Restrict` у `promo_links`.
+model Landing {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// Видно только сотрудникам, до 80 символов, края обрезаны.
+  name                String
+  /// В архиве — у новых меток не выбирается, у прежних работает как раньше. Пусто — не в архиве.
+  archivedAt          DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdByEmployeeId String    @map("created_by_employee_id") @db.Uuid
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  createdByEmployee Employee         @relation("landing_created_by", fields: [createdByEmployeeId], references: [id], onDelete: Restrict)
+  versions          LandingVersion[]
+  promoLinks        PromoLink[]
+
+  @@map("landings")
+  @@schema("xb")
+}
+
+/// Версия лендинга (issue #478) — каждая загрузка архива и каждая замена. Не меняется после
+/// записи: картинки версии лежат на томе `uploads` в `landings/<id версии>/`, и кэш у них вечный.
+model LandingVersion {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  landingId            String   @map("landing_id") @db.Uuid
+  /// С 1 по порядку внутри лендинга.
+  number               Int
+  /// `index.html` после очистки; пути к картинкам — как в архиве.
+  html                 String
+  /// Прошла ли проверку — все четыре пункта `checks`.
+  passed               Boolean
+  /// Итог проверки — `LandingCheck[]` из `shared/types/landings.ts`.
+  checks               Json     @db.JsonB
+  uploadedByEmployeeId String   @map("uploaded_by_employee_id") @db.Uuid
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  landing            Landing  @relation(fields: [landingId], references: [id], onDelete: Restrict)
+  uploadedByEmployee Employee @relation("landing_version_uploaded_by", fields: [uploadedByEmployeeId], references: [id], onDelete: Restrict)
+
+  @@unique([landingId, number])
+  @@map("landing_versions")
   @@schema("xb")
 }
 

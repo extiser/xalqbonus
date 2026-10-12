@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useDashboardSegment } from '~/composables/useDashboardSegment';
 import { readHireCostErrors } from '~/utils/hireCostFormErrors';
 import { toLoadState } from '~/utils/loadState';
+import { dashboardLevelTabs } from '~/utils/sectionTabs';
 import type { DashboardHireCostRecord, DashboardHireCostRequestBody } from '#shared/types/dashboard';
 
 /**
@@ -115,7 +116,7 @@ const saveHireCost = async (amount: number | null): Promise<void> => {
     <div class="flex flex-wrap items-end justify-between gap-4 px-1 pt-1.5 pb-5 max-web:px-0.5 max-web:pt-1 max-web:pb-3.5">
       <div class="flex min-w-0 flex-col gap-3.5">
         <AtomsWebPageTitle label="Дашборд" />
-        <MoleculesWebLevelTabs current="depth" :available="['money', 'levers', 'depth']" :month="monthQuery" />
+        <MoleculesWebLevelTabs label="Уровни дашборда" current="depth" :tabs="dashboardLevelTabs(monthQuery)" />
       </div>
       <MoleculesWebMonthPicker
         v-if="depth"

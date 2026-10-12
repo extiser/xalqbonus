@@ -79,3 +79,25 @@ export const readPromoEntry = (
 
   return null;
 };
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Лендинг метки (issue #478): uuid лендинга или пусто — экран заявки по умолчанию. `undefined` —
+ * поля в запросе нет: правка его не трогает. Не uuid — беда `landing_unavailable`, как у лендинга,
+ * которого выбрать нельзя: из формы такое не приходит, только из чужого клиента.
+ */
+export const readPromoLandingId = (value: unknown, problems: PromoDenialCode[]): string | null | undefined => {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+
+  if (typeof value === 'string' && UUID_PATTERN.test(value)) return value.toLowerCase();
+
+  problems.push('landing_unavailable');
+
+  return undefined;
+};
+
+/** Лендинг стоит только у рекламы в Telegram со входом «Приложение»: он — экран Mini App. */
+export const acceptsLanding = (medium: PromoMedium | null, entry: PromoEntry | null): boolean =>
+  medium === 'telegram_ad' && entry === 'miniapp';

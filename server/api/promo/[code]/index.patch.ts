@@ -3,11 +3,12 @@ import { requireEmployeeRole } from '#server/utils/employeeAuth';
 import { promoNotFound, readPromoCodeParam, rejectPromoFailure } from '#server/utils/promoFailure';
 import { PROMO_ROLES } from '#shared/access';
 
-// Правка метки — «Изменить» в карточке (issue #380): название и место. Код, носитель и вход
-// не меняются; поля в теле, кроме этих двух, не читаются.
+// Правка метки — «Изменить» в карточке (issue #380): название, место и лендинг (issue #478). Код,
+// носитель и вход не меняются; поля в теле, кроме этих трёх, не читаются.
 type UpdateBody = {
   name?: unknown;
   placement?: unknown;
+  landingId?: unknown;
 };
 
 export default defineEventHandler(async (event): Promise<{ code: string }> => {
@@ -18,7 +19,11 @@ export default defineEventHandler(async (event): Promise<{ code: string }> => {
   let updated: boolean;
 
   try {
-    updated = await updatePromoLink(code, { name: body?.name, placement: body?.placement });
+    updated = await updatePromoLink(code, {
+      name: body?.name,
+      placement: body?.placement,
+      landingId: body?.landingId,
+    });
   } catch (error) {
     throw rejectPromoFailure(error);
   }

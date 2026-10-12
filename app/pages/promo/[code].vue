@@ -8,6 +8,7 @@ import { toLoadState } from '~/utils/loadState';
 import { readPromoFieldErrors } from '~/utils/promoFormErrors';
 import { failureText } from '~/utils/requestError';
 import { PROMO_ENTRY_LABELS, PROMO_MEDIUM_LABELS, type PromoField } from '#shared/promo';
+import type { LandingOption } from '#shared/types/landings';
 import type { PromoCard } from '#shared/types/promo';
 
 /**
@@ -15,7 +16,9 @@ import type { PromoCard } from '#shared/types/promo';
  * адрес `/promo/{код}`. Открывается строкой списка и сразу после «Создать метку».
  *
  * Ссылка и QR, воронка за всё время, переходы по дням и вступившие по метке. «Изменить» —
- * название и место размещения в окне; код и носитель не меняются.
+ * название и место размещения в окне; код и носитель не меняются. У рекламы со входом
+ * «Приложение» — ещё лендинг (issue #478): в строке под названием ссылкой во вкладку «Лендинги»
+ * и в «Изменить» до первого перехода по метке.
  */
 
 definePageMeta({
@@ -39,9 +42,27 @@ const state = computed(() => toLoadState(status.value));
 
 const missing = computed(() => error.value?.statusCode === 404);
 
+/** У рекламы со входом «Приложение» в строке под названием — лендинг ссылкой (issue #478). */
+const landingLink = computed(() => {
+  const promo = card.value?.promo;
+
+  if (!promo || promo.medium !== 'telegram_ad' || promo.entry !== 'miniapp') return null;
+
+  return promo.landing
+    ? { name: promo.landing.name, to: `/promo/landings?landing=${encodeURIComponent(promo.landing.id)}` }
+    : { name: 'Экран заявки', to: '/promo/landings?landing=default' };
+});
+
+/** Вход словами — у рекламы в Telegram, первым после носителя (issue #467). */
+const metaEntry = computed(() => {
+  const promo = card.value?.promo;
+
+  return promo?.medium === 'telegram_ad' ? ` · ${PROMO_ENTRY_LABELS[promo.entry]}` : '';
+});
+
 /**
- * «Плакат · Офис 1, стена у стойки · с 06.10.2026 · завёл {имя}»; носитель — отдельно, жирным.
- * У рекламы в Telegram первым после носителя — вход словами (issue #467).
+ * «Плакат · Офис 1, стена у стойки · с 06.10.2026 · завёл {имя}»; носитель — отдельно, жирным,
+ * вход и лендинг — отдельно, перед этим хвостом.
  */
 const metaTail = computed(() => {
   const promo = card.value?.promo;
@@ -49,7 +70,6 @@ const metaTail = computed(() => {
   if (!promo) return '';
 
   return [
-    promo.medium === 'telegram_ad' ? PROMO_ENTRY_LABELS[promo.entry] : null,
     promo.placement,
     `с ${formatMomentDate(promo.createdAt)}`,
     promo.createdBy === null ? 'заведена при выкате' : `завёл ${promo.createdBy}`,
@@ -66,12 +86,24 @@ const editKey = ref(0);
 const fieldErrors = ref<Partial<Record<PromoField, string>>>({});
 const formError = ref<string | null>(null);
 const submitting = ref(false);
+const landingOptions = ref<LandingOption[]>([]);
 
 const openEdit = (): void => {
   editKey.value += 1;
   fieldErrors.value = {};
   formError.value = null;
+  landingOptions.value = [];
   editOpen.value = true;
+
+  if (landingLink.value !== null && !card.value?.promo.landingLocked) {
+    void $fetch<LandingOption[]>('/api/promo/landings/options')
+      .then((options) => {
+        landingOptions.value = options;
+      })
+      .catch((failure: unknown) => {
+        formError.value = failureText(failure);
+      });
+  }
 };
 
 const closeEdit = (): void => {
@@ -95,7 +127,7 @@ const saveEdit = async (values: PromoFormValues): Promise<void> => {
   try {
     await $fetch<{ code: string }>(cardUrl.value, {
       method: 'PATCH',
-      body: { name: values.name, placement: values.placement },
+      body: { name: values.name, placement: values.placement, landingId: values.landingId },
     });
 
     editOpen.value = false;
@@ -126,7 +158,11 @@ const saveEdit = async (values: PromoFormValues): Promise<void> => {
         </NuxtLink>
         <AtomsWebPageTitle :label="card?.promo.name ?? 'Метка'" />
         <p v-if="card" class="m-0 font-manrope text-[14px] text-web-title">
-          <b class="font-semibold text-web-text">{{ PROMO_MEDIUM_LABELS[card.promo.medium] }}</b>{{ metaTail }}
+          <b class="font-semibold text-web-text">{{ PROMO_MEDIUM_LABELS[card.promo.medium] }}</b>{{ metaEntry
+          }}<template v-if="landingLink"> · лендинг <NuxtLink
+              :to="landingLink.to"
+              class="font-semibold text-web-cyan no-underline hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-web-cyan"
+            >{{ landingLink.name }}</NuxtLink></template>{{ metaTail }}
         </p>
       </div>
       <AtomsWebActionButton v-if="card" label="Изменить" size="page" @click="openEdit" />
@@ -156,6 +192,11 @@ const saveEdit = async (values: PromoFormValues): Promise<void> => {
         mode="edit"
         :initial-name="card.promo.name"
         :initial-placement="card.promo.placement ?? ''"
+        :initial-medium="card.promo.medium"
+        :initial-entry="card.promo.entry"
+        :initial-landing="card.promo.landing"
+        :landing-locked="card.promo.landingLocked"
+        :landing-options="landingOptions"
         :field-errors="fieldErrors"
         :form-error="formError"
         :submitting="submitting"

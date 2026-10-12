@@ -36,6 +36,9 @@ import type { MetricKey, MetricValues } from '#shared/metrics';
  * на ноутбуке — переписку заявки, вокруг которой встают плитки справа, — а на телефоне она идёт
  * по порядку разметки. `inline` — название слева колонкой 150, содержимое справа строкой
  * («Ход заявки»); на телефоне — колонкой, как у всех.
+ *
+ * Без `title` на месте названия встаёт слот `head` — своя шапка плитки: предпросмотр лендинга
+ * (issue #478) называется именем лендинга с датами под ним, а не названием роли кодекса.
  */
 type TileCols = 3 | 4 | 6 | 8 | 12;
 type TileRows = 1 | 2 | 3 | 4 | 6;
@@ -44,7 +47,8 @@ type TileMediumCols = 6 | 12;
 defineProps<{
   cols: TileCols;
   rows: TileRows;
-  title: string;
+  /** Название плитки; без него на его месте — слот `head`. */
+  title?: string;
   /** Золотая точка программы перед названием — «Цена программы». */
   marker?: 'program';
   /** Ключ метрики: после названия встаёт значок подсказки (`AtomsWebTileTitle`). */
@@ -106,7 +110,10 @@ const MEDIUM_CLASSES: Record<TileMediumCols, string> = {
       class="flex items-center justify-between gap-3"
       :class="[!to && $slots.aside ? 'max-web:flex-wrap' : '', inline ? 'web:w-[150px] web:shrink-0' : '']"
     >
-      <AtomsWebTileTitle :label="title" :marker="marker" :metric="metric" :metric-values="metricValues" />
+      <AtomsWebTileTitle v-if="title" :label="title" :marker="marker" :metric="metric" :metric-values="metricValues" />
+      <div v-else class="min-w-0">
+        <slot name="head" />
+      </div>
       <span v-if="to" class="grid size-10 shrink-0 place-items-center rounded-full bg-web-raised" aria-hidden="true">
         <svg
           viewBox="0 0 16 16"

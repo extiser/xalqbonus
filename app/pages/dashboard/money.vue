@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { toLoadState } from '~/utils/loadState';
+import { dashboardLevelTabs } from '~/utils/sectionTabs';
 
 /**
  * Дашборд, вкладка «Деньги» (issue #438) — первый уровень и первая вкладка дашборда, экран
@@ -43,7 +44,7 @@ const changeMonth = (month: string): void => {
     <div class="flex flex-wrap items-end justify-between gap-4 px-1 pt-1.5 pb-5 max-web:px-0.5 max-web:pt-1 max-web:pb-3.5">
       <div class="flex min-w-0 flex-col gap-3.5">
         <AtomsWebPageTitle label="Дашборд" />
-        <MoleculesWebLevelTabs current="money" :available="['money', 'levers', 'depth']" :month="monthQuery" />
+        <MoleculesWebLevelTabs label="Уровни дашборда" current="money" :tabs="dashboardLevelTabs(monthQuery)" />
       </div>
       <MoleculesWebMonthPicker
         v-if="money"

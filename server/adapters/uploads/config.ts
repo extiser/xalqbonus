@@ -31,3 +31,6 @@ export const MAILING_PHOTO_DIR = 'mailings';
 
 /** Подкаталог обложек подарков внутри тома (issue #219). Он же первый сегмент `gift_grants.cover_path`. */
 export const GIFT_COVER_DIR = 'gifts';
+
+/** Подкаталог картинок лендингов внутри тома (issue #478): `landings/<id версии>/<путь из архива>`. */
+export const LANDING_DIR = 'landings';

@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useDashboardSegment } from '~/composables/useDashboardSegment';
 import { toLoadState } from '~/utils/loadState';
+import { dashboardLevelTabs } from '~/utils/sectionTabs';
 
 /**
  * Дашборд, вкладка «Рычаги» (issue #371): за счёт чего изменились поездки — экран
@@ -56,7 +57,7 @@ const changeMonth = (month: string): void => {
     <div class="flex flex-wrap items-end justify-between gap-4 px-1 pt-1.5 pb-5 max-web:px-0.5 max-web:pt-1 max-web:pb-3.5">
       <div class="flex min-w-0 flex-col gap-3.5">
         <AtomsWebPageTitle label="Дашборд" />
-        <MoleculesWebLevelTabs current="levers" :available="['money', 'levers', 'depth']" :month="monthQuery" />
+        <MoleculesWebLevelTabs label="Уровни дашборда" current="levers" :tabs="dashboardLevelTabs(monthQuery)" />
       </div>
       <MoleculesWebMonthPicker
         v-if="levers"

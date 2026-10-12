@@ -3,15 +3,40 @@
 import { createError, type H3Error } from 'h3';
 
 import { BotUnavailableError } from '#server/services/employees/botUnavailableError';
+import { LandingFailure } from '#server/services/promo/landingFailure';
 import { PromoInputError } from '#server/services/promo/promoFields';
 import { WEB_LANGUAGE } from '#shared/denials';
-import { PROMO_DENIAL_FIELDS, promoDenialText, type PromoField } from '#shared/promo';
+import {
+  LANDING_DENIAL_FIELDS,
+  landingDenialText,
+  PROMO_DENIAL_FIELDS,
+  promoDenialText,
+  type LandingDenialCode,
+  type PromoDenialCode,
+  type PromoField,
+} from '#shared/promo';
 
 /**
  * Отказы раздела «Промо» в ответе HTTP (issue #380): код — форме для решения, поле — куда
  * встанет текст, текст — из словаря `shared/promo.ts`. Занятый код — `409`, как у занятого
  * телефона в приглашении: запрос верный, но предмет уже чей-то.
+ *
+ * Отказы лендингов (issue #478) — тем же устройством. `409` — у состояния предмета, а не у запроса:
+ * лендинг стоит у меток, по метке уже переходили.
  */
+
+/** Номер ответа отказа метки: занятый код и лендинг после перехода — состояние, а не ошибка запроса. */
+const PROMO_CONFLICTS: ReadonlySet<PromoDenialCode> = new Set(['code_taken', 'landing_locked']);
+
+const LANDING_STATUSES: Readonly<Record<LandingDenialCode, { statusCode: number; statusMessage: string }>> = {
+  landing_not_found: { statusCode: 404, statusMessage: 'Not Found' },
+  landing_name_invalid: { statusCode: 400, statusMessage: 'Bad Request' },
+  landing_archive_too_large: { statusCode: 413, statusMessage: 'Payload Too Large' },
+  landing_archive_invalid: { statusCode: 400, statusMessage: 'Bad Request' },
+  landing_in_use: { statusCode: 409, statusMessage: 'Conflict' },
+  landing_locked: { statusCode: 409, statusMessage: 'Conflict' },
+  landing_unavailable: { statusCode: 400, statusMessage: 'Bad Request' },
+};
 
 /** Метки с таким кодом нет. */
 export const promoNotFound = (): H3Error =>
@@ -32,11 +57,21 @@ export const rejectPromoFailure = (error: unknown): unknown => {
       fields[PROMO_DENIAL_FIELDS[problem]] ??= promoDenialText(problem, WEB_LANGUAGE);
     }
 
+    const conflict = PROMO_CONFLICTS.has(code);
+
     return createError({
-      statusCode: code === 'code_taken' ? 409 : 400,
-      statusMessage: code === 'code_taken' ? 'Conflict' : 'Bad Request',
+      statusCode: conflict ? 409 : 400,
+      statusMessage: conflict ? 'Conflict' : 'Bad Request',
       message: promoDenialText(code, WEB_LANGUAGE),
       data: { code, field: PROMO_DENIAL_FIELDS[code], fields },
+    });
+  }
+
+  if (error instanceof LandingFailure) {
+    return createError({
+      ...LANDING_STATUSES[error.code],
+      message: landingDenialText(error.code, WEB_LANGUAGE),
+      data: { code: error.code, field: LANDING_DENIAL_FIELDS[error.code] },
     });
   }
 
