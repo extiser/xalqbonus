@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { strToU8, zipSync, type Zippable } from 'fflate';
 import { describe, expect, it } from 'vitest';
 
@@ -64,6 +66,14 @@ describe('inspectLandingArchive — проверка', () => {
       ['submit_button', true],
       ['images', true],
     ]);
+    expect(inspection.images.map((image) => image.path)).toEqual(['img/hero.jpg']);
+  });
+
+  it('шаблон «Скачать шаблон» загружается как есть и проходит все четыре пункта', () => {
+    const template = readFileSync(new URL('../../public/landing-template.zip', import.meta.url));
+    const inspection = inspectLandingArchive(new Uint8Array(template));
+
+    expect(inspection.checks.filter((item) => !item.ok)).toEqual([]);
     expect(inspection.images.map((image) => image.path)).toEqual(['img/hero.jpg']);
   });
 
@@ -235,6 +245,28 @@ describe('inspectLandingArchive — очистка', () => {
     const html = clean(`${NAME}<button data-xb-submit type="submit">Отправить</button>`);
 
     expect(html).toContain('<button data-xb-submit="" type="button">Отправить</button>');
+  });
+
+  it('анимация SVG, подставляющая ссылке javascript:, вырезается; остальные анимации остаются', () => {
+    const html = clean(
+      `<svg><a><set attributeName="href" to="javascript:alert(1)"/><text>тык</text></a>
+        <a><animate attributeName=" XLINK:href " values="javascript:alert(2)"/></a>
+        <circle r="5"><animate attributeName="r" values="5;10;5" dur="1s"/></circle></svg>${NAME}${BUTTON}`,
+    );
+
+    expect(html).not.toMatch(/javascript:/i);
+    expect(html).not.toMatch(/<set\b/i);
+    expect(html).toContain('attributeName="r"');
+  });
+
+  it('@import в стилях вырезается целиком, остальные правила остаются', () => {
+    const html = clean(
+      `${NAME}${BUTTON}`,
+      '<style>@import "https://example.com/a.css"; @import url(https://example.com/b.css); .lp { color: red; }</style>',
+    );
+
+    expect(html).not.toMatch(/@import|example\.com/i);
+    expect(html).toContain('.lp { color: red; }');
   });
 
   it('iframe, object, embed, base, link и meta http-equiv вырезаются', () => {

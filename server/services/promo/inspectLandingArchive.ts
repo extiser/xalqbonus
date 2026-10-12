@@ -60,6 +60,21 @@ const REMOVED_ELEMENTS = new Set(['script', 'iframe', 'object', 'embed', 'base',
 /** Атрибуты-адреса, значение которых не должно начинаться с `javascript:`. */
 const URL_ATTRIBUTES = new Set(['href', 'src', 'action', 'formaction']);
 
+/**
+ * Анимации SVG, которые умеют менять атрибут ссылки. Нацеленная на `href` анимация подставляет
+ * ссылке `javascript:` уже после разбора — мимо проверки атрибутов, — поэтому такая вырезается
+ * целиком. Остальные анимации SVG — цвет, положение — безвредны и остаются.
+ */
+const ANIMATION_ELEMENTS = new Set(['animate', 'set', 'animatemotion']);
+
+const LINK_ATTRIBUTE_NAMES = new Set(['href', 'xlink:href']);
+
+/**
+ * `@import` в стилях — целиком, с адресом в кавычках или в `url(…)`, до точки с запятой. Через него
+ * грузятся чужой CSS и шрифты, а лендинг целиком лежит у нас.
+ */
+const CSS_IMPORT_PATTERN = /@import\s*(?:url\(\s*(?:"[^"]*"|'[^']*'|[^)]*)\s*\)|"[^"]*"|'[^']*')[^;]*;?/gi;
+
 const FORMATS_TEXT = 'Подходят JPEG, PNG и WebP';
 
 // ---------------------------------------------------------------------------
@@ -168,14 +183,33 @@ const replaceNode = (node: ChildNode, replacement: ChildNode[]): void => {
   parent.childNodes.splice(index, 1, ...replacement);
 };
 
+/** Анимация SVG, нацеленная на ссылку: `attributeName` — `href` или `xlink:href`. */
+const animatesLink = (element: Element, tag: string): boolean => {
+  if (!ANIMATION_ELEMENTS.has(tag)) return false;
+
+  const target = element.attrs.find((attribute) => attribute.name.toLowerCase() === 'attributename');
+
+  return target !== undefined && LINK_ATTRIBUTE_NAMES.has(target.value.trim().toLowerCase());
+};
+
 /** Очистка дерева: правила issue #478, раздел «Разбор, проверка и очистка архива». */
 const sanitize = (root: ParentNode): void => {
   for (const element of collectElements(root)) {
     const tag = element.tagName.toLowerCase();
 
-    if (REMOVED_ELEMENTS.has(tag) || (tag === 'meta' && hasAttribute(element, 'http-equiv'))) {
+    if (
+      REMOVED_ELEMENTS.has(tag) ||
+      (tag === 'meta' && hasAttribute(element, 'http-equiv')) ||
+      animatesLink(element, tag)
+    ) {
       replaceNode(element, []);
       continue;
+    }
+
+    if (tag === 'style') {
+      for (const child of element.childNodes) {
+        if (isTextNode(child)) child.value = child.value.replace(CSS_IMPORT_PATTERN, '');
+      }
     }
 
     // Форма снимается, содержимое остаётся: отправлять её некуда, а поле и кнопку находит приложение.

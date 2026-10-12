@@ -288,7 +288,7 @@ const previewMissing = computed(() => cardError.value?.statusCode === 404);
           <AtomsWebHint
             :text="
               previewMissing
-                ? 'Такого лендинга нет — возможно, его удалили. Выберите строку в списке.'
+                ? 'Такого лендинга нет. Возможно, его удалили. Выберите строку в списке.'
                 : (selection === 'default' ? state : cardState) === 'loading'
                   ? 'Загружаем лендинг…'
                   : 'Лендинг не загрузился. Это отказ запроса.'
