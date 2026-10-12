@@ -6,8 +6,10 @@ import { formatNumber } from '~/utils/format';
 import { toLoadState } from '~/utils/loadState';
 import { readPromoFieldErrors } from '~/utils/promoFormErrors';
 import { failureText } from '~/utils/requestError';
+import { PROMO_TABS } from '~/utils/sectionTabs';
 import type { MetricKey } from '#shared/metrics';
 import type { PromoField } from '#shared/promo';
+import type { LandingOption } from '#shared/types/landings';
 import type { PromoCreated, PromoNewCode } from '#shared/types/promo';
 
 /**
@@ -18,7 +20,8 @@ import type { PromoCreated, PromoNewCode } from '#shared/types/promo';
  * «Веб в стиле бенто»).
  *
  * Код для новой метки страница запрашивает при открытии окна и по «Другой код»; созданная
- * метка открывается карточкой — там её QR.
+ * метка открывается карточкой — там её QR. Лендинги для выбора у рекламы со входом «Приложение»
+ * (issue #478) — тоже при открытии окна: список мог смениться, пока страница была открыта.
  */
 
 definePageMeta({
@@ -57,6 +60,7 @@ const fresh = ref<PromoNewCode | null>(null);
 const fieldErrors = ref<Partial<Record<PromoField, string>>>({});
 const formError = ref<string | null>(null);
 const submitting = ref(false);
+const landingOptions = ref<LandingOption[]>([]);
 
 const clearFieldError = (field: PromoField): void => {
   if (fieldErrors.value[field] === undefined) return;
@@ -77,13 +81,24 @@ const loadCode = async (): Promise<void> => {
   }
 };
 
+/** Без лендингов форма остаётся рабочей: в выборе — экран по умолчанию, и метка заводится. */
+const loadLandingOptions = async (): Promise<void> => {
+  try {
+    landingOptions.value = await $fetch<LandingOption[]>('/api/promo/landings/options');
+  } catch (error) {
+    formError.value = failureText(error);
+  }
+};
+
 const openForm = (): void => {
   formKey.value += 1;
   fresh.value = null;
   fieldErrors.value = {};
   formError.value = null;
+  landingOptions.value = [];
   formOpen.value = true;
   void loadCode();
+  void loadLandingOptions();
 };
 
 const closeForm = (): void => {
@@ -127,6 +142,9 @@ const createLink = async (values: PromoFormValues): Promise<void> => {
           Ссылки в бота с меткой и QR для плакатов, визиток и роликов. По каждой метке видно, сколько людей
           перешли, сколько вступили в программу и сколько начали ездить с баллами.
         </p>
+        <div class="mt-1.5">
+          <MoleculesWebLevelTabs label="Вкладки раздела «Промо»" current="links" :tabs="PROMO_TABS" />
+        </div>
       </div>
       <AtomsWebActionButton label="Новая метка" size="page" :icon="PhPlus" @click="openForm" />
     </div>
@@ -153,6 +171,7 @@ const createLink = async (values: PromoFormValues): Promise<void> => {
         :link="fresh?.link ?? null"
         :app-link="fresh?.appLink ?? null"
         :code="fresh?.code ?? null"
+        :landing-options="landingOptions"
         :field-errors="fieldErrors"
         :form-error="formError"
         :submitting="submitting"

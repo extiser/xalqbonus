@@ -13,7 +13,8 @@ import { computed, resolveComponent, type Component } from 'vue';
  * и контура, текст цветом названия: «Отмена» рядом с главным действием окна (`.btn-ghost`).
  * Варианты `hired` и `rejected` — кнопка, которая ставит статус заявки, цветом этого статуса
  * (кодекс, «Статусы»; issue #471): «Оформлен» зелёная, «Отказ» приглушённым алым, подложка 10 %
- * (у отказа 8 %), контур 45 % (у отказа 40 %).
+ * (у отказа 8 %), контур 45 % (у отказа 40 %). Вид `danger` — действие, после которого что-то
+ * пропадает, алым: «Удалить» в подтверждении (docs/frontend.md → «Подтверждения — свой диалог»).
  * Значок (`icon`) — Phosphor duotone слева от подписи, `trailingIcon` — справа: «Дальше»
  * листания (issue #471); `tooltip` — подпись при наведении
  * (`MoleculesWebTooltip`, issue #457): без неё обёртки нет.
@@ -27,7 +28,7 @@ import { computed, resolveComponent, type Component } from 'vue';
  * в ссылке — ошибка разметки.
  */
 type ActionButtonSize = 'tile' | 'page';
-type ActionButtonVariant = 'action' | 'quiet' | 'hired' | 'rejected';
+type ActionButtonVariant = 'action' | 'quiet' | 'hired' | 'rejected' | 'danger';
 
 const props = withDefaults(
   defineProps<{
@@ -73,6 +74,7 @@ const VARIANT_CLASSES: Record<ActionButtonVariant, string> = {
   quiet: 'border-0 bg-transparent text-web-title hover:text-web-text',
   hired: 'border-0 bg-web-green/10 text-web-green inset-ring inset-ring-web-green/45',
   rejected: 'border-0 bg-web-scarlet/8 text-web-scarlet-muted inset-ring inset-ring-web-scarlet/40',
+  danger: 'border-0 bg-web-scarlet/12 text-web-scarlet inset-ring inset-ring-web-scarlet/45',
 };
 
 const ICON_CLASSES: Record<ActionButtonSize, string> = {
