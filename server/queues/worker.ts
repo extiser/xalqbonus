@@ -19,7 +19,7 @@ import {
   getNotificationsQueue,
 } from '#server/queues/notifications';
 import { applyOrdersSchedule, createOrdersQueue, createOrdersWorker } from '#server/queues/orders';
-import { applySyncSchedule, createSyncQueue, createSyncWorker } from '#server/queues/sync';
+import { applySyncSchedule, createSyncQueue, createSyncWorker, isFinalAttempt } from '#server/queues/sync';
 import { failAbandonedRuns } from '#server/repositories/syncRuns';
 import { readSyncConfig, readTransactionsSyncConfig } from '#server/services/sync/config';
 import {
@@ -96,12 +96,6 @@ const config = readSyncConfig();
 const transactionsConfig = readTransactionsSyncConfig();
 const syncQueue = createSyncQueue();
 const syncWorker = createSyncWorker();
-
-syncWorker.on('failed', (job, error) => {
-  // Прогон уже закрыт строкой `sync_runs` со статусом `failed` и не сдвинул отметку —
-  // здесь остаётся только сказать об этом в лог воркера.
-  log.error('прогон синхронизации упал', { kind: job?.data.kind, error: error.message });
-});
 
 syncWorker.on('error', (error: Error) => {
   log.warn('очередь синхронизации сообщила об ошибке', { error: error.message });
@@ -225,20 +219,48 @@ metricsWorker.on('error', (error: Error) => {
   log.warn('очередь метрик сообщила об ошибке', { error: error.message });
 });
 
-// Деньги дашборда пересчитываются после ночного перечитывания транзакций, а не по часам
-// (issue #438, docs/decisions.md → «Деньги на дашборде»): опоздавшие транзакции добирает
-// перечитывание, и цифра должна их видеть. Упало, выключено или пропущено как просроченное —
-// деньги в эту ночь не пересчитываются, экран показывает прежнюю таблицу со временем её прогона.
-syncWorker.on('completed', (job, outcome) => {
-  if (job.data.kind !== 'transactions_recheck' || outcome !== 'done') {
-    return;
-  }
-
+const enqueueMoneyRecompute = (): void => {
   metricsQueue.add('money', { kind: 'money' }).catch((error: unknown) => {
     log.error('пересчёт денег не поставлен в очередь', {
       error: error instanceof Error ? error.message : String(error),
     });
   });
+};
+
+// Деньги дашборда пересчитываются после итогового исхода ночного перечитывания транзакций,
+// а не по часам (docs/decisions.md → «Деньги на дашборде»): опоздавшие транзакции добирает
+// перечитывание, и цифра должна их видеть. Исход любой — прошло, пропущено как просроченное
+// или отказало и после последней попытки: тогда деньги считаются по тому, что собрал живой сбор,
+// и прежняя цифра на экране сутки не стоит. Отказ, после которого будет повтор, пересчёт
+// не ставит — его поставит исход повтора. Выключенное перечитывание не ставит ничего.
+syncWorker.on('completed', (job) => {
+  if (job.data.kind === 'transactions_recheck') {
+    enqueueMoneyRecompute();
+  }
+});
+
+syncWorker.on('failed', (job, error) => {
+  // Прогон уже закрыт строкой `sync_runs` со статусом `failed` и не сдвинул отметку —
+  // здесь остаётся сказать об этом в лог воркера.
+  if (job === undefined) {
+    log.error('прогон синхронизации упал', { error: error.message });
+    return;
+  }
+
+  const attempts = job.opts.attempts ?? 1;
+  const isFinal = isFinalAttempt(job.attemptsMade, job.opts.attempts);
+
+  log.error('прогон синхронизации упал', {
+    kind: job.data.kind,
+    attempt: job.attemptsMade,
+    attempts,
+    willRetry: !isFinal,
+    error: error.message,
+  });
+
+  if (job.data.kind === 'transactions_recheck' && isFinal) {
+    enqueueMoneyRecompute();
+  }
 });
 
 // Прошлый процесс мог уйти по SIGKILL, не закрыв свою строку прогона: `syncWorker.close()`
