@@ -63,6 +63,14 @@ const SCHEDULER_IDS: Record<ScheduledSyncKind | TransactionsSyncKind, string> = 
 const TRANSACTIONS_RECHECK_PATTERN = '0 1 * * *';
 const TRANSACTIONS_RECHECK_TIME_ZONE = 'UTC';
 
+/**
+ * Перечитывание после отказа повторяется: три попытки с паузой полчаса. От его итогового исхода
+ * зависят деньги дашборда, и одна неудачная минута по лимиту Fleet API не должна стоить суток
+ * (docs/decisions.md → «Деньги на дашборде»).
+ */
+const TRANSACTIONS_RECHECK_ATTEMPTS = 3;
+const TRANSACTIONS_RECHECK_RETRY_DELAY_MS = 30 * 60_000;
+
 export type SyncJobData = { kind: ScheduledSyncKind | TransactionsSyncKind };
 
 export const createSyncQueue = (): Queue<SyncJobData> =>
@@ -72,6 +80,9 @@ export const createSyncQueue = (): Queue<SyncJobData> =>
       // Повтор упавшего прогона очередью не нужен: следующий по расписанию перечитает
       // то же окно целиком — отметка при неуспехе не двигалась. У догона — тот же кусок,
       // с которого запуск упал: пройденные до него уже сдвинули позицию.
+      // Исключение — перечитывание транзакций: следующее по расписанию будет только через
+      // сутки, а после его итогового исхода пересчитываются деньги дашборда, поэтому попыток
+      // у него больше (`TRANSACTIONS_RECHECK_ATTEMPTS`, шаблон в `applySyncSchedule`).
       attempts: 1,
       removeOnComplete: { count: 100 },
       removeOnFail: { count: 100 },
@@ -129,12 +140,21 @@ export const applySyncSchedule = async (
     await queue.upsertJobScheduler(
       SCHEDULER_IDS.transactions_recheck,
       { pattern: TRANSACTIONS_RECHECK_PATTERN, tz: TRANSACTIONS_RECHECK_TIME_ZONE },
-      { name: 'transactions_recheck', data: { kind: 'transactions_recheck' } },
+      {
+        name: 'transactions_recheck',
+        data: { kind: 'transactions_recheck' },
+        opts: {
+          attempts: TRANSACTIONS_RECHECK_ATTEMPTS,
+          backoff: { type: 'fixed', delay: TRANSACTIONS_RECHECK_RETRY_DELAY_MS },
+        },
+      },
     );
     log.info('Расписание заведено', {
       kind: 'transactions_recheck',
       pattern: TRANSACTIONS_RECHECK_PATTERN,
       tz: TRANSACTIONS_RECHECK_TIME_ZONE,
+      attempts: TRANSACTIONS_RECHECK_ATTEMPTS,
+      retryDelayMin: TRANSACTIONS_RECHECK_RETRY_DELAY_MS / 60_000,
     });
   } else {
     await queue.removeJobScheduler(SCHEDULER_IDS.transactions_recheck);
@@ -169,6 +189,10 @@ export type ScheduledJobTiming = {
  * и кладёт её отлежаться с задержкой до слота: `timestamp` у неё на целый интервал старше
  * момента запуска всегда, даже когда очередь пуста. Отсчёт от постановки поэтому объявлял
  * просроченной каждую задачу расписания — и синхронизация замолкала после первого прогона.
+ *
+ * Повтор упавшего перечитывания транзакций — та же задача: BullMQ возвращает её в очередь
+ * с прежними `timestamp` и `opts.delay`, и срок у неё прежний — слот расписания. Повтор через
+ * полчаса-час после слота при интервале сутки просроченным не считается.
  */
 export const isOverdue = (
   timing: ScheduledJobTiming,
@@ -182,10 +206,14 @@ const jobTiming = (job: Job<SyncJobData>): ScheduledJobTiming => ({
 });
 
 /**
- * Исход задачи: прогон прошёл или задача пропущена как просроченная. По нему воркер отличает
- * перечитывание транзакций, которое было, от пропущенного (issue #438): деньги дашборда
- * пересчитываются только после настоящего.
+ * Попыток у задачи больше не будет — отказ итоговый. BullMQ испускает `failed` и на отказе,
+ * после которого будет повтор, и увеличивает `attemptsMade` до события: на последней попытке
+ * он равен числу попыток. `attempts` не задан — попытка одна, и первый же отказ итоговый.
  */
+export const isFinalAttempt = (attemptsMade: number, attempts: number | undefined): boolean =>
+  attemptsMade >= (attempts ?? 1);
+
+/** Исход задачи: прогон прошёл или задача пропущена как просроченная. */
 export type SyncJobOutcome = 'done' | 'skipped';
 
 export const createSyncWorker = (): Worker<SyncJobData, SyncJobOutcome> =>

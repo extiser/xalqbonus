@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isOverdue } from '#server/queues/sync';
+import { isFinalAttempt, isOverdue } from '#server/queues/sync';
 
 /**
  * Пропуск накопившихся задач расписания.
@@ -40,5 +40,46 @@ describe('пропуск просроченных задач синхрониз�
     // Так выглядит прогон, поставленный руками, а не расписанием.
     expect(isOverdue({ timestamp: NOW - 10_000, delay: 0 }, INTERVAL_MS, NOW)).toBe(false);
     expect(isOverdue({ timestamp: NOW - 2 * INTERVAL_MS, delay: 0 }, INTERVAL_MS, NOW)).toBe(true);
+  });
+});
+
+/**
+ * Повтор ночного перечитывания транзакций и пересчёт денег после итогового исхода.
+ *
+ * Тест существует из-за пойманной ошибки: перечитывание шло одной попыткой, а деньги дашборда
+ * пересчитывались только после его успеха. 12 и 13.10.2026 оно падало на первой странице
+ * по лимиту Fleet API — одна неудачная минута, и «Деньги» сутки стояли на прежней цифре.
+ */
+
+const DAY_MS = 86_400_000;
+const MINUTE_MS = 60_000;
+
+describe('итоговая попытка задачи синхронизации', () => {
+  it('отказ, после которого будет повтор, итоговым не считается', () => {
+    // BullMQ увеличивает счётчик до события `failed`: после первой попытки он равен единице.
+    expect(isFinalAttempt(1, 3)).toBe(false);
+    expect(isFinalAttempt(2, 3)).toBe(false);
+  });
+
+  it('отказ последней попытки — итоговый', () => {
+    expect(isFinalAttempt(3, 3)).toBe(true);
+  });
+
+  it('без числа попыток первый же отказ итоговый', () => {
+    expect(isFinalAttempt(1, undefined)).toBe(true);
+  });
+});
+
+describe('повтор перечитывания транзакций', () => {
+  // Повтор сохраняет `timestamp` и `opts.delay` задачи: срок у него прежний — слот расписания.
+  const slot = NOW;
+  const timing = { timestamp: slot - DAY_MS, delay: DAY_MS };
+
+  it('повтор через 30 минут после слота при интервале сутки не просрочен', () => {
+    expect(isOverdue(timing, DAY_MS, slot + 30 * MINUTE_MS)).toBe(false);
+  });
+
+  it('повтор через 60 минут после слота при интервале сутки не просрочен', () => {
+    expect(isOverdue(timing, DAY_MS, slot + 60 * MINUTE_MS)).toBe(false);
   });
 });
