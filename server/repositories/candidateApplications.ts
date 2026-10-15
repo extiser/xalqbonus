@@ -60,6 +60,8 @@ export type CandidateApplicationInput = {
   /** `YYYY-MM-DD`. */
   lastTripDay: string | null;
   formerLinkPersonId: string | null;
+  /** Версия лендинга из касания запуска (issue #484). Пусто — экран по умолчанию или чат бота. */
+  landingVersionId: string | null;
 };
 
 /**

@@ -14,6 +14,9 @@ import type { OldEngineApplication, OldEngineOffice } from '#shared/types/miniap
  *
  * Офисы — те же, что у «обновите»: их уже собрал вход в лог устройств, в показном виде
  * для скрипта на ES5.
+ *
+ * Окна номера на старом движке нет (`contactWindow = false`): экран всегда по умолчанию, версия
+ * лендинга в касании пустая (issue #484).
  */
 
 export type OldEngineApplicationInput = {
@@ -37,7 +40,7 @@ export const readOldEngineApplication = async (
     return null;
   }
 
-  const screen = await readApplicationScreen(input.launch, input.now);
+  const screen = await readApplicationScreen(input.launch, input.now, false);
 
   if (!screen) {
     return null;

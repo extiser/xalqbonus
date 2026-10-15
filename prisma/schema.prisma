@@ -3018,8 +3018,15 @@ model PromoTouch {
   /// и строка на каждое чтение раздула бы «Перешли». Держит это частичный уникальный индекс
   /// `promo_touches_miniapp_launch_key` в миграции.
   launchedAt     DateTime? @map("launched_at") @db.Timestamptz(6)
+  /// Версия лендинга, которую сервер отдал этому запуску (issue #484). Пусто — показан экран заявки
+  /// по умолчанию или экран не про заявку. Заявка берёт версию отсюда.
+  landingVersionId String?   @map("landing_version_id") @db.Uuid
+  /// Первое за запуск нажатие кнопки отправки заявки — на лендинге и на экране по умолчанию
+  /// (issue #484). Пусто — не нажимали.
+  pressedAt        DateTime? @map("pressed_at") @db.Timestamptz(6)
 
-  person Person? @relation(fields: [personId], references: [id])
+  person         Person?         @relation(fields: [personId], references: [id])
+  landingVersion LandingVersion? @relation(fields: [landingVersionId], references: [id], onDelete: Restrict)
 
   /// «Сколько переходов по метке за период» — вопрос воронки раздела «Промо».
   @@index([code, touchedAt])
@@ -3104,6 +3111,8 @@ model LandingVersion {
 
   landing            Landing  @relation(fields: [landingId], references: [id], onDelete: Restrict)
   uploadedByEmployee Employee @relation("landing_version_uploaded_by", fields: [uploadedByEmployeeId], references: [id], onDelete: Restrict)
+  promoTouches       PromoTouch[]
+  applications       CandidateApplication[]
 
   @@unique([landingId, number])
   @@map("landing_versions")
@@ -3164,6 +3173,9 @@ model CandidateApplication {
   topicCardMessageId Int?    @map("topic_card_message_id")
   /// Кто ведёт заявку — сотрудник, ответивший кандидату первым.
   handledByEmployeeId String? @map("handled_by_employee_id") @db.Uuid
+  /// Версия лендинга, которую кандидат видел (issue #484): из касания запуска, с которого подана
+  /// заявка. Пусто — заявка с экрана по умолчанию или из чата бота.
+  landingVersionId    String? @map("landing_version_id") @db.Uuid
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -3172,6 +3184,7 @@ model CandidateApplication {
   matchedProfile   ParkProfile? @relation(fields: [matchedProfileId], references: [profileId])
   formerLinkPerson Person?      @relation("CandidateFormerLinkPerson", fields: [formerLinkPersonId], references: [id])
   handledByEmployee Employee?   @relation(fields: [handledByEmployeeId], references: [id])
+  landingVersion   LandingVersion? @relation(fields: [landingVersionId], references: [id], onDelete: Restrict)
   messages         CandidateMessage[]
   chatDrafts       CandidateChatDraft[]
   events           CandidateApplicationEvent[]

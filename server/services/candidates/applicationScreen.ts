@@ -3,15 +3,20 @@ import { readBotToken } from '#server/bot/config';
 import { plainText } from '#server/bot/texts';
 import type { Language } from '#server/generated/prisma/enums';
 import { type CandidateApplicationRow, findOpenApplicationByTelegram } from '#server/repositories/candidateApplications';
-import { readAdPromoCode } from '#server/services/candidates/adLaunch';
+import { findLandingRecord, findLandingVersions } from '#server/repositories/landings';
+import type { PromoLinkRecord } from '#server/repositories/promo';
+import { readAdPromoLink } from '#server/services/candidates/adLaunch';
 import { buildBotChatLink } from '#server/services/employees/employeeLinks';
 import { readMemberOffices } from '#server/services/offices/readMemberOffices';
 import { WELCOME_BONUS_POINTS, WELCOME_TRIPS_REQUIRED } from '#server/services/points/awardWelcomeBonus';
+import { landingImageBase, liveVersionOf } from '#server/services/promo/landingView';
+import { recordMiniAppTouchLandingVersion } from '#server/services/promo/recordPromoTouch';
 import { formatDayKey, formatDayMonthWord, previousDayKey } from '#server/utils/parkTime';
 import type { TelegramLaunch } from '#server/utils/telegramInitData';
 import { formatPhone } from '#shared/phone';
 import type {
   ApplicationScreenTexts,
+  ApplicationLanding,
   CandidateApplicationView,
   MiniAppApplicationScreen,
   MiniAppApplicationSentScreen,
@@ -121,15 +126,45 @@ const readScreenBase = async () => {
 };
 
 /**
+ * Лендинг метки (issue #484) — действующая версия: последняя прошедшая проверку. Лендинг в архиве
+ * показывается как раньше — у меток, где он стоит, он работает (docs/decisions.md → «Лендинги
+ * в „Промо“»). `null` — лендинга у метки нет или ни одна версия не прошла проверку.
+ */
+const readLinkLanding = async (link: PromoLinkRecord): Promise<{ versionId: string; landing: ApplicationLanding } | null> => {
+  if (link.landing === null) {
+    return null;
+  }
+
+  const record = await findLandingRecord(link.landing.id);
+  const live = record === null ? null : liveVersionOf(record.versions);
+
+  if (live === null) {
+    return null;
+  }
+
+  const [version] = await findLandingVersions([live.id]);
+
+  return version === undefined
+    ? null
+    : { versionId: version.id, landing: { html: version.html, imageBase: landingImageBase(version.id) } };
+};
+
+/**
  * Экран заявки для того, кто не участник и не сотрудник. `null` — не про заявку: показывается
  * регистрация.
  *
  * Открытая заявка этого Telegram — «Заявка уже отправлена» с меткой и без: кандидат мог открыть
  * приложение потом кнопкой меню бота. Иначе экран заявки — только по метке рекламы в Telegram.
+ *
+ * Экран заявки — лендинг метки, если он у неё есть и у Telegram есть окно номера (`contactWindow`):
+ * поля номера у лендинга нет, и ввести номер руками негде. Иначе — экран по умолчанию. Показанная
+ * версия пишется в касание запуска, экран по умолчанию — пустой версией: заявка возьмёт её оттуда
+ * (docs/decisions.md → «Лендинги в „Промо“»).
  */
 export const readApplicationScreen = async (
   launch: TelegramLaunch,
   now: Date,
+  contactWindow: boolean,
 ): Promise<MiniAppApplicationScreen | MiniAppApplicationSentScreen | null> => {
   const open = await findOpenApplicationByTelegram(launch.user.id);
 
@@ -142,13 +177,20 @@ export const readApplicationScreen = async (
     };
   }
 
-  if ((await readAdPromoCode(launch.startParam)) === null) {
+  const link = await readAdPromoLink(launch.startParam);
+
+  if (link === null) {
     return null;
   }
 
+  const [base, shown] = await Promise.all([readScreenBase(), contactWindow ? readLinkLanding(link) : null]);
+
+  await recordMiniAppTouchLandingVersion(launch, shown?.versionId ?? null);
+
   return {
     screen: 'application',
-    ...(await readScreenBase()),
+    ...base,
     language: launchLanguage(launch.user.languageCode),
+    landing: shown?.landing ?? null,
   };
 };

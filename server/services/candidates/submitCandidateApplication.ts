@@ -9,6 +9,7 @@ import {
   insertCandidateApplication,
 } from '#server/repositories/candidateApplications';
 import { findActiveLinkByChat, findLastClosedLinkPerson } from '#server/repositories/programMembership';
+import { findMiniAppTouchLandingVersion } from '#server/repositories/promo';
 import { readAdPromoCode } from '#server/services/candidates/adLaunch';
 import { toApplicationView } from '#server/services/candidates/applicationScreen';
 import { reconcileCandidatePhone } from '#server/services/candidates/reconcileCandidatePhone';
@@ -159,9 +160,12 @@ export const submitCandidateApplication = async (
     return respond('repeat', open, request.now);
   }
 
-  const [reconciliation, formerLinkPersonId] = await Promise.all([
+  // Версия лендинга — из касания своего запуска, а не действующая сейчас: лендинг могли заменить,
+  // пока человек был на экране (docs/decisions.md → «Лендинги в „Промо“»).
+  const [reconciliation, formerLinkPersonId, landingVersionId] = await Promise.all([
     reconcileCandidatePhone(phone.e164, request.now),
     findLastClosedLinkPerson(user.id),
+    findMiniAppTouchLandingVersion(request.launch),
   ]);
 
   const inserted = await insertCandidateApplication({
@@ -182,12 +186,14 @@ export const submitCandidateApplication = async (
     matchedProfileId: reconciliation.profileId,
     lastTripDay: reconciliation.lastTripDay,
     formerLinkPersonId,
+    landingVersionId,
   });
 
   if (inserted) {
     log.info('заявка кандидата', {
       telegramUserId: user.id.toString(),
       promoCode,
+      landingVersionId,
       match: reconciliation.match,
       phoneSource: phone.source,
     });

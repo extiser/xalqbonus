@@ -1036,6 +1036,17 @@ export type CandidateApplicationView = {
 export type MiniAppApplicationScreen = ApplicationScreenBase & {
   screen: 'application';
   language: Language;
+  /**
+   * Лендинг метки (issue #484) — действующая версия; `null` — экран заявки по умолчанию: лендинга
+   * у метки нет, ни одна версия не прошла проверку или у Telegram нет окна номера.
+   */
+  landing: ApplicationLanding | null;
+};
+
+/** Лендинг на экране заявки: очищенная разметка версии и адрес её картинок. */
+export type ApplicationLanding = {
+  html: string;
+  imageBase: string;
 };
 
 /** У этого Telegram открытая заявка — «Заявка уже отправлена», с меткой и без. Язык — заявки. */

@@ -35,6 +35,9 @@ import type { MiniAppStateResponse } from '#shared/types/miniapp';
 // Не участник и не сотрудник — заявка кандидата (issue #456): открытая заявка этого Telegram —
 // «Заявка уже отправлена», с меткой и без; метка рекламы в Telegram — экран заявки. Иначе —
 // регистрация, как раньше.
+//
+// Есть ли у Telegram окно номера, знает только клиент: параметр `contactWindow=1` — есть. Без него
+// экран заявки — по умолчанию, лендинг метки не показывается: поля номера у лендинга нет (issue #484).
 
 export default defineEventHandler(async (event): Promise<MiniAppStateResponse> => {
   const launch = requireTelegramLaunch(event);
@@ -62,7 +65,7 @@ export default defineEventHandler(async (event): Promise<MiniAppStateResponse> =
     return readMemberScreen(driver, user.id, new Date(), viewer ? demoScreen('driver', driver.language) : null);
   }
 
-  const applicationScreen = await readApplicationScreen(launch, new Date());
+  const applicationScreen = await readApplicationScreen(launch, new Date(), getQuery(event).contactWindow === '1');
 
   if (applicationScreen) {
     return applicationScreen;

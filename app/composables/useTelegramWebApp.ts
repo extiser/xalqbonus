@@ -76,6 +76,11 @@ export type TelegramWebApp = {
   requestWriteAccess?: (callback?: (granted: boolean) => void) => void;
   /** Открывает ссылку `t.me` внутри Telegram — чат с ботом у «Написать менеджеру». */
   openTelegramLink?: (url: string) => void;
+  /**
+   * Системное окно Telegram с текстом и кнопкой «OK». Доступно с Bot API 6.2. На лендинге им
+   * объясняется «Отмена» в окне номера: в вёрстке лендинга места под объяснение нет (issue #484).
+   */
+  showAlert?: (message: string, callback?: () => void) => void;
 };
 
 declare global {
