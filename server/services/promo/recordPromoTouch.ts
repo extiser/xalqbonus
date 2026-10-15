@@ -1,6 +1,7 @@
 import { consola } from 'consola';
 
 import {
+  findMiniAppTouchLandingVersion,
   insertMiniAppPromoTouch,
   insertPromoTouch,
   markMiniAppTouchPressed,
@@ -93,5 +94,19 @@ export const recordMiniAppTouchPress = async (launch: TelegramLaunch): Promise<v
     await markMiniAppTouchPressed(launch);
   } catch (error) {
     log.error('нажатие кнопки заявки в касании Mini App не записано', touchFailure(launch, error));
+  }
+};
+
+/**
+ * Версия лендинга из строки касания запуска — для заявки (issue #484). Ошибка — строкой в лог
+ * и `null`: заявка уходит без версии, а не падает из-за строки воронки.
+ */
+export const readMiniAppTouchLandingVersion = async (launch: TelegramLaunch): Promise<string | null> => {
+  try {
+    return await findMiniAppTouchLandingVersion(launch);
+  } catch (error) {
+    log.error('версия лендинга из касания Mini App не прочитана', touchFailure(launch, error));
+
+    return null;
   }
 };

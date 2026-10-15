@@ -5,7 +5,11 @@ import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { db } from '#server/db';
-import { markMiniAppTouchPressed, setMiniAppTouchLandingVersion } from '#server/repositories/promo';
+import {
+  findMiniAppTouchLandingVersion,
+  markMiniAppTouchPressed,
+  setMiniAppTouchLandingVersion,
+} from '#server/repositories/promo';
 import { advanceChatDraft } from '#server/services/candidates/advanceChatDraft';
 import { readApplicationScreen } from '#server/services/candidates/applicationScreen';
 import type { ChatDraftReply } from '#server/services/candidates/chatDraftReplies';
@@ -45,8 +49,15 @@ import {
  *
  * Картинки версий ложатся во временный каталог, как в `landings.test.ts`. Имя бота для ссылки
  * «Написать менеджеру» положено в кэш заранее, очередь темы и поиск в Fleet API подменены:
- * в Telegram и Fleet тест не ходит.
+ * в Telegram и Fleet тест не ходит. Чтение версии касания — настоящая функция под обёрткой:
+ * один тест роняет её, чтобы проверить, что заявка уходит без версии.
  */
+
+vi.mock('#server/repositories/promo', async (importOriginal) => {
+  const original = await importOriginal<typeof import('#server/repositories/promo')>();
+
+  return { ...original, findMiniAppTouchLandingVersion: vi.fn(original.findMiniAppTouchLandingVersion) };
+});
 
 vi.mock('#server/queues/candidates', async (importOriginal) => ({
   ...(await importOriginal<typeof import('#server/queues/candidates')>()),
@@ -330,6 +341,18 @@ describe('версия лендинга в заявке', () => {
     expect(await readTestOpenApplications(telegramUserId)).toMatchObject([
       { landingVersionId: await versionId(landingId, 1) },
     ]);
+  });
+
+  it('версия не прочиталась — заявка принята без версии', async () => {
+    const landingId = await uploadLanding();
+    const telegramUserId = newCandidate();
+    const launch = launchOf(telegramUserId, await adLink(landingId), FIRST_LAUNCH);
+
+    await openScreen(launch, true);
+    vi.mocked(findMiniAppTouchLandingVersion).mockRejectedValueOnce(new Error('база не ответила'));
+
+    expect(await submit(launch)).toMatchObject({ outcome: 'accepted' });
+    expect(await readTestOpenApplications(telegramUserId)).toMatchObject([{ landingVersionId: null }]);
   });
 
   it('касание без версии — пусто', async () => {
