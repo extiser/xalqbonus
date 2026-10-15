@@ -13,6 +13,7 @@ import { readAdPromoCode } from '#server/services/candidates/adLaunch';
 import { toApplicationView } from '#server/services/candidates/applicationScreen';
 import { reconcileCandidatePhone } from '#server/services/candidates/reconcileCandidatePhone';
 import { isEmployeeTelegram } from '#server/services/employees/isEmployeeTelegram';
+import { readMiniAppTouchLandingVersion } from '#server/services/promo/recordPromoTouch';
 import { normalizePhoneE164 } from '#server/utils/phoneNumber';
 import { checkContactData, type TelegramLaunch } from '#server/utils/telegramInitData';
 import {
@@ -159,9 +160,13 @@ export const submitCandidateApplication = async (
     return respond('repeat', open, request.now);
   }
 
-  const [reconciliation, formerLinkPersonId] = await Promise.all([
+  // Версия лендинга — из касания своего запуска, а не действующая сейчас: лендинг могли заменить,
+  // пока человек был на экране (docs/decisions.md → «Лендинги в „Промо“»). Не прочиталась — заявка
+  // уходит без версии.
+  const [reconciliation, formerLinkPersonId, landingVersionId] = await Promise.all([
     reconcileCandidatePhone(phone.e164, request.now),
     findLastClosedLinkPerson(user.id),
+    readMiniAppTouchLandingVersion(request.launch),
   ]);
 
   const inserted = await insertCandidateApplication({
@@ -182,12 +187,14 @@ export const submitCandidateApplication = async (
     matchedProfileId: reconciliation.profileId,
     lastTripDay: reconciliation.lastTripDay,
     formerLinkPersonId,
+    landingVersionId,
   });
 
   if (inserted) {
     log.info('заявка кандидата', {
       telegramUserId: user.id.toString(),
       promoCode,
+      landingVersionId,
       match: reconciliation.match,
       phoneSource: phone.source,
     });

@@ -18,9 +18,12 @@
      Свои шрифты и скрипты не работают, скрипты вырезаются при загрузке.
      Стили вешайте на свой блок, как .lp. Правила для body и html внутри приложения не действуют.
   5. Заархивируйте содержимое папки в .zip так, чтобы index.html лежал в корне архива.
+  6. Пока имя пустое, кнопка неактивна (:disabled). Пока заявка отправляется, у кнопки есть
+     атрибут data-xb-busy. Как кнопка выглядит в эти моменты, задаёт ваш стиль. Если человек
+     нажмёт «Отмена» в окне номера, приложение само покажет объяснение.
 -->
 <style>
-  .lp { font-family: Manrope, system-ui, sans-serif; color: #10202A; background: #fff; padding: 22px 20px 28px; max-width: 520px; margin: 0 auto; }
+  .lp { font-family: Manrope, system-ui, sans-serif; color: #10202A; background: #fff; padding: 22px 20px 28px; max-width: 520px; margin: 0 auto; min-height: 100vh; box-sizing: border-box; }
   .lp-badge { display: inline-block; font-weight: 700; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: #0B6E4F; background: #DFF5EC; border-radius: 6px; padding: 4px 8px; }
   .lp h1 { font-weight: 800; font-size: 26px; line-height: 1.15; margin: 12px 0 0; letter-spacing: -.5px; }
   .lp p { font-size: 15px; line-height: 1.5; color: #3A4A52; margin: 10px 0 0; }
@@ -31,6 +34,8 @@
   .lp label { display: block; font-weight: 600; font-size: 13px; color: #3A4A52; margin-top: 22px; }
   .lp input { box-sizing: border-box; width: 100%; height: 48px; margin-top: 6px; border: 1px solid #CBD5DA; border-radius: 10px; padding: 0 14px; font: 500 16px Manrope, system-ui, sans-serif; color: #10202A; background: #fff; }
   .lp button { width: 100%; height: 52px; margin-top: 14px; border: 0; border-radius: 12px; background: #0B6E4F; color: #fff; font: 700 16px Manrope, system-ui, sans-serif; }
+  .lp button:disabled { opacity: .45; }
+  .lp button[data-xb-busy] { opacity: .7; }
   .lp small { display: block; font-size: 12px; line-height: 1.45; color: #6B7B82; margin-top: 10px; text-align: center; }
 </style>
 </head>

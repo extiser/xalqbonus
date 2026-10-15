@@ -64,6 +64,7 @@ import {
 import { OLD_ENGINE_APPLICATION_SCRIPT } from '~/utils/oldEngineApplication';
 import { OLD_ENGINE_FORCE_ALLOWED_SCRIPT, OLD_ENGINE_GUARD_SCRIPT } from '~/utils/oldEngineGuard';
 import { failureDenial } from '~/utils/requestError';
+import { hasContactWindow } from '~/utils/telegramContactWindow';
 import {
   cancelledOutcome,
   deskItemId,
@@ -398,6 +399,7 @@ const candidate = useCandidateApplication({
   webApp: () => webApp,
   reload: () => loadState(),
   onAccepted: () => metrika.goal('application_sent', { promoCode: launchPromoCode() }),
+  onPressed: () => metrika.goal('application_press', { promoCode: launchPromoCode() }),
 });
 
 /**
@@ -2239,10 +2241,14 @@ const switchDemoRole = async (role: DemoRole): Promise<void> => {
   await retry();
 };
 
-/** Запрос состояния экрана. Один на первую загрузку и на перечитывание: спрашивается то же. */
+/**
+ * Запрос состояния экрана. Один на первую загрузку и на перечитывание: спрашивается то же.
+ * `contactWindow` — у Telegram есть окно номера: без него сервер не отдаёт лендинг метки (issue #484).
+ */
 const fetchState = (): Promise<MiniAppStateResponse> =>
   $fetch<MiniAppStateResponse>('/api/miniapp/me', {
     headers: { [INIT_DATA_HEADER]: initData },
+    query: hasContactWindow(webApp) ? { contactWindow: '1' } : {},
   });
 
 /** Спрашивает сервер, что показать этому человеку, и показывает. */
@@ -3067,8 +3073,15 @@ const openMap = (office: MemberOfficeView): void => {
     </template>
 
     <template v-else-if="stage === 'application'">
+      <!-- Лендинг метки — на весь экран, без шапки и переключателя языка: его текст на одном языке. -->
+      <OrganismsLandingView
+        v-if="candidate.landingForm.value"
+        v-bind="candidate.landingForm.value"
+        v-model:name="candidate.name.value"
+        @submit="candidate.submit"
+      />
       <OrganismsNextMemberApplicationForm
-        v-if="candidate.form.value"
+        v-else-if="candidate.form.value"
         v-bind="candidate.form.value"
         v-model:name="candidate.name.value"
         v-model:phone="candidate.manualPhone.value"

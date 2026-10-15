@@ -1,8 +1,11 @@
 import { consola } from 'consola';
 
 import {
+  findMiniAppTouchLandingVersion,
   insertMiniAppPromoTouch,
   insertPromoTouch,
+  markMiniAppTouchPressed,
+  setMiniAppTouchLandingVersion,
   type PromoTouchInput,
   type PromoTouchRow,
 } from '#server/repositories/promo';
@@ -61,5 +64,49 @@ export const recordMiniAppPromoTouch = async ({ user, startParam, authDate }: Te
       telegramUserId: user.id.toString(),
       error: error instanceof Error ? error.message : String(error),
     });
+  }
+};
+
+const touchFailure = (launch: TelegramLaunch, error: unknown) => ({
+  code: launch.startParam,
+  telegramUserId: launch.user.id.toString(),
+  error: error instanceof Error ? error.message : String(error),
+});
+
+/**
+ * Версия лендинга, отданная запуску, — в строку касания (issue #484); `null` — экран заявки
+ * по умолчанию. Ошибка наружу не идёт, как у самого касания: экран важнее строки воронки.
+ */
+export const recordMiniAppTouchLandingVersion = async (
+  launch: TelegramLaunch,
+  versionId: string | null,
+): Promise<void> => {
+  try {
+    await setMiniAppTouchLandingVersion(launch, versionId);
+  } catch (error) {
+    log.error('версия лендинга в касании Mini App не записана', { versionId, ...touchFailure(launch, error) });
+  }
+};
+
+/** Первое нажатие кнопки отправки заявки — в строку касания (issue #484). Ошибка — строкой в лог. */
+export const recordMiniAppTouchPress = async (launch: TelegramLaunch): Promise<void> => {
+  try {
+    await markMiniAppTouchPressed(launch);
+  } catch (error) {
+    log.error('нажатие кнопки заявки в касании Mini App не записано', touchFailure(launch, error));
+  }
+};
+
+/**
+ * Версия лендинга из строки касания запуска — для заявки (issue #484). Ошибка — строкой в лог
+ * и `null`: заявка уходит без версии, а не падает из-за строки воронки.
+ */
+export const readMiniAppTouchLandingVersion = async (launch: TelegramLaunch): Promise<string | null> => {
+  try {
+    return await findMiniAppTouchLandingVersion(launch);
+  } catch (error) {
+    log.error('версия лендинга из касания Mini App не прочитана', touchFailure(launch, error));
+
+    return null;
   }
 };

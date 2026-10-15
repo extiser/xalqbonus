@@ -2,6 +2,8 @@ import { db } from '#server/db';
 import { Prisma } from '#server/generated/prisma/client';
 import type { PromoEntry, PromoMedium } from '#server/generated/prisma/enums';
 import { parkDaySql } from '#server/utils/parkDaySql';
+import type { TelegramLaunch } from '#server/utils/telegramInitData';
+import { readPromoCode } from '#shared/promoLinks';
 
 /**
  * Переходы по промо-меткам (issue #377) и справочник меток с воронкой (issue #380).
@@ -111,6 +113,65 @@ export const insertMiniAppPromoTouch = async (touch: MiniAppPromoTouchInput): Pr
   `;
 
   return rows[0] ?? null;
+};
+
+/**
+ * Ключ строки касания запуска (issue #484) — тот же, что у индекса `promo_touches_miniapp_launch_key`:
+ * Telegram, код метки из `start_param` и `auth_date`. `null` — в `start_param` не метка, строки нет.
+ */
+const miniAppLaunchKey = (launch: TelegramLaunch): Prisma.Sql | null => {
+  const code = readPromoCode(launch.startParam ?? '');
+
+  return code === null
+    ? null
+    : Prisma.sql`
+        "channel" = 'miniapp'
+        AND "telegram_user_id" = ${launch.user.id.toString()}::text::bigint
+        AND "code" = ${code}
+        AND "launched_at" = ${launch.authDate}::timestamptz
+      `;
+};
+
+/**
+ * Ставит строке касания запуска версию лендинга, которую сервер отдал этому запуску (issue #484).
+ * `null` тоже пишется: перечитанное состояние того же запуска могло сменить экран. Строки нет —
+ * ничего не меняется.
+ */
+export const setMiniAppTouchLandingVersion = async (
+  launch: TelegramLaunch,
+  versionId: string | null,
+): Promise<void> => {
+  const key = miniAppLaunchKey(launch);
+
+  if (key === null) return;
+
+  await db.$executeRaw`
+    UPDATE xb.promo_touches SET "landing_version_id" = ${versionId}::uuid WHERE ${key}
+  `;
+};
+
+/** Отмечает нажатие кнопки отправки в строке касания запуска — только первое (issue #484). */
+export const markMiniAppTouchPressed = async (launch: TelegramLaunch): Promise<void> => {
+  const key = miniAppLaunchKey(launch);
+
+  if (key === null) return;
+
+  await db.$executeRaw`
+    UPDATE xb.promo_touches SET "pressed_at" = now() WHERE ${key} AND "pressed_at" IS NULL
+  `;
+};
+
+/** Версия лендинга из строки касания запуска (issue #484). `null` — строки нет или версия пуста. */
+export const findMiniAppTouchLandingVersion = async (launch: TelegramLaunch): Promise<string | null> => {
+  const key = miniAppLaunchKey(launch);
+
+  if (key === null) return null;
+
+  const rows = await db.$queryRaw<{ landingVersionId: string | null }[]>`
+    SELECT "landing_version_id" AS "landingVersionId" FROM xb.promo_touches WHERE ${key}
+  `;
+
+  return rows[0]?.landingVersionId ?? null;
 };
 
 // ---------------------------------------------------------------------------

@@ -45,6 +45,28 @@ export const readTestPromoTouches = async (telegramUserId: bigint): Promise<Test
   });
 };
 
+/** Запоминает Telegram, касания которого пишет сервис, а тест не читает: уборка найдёт их по нему. */
+export const trackTestPromoTelegram = (telegramUserId: bigint): void => {
+  readTelegramUserIds.add(telegramUserId);
+};
+
+export type TestPromoTouchMarks = {
+  launchedAt: Date | null;
+  landingVersionId: string | null;
+  pressedAt: Date | null;
+};
+
+/** Запуск, версия лендинга и нажатие у касаний этого Telegram — в порядке записи (issue #484). */
+export const readTestPromoTouchMarks = async (telegramUserId: bigint): Promise<TestPromoTouchMarks[]> => {
+  readTelegramUserIds.add(telegramUserId);
+
+  return db.promoTouch.findMany({
+    where: { telegramUserId },
+    orderBy: { id: 'asc' },
+    select: { launchedAt: true, landingVersionId: true, pressedAt: true },
+  });
+};
+
 export type TestPromoTouchInput = {
   code: string;
   telegramUserId: bigint;

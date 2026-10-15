@@ -14,6 +14,7 @@ import {
 import type { TelegramWebApp } from '~/composables/useTelegramWebApp';
 import type { MemberOfficeView } from '~/types/memberView';
 import { failureCode } from '~/utils/requestError';
+import { hasContactWindow } from '~/utils/telegramContactWindow';
 
 /**
  * Заявка кандидата в Mini App (issue #456): экран заявки, окна Telegram, отправка, повтор
@@ -26,15 +27,16 @@ import { failureCode } from '~/utils/requestError';
  * Состояния ожидания без выхода нет: окно номера, закрытое свайпом, колбэк не зовёт вовсе
  * (docs/miniapp.md), поэтому кнопка гаснет только на время запроса к серверу — его конец
  * приходит всегда.
+ *
+ * Экран заявки — лендинг метки или экран по умолчанию, по полю `landing` ответа (issue #484). Путь
+ * заявки, окна Telegram, повтор и отказы у них общие; разное — только то, как показать «Отмену»
+ * в окне номера: на лендинге места под объяснение нет, и его говорит системное окно Telegram.
  */
 
 /** Что сейчас на экране: заявка или один из исходов. */
 type ApplicationView = 'form' | 'accepted' | 'repeat' | 'failed';
 
 type ApplicationScreenState = MiniAppApplicationScreen | MiniAppApplicationSentScreen;
-
-/** Версия Bot API, с которой есть окна номера и «Разрешить боту писать». */
-const CONTACT_WINDOWS_VERSION = '6.9';
 
 /**
  * Сколько ждать ответа ручки заявки, мс. Сверка номера ждёт Fleet API не дольше своего срока
@@ -68,6 +70,8 @@ export type CandidateApplicationDependencies = {
   reload: () => Promise<void>;
   /** Заявка принята — цель Метрики. */
   onAccepted: () => void;
+  /** Нажата кнопка отправки — цель Метрики. */
+  onPressed: () => void;
 };
 
 export const useCandidateApplication = (dependencies: CandidateApplicationDependencies) => {
@@ -110,15 +114,11 @@ export const useCandidateApplication = (dependencies: CandidateApplicationDepend
     view.value = 'form';
   };
 
-  /**
-   * Telegram без окна номера: `requestContact` и `requestWriteAccess` появились в Bot API 6.9.
-   * Нечем сравнить версию — тоже старый: сравнение появилось ещё раньше.
-   */
-  const oldClient = computed(() => {
-    const webApp = dependencies.webApp();
+  /** Telegram без окна номера: номер вводится руками, окон нет вовсе. */
+  const oldClient = computed(() => !hasContactWindow(dependencies.webApp()));
 
-    return !(webApp?.isVersionAtLeast?.(CONTACT_WINDOWS_VERSION) ?? false) || !webApp?.requestContact;
-  });
+  /** Лендинг метки на экране заявки; `null` — экран по умолчанию. */
+  const landing = computed(() => (screen.value?.screen === 'application' ? screen.value.landing : null));
 
   const texts = computed(() => screen.value?.texts[language.value] ?? null);
 
@@ -176,14 +176,46 @@ export const useCandidateApplication = (dependencies: CandidateApplicationDepend
   };
 
   /**
+   * «Нажал кнопку» — в касание запуска и целью Метрики. Ответа приложение не ждёт: окно номера
+   * открывается сразу, и ни ответ, ни ошибка ручки ни на что не влияют.
+   */
+  const press = (): void => {
+    dependencies.onPressed();
+    void $fetch('/api/miniapp/applications/press', {
+      method: 'POST',
+      headers: { [INIT_DATA_HEADER]: dependencies.initData() },
+    }).catch((error: unknown) => {
+      console.error('[miniapp] нажатие кнопки заявки не записано', error);
+    });
+  };
+
+  /** «Отмена» в окне номера: на лендинге — системное окно Telegram, на экране по умолчанию — строка над кнопкой. */
+  const showDeclined = (): void => {
+    const message = texts.value?.declined;
+
+    if (landing.value !== null) {
+      if (message) dependencies.webApp()?.showAlert?.(message);
+
+      return;
+    }
+
+    declined.value = true;
+  };
+
+  /**
    * «Отправить заявку»: окно номера, окно «Разрешить боту писать» — если писать боту ещё нельзя, —
-   * и отправка. «Отмена» в окне номера — заявка не уходит, над кнопкой объяснение; закрытие окна
-   * свайпом не зовёт ничего, и кнопка просто остаётся нажимаемой.
+   * и отправка. «Отмена» в окне номера — заявка не уходит, объяснение показывает `showDeclined`;
+   * закрытие окна свайпом не зовёт ничего, и кнопка просто остаётся нажимаемой.
+   *
+   * Нажатие активной кнопки пишется до окна номера, и на старом Telegram тоже. Повтор после сбоя
+   * нажатием не считается — он идёт через `retry`.
    */
   const submit = (): void => {
     if (sending.value) {
       return;
     }
+
+    press();
 
     const base = { name: name.value, writeAccessGranted: false, language: language.value };
 
@@ -197,7 +229,7 @@ export const useCandidateApplication = (dependencies: CandidateApplicationDepend
 
     webApp?.requestContact?.((shared, contact) => {
       if (!shared || contact?.status !== 'sent' || !contact.response) {
-        declined.value = true;
+        showDeclined();
 
         return;
       }
@@ -236,11 +268,18 @@ export const useCandidateApplication = (dependencies: CandidateApplicationDepend
     }
   };
 
-  /** Свойства `MemberApplicationForm`. */
+  /** Свойства `LandingView` — лендинг метки на экране заявки. Имя — моделью `name`. */
+  const landingForm = computed(() => {
+    const shown = landing.value;
+
+    return view.value === 'form' && shown ? { html: shown.html, imageBase: shown.imageBase, busy: sending.value } : null;
+  });
+
+  /** Свойства `MemberApplicationForm` — экран заявки по умолчанию. */
   const form = computed(() => {
     const current = texts.value;
 
-    return view.value === 'form' && current
+    return view.value === 'form' && current && landing.value === null
       ? { texts: current, language: language.value, old: oldClient.value, declined: declined.value, busy: sending.value }
       : null;
   });
@@ -309,6 +348,7 @@ export const useCandidateApplication = (dependencies: CandidateApplicationDepend
     view,
     name,
     manualPhone,
+    landingForm,
     form,
     outcome,
     open,

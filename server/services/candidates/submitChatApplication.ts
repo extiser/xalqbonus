@@ -92,6 +92,8 @@ const recordApplication = async (input: SubmitChatApplicationInput): Promise<Rec
     matchedProfileId: reconciliation.profileId,
     lastTripDay: reconciliation.lastTripDay,
     formerLinkPersonId,
+    // Лендинга в чате бота нет.
+    landingVersionId: null,
   });
 
   if (inserted) {
